@@ -41,7 +41,7 @@ open class TapRT(
      * 否则一旦与正在执行的 `Interpreter.run()` 并发就会 SIGSEGV 杀掉整个进程。
      * [fallbackHandler] 仅作为目标线程可能已经退出时的兜底。
      */
-    fun releaseClassifier(sensorHandler: android.os.Handler?, fallbackHandler: android.os.Handler?) {
+    override fun releaseClassifier(sensorHandler: android.os.Handler?, fallbackHandler: android.os.Handler?) {
         val classifier = _tflite as? TapTfClassifier ?: return
         _tflite = TfClassifier()
         classifier.closeOn(sensorHandler, fallbackHandler)

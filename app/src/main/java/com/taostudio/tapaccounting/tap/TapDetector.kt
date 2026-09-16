@@ -15,6 +15,7 @@ import android.widget.Toast
 import com.taostudio.tapaccounting.Prefs
 import com.taostudio.tapaccounting.R
 import com.taostudio.tapaccounting.Utils
+import com.taostudio.tapaccounting.tap.aosp.AospTapRT
 
 class TapDetector(
     private val context: Context,
@@ -46,6 +47,15 @@ class TapDetector(
          * 所以绝对阈值不能保证原样搬运，需要在设备上用测试模式实测微调。
          */
         private const val HE_NEGATIVE_PEAK_TOLERATE = 0.015f
+
+        /**
+         * 省电档（HE）走 crDroid/AOSP 那套内核，所以它的三个时间常量用 AOSP 的值，
+         * 不能沿用 ML 那套（160ms / 2.5ms）。
+         *   APSensor: `tap = TapRT(context, 153600000L)`、`samplingIntervalNs = 2400000L`
+         * 两者配套（AOSP 内核里 slope 的参考值硬编码 2400000f，正好等于采样间隔 → 增益 1.0）。
+         */
+        private const val AOSP_HE_SIZE_WINDOW_NS = 153_600_000L
+        private const val AOSP_HE_SAMPLING_INTERVAL_NS = 2_400_000L
         /**
          * 测试模式命中反馈的最小间隔。
          *
@@ -83,7 +93,13 @@ class TapDetector(
     private val accelerometer: Sensor? = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
     private val gyroscope: Sensor? = sensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE)
 
-    private var tap: TapRT? = null
+    private var tap: BaseTapRT? = null
+
+    /**
+     * 当前运行时是不是 crDroid/AOSP 那套内核（HE 档专用）。
+     * 它的重采样间隔是 2.4ms 而不是 ML 的 2.5ms，必须配套传参，否则 slope 增益会差 4%。
+     */
+    private var runtimeIsAosp = false
     private var sensorThread: HandlerThread? = null
     private var sensorHandler: Handler? = null
 
@@ -327,7 +343,7 @@ class TapDetector(
                 event.values[1],
                 event.values[2],
                 event.timestamp,
-                SAMPLING_INTERVAL_NS,
+                if (runtimeIsAosp) AOSP_HE_SAMPLING_INTERVAL_NS else SAMPLING_INTERVAL_NS,
                 shouldUseHeuristicRuntime()
             )
 
@@ -380,6 +396,11 @@ class TapDetector(
             SENSOR_BATCHING_PERIOD_US,
             handler
         )
+        // 注意：这里与 crDroid 有意不同。
+        // crDroid 的 APSensor 对 HE 和 ML 都注册加速度计 + 陀螺仪，但它的启发式算法本身
+        // 会 `if (sensorType == Sensor.TYPE_GYROSCOPE) return` 直接忽略陀螺仪数据。
+        // 本项目的 HE 是"为了不被系统杀"的省电待机档，所以干脆连陀螺仪都不注册：
+        // 算法用不到它，而少一路 400Hz 传感器就少一半回调。
         if (!shouldUseHeuristicRuntime()) {
             sensorManager.registerListener(
                 this,
@@ -502,23 +523,14 @@ class TapDetector(
         tripleEnabled: Boolean,
         sensitivity: Float,
         classifier: TapTfClassifier?
-    ): TapRT {
+    ): BaseTapRT {
+        // 省电档一律走 crDroid/AOSP 内核：那是 crDroid 默认启用的主线路径
+        // （config.xml 里 default_apsensor_heuristic_mode = true）。
+        if (useHeuristic) {
+            return createAospHeRuntime()
+        }
+        runtimeIsAosp = false
         return when {
-            useHeuristic && tripleEnabled -> HeuristicTapTapTapRT(
-                160000000L,
-                true
-            ).apply {
-                configureCommonFilters(sensitivity)
-                getNegativePeakDetection().setMinNoiseTolerate(HE_NEGATIVE_PEAK_TOLERATE)
-                getNegativePeakDetection().setWindowSize(64)
-                reset(false)
-            }
-            useHeuristic -> TapRT(160000000L).apply {
-                configureCommonFilters(sensitivity)
-                getNegativePeakDetection().setMinNoiseTolerate(HE_NEGATIVE_PEAK_TOLERATE)
-                getNegativePeakDetection().setWindowSize(64)
-                reset(false)
-            }
             tripleEnabled && classifier != null -> {
                 TapTapTapRT(160000000L, true, sensitivity, classifier).apply {
                     configureCommonFilters(sensitivity)
@@ -533,16 +545,60 @@ class TapDetector(
                 }
             }
             else -> {
-                // 分类器不可用（模型缺失等）：退化为不使用 ML 的运行时，避免空指针
+                // 分类器不可用（模型缺失等）：退化为 crDroid/AOSP 启发式运行时，避免空指针
                 Log.w(TAG, "classifier unavailable, falling back to heuristic runtime")
-                TapRT(160000000L).apply {
-                    configureCommonFilters(sensitivity)
-                    getNegativePeakDetection().setMinNoiseTolerate(HE_NEGATIVE_PEAK_TOLERATE)
-                    getNegativePeakDetection().setWindowSize(64)
-                    reset(false)
-                }
+                createAospHeRuntime()
             }
         }
+    }
+
+    /**
+     * 构建 crDroid/AOSP 内核的启发式运行时，并按上游 `APSensor.startListening()` 原样配置：
+     *
+     * ```
+     * callback.setListening(true, SensorManager.SENSOR_DELAY_FASTEST)
+     * lowpassAcc.para = 1f;  lowpassGyro.para = 1f
+     * highpassAcc.para = 0.05f; highpassGyro.para = 0.05f
+     * positivePeakDetector.minNoiseTolerate = sensitivity; windowSize = 64
+     * negativePeakDetector.minNoiseTolerate = 0.015f;     windowSize = 64
+     * reset(heuristicMode)
+     * ```
+     *
+     * 上游把 `negativePeakDetector` 的阈值**硬编码**，用户灵敏度只作用于正面检测器
+     * （`APSensor.updateSensitivity()` 也只改正面那个）。
+     */
+    private fun createAospHeRuntime(): BaseTapRT {
+        runtimeIsAosp = true
+        val level = Prefs.getTapHeSensitivityLevel(context)
+        return AospTapRT(AOSP_HE_SIZE_WINDOW_NS).apply {
+            lowpassAcc.para = 1f
+            lowpassGyro.para = 1f
+            highpassAcc.para = 0.05f
+            highpassGyro.para = 0.05f
+            positivePeakDetector.minNoiseTolerate = aospHeSensitivity(level)
+            positivePeakDetector.windowSize = 64
+            negativePeakDetector.minNoiseTolerate = HE_NEGATIVE_PEAK_TOLERATE
+            negativePeakDetector.windowSize = 64
+            // 上游是 reset(heuristicMode)，HE 时即 true
+            reset(true)
+        }
+    }
+
+    /**
+     * 省电档灵敏度档位(0..10) → AOSP 内核的正面峰值阈值。
+     *
+     * 数值沿用 crDroid `ColumbusService.updateSensitivity()` 的公式：
+     * `value <= 5 → value/100f`，否则 `(value-5)*0.15f`。
+     *
+     * **但档位方向反转**（用 `10 - level` 进公式）：crDroid 的界面是 0=light(灵敏) …
+     * 10=heavy(钝)，而本 App（含 ML 档）的约定是"数字越大越灵敏"。
+     * HE 滑块必须跟全 App 一致，否则又会造出"标签与语义相反"那种坑。
+     *
+     * 对照：level 10 → 0.00(最灵敏) / 5 → 0.05 / 2 → 0.45 / 0 → 0.75(最钝)。
+     */
+    private fun aospHeSensitivity(level: Int): Float {
+        val v = (10 - level).coerceIn(0, 10)
+        return if (v <= 5) v.toFloat() / 100f else (v - 5).toFloat() * 0.15f
     }
 
     private fun TapRT.configureCommonFilters(sensitivity: Float) {

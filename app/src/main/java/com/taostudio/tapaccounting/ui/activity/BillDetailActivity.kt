@@ -29,6 +29,7 @@ import com.taostudio.tapaccounting.TapApplication
 import com.taostudio.tapaccounting.Prefs
 import com.taostudio.tapaccounting.R
 import com.taostudio.tapaccounting.data.local.entity.Bill
+import com.taostudio.tapaccounting.data.repository.CategoryRepository
 import com.taostudio.tapaccounting.logic.BillDeleteHelper
 import com.taostudio.tapaccounting.logic.BillDisplayFormatter
 import com.taostudio.tapaccounting.logic.BillMutationService
@@ -594,10 +595,7 @@ class BillDetailActivity : AppCompatActivity() {
             Toast.makeText(this, getString(R.string.invalid_amount), Toast.LENGTH_SHORT).show()
             return
         }
-        if (!isTransferFamily(currentUiType) && currentCategoryName.isBlank()) {
-            Toast.makeText(this, getString(R.string.select_category_first), Toast.LENGTH_SHORT).show()
-            return
-        }
+        // 分类允许为空（未分类是合法状态）；清空后可直接保存
 
         val remark = etRemark.text.toString().trim()
         val app = application as TapApplication
@@ -606,17 +604,31 @@ class BillDetailActivity : AppCompatActivity() {
             try {
                 val assetEnabled = Prefs.isAssetFeatureEnabled(this@BillDetailActivity)
                 val persistedAssetName = if (assetEnabled) currentAssetName else originalBill.accountName
-                val persistedAccountId = if (assetEnabled && persistedAssetName.isNotBlank()) {
+                val persistedAccountId = if (!assetEnabled) {
+                    originalBill.accountId
+                } else if (persistedAssetName.isNotBlank()) {
                     app.database.assetDao().getAssetByName(persistedAssetName)?.id
                 } else {
-                    originalBill.accountId
+                    null
+                }
+
+                val persistedCategory = persistedCategoryName(currentUiType, currentCategoryName)
+                val persistedCategoryId = if (isTransferFamily(currentUiType)) {
+                    originalBill.categoryId
+                } else if (persistedCategory.isNotBlank()) {
+                    val categoryDbType = if (currentUiType == Bill.TYPE_INCOME) 1 else 0
+                    CategoryRepository(app.database.categoryDao())
+                        .findCategoryByDisplayName(categoryDbType, persistedCategory)?.id
+                } else {
+                    null
                 }
 
                 val updatedBill = originalBill.copy(
                     type = persistedType(currentUiType),
                     subType = persistedSubType(originalBill, currentUiType),
                     amount = amount,
-                    categoryName = persistedCategoryName(currentUiType, currentCategoryName, originalBill.categoryName),
+                    categoryName = persistedCategory,
+                    categoryId = persistedCategoryId,
                     accountName = persistedAssetName,
                     accountId = persistedAccountId,
                     bookName = currentBookName.ifBlank { originalBill.bookName },
@@ -722,11 +734,12 @@ class BillDetailActivity : AppCompatActivity() {
         }
     }
 
-    private fun persistedCategoryName(uiType: Int, currentCategory: String, fallbackCategory: String): String {
+    private fun persistedCategoryName(uiType: Int, currentCategory: String): String {
         return when (uiType) {
             Bill.TYPE_TRANSFER -> getString(R.string.transfer_label)
             Bill.TYPE_REPAYMENT -> getString(R.string.repayment_label)
-            else -> currentCategory.ifBlank { fallbackCategory }
+            // 空分类表示用户主动清空为「未分类」
+            else -> currentCategory
         }
     }
 

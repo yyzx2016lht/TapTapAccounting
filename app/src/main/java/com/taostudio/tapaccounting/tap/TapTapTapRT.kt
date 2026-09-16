@@ -6,9 +6,8 @@ class TapTapTapRT(
     sizeWindowNs: Long,
     private val isTripleTapEnabled: Boolean,
     private val sensitivity: Float,
-    classifier: TfClassifier,
-    private val minTimeGapNs: Long = mMinTimeGapNs
-) : TapRT(sizeWindowNs, minTimeGapNs) {
+    classifier: TfClassifier
+) : TapRT(sizeWindowNs) {
 
     companion object {
         const val mMaxTimeGapTripleNs = 750_000_000L
@@ -41,7 +40,7 @@ class TapTapTapRT(
         val timeNow = SystemClock.elapsedRealtimeNanos()
         while (secondPassIterator.hasNext()) {
             val pastTimestamp = secondPassIterator.next()
-            if (_tBackTapTimestamps.last() - pastTimestamp <= minTimeGapNs) {
+            if (_tBackTapTimestamps.last() - pastTimestamp <= mMinTimeGapNs) {
                 continue
             }
             tapCount++

@@ -328,7 +328,8 @@ class AssetDetailActivity : AppCompatActivity() {
             OverlayDialogs.showGridAssetPicker(
                 this,
                 sourceAsset.name,
-                "选择目标资产"
+                "选择目标资产",
+                allowClear = false
             ) { selectedName ->
                 if (selectedName == sourceAsset.name) {
                     Toast.makeText(this, "已在当前资产中", Toast.LENGTH_SHORT).show()

@@ -11,6 +11,7 @@ import android.hardware.SensorManager
 import android.os.*
 import androidx.core.content.ContextCompat
 import kotlinx.coroutines.*
+import com.taostudio.tapaccounting.tap.TapDetectionState
 import com.taostudio.tapaccounting.tap.TapDetector
 
 class OverlayService : Service() {
@@ -60,6 +61,8 @@ class OverlayService : Service() {
 
     private var isFlipEnabled = false
     private var isDoubleTapEnabled = false
+    /** onDestroy 之后不再尝试刷新前台通知，避免在正在销毁的服务上 startForeground。 */
+    private var isDestroying = false
     private val keepAliveManager = KeepAliveManager()
     private var lastTapFeedbackAtMs: Long = 0L
 
@@ -374,7 +377,7 @@ class OverlayService : Service() {
             overlayManager = OverlayManager(this)
             isFlipEnabled = Prefs.isFlipEnabled(this)
             isDoubleTapEnabled = Prefs.isDoubleTapEnabled(this)
-            promoteToForeground(getString(R.string.notif_double_tap_running))
+            promoteToForeground(currentNotificationText())
             keepAliveManager.attach()
 
             if (isFlipEnabled) {
@@ -425,7 +428,7 @@ class OverlayService : Service() {
             ACTION_START_DOUBLE_TAP -> {
                 isDoubleTapEnabled = true
                 cancelRestart()
-                promoteToForeground(getString(R.string.notif_double_tap_running))
+                promoteToForeground(currentNotificationText())
                 startTapDetectionIfAllowed("user-start")
                 scheduleKeepAliveWork()
             }
@@ -434,6 +437,8 @@ class OverlayService : Service() {
                 isDoubleTapEnabled = false
                 stopTapDetection()
                 if (userDisabledTap) {
+                    // 真正的关闭：不要把上一次的精确窗口带到下一次开启
+                    TapDetector.clearCarriedWakeWindow()
                     OverlayWatchdogWorker.cancel(this)
                     stopSelfIfIdle("double-tap-disabled")
                 } else {
@@ -444,7 +449,7 @@ class OverlayService : Service() {
                 isDoubleTapEnabled = Prefs.isDoubleTapEnabled(this)
                 if (isDoubleTapEnabled) {
                     cancelRestart()
-                    promoteToForeground(getString(R.string.notif_double_tap_running))
+                    promoteToForeground(currentNotificationText())
                     keepAliveManager.restartDetector("settings-restart")
                     scheduleKeepAliveWork()
                 } else {
@@ -479,6 +484,7 @@ class OverlayService : Service() {
 
     override fun onDestroy() {
         Logger.d(this, "OverlayService", "Service onDestroy")
+        isDestroying = true
         keepAliveManager.detach()
         stopFlipDetection()
         stopTapDetection()
@@ -547,7 +553,14 @@ class OverlayService : Service() {
         if (tapDetector != null) return
         ProcessExitLogger.recordHeartbeat(applicationContext as Application)
         val sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
-        tapDetector = TapDetector(this, sensorManager) { tapCount ->
+        tapDetector = TapDetector(
+            this,
+            sensorManager,
+            onStateChanged = { state ->
+                Logger.d(this, "OverlayService", "Tap detection state -> $state")
+                Handler(Looper.getMainLooper()).post { refreshDetectionNotification() }
+            }
+        ) { tapCount ->
             Handler(Looper.getMainLooper()).post {
                 handleTapAction(tapCount)
             }
@@ -647,6 +660,7 @@ class OverlayService : Service() {
     private fun stopTapDetection() {
         tapDetector?.stop()
         tapDetector = null
+        refreshDetectionNotification()
     }
 
     /**
@@ -666,8 +680,55 @@ class OverlayService : Service() {
     // ════════════════════════════════════════════════════════
     //  工具方法
     // ════════════════════════════════════════════════════════
-    private fun promoteToForeground(content: String) {
-        val notification = OverlayServiceNotifications.build(this, CHANNEL_ID, content)
+
+    /**
+     * 通知正文由当前检测状态推导，而不是写死一句"双击检测运行中"。
+     *
+     * 省电模式下档位会自己来回切（启发式待机 ⇄ 精确窗口），
+     * 用户看通知就能知道现在敲下去会不会记账。
+     */
+    private fun currentNotificationText(): String {
+        val detector = tapDetector
+        if (isDoubleTapEnabled && detector != null) {
+            return when (detector.currentDetectionState()) {
+                TapDetectionState.HeuristicStandby -> getString(R.string.notif_tap_standby)
+                TapDetectionState.HeuristicTest -> getString(R.string.notif_tap_he_test)
+                TapDetectionState.PreciseWindow -> getString(R.string.notif_tap_precise)
+                TapDetectionState.AlwaysMl -> getString(R.string.notif_tap_always_ml)
+                TapDetectionState.Off -> getString(R.string.notif_tap_paused)
+            }
+        }
+        if (isDoubleTapEnabled) {
+            // 开关开着但检测器没跑（息屏/锁屏/横屏屏蔽）
+            return getString(R.string.notif_tap_paused)
+        }
+        if (Prefs.isDoubleTapEnabled(this)) {
+            // 开关仍然开着，只是被 AI 面板/悬浮窗临时暂停了——这时候说"运行中"是假的
+            return getString(R.string.notif_tap_paused_temp)
+        }
+        return if (isFlipEnabled) {
+            getString(R.string.notif_quick_gesture_running)
+        } else {
+            getString(R.string.notif_double_tap_running)
+        }
+    }
+
+    /** 按当前状态重刷前台通知；精确窗口内带上系统渲染的剩余倒计时。 */
+    private fun refreshDetectionNotification() {
+        if (isDestroying) return
+        val countDownTo = tapDetector
+            ?.preciseWindowRemainingMs()
+            ?.takeIf { it > 0L }
+            ?.let { System.currentTimeMillis() + it }
+        try {
+            promoteToForeground(currentNotificationText(), countDownTo)
+        } catch (e: Exception) {
+            Logger.d(this, "OverlayService", "refreshDetectionNotification failed: ${e.message}")
+        }
+    }
+
+    private fun promoteToForeground(content: String, countDownTo: Long? = null) {
+        val notification = OverlayServiceNotifications.build(this, CHANNEL_ID, content, countDownTo)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
             // 对照实验：health 是 Android 14 引入的传感器监测类型，
             // 语义上比 specialUse 更贴合"加速度计/陀螺仪持续检测"。
@@ -734,7 +795,7 @@ class OverlayService : Service() {
         } catch (e: Exception) {
             Logger.d(this, "OverlayService", "enterMicrophoneMode failed: ${e.message}")
             // 回退：至少保证服务仍在前台
-            runCatching { promoteToForeground(getString(R.string.notif_double_tap_running)) }
+            runCatching { promoteToForeground(currentNotificationText()) }
             false
         }
     }
@@ -742,7 +803,7 @@ class OverlayService : Service() {
     fun exitMicrophoneMode() {
         try {
             if (isDoubleTapEnabled) {
-                promoteToForeground(getString(R.string.notif_double_tap_running))
+                promoteToForeground(currentNotificationText())
                 Logger.d(this, "OverlayService", "exitMicrophoneMode: restored SPECIAL_USE foreground")
             } else {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) stopForeground(STOP_FOREGROUND_REMOVE)

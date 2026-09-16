@@ -44,6 +44,7 @@ object OverlayDialogs {
     private sealed class AssetPickerItem {
         data class AssetItem(val asset: com.taostudio.tapaccounting.data.local.entity.Asset) : AssetPickerItem()
         data class ArchivedGroup(val count: Int, val expanded: Boolean) : AssetPickerItem()
+        object ClearItem : AssetPickerItem()
     }
 
     private fun setExactVisibleRowsHeight(target: View, rowHeight: Int, rows: Int = 4) {
@@ -346,7 +347,13 @@ object OverlayDialogs {
             Log.w(TAG, "Ignore anchored menu show due to illegal window state: ${e.message}")
         }
     }
-    fun showGridCategoryPicker(ctx: Context, currentSelectionText: String, type: Int, onConfirm: (String) -> Unit) {
+    fun showGridCategoryPicker(
+        ctx: Context,
+        currentSelectionText: String,
+        type: Int,
+        allowClear: Boolean = true,
+        onConfirm: (String) -> Unit
+    ) {
         val themeContext = ContextThemeWrapper(ctx, R.style.Theme_TapAccounting)
         val view = LayoutInflater.from(themeContext).inflate(R.layout.dialog_category_picker, null)
 
@@ -419,6 +426,32 @@ object OverlayDialogs {
                         dialog.dismiss()
                     }))
                 }
+            }
+
+            // 常驻「不分类」清空项：始终排在分类列表最后
+            if (allowClear) {
+                val clearRow = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL }
+                val clearItem = LayoutInflater.from(ctx).inflate(R.layout.item_category_grid, clearRow, false)
+                clearItem.findViewById<TextView>(R.id.tv_category_name).apply {
+                    text = ctx.getString(R.string.clear_category)
+                    setTextColor(Color.parseColor("#6E7D94"))
+                }
+                clearItem.findViewById<ImageView>(R.id.iv_category_icon).apply {
+                    setColorFilter(Color.parseColor("#90A4AE"))
+                    setImageResource(R.drawable.ic_close_small)
+                }
+                clearItem.findViewById<View>(R.id.layout_category_icon_container).background =
+                    android.graphics.drawable.GradientDrawable().apply {
+                        shape = android.graphics.drawable.GradientDrawable.OVAL
+                        setColor(Color.parseColor("#F0F2F5"))
+                    }
+                clearItem.setOnClickListener {
+                    onConfirm("")
+                    dialog.dismiss()
+                }
+                clearRow.addView(clearItem, LinearLayout.LayoutParams(0, -2, 1f))
+                for (i in 0 until 4) clearRow.addView(View(ctx), LinearLayout.LayoutParams(0, -2, 1f))
+                container.addView(clearRow)
             }
         }
 
@@ -1135,6 +1168,7 @@ object OverlayDialogs {
         currentSelectionText: String,
         title: String,
         assetFilter: ((com.taostudio.tapaccounting.data.local.entity.Asset) -> Boolean)? = null,
+        allowClear: Boolean = true,
         onConfirm: (String) -> Unit
     ) {
         val themeContext = ContextThemeWrapper(ctx, R.style.Theme_TapAccounting)
@@ -1159,6 +1193,10 @@ object OverlayDialogs {
                     archivedPickerAssets.forEach { pickerItems.add(AssetPickerItem.AssetItem(it)) }
                 }
             }
+            // 常驻「不选资产」清空项：始终排在资产列表最后
+            if (allowClear) {
+                pickerItems.add(AssetPickerItem.ClearItem)
+            }
         }
 
         val adapter = object : androidx.recyclerview.widget.RecyclerView.Adapter<androidx.recyclerview.widget.RecyclerView.ViewHolder>() {
@@ -1169,6 +1207,7 @@ object OverlayDialogs {
                 return when (val item = pickerItems[position]) {
                     is AssetPickerItem.AssetItem -> item.asset.id
                     is AssetPickerItem.ArchivedGroup -> Long.MIN_VALUE + item.count
+                    is AssetPickerItem.ClearItem -> Long.MAX_VALUE
                 }
             }
 
@@ -1192,12 +1231,29 @@ object OverlayDialogs {
                         tvType?.visibility = View.VISIBLE
                         tv.setTextColor(Color.parseColor("#6E7D94"))
                         holder.itemView.alpha = 0.92f
+                        iv.colorFilter = null
                         iv.setImageResource(R.drawable.ic_backup_folder_action)
                         iv.alpha = 0.72f
                         holder.itemView.setOnClickListener {
                             archivedExpanded = !archivedExpanded
                             rebuildPickerItems()
                             notifyDataSetChanged()
+                        }
+                    }
+                    is AssetPickerItem.ClearItem -> {
+                        tv.text = ctx.getString(R.string.clear_asset)
+                        tvType?.visibility = View.GONE
+                        tv.setTextColor(Color.parseColor("#6E7D94"))
+                        holder.itemView.alpha = 1f
+                        iv.setImageResource(R.drawable.ic_close_small)
+                        iv.alpha = 0.85f
+                        iv.colorFilter = android.graphics.PorterDuffColorFilter(
+                            Color.parseColor("#90A4AE"),
+                            android.graphics.PorterDuff.Mode.SRC_IN
+                        )
+                        holder.itemView.setOnClickListener {
+                            onConfirm("")
+                            dialog.dismiss()
                         }
                     }
                     is AssetPickerItem.AssetItem -> {
@@ -1211,6 +1267,7 @@ object OverlayDialogs {
                             asset.isArchived -> 0.72f
                             else -> 0.85f
                         }
+                        iv.colorFilter = null
                         iv.alpha = if (asset.isArchived) 0.76f else 1f
 
                         if (asset.icon.isNotEmpty()) {

@@ -170,7 +170,7 @@ class BalanceAdjustmentActivity : AppCompatActivity() {
     private fun showCategoryDialog() {
         val type = if (!isCurrencyChanged && diff >= 0) 1 else 0
         OverlayDialogs.showGridCategoryPicker(this, selectedCategoryName, type) { selected ->
-            selectedCategoryName = selected.ifEmpty { "其他" }
+            selectedCategoryName = selected.ifBlank { "其他" }
             tvCategory.text = selectedCategoryName
         }
     }

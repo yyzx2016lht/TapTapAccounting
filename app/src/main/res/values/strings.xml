@@ -65,10 +65,16 @@
     <string name="ai_accounting_entry_desc">在传统记账弹窗底部显示切换入口。</string>
 
     <!-- 手势设置 -->
-    <string name="tap_always_on_desc">开启后静止约 3 分钟切启发式待机省电；关闭则全程使用 ML 识别</string>
+    <string name="tap_always_on_desc">开启后以省电模式待机（更省电但易误触）；敲一下先震动提示进入精确检测，此后 1 分钟内双击即记账</string>
+    <string name="tap_wake_hint">已进入精确检测，请再敲击一次</string>
     <string name="tap_triple_desc">连敲三次触发单独动作，开启后双击响应会变慢</string>
     <string name="flip_sensitivity_hint">灵敏度越高越容易触发，过高可能误触</string>
     <string name="tap_sensitivity_hint">灵敏度越高越容易触发，过高可能误触</string>
+    <string name="tap_he_sensitivity">省电档灵敏度</string>
+    <string name="tap_he_sensitivity_hint">仅作用于省电待机档。启发式没有 ML 兜底，同一个阈值会比精确模式更容易误触，所以这里默认比主灵敏度更钝。调高更易敲醒，调低更抗误触；精确档仍使用上面的主灵敏度。</string>
+    <string name="tap_he_test_mode">省电档测试模式</string>
+    <string name="tap_he_test_mode_desc">锁定启发式检测，敲中只震动提示、不切精确档也不记账，方便连续试灵敏度</string>
+    <string name="tap_he_test_hit_fmt">省电档检出：%1$d 击</string>
     <string name="whitelist_desc">只在指定应用内触发手势记账</string>
     <string name="keep_alive_minimal_desc">无常驻通知时，仅录音等临时场景使用</string>
 
@@ -545,6 +551,8 @@
     <string name="bill_property">账单属性</string>
     <string name="belonging_asset">所属资产</string>
     <string name="not_selected">未选择</string>
+    <string name="clear_category">不分类</string>
+    <string name="clear_asset">不选资产</string>
     <string name="default_book">默认账本</string>
     <string name="hint_input_remark">点击输入备注</string>
     <string name="exclude_stats">不计入统计</string>
@@ -903,9 +911,9 @@
     <string name="default_model">默认模型</string>
     <string name="low_power_inference">低功耗推理</string>
     <string name="npu_hint">使用 NPU 加速，更省电</string>
-    <!-- 该开关直接对应 tap_power_saving：打开 = 省电（静止约 3 分钟后切启发式待机），
-         关闭 = 全程 ML。旧的 "full_ml_mode / 全程 ML 高灵敏模式" 文案与绑定语义相反，
-         已废弃并改名，避免再次被误用。 -->
+    <!-- 该开关直接对应 tap_power_saving：打开 = 省电（启发式待机，敲一下仅震动唤醒并进入
+         1 分钟精确检测，期间不做任何用户动作），关闭 = 全程 ML。旧的
+         "full_ml_mode / 全程 ML 高灵敏模式" 文案与绑定语义相反，已废弃并改名，避免再次被误用。 -->
     <string name="tap_low_power_mode">敲击检测省电</string>
     <string name="triple_tap_mode">三击模式</string>
     <string name="double_tap_action">双击动作</string>
@@ -1779,6 +1787,13 @@
     <!-- OverlayService 通知文本 -->
     <string name="notif_double_tap_running">双击检测运行中</string>
     <string name="notif_quick_gesture_running">快速手势运行中</string>
+    <!-- 前台通知按检测状态显示，让用户知道现在敲下去会不会记账 -->
+    <string name="notif_tap_standby">省电待机中 · 敲一下唤醒</string>
+    <string name="notif_tap_he_test">省电档测试模式 · 只检测不记账</string>
+    <string name="notif_tap_precise">精确检测中 · 双击即记账</string>
+    <string name="notif_tap_always_ml">全程 ML 识别中</string>
+    <string name="notif_tap_paused">敲击检测已暂停 · 亮屏解锁后恢复</string>
+    <string name="notif_tap_paused_temp">敲击检测已暂停 · 关闭当前面板后恢复</string>
     <string name="notif_recording">录音中…</string>
 
     <!-- Balance Adjustment -->

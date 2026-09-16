@@ -149,7 +149,7 @@ class RefundActivity : AppCompatActivity() {
     }
 
     private fun showAssetPicker() {
-        OverlayDialogs.showGridAssetPicker(this, selectedAccount, getString(R.string.select_refund_account)) { selected ->
+        OverlayDialogs.showGridAssetPicker(this, selectedAccount, getString(R.string.select_refund_account), allowClear = false) { selected ->
             selectedAccount = selected
             tvRefundAccount.text = selected.ifBlank { getString(R.string.select_refund_account_label) }
         }

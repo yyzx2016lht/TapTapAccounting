@@ -449,7 +449,8 @@ class AssetStatsActivity : AppCompatActivity() {
             OverlayDialogs.showGridAssetPicker(
                 this,
                 sourceAsset.name,
-                getString(R.string.select_target_asset)
+                getString(R.string.select_target_asset),
+                allowClear = false
             ) { selectedName ->
                 if (selectedName == sourceAsset.name) {
                     Toast.makeText(this, getString(R.string.already_in_asset), Toast.LENGTH_SHORT).show()
@@ -752,7 +753,8 @@ class AssetStatsActivity : AppCompatActivity() {
         OverlayDialogs.showGridAssetPicker(
             this,
             currentAsset?.name.orEmpty(),
-            getString(R.string.select_asset)
+            getString(R.string.select_asset),
+            allowClear = false
         ) { selectedName ->
             lifecycleScope.launch {
                 val selected = withContext(Dispatchers.IO) {

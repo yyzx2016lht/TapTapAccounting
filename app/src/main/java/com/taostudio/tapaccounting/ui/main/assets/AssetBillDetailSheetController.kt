@@ -628,7 +628,7 @@ internal class AssetBillDetailSheetController(
         }
 
         layoutRefundAccount.setOnClickListener {
-            OverlayDialogs.showGridAssetPicker(activity, tvRefundAccount.text.toString(), activity.getString(R.string.select_refund_account)) { account ->
+            OverlayDialogs.showGridAssetPicker(activity, tvRefundAccount.text.toString(), activity.getString(R.string.select_refund_account), allowClear = false) { account ->
                 selectedAccount = account
                 tvRefundAccount.text = account
             }

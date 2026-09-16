@@ -453,6 +453,14 @@ object Prefs {
     fun setTapModel(ctx: Context, model: String) = PrefsGeneralSupport.setTapModel(ctx, model)
     fun getTapSensitivityLevel(ctx: Context): Int = PrefsGeneralSupport.getTapSensitivityLevel(ctx)
     fun setTapSensitivityLevel(ctx: Context, level: Int) = PrefsGeneralSupport.setTapSensitivityLevel(ctx, level)
+
+    /** 省电档（启发式待机）专用灵敏度：数字越大越灵敏。 */
+    fun getTapHeSensitivityLevel(ctx: Context): Int = PrefsGeneralSupport.getTapHeSensitivityLevel(ctx)
+    fun setTapHeSensitivityLevel(ctx: Context, level: Int) = PrefsGeneralSupport.setTapHeSensitivityLevel(ctx, level)
+
+    /** 省电档测试模式：锁定启发式、只提示不记账，用于试灵敏度。 */
+    fun isTapHeTestModeEnabled(ctx: Context): Boolean = PrefsGeneralSupport.isTapHeTestModeEnabled(ctx)
+    fun setTapHeTestModeEnabled(ctx: Context, enabled: Boolean) = PrefsGeneralSupport.setTapHeTestModeEnabled(ctx, enabled)
     fun isTapNnapiLowPower(ctx: Context): Boolean = PrefsGeneralSupport.isTapNnapiLowPower(ctx)
     fun setTapNnapiLowPower(ctx: Context, enabled: Boolean) = PrefsGeneralSupport.setTapNnapiLowPower(ctx, enabled)
     fun isTapPowerSavingEnabled(ctx: Context): Boolean = PrefsGeneralSupport.isTapPowerSavingEnabled(ctx)

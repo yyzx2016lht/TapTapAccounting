@@ -679,7 +679,7 @@ internal class HomeBillSheetsController(
         }
 
         layoutRefundAccount.setOnClickListener {
-            OverlayDialogs.showGridAssetPicker(fragment.requireContext(), tvRefundAccount.text.toString(), "选择退款入账账户") { account ->
+            OverlayDialogs.showGridAssetPicker(fragment.requireContext(), tvRefundAccount.text.toString(), "选择退款入账账户", allowClear = false) { account ->
                 selectedAccount = account
                 tvRefundAccount.text = account
             }

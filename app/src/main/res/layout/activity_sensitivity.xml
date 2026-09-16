@@ -1020,6 +1020,107 @@
                                 app:trackTint="@color/switch_track_tint" />
                         </LinearLayout>
 
+                        <!-- HE 灵敏度：只有省电模式开启时才有意义，由 updateLowPowerDependencies 控制显隐 -->
+                        <LinearLayout
+                            android:id="@+id/group_tap_he_sensitivity"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="vertical"
+                            android:paddingBottom="8dp">
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="4dp"
+                                android:text="@string/tap_he_sensitivity"
+                                android:textColor="#333333"
+                                android:textSize="@dimen/text_size_14" />
+
+                            <TextView
+                                android:id="@+id/tvTapHeCurrentValue"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="2dp"
+                                android:textColor="#999999"
+                                android:textSize="@dimen/text_size_12" />
+
+                            <LinearLayout
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:orientation="horizontal"
+                                android:gravity="center_vertical"
+                                android:layout_marginTop="6dp">
+                                <TextView
+                                    android:layout_width="48dp"
+                                    android:layout_height="wrap_content"
+                                    android:text="@string/hardest_trigger"
+                                    android:textSize="@dimen/text_size_11"
+                                    android:textColor="#999999"
+                                    android:gravity="center" />
+                                <SeekBar
+                                    android:id="@+id/seekBarTapHeSensitivity"
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_weight="1"
+                                    android:layout_marginHorizontal="4dp"
+                                    android:max="10"
+                                    android:progress="3" />
+                                <TextView
+                                    android:layout_width="48dp"
+                                    android:layout_height="wrap_content"
+                                    android:text="@string/easiest_trigger"
+                                    android:textSize="@dimen/text_size_11"
+                                    android:textColor="#999999"
+                                    android:gravity="center" />
+                            </LinearLayout>
+
+                            <TextView
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="8dp"
+                                android:text="@string/tap_he_sensitivity_hint"
+                                android:textSize="@dimen/text_size_12"
+                                android:textColor="#999999"
+                                android:lineSpacingExtra="4dp" />
+
+                            <!-- 测试模式：锁定启发式，敲中只提示，用来快速试灵敏度 -->
+                            <LinearLayout
+                                android:id="@+id/layout_tap_he_test"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:gravity="center_vertical"
+                                android:orientation="horizontal"
+                                android:layout_marginTop="10dp">
+
+                                <LinearLayout
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_weight="1"
+                                    android:orientation="vertical">
+                                    <TextView
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:text="@string/tap_he_test_mode"
+                                        android:textColor="#333333"
+                                        android:textSize="@dimen/text_size_14" />
+                                    <TextView
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:layout_marginTop="1dp"
+                                        android:text="@string/tap_he_test_mode_desc"
+                                        android:textColor="#999999"
+                                        android:textSize="@dimen/text_size_12" />
+                                </LinearLayout>
+
+                                <com.google.android.material.switchmaterial.SwitchMaterial
+                                    android:id="@+id/switch_tap_he_test"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    app:thumbTint="@color/switch_thumb_tint"
+                                    app:trackTint="@color/switch_track_tint" />
+                            </LinearLayout>
+                        </LinearLayout>
+
                         <View
                             android:id="@+id/divider_after_tap_low_power"
                             android:layout_width="match_parent"

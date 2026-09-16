@@ -176,6 +176,8 @@ object PrefsBackupSupport {
         if (root.has("double_tap_enabled_v1")) edit.putBoolean("double_tap_enabled", root.getBoolean("double_tap_enabled_v1"))
         if (root.has("tap_model_v1")) edit.putString("tap_model", root.getString("tap_model_v1"))
         if (root.has("tap_sensitivity_level_v1")) edit.putInt("tap_sensitivity_level", root.getInt("tap_sensitivity_level_v1"))
+        if (root.has("tap_he_sensitivity_v1")) edit.putInt("tap_he_sensitivity", root.getInt("tap_he_sensitivity_v1"))
+        if (root.has("tap_he_test_mode_v1")) edit.putBoolean("tap_he_test_mode", root.getBoolean("tap_he_test_mode_v1"))
         if (root.has("tap_nnapi_low_power_v1")) edit.putBoolean("tap_nnapi_low_power", root.getBoolean("tap_nnapi_low_power_v1"))
         if (root.has("tap_power_saving_v1")) edit.putBoolean("tap_power_saving", root.getBoolean("tap_power_saving_v1"))
         if (root.has("tap_force_full_ml_v1")) edit.putBoolean("tap_force_full_ml_migrated_v1", root.getBoolean("tap_force_full_ml_v1"))
@@ -391,6 +393,8 @@ object PrefsBackupSupport {
             put("double_tap_enabled_v1", Prefs.isDoubleTapEnabled(ctx))
             put("tap_model_v1", Prefs.getTapModel(ctx))
             put("tap_sensitivity_level_v1", Prefs.getTapSensitivityLevel(ctx))
+            put("tap_he_sensitivity_v1", Prefs.getTapHeSensitivityLevel(ctx))
+            put("tap_he_test_mode_v1", Prefs.isTapHeTestModeEnabled(ctx))
             put("tap_nnapi_low_power_v1", Prefs.isTapNnapiLowPower(ctx))
             put("tap_power_saving_v1", Prefs.isTapPowerSavingEnabled(ctx))
             put("tap_force_full_ml_v1", Prefs.isTapForceFullMl(ctx))
@@ -527,7 +531,7 @@ object PrefsBackupSupport {
     fun serializeSettingsModules(ctx: Context): Map<String, String> {
         val full = JSONObject(serializeSettings(ctx))
         return linkedMapOf(
-            "settings_general_basic" to filterSettingsModule(full, "quick_gesture_enabled_v1", "hide_recents_v1", "app_usage_mode_v1", "first_day_of_week_v1", "app_white_list_v1", "double_tap_enabled_v1", "tap_model_v1", "tap_sensitivity_level_v1", "tap_nnapi_low_power_v1", "tap_power_saving_v1", "tap_force_full_ml_v1", "tap_triple_enabled_v1", "tap_action_double_v1", "tap_action_triple_v1", "flip_enabled_v1", "flip_sensitivity_v1", "flip_action_v1", "flip_disable_landscape_v1", "recurring_auto_detect_enabled_v1", "recurring_detect_amount_tolerance_v1"),
+            "settings_general_basic" to filterSettingsModule(full, "quick_gesture_enabled_v1", "hide_recents_v1", "app_usage_mode_v1", "first_day_of_week_v1", "app_white_list_v1", "double_tap_enabled_v1", "tap_model_v1", "tap_sensitivity_level_v1", "tap_he_sensitivity_v1", "tap_he_test_mode_v1", "tap_nnapi_low_power_v1", "tap_power_saving_v1", "tap_force_full_ml_v1", "tap_triple_enabled_v1", "tap_action_double_v1", "tap_action_triple_v1", "flip_enabled_v1", "flip_sensitivity_v1", "flip_action_v1", "flip_disable_landscape_v1", "recurring_auto_detect_enabled_v1", "recurring_detect_amount_tolerance_v1"),
             "settings_general_assets" to filterSettingsModule(full, "asset_feature_enabled_v1", "active_currencies_v1", "exchange_refresh_interval_v1", "cm_enabled_currencies_v1", "cm_rates_json_v1", "cm_rates_update_time_v1", "cm_refresh_interval_min_v1"),
             // These modules enter only the whole-archive encrypted backup format.
             "settings_general_cloud" to filterSettingsModule(full, "cloud_webdav_url_v1", "cloud_webdav_user_v1", "cloud_webdav_pass_v1", "cloud_webdav_dir_v1", "cloud_device_name_v1"),

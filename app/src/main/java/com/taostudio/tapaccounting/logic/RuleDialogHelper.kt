@@ -156,7 +156,7 @@ object RuleDialogHelper {
         tvCategory.setOnClickListener {
             val currentType = if (spType.selectedItemPosition == 1) 1 else 0
             OverlayDialogs.showGridCategoryPicker(ctx, tvCategory.text.toString(), currentType) { selected ->
-                tvCategory.text = selected
+                tvCategory.text = selected.ifBlank { ctx.getString(R.string.tap_select_category) }
             }
         }
 

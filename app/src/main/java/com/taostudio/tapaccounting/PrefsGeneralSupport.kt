@@ -35,6 +35,11 @@ object PrefsGeneralSupport {
     private const val KEY_GESTURE_PERMISSION_PROMPT_DEFER_UNTIL_MS = "gesture_permission_prompt_defer_until_ms_v1"
     private const val KEY_TAP_MODEL = "tap_model"
     private const val KEY_TAP_SENSITIVITY_LEVEL = "tap_sensitivity_level"
+    private const val KEY_TAP_HE_SENSITIVITY = "tap_he_sensitivity"
+    private const val KEY_TAP_HE_TEST_MODE = "tap_he_test_mode"
+
+    /** 省电档灵敏度默认值：比主灵敏度默认的 5 更钝一档。 */
+    const val DEFAULT_TAP_HE_SENSITIVITY = 3
     private const val KEY_TAP_NNAPI_LOW_POWER = "tap_nnapi_low_power"
     private const val KEY_TAP_TRIPLE_ENABLED = "tap_triple_enabled"
     private const val KEY_TAP_LOW_POWER = "tap_low_power"
@@ -290,6 +295,29 @@ object PrefsGeneralSupport {
         prefs(ctx).getInt(KEY_TAP_SENSITIVITY_LEVEL, 5)
     fun setTapSensitivityLevel(ctx: Context, level: Int) =
         prefs(ctx).edit().putInt(KEY_TAP_SENSITIVITY_LEVEL, level).apply()
+
+    /**
+     * 省电档（启发式待机）专用灵敏度。
+     *
+     * 和 [getTapSensitivityLevel] 同刻度：**数字越大越灵敏**（对应 PeakDetector 的
+     * minNoiseTolerate 越小）。默认 3 比主灵敏度默认 5 更钝，因为启发式这条链路没有 ML 兜底，
+     * 同一个阈值在 ML 下没问题、在启发式下就会频繁误触。
+     */
+    fun getTapHeSensitivityLevel(ctx: Context): Int =
+        prefs(ctx).getInt(KEY_TAP_HE_SENSITIVITY, DEFAULT_TAP_HE_SENSITIVITY)
+    fun setTapHeSensitivityLevel(ctx: Context, level: Int) =
+        prefs(ctx).edit().putInt(KEY_TAP_HE_SENSITIVITY, level).apply()
+
+    /**
+     * 省电档测试模式：检测器锁定在启发式待机，敲中只给震动+提示，
+     * 既不切精确档也不记账。用来快速试出省电档灵敏度该调多少。
+     *
+     * 只在省电模式开启时生效（它挂在省电分组下面）。
+     */
+    fun isTapHeTestModeEnabled(ctx: Context): Boolean =
+        prefs(ctx).getBoolean(KEY_TAP_HE_TEST_MODE, false)
+    fun setTapHeTestModeEnabled(ctx: Context, enabled: Boolean) =
+        prefs(ctx).edit().putBoolean(KEY_TAP_HE_TEST_MODE, enabled).apply()
 
     fun isTapNnapiLowPower(ctx: Context): Boolean =
         prefs(ctx).getBoolean(KEY_TAP_NNAPI_LOW_POWER, false)

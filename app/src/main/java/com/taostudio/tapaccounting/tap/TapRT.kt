@@ -7,15 +7,12 @@ enum class TapClass {
 }
 
 open class TapRT(
-    val sizeWindowNs: Long,
-    private val minTimeGapNs: Long = mMinTimeGapNs,
-    private val maxTimeGapNs: Long = mMaxTimeGapNs
+    val sizeWindowNs: Long
 ) : EventIMURT(), BaseTapRT {
 
     companion object {
         const val mMinTimeGapNs = 100000000L
         const val mMaxTimeGapNs = 500000000L
-        const val HEURISTIC_MIN_TIME_GAP_NS = 180000000L
         private const val mFrameAlignPeak = 12
     }
 
@@ -88,7 +85,7 @@ open class TapRT(
         val v0 = _tBackTapTimestamps.iterator()
         while (v0.hasNext()) {
             val v1 = v0.next()
-            if (timestamp - v1 <= maxTimeGapNs) {
+            if (timestamp - v1 <= mMaxTimeGapNs) {
                 continue
             }
             v0.remove()
@@ -101,7 +98,7 @@ open class TapRT(
         while (v6.hasNext()) {
             val v0_1 = _tBackTapTimestamps.last
             val v7 = v6.next()
-            if (v0_1 - v7 <= minTimeGapNs) {
+            if (v0_1 - v7 <= mMinTimeGapNs) {
                 continue
             }
 

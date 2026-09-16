@@ -535,7 +535,29 @@ class AccountingFormController(
     private fun isAccountPlaceholder(name: String): Boolean {
         val text = name.trim()
         if (text.isEmpty()) return true
-        return text.contains(ctx.getString(R.string.select_asset).take(2)) || text == ctx.getString(R.string.from_account) || text == ctx.getString(R.string.to_account) || text == ctx.getString(R.string.payment_account)
+        return text.contains(ctx.getString(R.string.select_asset).take(2)) ||
+            text == ctx.getString(R.string.from_account) ||
+            text == ctx.getString(R.string.to_account) ||
+            text == ctx.getString(R.string.payment_account) ||
+            text == ctx.getString(R.string.default_account) ||
+            text == ctx.getString(R.string.select_to_account) ||
+            text == ctx.getString(R.string.select_from_account) ||
+            text == ctx.getString(R.string.select_credit_card)
+    }
+
+    /** 占位文案归一为空字符串，避免「选择资产/默认账户」等被写入账单 */
+    private fun sanitizeAccountNameForSave(name: String): String =
+        name.trim().takeUnless { isAccountPlaceholder(it) }.orEmpty()
+
+    /** 分类占位文案（选择分类等）归一为空字符串 */
+    private fun sanitizeCategoryNameForSave(name: String): String {
+        val text = name.trim()
+        if (text.isEmpty()) return ""
+        if (text == ctx.getString(R.string.select_category) ||
+            text == ctx.getString(R.string.tap_select_category) ||
+            text == ctx.getString(R.string.select_category_label)
+        ) return ""
+        return text
     }
 
     private fun adjustTypeByToAccount(toAccountName: String) {
@@ -622,6 +644,25 @@ class AccountingFormController(
                             val selectableAssets = assetFilter?.let { filter -> assets.filter(filter) } ?: assets
                             if (selectableAssets.isNotEmpty()) {
                                 OverlayDialogs.showGridAssetPicker(ctx, tvAccount.text.toString(), title, assetFilter) { selectedName ->
+                                    if (selectedName.isBlank()) {
+                                        // 清空资产：恢复占位文案，重置图标与汇率状态
+                                        tvAccount.text = if (isRepaymentMode || spType.selectedItemPosition == 2) {
+                                            ctx.getString(R.string.from_account)
+                                        } else {
+                                            ctx.getString(R.string.select_asset)
+                                        }
+                                        resetAccountIconToEmoji()
+                                        customTransferRate = null
+                                        customTargetAmount = null
+                                        savedTransferRateForEdit = null
+                                        hasConfirmedExchangeRate = false
+                                        hasConfirmedCurrencyRate = false
+                                        customCurrencyRate = null
+                                        customCurrencyTargetAmount = null
+                                        pendingInvestmentSchedule = null
+                                        hasCheckedInvestmentSchedulePrompt = false
+                                        return@showGridAssetPicker
+                                    }
                                     tvAccount.text = selectedName
                                     refreshAccountIconForName(selectedName)
                                     customTransferRate = null
@@ -649,8 +690,13 @@ class AccountingFormController(
                     if (!isActivityAlive()) return@OnClickListener
                     val currentType = if (spType.selectedItemPosition == 1) Prefs.TYPE_INCOME else Prefs.TYPE_EXPENSE
                     OverlayDialogs.showGridCategoryPicker(ctx, tvCategory.text.toString(), currentType) {
-                        tvCategory.text = it.replace(" > ", " - ")
-                        refreshCategoryIconForSelection(it)
+                        if (it.isBlank()) {
+                            tvCategory.text = ctx.getString(R.string.select_category)
+                            resetCategoryIconToEmoji()
+                        } else {
+                            tvCategory.text = it.replace(" > ", " - ")
+                            refreshCategoryIconForSelection(it)
+                        }
                     }
                 }
                 R.id.layout_account_2, R.id.tv_account_2 -> {
@@ -668,6 +714,18 @@ class AccountingFormController(
                             val selectableAssets = assetFilter?.let { filter -> assets.filter(filter) } ?: assets
                             if (selectableAssets.isNotEmpty()) {
                                 OverlayDialogs.showGridAssetPicker(ctx, tvAccount2.text.toString(), title, assetFilter) { selectedName ->
+                                    if (selectedName.isBlank()) {
+                                        // 清空转入账户：恢复占位文案，重置图标与汇率状态
+                                        tvAccount2.text = ctx.getString(R.string.to_account)
+                                        resetAccount2IconToEmoji()
+                                        customTransferRate = null
+                                        customTargetAmount = null
+                                        savedTransferRateForEdit = null
+                                        hasConfirmedExchangeRate = false
+                                        pendingInvestmentSchedule = null
+                                        hasCheckedInvestmentSchedulePrompt = false
+                                        return@showGridAssetPicker
+                                    }
                                     tvAccount2.text = selectedName
                                     refreshAccount2IconForName(selectedName)
                                     customTransferRate = null
@@ -1631,9 +1689,9 @@ class AccountingFormController(
         }
 
         val subType = if (isRepayment) Bill.SUBTYPE_REPAYMENT else Bill.SUBTYPE_NORMAL
-        
-        val accountName1 = if (isAssetFeatureEnabled) tvAccount.text.toString() else ""
-        val accountName2 = if (isAssetFeatureEnabled) tvAccount2.text.toString() else ""
+
+        val accountName1 = if (isAssetFeatureEnabled) sanitizeAccountNameForSave(tvAccount.text.toString()) else ""
+        val accountName2 = if (isAssetFeatureEnabled) sanitizeAccountNameForSave(tvAccount2.text.toString()) else ""
 
         if (editingBillId == null &&
             isAssetFeatureEnabled &&
@@ -1734,7 +1792,7 @@ class AccountingFormController(
                 return@launch
             }
 
-            var finalCategory = tvCategory.text.toString()
+            var finalCategory = sanitizeCategoryNameForSave(tvCategory.text.toString())
             if (type == 2) {
                 finalCategory = if (isRepayment) "还款" else "转账"
             }

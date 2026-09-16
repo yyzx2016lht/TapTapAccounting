@@ -4,9 +4,8 @@ import android.os.SystemClock
 
 class HeuristicTapTapTapRT(
     sizeWindowNs: Long,
-    private val isTripleTapEnabled: Boolean,
-    private val minTimeGapNs: Long = mMinTimeGapNs
-) : TapRT(sizeWindowNs, minTimeGapNs) {
+    private val isTripleTapEnabled: Boolean
+) : TapRT(sizeWindowNs) {
 
     companion object {
         private const val mMaxTimeGapTripleNs = 750_000_000L
@@ -30,7 +29,7 @@ class HeuristicTapTapTapRT(
         val timeNow = SystemClock.elapsedRealtimeNanos()
         while (secondPassIterator.hasNext()) {
             val pastTimestamp = secondPassIterator.next()
-            if (_tBackTapTimestamps.last() - pastTimestamp <= minTimeGapNs) continue
+            if (_tBackTapTimestamps.last() - pastTimestamp <= mMinTimeGapNs) continue
             tapCount++
         }
 

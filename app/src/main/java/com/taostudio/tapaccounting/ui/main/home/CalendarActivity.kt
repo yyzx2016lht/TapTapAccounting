@@ -980,7 +980,7 @@ class CalendarActivity : AppCompatActivity() {
         }
 
         layoutRefundAccount.setOnClickListener {
-            OverlayDialogs.showGridAssetPicker(this, tvRefundAccount.text.toString(), "选择退款入账账户") { account ->
+            OverlayDialogs.showGridAssetPicker(this, tvRefundAccount.text.toString(), "选择退款入账账户", allowClear = false) { account ->
                 selectedAccount = account
                 tvRefundAccount.text = account
             }

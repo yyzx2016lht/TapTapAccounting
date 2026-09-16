@@ -1,7 +1,12 @@
 package com.taostudio.tapaccounting
 
+import org.json.JSONObject
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 class AIAccountingSupportTest {
     private val expenseCats = listOf(
@@ -130,5 +135,35 @@ class AIAccountingSupportTest {
             resolveAccountingBookForSave("", "", availableBooks, "默认账本")
         )
     }
+
+    @Test
+    fun cleanJsonStringStripsAlreadyBookedPrefix() {
+        val cleaned = cleanJsonString(
+            """已记账：{"bills":[{"amount":5.99,"type":0,"time":"2026-09-08 12:00:00","remarks":"牛奶","currency":"CNY"}]}"""
+        )
+        assertTrue(cleaned.startsWith("{"))
+        assertTrue(JSONObject(cleaned).has("bills"))
+    }
+
+    @Test
+    fun normalizeAccountingResultUsesNowWhenTimeMissing() {
+        val now = 1_725_768_000_000L // fixed anchor
+        val root = JSONObject(
+            """{"bills":[{"amount":5.99,"type":0,"time":"","remarks":"牛奶","currency":"CNY","category_id":"e0"}]}"""
+        )
+        normalizeAccountingResult(
+            root = root,
+            expenseCats = expenseCats,
+            incomeCats = emptyList(),
+            assetNames = emptyList(),
+            assetFeatureEnabled = false,
+            referenceText = "买了牛奶5.99",
+            nowMillis = now
+        )
+        val time = root.getJSONArray("bills").getJSONObject(0).getString("time")
+        val expected = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date(now))
+        assertEquals(expected, time)
+    }
+
 }
 

@@ -40,7 +40,10 @@ class OverlayService : Service() {
             }
         }
 
-        private const val WATCHDOG_INTERVAL_MS = 60_000L
+        // 看门狗：既做传感器健康检查，也充当存活心跳源。
+        // 间隔取 30s，配合 ProcessExitLogger 内部 60s 的写盘限流，
+        // 进程若被强杀，心跳流水里能定位到 1 分钟以内。
+        private const val WATCHDOG_INTERVAL_MS = 30_000L
         private const val TAP_DEAD_EVENT_TIMEOUT_MS = 45_000L
         private const val TAP_DEAD_CONSECUTIVE_LIMIT = 1
         private const val MAX_CONSECUTIVE_WATCHDOG_RESTARTS = 5
@@ -431,9 +434,7 @@ class OverlayService : Service() {
                 isDoubleTapEnabled = false
                 stopTapDetection()
                 if (userDisabledTap) {
-                    KeepAliveWorker.cancelHourlyRestart(this)
-                    KeepAliveWorker.cancelPeriodic(this)
-                    KeepAliveWorker.cancelOneTime(this)
+                    OverlayWatchdogWorker.cancel(this)
                     stopSelfIfIdle("double-tap-disabled")
                 } else {
                     Logger.d(this, "OverlayService", "Tap detection paused temporarily; service kept alive")
@@ -648,39 +649,78 @@ class OverlayService : Service() {
         tapDetector = null
     }
 
+    /**
+     * 挂上/续期看门狗。
+     *
+     * 用 KEEP 策略入队，所以服务每次重建都调用它是安全的：
+     * 已存在的排期不会被重置，只保证"只要手势开着，看门狗就一定在"。
+     */
     private fun scheduleKeepAliveWork() {
-        KeepAliveWorker.cancelPeriodic(this)
-        KeepAliveWorker.cancelHourlyRestart(this)
-        KeepAliveWorker.cancelOneTime(this)
+        OverlayWatchdogWorker.schedule(this)
     }
 
     private fun cancelRestart() {
-        KeepAliveWorker.cancelOneTime(this)
+        // 旧的 KeepAliveWorker 一次性重拉已废弃，改由 OverlayWatchdogWorker 周期自愈
     }
 
     // ════════════════════════════════════════════════════════
     //  工具方法
     // ════════════════════════════════════════════════════════
     private fun promoteToForeground(content: String) {
-        try {
-            val notification = OverlayServiceNotifications.build(this, CHANNEL_ID, content)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                startForeground(
-                    NOTIF_ID,
-                    notification,
-                    ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
-                )
-            } else {
-                startForeground(NOTIF_ID, notification)
+        val notification = OverlayServiceNotifications.build(this, CHANNEL_ID, content)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            // 对照实验：health 是 Android 14 引入的传感器监测类型，
+            // 语义上比 specialUse 更贴合"加速度计/陀螺仪持续检测"。
+            // 但个别 ROM 会要求 PROPERTY_HEALTH_FGS_SUBTYPE 等附加声明而抛异常，
+            // 一旦抛异常服务就会掉出前台（比原来更糟），所以必须逐级回退。
+            val candidates = intArrayOf(
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_HEALTH,
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
+            )
+            for (type in candidates) {
+                try {
+                    startForeground(NOTIF_ID, notification, type)
+                    Logger.d(this, "OverlayService", "Foreground service active: $content (type=${fgTypeName(type)})")
+                    return
+                } catch (e: Exception) {
+                    Logger.d(
+                        this,
+                        "OverlayService",
+                        "startForeground with ${fgTypeName(type)} failed: ${e.javaClass.simpleName}: ${e.message}"
+                    )
+                }
             }
-            Logger.d(this, "OverlayService", "Foreground service active: $content")
-        } catch (e: Exception) {
-            Logger.d(this, "OverlayService", "startForeground failed: ${e.message}")
+            Logger.d(this, "OverlayService", "🚨 all foreground types rejected; service stays non-foreground")
+        } else {
+            try {
+                startForeground(NOTIF_ID, notification)
+                Logger.d(this, "OverlayService", "Foreground service active: $content (legacy)")
+            } catch (e: Exception) {
+                Logger.d(this, "OverlayService", "startForeground failed: ${e.message}")
+            }
         }
+    }
+
+    private fun fgTypeName(type: Int): String = when (type) {
+        ServiceInfo.FOREGROUND_SERVICE_TYPE_HEALTH -> "HEALTH"
+        ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE -> "SPECIAL_USE"
+        ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE -> "MICROPHONE"
+        else -> "0x${Integer.toHexString(type)}"
     }
 
     fun enterMicrophoneMode(): Boolean {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE) return true
+
+        // 麦克风类型要求 RECORD_AUDIO 处于授权态，否则 startForeground 抛异常会让服务掉出前台。
+        // 这里先自检，不满足就直接保持 SPECIAL_USE，宁可录音失败也不能丢掉前台身份。
+        val hasRecordAudio = ContextCompat.checkSelfPermission(
+            this,
+            android.Manifest.permission.RECORD_AUDIO
+        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        if (!hasRecordAudio) {
+            Logger.d(this, "OverlayService", "enterMicrophoneMode skipped: RECORD_AUDIO not granted")
+            return false
+        }
 
         return try {
             startForeground(
@@ -693,6 +733,8 @@ class OverlayService : Service() {
             true
         } catch (e: Exception) {
             Logger.d(this, "OverlayService", "enterMicrophoneMode failed: ${e.message}")
+            // 回退：至少保证服务仍在前台
+            runCatching { promoteToForeground(getString(R.string.notif_double_tap_running)) }
             false
         }
     }

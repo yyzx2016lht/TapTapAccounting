@@ -50,9 +50,10 @@ class WidgetSettingsActivity : AppCompatActivity() {
     private fun buildRow(appWidgetId: Int, size: WidgetSize): View {
         val config = WidgetConfigStore.load(this, appWidgetId) ?: WidgetConfig.default(this)
         val sizeLabel = when (size) {
-            WidgetSize.COMPACT -> "精简款 · 2×1"
-            WidgetSize.STANDARD -> "标准款 · 2×2"
-            WidgetSize.DETAILED -> "详细款 · 4×2"
+            WidgetSize.COMPACT -> "支出金额 · 2×1"
+            WidgetSize.STANDARD -> "预算金额 · 2×1"
+            WidgetSize.TODAY_BUDGET -> "今日花费与预算 · 2×1"
+            WidgetSize.DETAILED -> "财务概览 · 4×2"
         }
 
         val card = CardView(this).apply {
@@ -85,7 +86,11 @@ class WidgetSettingsActivity : AppCompatActivity() {
             setTypeface(typeface, android.graphics.Typeface.BOLD)
         })
         textColumn.addView(TextView(this).apply {
-            text = "${config.bookName} · ${config.period.label()}"
+            text = when (size) {
+                WidgetSize.STANDARD -> "${config.bookName} · 本月"
+                WidgetSize.TODAY_BUDGET -> "${config.bookName} · 今日"
+                else -> "${config.bookName} · ${config.period.label()}"
+            }
             setTextColor(resources.getColor(R.color.settings_item_subtitle, theme))
             textSize = 12f
             setPadding(0, (4 * resources.displayMetrics.density).toInt(), 0, 0)

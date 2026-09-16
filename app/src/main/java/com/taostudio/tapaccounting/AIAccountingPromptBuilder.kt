@@ -27,6 +27,7 @@ internal fun buildAccountingSystemPrompt(
         AIPrompts.buildExecutionModeRule()
     }
 
+    prompt += AIPrompts.buildAmountSplitAndMergeRule()
     prompt += AIPrompts.buildOutputJsonRuleWithTargetFields()
 
     return prompt
@@ -44,6 +45,9 @@ internal fun buildScreenAccountingSystemPrompt(
     if (quickScreenMode) {
         prompt += AIPrompts.SCREEN_CAPTURE_DIRECT_PROMPT_ADDON
     }
+
+    // 同名商品必须合并累加，不能只保留其中一行（订单详情页常见同款连排多行）
+    prompt += AIPrompts.buildSameItemMergeRule()
 
     // 动态规则对两个场景通用，且不与基础 prompt 冲突
     prompt += AIPrompts.buildTypeRule(promptContext.assetFeatureEnabled)
@@ -185,6 +189,8 @@ internal fun buildAccountingUserPrompt(
             appendLine("【你的名字】$aiName")
         }
         appendLine("【对话记账输出格式】成功记账：{\"bills\":[...], \"assistant_reply\":\"一句自然的中文回复\"}；非记账/纯闲聊：{\"no_bill\":true, \"reply\":\"...\"}。assistant_reply 必须是直接对用户说的话，不要输出场景标签、英文状态词、JSON 或内部指令。")
+        appendLine("【历史约束·必须遵守】历史里以「过去已入账」「已记账」开头的内容只是过去轮次摘要，不是当前任务结果。只要当前【用户输入】包含新的消费/收入/票据/金额信息，就必须重新提取并输出 bills；禁止只回复「已经记账/已记好」且 no_bill=true，也禁止把历史 JSON 原文抄进 reply。")
+        appendLine("【历史金额·禁止当锚点】历史摘要里出现过的金额、单价只允许用于理解指代（「同上」「刚才那笔」「再来一笔一样的」）。严禁拿它推断本轮未明确给出的金额、单价，或据此对用户未拆分的组合总价做分摊。本轮金额只能来自【用户输入】中明确写出的数字。")
     } else {
         appendLine("【场景】独立记账模式。直接输出账单 JSON，不需要 assistant_reply。")
     }

@@ -70,9 +70,22 @@ object PrefsGeneralSupport {
     fun setDisableLandscape(ctx: Context, enabled: Boolean) =
         prefs(ctx).edit().putBoolean(KEY_DISABLE_LANDSCAPE, enabled).apply()
 
-    fun isHideRecents(ctx: Context): Boolean = prefs(ctx).getBoolean(KEY_HIDE_RECENTS, false)
-    fun setHideRecents(ctx: Context, hide: Boolean) =
-        prefs(ctx).edit().putBoolean(KEY_HIDE_RECENTS, hide).apply()
+    /**
+     * 隐藏后台卡片已被废弃，永远返回 false，也不再允许打开。
+     *
+     * 这个开关原本的假设是"卡片消失能少被系统清理"，实测结论相反：
+     * 卡片是 ColorOS/Osense 判定"用户还在用"的输入之一，卡片被摘掉之后
+     * 进程会进入"无任务"状态并反复被杀。相关证据见 keepalive 排查记录。
+     *
+     * 保留 key 与 setter 是为了兼容旧备份的恢复（老备份里可能有 hide_recents_v1，
+     * 直接删 key 会让恢复逻辑找不到字段）。
+     */
+    fun isHideRecents(ctx: Context): Boolean = false
+
+    @Deprecated("隐藏后台卡片已被证伪，调用不再生效", ReplaceWith(""))
+    fun setHideRecents(ctx: Context, hide: Boolean) {
+        // 故意不落盘：即使旧备份把 hide_recents_v1 恢复成 true，也不会再隐藏卡片
+    }
 
     fun isShizukuPersistenceEnabled(ctx: Context): Boolean =
         prefs(ctx).getBoolean(KEY_SHIZUKU_PERSISTENCE, false)

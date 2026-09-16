@@ -198,6 +198,7 @@
     <color name="widget_text_secondary">#FF8A94A6</color>
     <color name="widget_accent">#FF1A56CC</color>
     <color name="widget_danger">#FFE53935</color>
+    <color name="widget_progress_track">#1A1A56CC</color>
 
     <!-- Shared book dialogs -->
     <color name="shared_dialog_section_title">#6F7E95</color>

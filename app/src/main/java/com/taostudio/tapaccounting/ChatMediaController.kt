@@ -713,31 +713,11 @@ class ChatMediaController(
     }
 
     /**
-     * 为 AI 发送压缩图片（类似微信发图策略）：
-     * - 分辨率限制在 1280px 以内（AI 看图不需要太大）
-     * - JPEG 质量 75（清晰度足够，体积小）
-     * - 目标：大多数图片压缩到 100-300KB
+     * 为 AI 发送压缩图片（类似微信发图策略）：长边 ≤1280px、JPEG 75。
+     * 参数与「图片记账」入口共用，见 [AiImageCompressor]。
      */
     private fun compressImageForAi(file: File) {
-        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-        BitmapFactory.decodeFile(file.absolutePath, bounds)
-        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return
-
-        // 计算采样率：目标 1280px
-        val targetSize = 1280
-        var sample = 1
-        while (bounds.outWidth / sample > targetSize || bounds.outHeight / sample > targetSize) {
-            sample *= 2
-        }
-        val opts = BitmapFactory.Options().apply { inSampleSize = sample }
-        val bitmap = BitmapFactory.decodeFile(file.absolutePath, opts) ?: return
-        try {
-            FileOutputStream(file, false).use { out ->
-                bitmap.compress(Bitmap.CompressFormat.JPEG, 75, out)
-            }
-        } finally {
-            bitmap.recycle()
-        }
+        AiImageCompressor.compressInPlace(file)
     }
 
     private fun copyPickedAttachmentToStorage(sourceUri: Uri, sourceMime: String, fileName: String): Uri {

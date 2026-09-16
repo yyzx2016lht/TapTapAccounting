@@ -27,8 +27,8 @@ class ChatMessagePersistenceController(
     private val getCurrentBookName: () -> String,
     private val getCurrentConversationId: () -> String,
     private val buildVoicePayload: (String, Int, String) -> String,
-    private val scrollToBottom: () -> Unit,
-    private val ensureLastMessageVisible: () -> Unit,
+    private val scrollToBottom: (Boolean) -> Unit,
+    private val followStreamUpdates: () -> Boolean,
     private val refreshSessionRows: suspend () -> Unit
 ) {
     private fun isUiAlive(): Boolean = !(context.isDestroyed || context.isFinishing)
@@ -51,7 +51,7 @@ class ChatMessagePersistenceController(
         val uiKey = item.uiKey
         displayMessages.add(item)
         adapterProvider().notifyItemInserted(displayMessages.lastIndex)
-        scrollToBottom()
+        scrollToBottom(true)
         Logger.d(
             context,
             "ChatRecord",
@@ -106,7 +106,7 @@ class ChatMessagePersistenceController(
         pendingVoiceBubbleAnimations += audioFile.absolutePath
         displayMessages.add(item)
         adapterProvider().notifyItemInserted(displayMessages.lastIndex)
-        scrollToBottom()
+        scrollToBottom(true)
         Logger.d(
             context,
             "ChatRecord",
@@ -168,7 +168,7 @@ class ChatMessagePersistenceController(
             displayMessages.add(item)
             val insertedIndex = displayMessages.lastIndex
             adapterProvider().notifyItemInserted(insertedIndex)
-            scrollToBottom()
+            if (followStreamUpdates()) scrollToBottom(false)
         }
 
         if (!isLoading && text.isNotBlank()) {
@@ -193,8 +193,8 @@ class ChatMessagePersistenceController(
                     if (getCurrentBookName() == targetBookName && getCurrentConversationId() == targetConversationId) {
                         val idx = displayMessages.indexOfFirst { it.uiKey == uiKey }
                         if (idx >= 0) {
+                            // 仅回填 dbId，不重复通知（视觉上无任何变化，复通知会重渲染 Markdown 引起完成后的二次闪动）
                             displayMessages[idx] = displayMessages[idx].copy(dbId = id)
-                            adapterProvider().notifyItemChanged(idx)
                         }
                     }
                     refreshSessionRows()
@@ -231,7 +231,7 @@ class ChatMessagePersistenceController(
         if (idx >= 0) {
             displayMessages.removeAt(idx)
             adapterProvider().notifyItemRemoved(idx)
-            scrollToBottom()
+            if (followStreamUpdates()) scrollToBottom(false)
         }
     }
 
@@ -243,6 +243,8 @@ class ChatMessagePersistenceController(
         if (current.content == text) return
         displayMessages[idx] = current.copy(content = text)
         adapterProvider().notifyItemChanged(idx, ChatAdapter.PAYLOAD_LOADING_TEXT)
+        // 用户停留在底部时，让流式增长始终露出最新一行（不在底部则不打扰阅读）
+        if (followStreamUpdates()) scrollToBottom(false)
     }
 
     fun finalizeLoadingMessage(
@@ -251,10 +253,10 @@ class ChatMessagePersistenceController(
         bookName: String,
         conversationId: String,
         showConversationModeNudge: Boolean = false
-    ) {
-        if (!isUiAlive()) return
+    ): Boolean {
+        if (!isUiAlive()) return false
         val idx = displayMessages.indexOfFirst { it.uiKey == uiKey && it.isLoading }
-        if (idx < 0) return
+        if (idx < 0) return false
         val current = displayMessages[idx]
         displayMessages[idx] = current.copy(
             content = text,
@@ -262,7 +264,7 @@ class ChatMessagePersistenceController(
             showConversationModeNudge = showConversationModeNudge
         )
         adapterProvider().notifyItemChanged(idx)
-        scrollToBottom()
+        if (followStreamUpdates()) scrollToBottom(false)
         if (text.isNotBlank()) {
             aiWorkScope.launch(Dispatchers.IO) {
                 val id = db.chatMessageDao().insert(
@@ -280,14 +282,15 @@ class ChatMessagePersistenceController(
                     if (getCurrentBookName() == bookName && getCurrentConversationId() == conversationId) {
                         val currentIdx = displayMessages.indexOfFirst { it.uiKey == uiKey }
                         if (currentIdx >= 0) {
+                            // 仅回填 dbId，避免完成后再触发一次全量 rebind（重新加载头像 / 重渲 Markdown）
                             displayMessages[currentIdx] = displayMessages[currentIdx].copy(dbId = id)
-                            adapterProvider().notifyItemChanged(currentIdx)
                         }
                     }
                     refreshSessionRows()
                 }
             }
         }
+        return true
     }
 
     @Deprecated("Use uiKey-based appendAiTextMessage overload.")

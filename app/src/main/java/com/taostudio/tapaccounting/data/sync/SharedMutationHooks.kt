@@ -6,6 +6,7 @@ import com.taostudio.tapaccounting.TapApplication
 import com.taostudio.tapaccounting.data.local.AppDatabase
 import com.taostudio.tapaccounting.data.local.entity.Bill
 import com.taostudio.tapaccounting.data.local.entity.SharedLedger
+import com.taostudio.tapaccounting.widget.ExpenseWidgetUpdater
 import java.util.UUID
 import androidx.room.withTransaction
 
@@ -69,6 +70,7 @@ object SharedMutationHooks {
             if (latest.isNotEmpty()) db.billDao().delete(latest)
         }
         if (sharedTargets.isNotEmpty()) SharedSyncScheduler.enqueueNow(TapApplication.app())
+        runCatching { ExpenseWidgetUpdater.refreshAllDebounced(TapApplication.app()) }
     }
 
     private suspend fun enqueueDeleteFromLedger(db: AppDatabase, ledger: SharedLedger, bill: Bill) {
@@ -98,6 +100,7 @@ object SharedMutationHooks {
                 enqueueSaved(db, moved)
             }
         }
+        runCatching { ExpenseWidgetUpdater.refreshAllDebounced(TapApplication.app()) }
     }
 
     suspend fun repairMovedSharedBills(db: AppDatabase) {

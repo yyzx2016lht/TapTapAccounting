@@ -65,7 +65,7 @@
     <string name="ai_accounting_entry_desc">在传统记账弹窗底部显示切换入口。</string>
 
     <!-- 手势设置 -->
-    <string name="tap_always_on_desc">始终使用传感器检测，关闭后自动省电</string>
+    <string name="tap_always_on_desc">开启后静止约 3 分钟切启发式待机省电；关闭则全程使用 ML 识别</string>
     <string name="tap_triple_desc">连敲三次触发单独动作，开启后双击响应会变慢</string>
     <string name="flip_sensitivity_hint">灵敏度越高越容易触发，过高可能误触</string>
     <string name="tap_sensitivity_hint">灵敏度越高越容易触发，过高可能误触</string>
@@ -638,6 +638,11 @@
     <string name="re_recognize">重识别</string>
     <string name="copy_transcript">复制转写</string>
     <string name="multi_select">多选</string>
+    <string name="share">分享</string>
+    <string name="read_aloud">朗读</string>
+    <string name="scroll_to_latest">回到最新</string>
+    <string name="tts_not_ready">朗读引擎准备中，请稍后再试</string>
+    <string name="share_chooser_title">分享到</string>
     <string name="modify_category">修改分类</string>
     <string name="interrupt_generation">中断生成</string>
     <string name="view_large_image">查看大图</string>
@@ -871,6 +876,8 @@
     <string name="tap_back_desc">敲击手机背面触发你选择的快捷动作</string>
     <string name="no_landscape_detect">横屏状态不检测</string>
     <string name="landscape_hint">启用后，横屏时将忽略翻转和敲击触发</string>
+    <!-- 已废弃：实测"卡片消失"会导致进程被系统反复清理，入口已在代码中下线。
+         字符串保留仅为避免旧引用报错，不要在 UI 中重新启用。 -->
     <string name="hide_bg_card">隐藏后台卡片</string>
     <string name="hide_bg_card_hint">实验性功能，测试是否解决杀后台问题</string>
     <string name="popup_vibration">弹窗震动反馈</string>
@@ -896,7 +903,10 @@
     <string name="default_model">默认模型</string>
     <string name="low_power_inference">低功耗推理</string>
     <string name="npu_hint">使用 NPU 加速，更省电</string>
-    <string name="full_ml_mode">全程 ML 高灵敏模式</string>
+    <!-- 该开关直接对应 tap_power_saving：打开 = 省电（静止约 3 分钟后切启发式待机），
+         关闭 = 全程 ML。旧的 "full_ml_mode / 全程 ML 高灵敏模式" 文案与绑定语义相反，
+         已废弃并改名，避免再次被误用。 -->
+    <string name="tap_low_power_mode">敲击检测省电</string>
     <string name="triple_tap_mode">三击模式</string>
     <string name="double_tap_action">双击动作</string>
     <string name="show_accounting_overlay">弹出记账悬浮窗</string>

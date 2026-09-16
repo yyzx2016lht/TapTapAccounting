@@ -37,9 +37,8 @@ class ChatMessagePipeline(
     private val appendAiTextMessage: (String, Boolean, String?, String?, Boolean) -> String,
     private val removeLoadingMessage: (String) -> Unit,
     private val updateLoadingMessage: (String, String) -> Unit,
-    private val finalizeLoadingMessage: (String, String, String, String, Boolean) -> Unit,
+    private val finalizeLoadingMessage: (String, String, String, String, Boolean) -> Boolean,
     private val buildAnalysisInput: suspend (String) -> String,
-    private val decideSingleOrMultiForChat: (String) -> Boolean,
     private val processBillResult: suspend (JSONObject, String, String, String) -> List<Bill>,
     private val confirmVisualAccountingDraft: suspend (String, String, String) -> String?,
     private val buildBillSummary: (List<Bill>) -> String,
@@ -59,13 +58,22 @@ class ChatMessagePipeline(
         showConversationModeNudge: Boolean = false
     ): String = appendAiTextMessage(text, isLoading, bookName, conversationId, showConversationModeNudge)
 
+    /**
+     * 原地把加载气泡定稿为最终回复：不销毁重建消息条目，避免 remove+insert 带来的
+     * 二次闪跳。若加载气泡已不存在（已被移除等），回退为追加新消息，保证内容不丢。
+     */
     private fun finalizeAi(
         uiKey: String,
         text: String,
         bookName: String,
         conversationId: String,
         showConversationModeNudge: Boolean = false
-    ) = finalizeLoadingMessage(uiKey, text, bookName, conversationId, showConversationModeNudge)
+    ) {
+        val finalized = finalizeLoadingMessage(uiKey, text, bookName, conversationId, showConversationModeNudge)
+        if (!finalized) {
+            appendAi(text, false, bookName, conversationId, showConversationModeNudge)
+        }
+    }
 
     companion object {
         private const val CHAT_ROUTE_LOG_TAG = "AiChatRoute"
@@ -318,14 +326,27 @@ class ChatMessagePipeline(
 
     private suspend fun summarizeBillHistoryMessage(msg: ChatMessage, bookName: String): String {
         val billIds = ChatBillMessageParser.parseBillIds(msg.billIds)
-        val bills = billIds.mapNotNull { id -> db.billDao().getBillById(id) }
-        if (bills.isNotEmpty()) {
-            return truncateHistoryText("已记账：${buildBillSummary(bills)}", MAX_CHAT_HISTORY_TURN_CHARS)
+        val liveBills = billIds.mapNotNull { id -> db.billDao().getBillById(id) }
+        if (liveBills.isNotEmpty()) {
+            return truncateHistoryText(
+                "过去已入账（仅上下文，不是当前任务结果）：${buildBillSummary(liveBills)}",
+                MAX_CHAT_HISTORY_TURN_CHARS
+            )
         }
-        if (msg.content.isNotBlank()) {
-            return truncateHistoryText("已记账：${compactHistoryText(msg.content, 800)}", MAX_CHAT_HISTORY_TURN_CHARS)
+        // Never dump raw bill JSON into model history — that makes the model echo
+        // "已记账：{...}" as plain text and skip real booking on the next turn.
+        val snapshotBills = ChatBillMessageParser.parseBillsFromMessageContent(
+            content = msg.content,
+            currentBookName = bookName,
+            parseTimeToMillis = { System.currentTimeMillis() }
+        )
+        if (snapshotBills.isNotEmpty()) {
+            return truncateHistoryText(
+                "过去已入账（仅上下文，不是当前任务结果）：${buildBillSummary(snapshotBills)}",
+                MAX_CHAT_HISTORY_TURN_CHARS
+            )
         }
-        return "[账单结果]"
+        return "[过去账单结果]"
     }
 
     private fun compactHistoryText(text: String, maxLen: Int = 180): String {
@@ -464,14 +485,29 @@ class ChatMessagePipeline(
                 }
                 val chatHistoryTurns = buildChatHistoryTurns(historyInputText, requestContext)
                 val analysisInput = buildAnalysisInput(userText)
-                val autoMultiMode = true
                 var accountingSourceText = userText
                 val result = try {
                     if (isImagePayload && extractedImages != null) {
                         val supplementText = extractedImages.supplement
                         val imagePairs = extractedImages.images.map { it.base64 to it.mime }
+                        // 先做二分类
+                        val intent = withContext(Dispatchers.IO) {
+                            AIService.classifyIntent(context, supplementText, imagePairs)
+                        }
+                        if (!canWriteForRequest(requestContext)) return@launch
+
                         if (isConversationMode()) {
-                            if (!canWriteForRequest(requestContext)) return@launch
+                            if (intent == "BOOKKEEPING") {
+                                // 对话模式下检测到记账请求，提示用户切换模式
+                                finalizeAi(
+                                    loadingKey,
+                                    "检测到记账内容，你可以点击右上角切换到记账模式来记录这笔账",
+                                    requestContext.bookName,
+                                    requestContext.conversationId
+                                )
+                                return@launch
+                            }
+                            // 对话模式下的闲聊
                             streamConversationWithImages(
                                 loadingKey = loadingKey,
                                 userInput = supplementText,
@@ -481,35 +517,37 @@ class ChatMessagePipeline(
                             )
                             return@launch
                         }
-                        val routerIntent = withContext(Dispatchers.IO) {
-                            AIService.classifyRouterIntent(context, supplementText, imagePairs).intent
+
+                        // 记账模式下的闲聊
+                        if (intent == "GENERAL_CHAT") {
+                            streamAccountingCasualWithImages(
+                                loadingKey = loadingKey,
+                                userInput = supplementText,
+                                images = imagePairs,
+                                chatHistoryTurns = chatHistoryTurns,
+                                requestContext = requestContext
+                            )
+                            return@launch
+                        }
+                    } else if (!isImagePayload) {
+                        // 先做二分类
+                        val intent = withContext(Dispatchers.IO) {
+                            AIService.classifyIntent(context, userText)
                         }
                         if (!canWriteForRequest(requestContext)) return@launch
-                        when (routerIntent) {
-                            "GENERAL_CHAT" -> {
-                                streamAccountingCasualWithImages(
-                                    loadingKey = loadingKey,
-                                    userInput = supplementText,
-                                    images = imagePairs,
-                                    chatHistoryTurns = chatHistoryTurns,
-                                    requestContext = requestContext
-                                )
-                                return@launch
-                            }
-                            "UNSUPPORTED_WRITE" -> {
-                                removeLoadingMessage(loadingKey)
-                                appendAi(
-                                    context.getString(R.string.chat_unsupported_write),
-                                    false,
+
+                        if (isConversationMode()) {
+                            if (intent == "BOOKKEEPING") {
+                                // 对话模式下检测到记账请求，提示用户切换模式
+                                finalizeAi(
+                                    loadingKey,
+                                    "检测到记账内容，你可以点击右上角切换到记账模式来记录这笔账",
                                     requestContext.bookName,
                                     requestContext.conversationId
                                 )
                                 return@launch
                             }
-                        }
-                    } else if (!isImagePayload) {
-                        if (isConversationMode()) {
-                            if (!canWriteForRequest(requestContext)) return@launch
+                            // 对话模式下的闲聊
                             streamConversationWithText(
                                 loadingKey = loadingKey,
                                 userText = userText,
@@ -519,33 +557,15 @@ class ChatMessagePipeline(
                             return@launch
                         }
 
-                        // 记账模式下区分新增记账、闲聊和不支持的写操作
-                        val routerResult = withContext(Dispatchers.IO) {
-                            AIService.classifyRouterIntent(context, userText)
-                        }
-                        if (!canWriteForRequest(requestContext)) return@launch
-
-                        when (routerResult.intent) {
-                            "GENERAL_CHAT" -> {
-                                streamAccountingCasualWithText(
-                                    loadingKey = loadingKey,
-                                    userText = userText,
-                                    chatHistoryTurns = chatHistoryTurns,
-                                    requestContext = requestContext
-                                )
-                                return@launch
-                            }
-                            "UNSUPPORTED_WRITE" -> {
-                                removeLoadingMessage(loadingKey)
-                                appendAi(
-                                    context.getString(com.taostudio.tapaccounting.R.string.chat_unsupported_write),
-                                    false,
-                                    requestContext.bookName,
-                                    requestContext.conversationId
-                                )
-                                return@launch
-                            }
-                            // ACCOUNTING_CREATE → 继续走记账流程
+                        // 记账模式下的闲聊
+                        if (intent == "GENERAL_CHAT") {
+                            streamAccountingCasualWithText(
+                                loadingKey = loadingKey,
+                                userText = userText,
+                                chatHistoryTurns = chatHistoryTurns,
+                                requestContext = requestContext
+                            )
+                            return@launch
                         }
                     }
 
@@ -597,10 +617,9 @@ class ChatMessagePipeline(
                                 )?.trim()
                                 if (!canWriteForRequest(requestContext)) return@launch
                                 if (confirmedDraft.isNullOrBlank()) {
-                                    removeLoadingMessage(loadingKey)
-                                    appendAi(
+                                    finalizeAi(
+                                        loadingKey,
                                         "已取消本次图片记账。",
-                                        false,
                                         requestContext.bookName,
                                         requestContext.conversationId
                                     )
@@ -615,7 +634,6 @@ class ChatMessagePipeline(
                                     AIService.analyzeAccounting(
                                         ctx = context,
                                         userInput = accountingInput,
-                                        isMultiModeOverride = autoMultiMode,
                                         isFromChat = true,
                                         chatTurns = chatHistoryTurns,
                                         onProgress = { status ->
@@ -681,10 +699,9 @@ class ChatMessagePipeline(
                                 )?.trim()
                                 if (!canWriteForRequest(requestContext)) return@launch
                                 if (confirmedDraft.isNullOrBlank()) {
-                                    removeLoadingMessage(loadingKey)
-                                    appendAi(
+                                    finalizeAi(
+                                        loadingKey,
                                         "已取消本次图片记账。",
-                                        false,
                                         requestContext.bookName,
                                         requestContext.conversationId
                                     )
@@ -701,7 +718,6 @@ class ChatMessagePipeline(
                                     AIService.analyzeAccounting(
                                         ctx = context,
                                     userInput = accountingInput,
-                                    isMultiModeOverride = autoMultiMode,
                                     isFromChat = true,
                                     chatTurns = chatHistoryTurns,
                                     onProgress = { status ->
@@ -724,7 +740,6 @@ class ChatMessagePipeline(
                             AIService.analyzeAccounting(
                                 ctx = context,
                                 userInput = analysisInput,
-                                isMultiModeOverride = autoMultiMode,
                                 isFromChat = true,
                                 chatTurns = chatHistoryTurns,
                                 onProgress = { status ->
@@ -739,8 +754,8 @@ class ChatMessagePipeline(
                 }
 
                 if (!canWriteForRequest(requestContext)) return@launch
-                removeLoadingMessage(loadingKey)
                 finalizeChatAccountingResult(
+                    loadingKey = loadingKey,
                     result = result,
                     sourceText = accountingSourceText,
                     requestContext = requestContext,
@@ -755,9 +770,8 @@ class ChatMessagePipeline(
                 removeLoadingMessage(loadingKey)
             } catch (e: Exception) {
                 if (!canWriteForRequest(requestContext)) return@launch
-                removeLoadingMessage(loadingKey)
                 val msg = mapAiErrorToUserMessage(e)
-                appendAi(msg, false, requestContext.bookName, requestContext.conversationId)
+                finalizeAi(loadingKey, msg, requestContext.bookName, requestContext.conversationId)
             } finally {
                 clearActiveRequestIfMatch(requestContext)
             }
@@ -800,8 +814,7 @@ class ChatMessagePipeline(
                                 requestContext.conversationId
                             )
                         } else {
-                            removeLoadingMessage(loadingKey)
-                            appendAi("语音回复生成失败，请重试。", false, requestContext.bookName, requestContext.conversationId)
+                            finalizeAi(loadingKey, "语音回复生成失败，请重试。", requestContext.bookName, requestContext.conversationId)
                         }
                         return@launch
                     }
@@ -853,8 +866,8 @@ class ChatMessagePipeline(
                         )
                     }
                     if (!canWriteForRequest(requestContext)) return@launch
-                    removeLoadingMessage(loadingKey)
                     finalizeChatAccountingResult(
+                        loadingKey = loadingKey,
                         result = result,
                         sourceText = "[语音输入]",
                         requestContext = requestContext,
@@ -867,12 +880,28 @@ class ChatMessagePipeline(
                 if (!canWriteForRequest(requestContext)) return@launch
 
                 if (transcript.isBlank()) {
-                    removeLoadingMessage(loadingKey)
-                    appendAi("我没听清语音内容，你可以再说一次或直接打字。", false, requestContext.bookName, requestContext.conversationId)
+                    finalizeAi(loadingKey, "我没听清语音内容，你可以再说一次或直接打字。", requestContext.bookName, requestContext.conversationId)
                     return@launch
                 }
 
+                // 先做二分类
+                val intent = withContext(Dispatchers.IO) {
+                    AIService.classifyIntent(context, transcript)
+                }
+                if (!canWriteForRequest(requestContext)) return@launch
+
                 if (isConversationMode()) {
+                    if (intent == "BOOKKEEPING") {
+                        // 对话模式下检测到记账请求，提示用户切换模式
+                        finalizeAi(
+                            loadingKey,
+                            "检测到记账内容，你可以点击右上角切换到记账模式来记录这笔账",
+                            requestContext.bookName,
+                            requestContext.conversationId
+                        )
+                        return@launch
+                    }
+                    // 对话模式下的闲聊
                     streamConversationWithText(
                         loadingKey = loadingKey,
                         userText = transcript,
@@ -882,31 +911,15 @@ class ChatMessagePipeline(
                     return@launch
                 }
 
-                val routerResult = withContext(Dispatchers.IO) {
-                    AIService.classifyRouterIntent(context, transcript)
-                }
-                if (!canWriteForRequest(requestContext)) return@launch
-
-                when (routerResult.intent) {
-                    "GENERAL_CHAT" -> {
-                        streamAccountingCasualWithText(
-                            loadingKey = loadingKey,
-                            userText = transcript,
-                            chatHistoryTurns = buildChatHistoryTurns(transcript, requestContext),
-                            requestContext = requestContext
-                        )
-                        return@launch
-                    }
-                    "UNSUPPORTED_WRITE" -> {
-                        removeLoadingMessage(loadingKey)
-                        appendAi(
-                            context.getString(R.string.chat_unsupported_write),
-                            false,
-                            requestContext.bookName,
-                            requestContext.conversationId
-                        )
-                        return@launch
-                    }
+                // 记账模式下的闲聊
+                if (intent == "GENERAL_CHAT") {
+                    streamAccountingCasualWithText(
+                        loadingKey = loadingKey,
+                        userText = transcript,
+                        chatHistoryTurns = buildChatHistoryTurns(transcript, requestContext),
+                        requestContext = requestContext
+                    )
+                    return@launch
                 }
 
                 updateLoadingMessage(loadingKey, "正在整理账单...")
@@ -914,7 +927,6 @@ class ChatMessagePipeline(
                     AIService.analyzeAccounting(
                         ctx = context,
                         userInput = transcript,
-                        isMultiModeOverride = decideSingleOrMultiForChat(transcript),
                         onProgress = { status ->
                             runOnUiIfAlive {
                                 if (canWriteForRequest(requestContext)) {
@@ -928,8 +940,8 @@ class ChatMessagePipeline(
                 }
 
                 if (!canWriteForRequest(requestContext)) return@launch
-                removeLoadingMessage(loadingKey)
                 finalizeChatAccountingResult(
+                    loadingKey = loadingKey,
                     result = result,
                     sourceText = transcript,
                     requestContext = requestContext,
@@ -939,9 +951,8 @@ class ChatMessagePipeline(
                 removeLoadingMessage(loadingKey)
             } catch (e: Exception) {
                 if (!canWriteForRequest(requestContext)) return@launch
-                removeLoadingMessage(loadingKey)
                 val msg = mapAiErrorToUserMessage(e)
-                appendAi(msg, false, requestContext.bookName, requestContext.conversationId)
+                finalizeAi(loadingKey, msg, requestContext.bookName, requestContext.conversationId)
             } finally {
                 clearActiveRequestIfMatch(requestContext)
             }
@@ -951,6 +962,7 @@ class ChatMessagePipeline(
     }
 
     private suspend fun finalizeChatAccountingResult(
+        loadingKey: String,
         result: JSONObject?,
         sourceText: String,
         requestContext: ChatRequestContext,
@@ -959,27 +971,35 @@ class ChatMessagePipeline(
     ) {
         if (result == null) {
             if (forceTextReply) {
-                appendAi(
+                finalizeAi(
+                    loadingKey,
                     parseFailureHint,
-                    false,
                     requestContext.bookName,
                     requestContext.conversationId
                 )
+            } else {
+                removeLoadingMessage(loadingKey)
             }
             return
         }
         if (result.optBoolean("no_bill", false)) {
-            appendAccountingInlineReply(result, requestContext)
-            if (forceTextReply && AIService.extractAccountingAssistantReply(result).isBlank()) {
-                appendAi(
-                    "我暂时没识别到明确账单，你可以补充金额、分类或账户，我继续帮你完成。",
-                    false,
-                    requestContext.bookName,
-                    requestContext.conversationId
-                )
+            val reply = sanitizeAssistantReply(AIService.extractAccountingAssistantReply(result))
+            val safeReply = if (replyLooksLikeBookedSuccess(reply)) "" else reply
+            val text = if (forceTextReply || safeReply.isBlank()) {
+                "这次没有真正入账。你可以补充金额、消费内容或账户，我再帮你记。"
+            } else {
+                safeReply
             }
+            finalizeAi(
+                loadingKey,
+                text,
+                requestContext.bookName,
+                requestContext.conversationId
+            )
             return
         }
+        // 账单路径：原加载气泡换成账单卡片（不同消息类型），移除即可
+        removeLoadingMessage(loadingKey)
         val savedBills = processBillResult(
             result,
             sourceText,
@@ -1009,7 +1029,25 @@ class ChatMessagePipeline(
             return ""
         }
         text = text.replace(Regex("^\\s*(BILL_SAVED|NO_BILL|SCENE)\\s*[:：-]?\\s*", RegexOption.IGNORE_CASE), "")
+        // Drop leaked bill JSON dumps that models sometimes put into reply.
+        if (text.contains("\"bills\"") && (text.contains('{') || text.contains('['))) {
+            val withoutJson = text
+                .replace(Regex("已记账\\s*[:：]?\\s*\\{.*\\}", RegexOption.DOT_MATCHES_ALL), "")
+                .replace(Regex("过去已入账[^\\n]*"), "")
+                .replace(Regex("\\{\\s*\"bills\"\\s*:.*\\}", RegexOption.DOT_MATCHES_ALL), "")
+                .trim()
+            text = withoutJson
+        }
         return text.trim()
+    }
+
+    private fun replyLooksLikeBookedSuccess(reply: String): Boolean {
+        val normalized = reply.replace("\\s+".toRegex(), "")
+        if (normalized.isBlank()) return false
+        return listOf(
+            "已记账", "已经记账", "记账成功", "入账成功", "已经记好",
+            "记好了", "已经帮你记", "帮你记下", "记下了"
+        ).any { normalized.contains(it) }
     }
 
     private suspend fun streamAccountingCasualWithText(
@@ -1041,10 +1079,9 @@ class ChatMessagePipeline(
                 showConversationModeNudge = true
             )
         } else {
-            removeLoadingMessage(loadingKey)
-            appendAi(
+            finalizeAi(
+                loadingKey,
                 context.getString(R.string.chat_reply_failed),
-                false,
                 requestContext.bookName,
                 requestContext.conversationId
             )
@@ -1073,19 +1110,18 @@ class ChatMessagePipeline(
             )
         }
         if (!canWriteForRequest(requestContext)) return
-        removeLoadingMessage(loadingKey)
         if (chatReply.completed && chatReply.content.isNotBlank()) {
-            appendAi(
+            finalizeAi(
+                loadingKey,
                 chatReply.content,
-                false,
                 requestContext.bookName,
                 requestContext.conversationId,
                 showConversationModeNudge = true
             )
         } else {
-            appendAi(
+            finalizeAi(
+                loadingKey,
                 context.getString(R.string.chat_reply_failed),
-                false,
                 requestContext.bookName,
                 requestContext.conversationId
             )
@@ -1120,10 +1156,9 @@ class ChatMessagePipeline(
                 requestContext.conversationId
             )
         } else {
-            removeLoadingMessage(loadingKey)
-            appendAi(
+            finalizeAi(
+                loadingKey,
                 context.getString(R.string.chat_reply_failed),
-                false,
                 requestContext.bookName,
                 requestContext.conversationId
             )
@@ -1152,18 +1187,17 @@ class ChatMessagePipeline(
             )
         }
         if (!canWriteForRequest(requestContext)) return
-        removeLoadingMessage(loadingKey)
         if (chatReply.completed && chatReply.content.isNotBlank()) {
-            appendAi(
+            finalizeAi(
+                loadingKey,
                 chatReply.content,
-                false,
                 requestContext.bookName,
                 requestContext.conversationId
             )
         } else {
-            appendAi(
+            finalizeAi(
+                loadingKey,
                 context.getString(R.string.chat_reply_failed),
-                false,
                 requestContext.bookName,
                 requestContext.conversationId
             )

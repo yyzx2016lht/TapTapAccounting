@@ -803,7 +803,7 @@ class AccountingFormController(
         }
         layoutAiTextEntry.setOnClickListener {
             hideAmountKeypad()
-            aiAssistant.showInputPanel(hideStreamText = true, isMultiMode = isCurrentUiMultiMode()) { fillDataToUi(it) }
+            aiAssistant.showInputPanel(hideStreamText = true) { fillDataToUi(it) }
         }
         // btnVoice 的触摸逻辑由 VoiceInputHandler.setupVoiceButton 接管，此处不设置 OnClickListener
 

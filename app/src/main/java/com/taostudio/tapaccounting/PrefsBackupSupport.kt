@@ -169,7 +169,9 @@ object PrefsBackupSupport {
 
         if (root.has("quick_gesture_enabled_v1")) edit.putBoolean(KEY_QUICK_GESTURE_ENABLED, root.getBoolean("quick_gesture_enabled_v1"))
 
-        if (root.has("hide_recents_v1")) edit.putBoolean(KEY_HIDE_RECENTS, root.getBoolean("hide_recents_v1"))
+        // 隐藏后台卡片已废弃：老备份里的 hide_recents_v1 一律忽略，
+        // 避免恢复出"卡片被摘掉 → 进程被反复清理"的已知劣化配置。
+        edit.putBoolean(KEY_HIDE_RECENTS, false)
 
         if (root.has("double_tap_enabled_v1")) edit.putBoolean("double_tap_enabled", root.getBoolean("double_tap_enabled_v1"))
         if (root.has("tap_model_v1")) edit.putString("tap_model", root.getString("tap_model_v1"))

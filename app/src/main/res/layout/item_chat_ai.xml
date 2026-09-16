@@ -125,8 +125,8 @@
                     android:gravity="center_vertical"
                     android:minHeight="40dp"
                     android:orientation="horizontal"
-                    android:paddingHorizontal="12dp"
-                    android:paddingVertical="10dp">
+                    android:paddingHorizontal="@dimen/chat_bubble_padding_h"
+                    android:paddingVertical="@dimen/chat_bubble_padding_v">
 
                     <com.taostudio.tapaccounting.ui.chat.ChatTypingDotsView
                         android:id="@+id/typing_dots"
@@ -140,6 +140,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:linksClickable="true"
+                        android:maxWidth="@dimen/chat_message_max_width"
                         android:textColor="@color/chat_loading_text"
                         android:textSize="13sp"
                         android:visibility="gone" />

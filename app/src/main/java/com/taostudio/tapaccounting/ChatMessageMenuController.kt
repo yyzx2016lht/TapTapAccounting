@@ -3,7 +3,10 @@ package com.taostudio.tapaccounting
 import android.graphics.Color
 import android.graphics.drawable.ColorDrawable
 import android.os.Build
+import android.view.ActionMode
 import android.view.LayoutInflater
+import android.view.Menu
+import android.view.MenuItem
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager.BadTokenException
@@ -28,7 +31,10 @@ class ChatMessageMenuController(
     private val showSoftKeyboard: (View) -> Unit,
     private val updateInputActionUi: () -> Unit,
     private val deleteBillsFromMenu: (ChatDisplayItem) -> Unit,
-    private val openBillCalendar: (ChatDisplayItem) -> Unit
+    private val openBillCalendar: (ChatDisplayItem) -> Unit,
+    private val selectAllInTextView: (TextView) -> Unit,
+    private val sharePlainText: (String) -> Unit,
+    private val readAloud: (String) -> Unit
 ) {
     private fun canShowPopup(anchor: View): Boolean {
         if (!anchor.isAttachedToWindow || anchor.windowToken == null) return false
@@ -121,6 +127,9 @@ class ChatMessageMenuController(
         val popup = createMessagePopup(popupView)
 
         popupView.findViewById<View>(R.id.menu_item_copy).visibility = View.VISIBLE
+        popupView.findViewById<View>(R.id.menu_item_select_all).visibility = View.GONE
+        popupView.findViewById<View>(R.id.menu_item_share).visibility = View.VISIBLE
+        popupView.findViewById<View>(R.id.menu_item_read_aloud).visibility = View.VISIBLE
         popupView.findViewById<View>(R.id.menu_item_edit_resend).visibility = View.VISIBLE
         popupView.findViewById<View>(R.id.menu_item_transcribe).visibility = View.GONE
         popupView.findViewById<View>(R.id.menu_item_retranscribe).visibility = View.GONE
@@ -151,6 +160,14 @@ class ChatMessageMenuController(
             val summary = ChatBillUiHelper.buildCopySummary(item)
             copyToClipboard("chat_bill_summary", summary, "已复制")
         }
+        popupView.findViewById<View>(R.id.menu_item_share).setOnClickListener {
+            popup.dismiss()
+            sharePlainText(ChatBillUiHelper.buildCopySummary(item))
+        }
+        popupView.findViewById<View>(R.id.menu_item_read_aloud).setOnClickListener {
+            popup.dismiss()
+            readAloud(ChatBillUiHelper.buildCopySummary(item))
+        }
         editResend.setOnClickListener {
             popup.dismiss()
             openBillCalendar(item)
@@ -167,6 +184,9 @@ class ChatMessageMenuController(
         val popup = createMessagePopup(popupView)
 
         popupView.findViewById<View>(R.id.menu_item_copy).visibility = View.VISIBLE
+        popupView.findViewById<View>(R.id.menu_item_select_all).visibility = View.VISIBLE
+        popupView.findViewById<View>(R.id.menu_item_share).visibility = View.VISIBLE
+        popupView.findViewById<View>(R.id.menu_item_read_aloud).visibility = View.VISIBLE
         popupView.findViewById<View>(R.id.menu_item_edit_resend).visibility = View.VISIBLE
         popupView.findViewById<View>(R.id.menu_item_transcribe).visibility = View.GONE
         popupView.findViewById<View>(R.id.menu_item_retranscribe).visibility = View.GONE
@@ -177,6 +197,25 @@ class ChatMessageMenuController(
             val text = item.content.trim()
             if (text.isEmpty()) return@setOnClickListener
             copyToClipboard("chat_message", text, "已复制")
+        }
+        popupView.findViewById<View>(R.id.menu_item_select_all).setOnClickListener {
+            popup.dismiss()
+            val tv = anchor as? TextView ?: return@setOnClickListener
+            val text = item.content.trim()
+            if (text.isEmpty()) return@setOnClickListener
+            selectAllInTextView(tv)
+        }
+        popupView.findViewById<View>(R.id.menu_item_share).setOnClickListener {
+            popup.dismiss()
+            val text = item.content.trim()
+            if (text.isEmpty()) return@setOnClickListener
+            sharePlainText(text)
+        }
+        popupView.findViewById<View>(R.id.menu_item_read_aloud).setOnClickListener {
+            popup.dismiss()
+            val text = item.content.trim()
+            if (text.isEmpty()) return@setOnClickListener
+            readAloud(text)
         }
         popupView.findViewById<View>(R.id.menu_item_edit_resend).setOnClickListener {
             popup.dismiss()

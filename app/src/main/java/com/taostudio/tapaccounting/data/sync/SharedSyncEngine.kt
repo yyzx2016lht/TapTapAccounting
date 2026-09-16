@@ -13,6 +13,7 @@ import com.taostudio.tapaccounting.data.local.entity.SyncOperation
 import com.taostudio.tapaccounting.data.local.entity.SyncState
 import com.taostudio.tapaccounting.data.sync.protocol.Operation
 import com.taostudio.tapaccounting.data.sync.protocol.ManifestValidator
+import com.taostudio.tapaccounting.widget.ExpenseWidgetUpdater
 import kotlinx.coroutines.delay
 import java.security.MessageDigest
 import java.util.UUID
@@ -135,6 +136,8 @@ class SharedSyncEngine(private val context: Context, private val db: AppDatabase
                 isSyncing = false,
                 lastError = null
             ))
+            // 远端账单/预算落地后刷新桌面小组件，避免共享成员记账后本机小组件仍旧数据。
+            ExpenseWidgetUpdater.refreshAllDebounced(context)
         } catch (e: Exception) {
             if (e is WebDavHttpException) recordCooldown(e, ledger.webdavUrl, ledger.webdavUser)
             db.syncStateDao().save(current.copy(isSyncing = false, lastError = e.message ?: "同步失败"))

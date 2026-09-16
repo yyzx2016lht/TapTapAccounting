@@ -63,3 +63,7 @@ config.json
 # ===== 杂项 =====
 codex_overlay_preview.png
 assets/dexopt/
+
+# ===== 临时工作目录 =====
+.tmp/
+.workbuddy/

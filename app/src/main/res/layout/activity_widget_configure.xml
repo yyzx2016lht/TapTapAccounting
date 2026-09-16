@@ -17,18 +17,18 @@
             android:id="@+id/btn_widget_config_back"
             android:layout_width="@dimen/icon_size_40"
             android:layout_height="@dimen/icon_size_40"
+            android:layout_centerVertical="true"
             android:padding="8dp"
             android:src="@drawable/ic_chevron_left"
-            android:layout_centerVertical="true"
             app:tint="@color/settings_item_title" />
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_centerInParent="true"
             android:text="桌面小组件设置"
+            android:textColor="@color/settings_item_title"
             android:textSize="@dimen/text_size_18"
-            android:textStyle="bold"
-            android:textColor="@color/settings_item_title" />
+            android:textStyle="bold" />
     </RelativeLayout>
 
     <androidx.core.widget.NestedScrollView
@@ -36,89 +36,107 @@
         android:layout_height="0dp"
         android:layout_weight="1"
         android:overScrollMode="never">
-
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
             android:padding="16dp">
 
-            <!-- 账本 -->
+            <TextView
+                android:id="@+id/tv_widget_size_hint"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="12dp"
+                android:gravity="center"
+                android:textColor="@color/settings_item_subtitle"
+                android:textSize="@dimen/text_size_12" />
+
             <androidx.cardview.widget.CardView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="12dp"
+                app:cardBackgroundColor="@color/settings_card_bg"
                 app:cardCornerRadius="16dp"
-                app:cardElevation="0dp"
-                app:cardBackgroundColor="@color/settings_card_bg">
-
+                app:cardElevation="0dp">
                 <LinearLayout
+                    android:id="@+id/layout_widget_book_selector"
                     android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:padding="16dp">
-
+                    android:layout_height="72dp"
+                    android:background="?attr/selectableItemBackground"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingHorizontal="16dp">
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="统计账本"
+                            android:textColor="@color/settings_section_title"
+                            android:textSize="@dimen/text_size_15"
+                            android:textStyle="bold" />
+                        <TextView
+                            android:id="@+id/tv_widget_selected_book"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="4dp"
+                            android:maxLines="1"
+                            android:ellipsize="end"
+                            android:textColor="@color/settings_item_subtitle"
+                            android:textSize="@dimen/text_size_12" />
+                    </LinearLayout>
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="统计账本"
-                        android:textColor="@color/settings_section_title"
-                        android:textSize="@dimen/text_size_15"
-                        android:textStyle="bold"
-                        android:layout_marginBottom="4dp" />
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="默认使用当前正在查看的账本，也可以固定为某一个账本"
-                        android:textColor="@color/settings_item_subtitle"
-                        android:textSize="@dimen/text_size_11"
-                        android:layout_marginBottom="10dp" />
-
-                    <RadioGroup
-                        android:id="@+id/rg_widget_book"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:orientation="vertical" />
+                        android:text="›"
+                        android:textColor="@color/settings_chevron"
+                        android:textSize="22sp" />
                 </LinearLayout>
             </androidx.cardview.widget.CardView>
 
-            <!-- 统计周期 -->
             <androidx.cardview.widget.CardView
+                android:id="@+id/card_widget_period"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="12dp"
+                app:cardBackgroundColor="@color/settings_card_bg"
                 app:cardCornerRadius="16dp"
-                app:cardElevation="0dp"
-                app:cardBackgroundColor="@color/settings_card_bg">
-
+                app:cardElevation="0dp">
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:orientation="vertical"
                     android:padding="16dp">
-
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:text="支出统计周期"
                         android:textColor="@color/settings_section_title"
                         android:textSize="@dimen/text_size_15"
-                        android:textStyle="bold"
-                        android:layout_marginBottom="4dp" />
+                        android:textStyle="bold" />
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="预算相关指标始终按当前自然月计算，不受此选项影响"
+                        android:layout_marginTop="4dp"
+                        android:layout_marginBottom="8dp"
+                        android:text="只影响支出；预算和剩余始终按本月计算"
                         android:textColor="@color/settings_item_subtitle"
-                        android:textSize="@dimen/text_size_11"
-                        android:layout_marginBottom="10dp" />
-
+                        android:textSize="@dimen/text_size_11" />
                     <RadioGroup
                         android:id="@+id/rg_widget_period"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:orientation="vertical">
-
+                        <RadioButton
+                            android:id="@+id/rb_period_today"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="今日" />
                         <RadioButton
                             android:id="@+id/rb_period_month"
                             android:layout_width="match_parent"
@@ -133,66 +151,18 @@
                             android:id="@+id/rb_period_7days"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:text="最近7日" />
+                            android:text="近7日" />
                     </RadioGroup>
                 </LinearLayout>
             </androidx.cardview.widget.CardView>
 
-            <!-- 显示内容 -->
-            <androidx.cardview.widget.CardView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="12dp"
-                app:cardCornerRadius="16dp"
-                app:cardElevation="0dp"
-                app:cardBackgroundColor="@color/settings_card_bg">
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:padding="16dp">
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="显示内容"
-                        android:textColor="@color/settings_section_title"
-                        android:textSize="@dimen/text_size_15"
-                        android:textStyle="bold"
-                        android:layout_marginBottom="4dp" />
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="小尺寸小组件只会显示排在最前面的一项"
-                        android:textColor="@color/settings_item_subtitle"
-                        android:textSize="@dimen/text_size_11"
-                        android:layout_marginBottom="10dp" />
-
-                    <CheckBox
-                        android:id="@+id/cb_metric_expense"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="总支出" />
-                    <CheckBox
-                        android:id="@+id/cb_metric_budget"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="本月预算" />
-                    <CheckBox
-                        android:id="@+id/cb_metric_remaining"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="预算剩余" />
-                </LinearLayout>
-            </androidx.cardview.widget.CardView>
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btn_save_widget_config"
                 android:layout_width="match_parent"
                 android:layout_height="48dp"
                 android:layout_marginTop="4dp"
-                android:text="保存"
+                android:text="保存并刷新"
                 app:cornerRadius="24dp" />
         </LinearLayout>
     </androidx.core.widget.NestedScrollView>

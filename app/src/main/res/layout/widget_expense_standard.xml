@@ -8,73 +8,72 @@
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="match_parent"
+        android:gravity="center_vertical"
         android:orientation="vertical"
-        android:padding="12dp">
+        android:paddingHorizontal="12dp"
+        android:paddingVertical="6dp">
 
         <TextView
-            android:id="@+id/tv_widget_subtitle"
+            android:id="@+id/tv_widget_primary_label"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:includeFontPadding="false"
             android:maxLines="1"
-            android:ellipsize="end"
-            android:textSize="10sp"
+            android:text="预算剩余"
             android:textColor="@color/widget_text_secondary"
-            android:text="日常账本 · 本月" />
+            android:textSize="8sp" />
+
+        <TextView
+            android:id="@+id/tv_widget_primary_value"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:includeFontPadding="false"
+            android:maxLines="1"
+            android:text="¥1,350.00"
+            android:textColor="@color/widget_accent"
+            android:textSize="16dp"
+            android:textStyle="bold" />
+
+        <ProgressBar
+            android:id="@+id/progress_widget_budget"
+            style="?android:attr/progressBarStyleHorizontal"
+            android:layout_width="match_parent"
+            android:layout_height="3dp"
+            android:layout_marginTop="4dp"
+            android:max="100"
+            android:progress="90"
+            android:progressDrawable="@drawable/widget_budget_progress" />
 
         <LinearLayout
             android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:layout_weight="1"
+            android:layout_height="wrap_content"
             android:layout_marginTop="4dp"
-            android:orientation="vertical"
-            android:gravity="center_vertical">
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
 
-            <LinearLayout
-                android:layout_width="match_parent"
+            <TextView
+                android:id="@+id/tv_widget_secondary_label"
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center_vertical"
-                android:layout_marginBottom="4dp">
-                <TextView
-                    android:id="@+id/tv_widget_primary_label"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:textSize="12sp"
-                    android:textColor="@color/widget_text_secondary"
-                    android:text="总支出" />
-                <TextView
-                    android:id="@+id/tv_widget_primary_value"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:textSize="16sp"
-                    android:textStyle="bold"
-                    android:textColor="@color/widget_accent"
-                    android:text="¥0.00" />
-            </LinearLayout>
+                android:includeFontPadding="false"
+                android:maxLines="1"
+                android:text="本月预算"
+                android:textColor="@color/widget_text_secondary"
+                android:textSize="8sp" />
 
-            <LinearLayout
-                android:id="@+id/row_widget_secondary"
-                android:layout_width="match_parent"
+            <TextView
+                android:id="@+id/tv_widget_secondary_value"
+                android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center_vertical">
-                <TextView
-                    android:id="@+id/tv_widget_secondary_label"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:textSize="12sp"
-                    android:textColor="@color/widget_text_secondary"
-                    android:text="本月预算" />
-                <TextView
-                    android:id="@+id/tv_widget_secondary_value"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:textSize="14sp"
-                    android:textColor="@color/widget_text_primary"
-                    android:text="¥0.00" />
-            </LinearLayout>
+                android:layout_marginStart="6dp"
+                android:layout_weight="1"
+                android:gravity="end"
+                android:includeFontPadding="false"
+                android:maxLines="1"
+                android:text="¥1,500.00"
+                android:textColor="@color/widget_text_primary"
+                android:textSize="11dp"
+                android:textStyle="bold" />
         </LinearLayout>
     </LinearLayout>
 </FrameLayout>

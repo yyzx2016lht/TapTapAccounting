@@ -8,18 +8,21 @@ import java.util.Calendar
  * 这样用户在系统"添加小组件"选择器里能直接看到三个不同大小的条目。
  */
 enum class WidgetSize {
-    COMPACT,   // 2x1，只放得下一个核心数字
-    STANDARD,  // 2x2，核心数字 + 1-2 个次要指标
-    DETAILED   // 4x2，全部指标 + 预算进度条
+    COMPACT,       // 支出金额 2x1
+    STANDARD,      // 预算金额 2x1
+    TODAY_BUDGET,  // 今日花费与预算剩余 2x1
+    DETAILED       // 财务概览 4x2
 }
 
 /** 小组件展示的统计周期。 */
 enum class WidgetPeriod {
+    TODAY,
     THIS_MONTH,
     THIS_WEEK,
     LAST_7_DAYS;
 
     fun label(): String = when (this) {
+        TODAY -> "今日"
         THIS_MONTH -> "本月"
         THIS_WEEK -> "本周"
         LAST_7_DAYS -> "最近7日"
@@ -29,6 +32,12 @@ enum class WidgetPeriod {
     fun range(now: Long = System.currentTimeMillis()): Pair<Long, Long> {
         val cal = Calendar.getInstance().apply { timeInMillis = now }
         return when (this) {
+            TODAY -> {
+                setStartOfDay(cal)
+                val start = cal.timeInMillis
+                setEndOfDay(cal)
+                start to cal.timeInMillis
+            }
             THIS_MONTH -> {
                 cal.set(Calendar.DAY_OF_MONTH, 1)
                 setStartOfDay(cal)
@@ -71,24 +80,11 @@ enum class WidgetPeriod {
     }
 }
 
-/** 小组件可勾选展示的指标。预算类指标始终反映"当前自然月"的总预算，与周期选择无关。 */
-enum class WidgetMetric {
-    EXPENSE,    // 所选周期内的总支出
-    BUDGET,     // 本月总预算
-    REMAINING;  // 本月预算剩余
 
-    fun label(): String = when (this) {
-        EXPENSE -> "总支出"
-        BUDGET -> "本月预算"
-        REMAINING -> "预算剩余"
-    }
-}
-
-/** 单个小组件实例（appWidgetId）的配置。 */
+/** 样式由用户添加的小组件类型决定；实例配置只负责数据范围。 */
 data class WidgetConfig(
     val bookName: String,
-    val period: WidgetPeriod = WidgetPeriod.THIS_MONTH,
-    val metrics: Set<WidgetMetric> = setOf(WidgetMetric.EXPENSE, WidgetMetric.BUDGET, WidgetMetric.REMAINING)
+    val period: WidgetPeriod = WidgetPeriod.THIS_MONTH
 ) {
     companion object {
         fun default(context: Context): WidgetConfig {

@@ -206,6 +206,10 @@ internal class HomeChartController(
         }
     }
 
+    /** 去掉紧凑金额的尾随 ".0"，如 "6.0" -> "6"、"2.0K" -> "2K"。 */
+    private fun trimTrailingZero(s: String): String =
+        if (s.endsWith(".0")) s.dropLast(2) else s
+
     private fun getStartTimeFromRange(rangeOpt: Int): Long {
         val cal = Calendar.getInstance()
         cal.set(Calendar.HOUR_OF_DAY, 0)
@@ -321,16 +325,35 @@ internal class HomeChartController(
                 else s
             }
         }
-        val shouldDrawValues = (currentType != 2) && (currentTimeRange != 1)
+        // 密集柱（最近15日）专用金额格式：标签最多 4 个字符（如 "85"、"1.2K"、"99K"），
+        // 让 15 根柱子的柱顶金额互不压盖且清晰可读。
+        val formatterCompact = object : ValueFormatter() {
+            override fun getFormattedValue(value: Float): String {
+                if (value <= 0f) return ""
+                return when {
+                    value < 10f -> trimTrailingZero(String.format(Locale.getDefault(), "%.1f", value))
+                    value < 995f -> String.format(Locale.getDefault(), "%.0f", value)
+                    value < 9_950f -> trimTrailingZero(String.format(Locale.getDefault(), "%.1fK", value / 1000f))
+                    value < 995_000f -> String.format(Locale.getDefault(), "%.0fK", value / 1000f)
+                    else -> trimTrailingZero(String.format(Locale.getDefault(), "%.1fM", value / 1_000_000f))
+                }
+            }
+        }
+        val isDenseRange = currentTimeRange == 1
+        // 15日柱子密集（每柱槽位约20dp）：金额用紧凑格式+更小字号，由渲染器做防重叠绘制；
+        // 7日/本周维持原有 K 格式与 11f 字号不变。
+        val chartValueFormatter = if (isDenseRange) formatterCompact else formatterK
+        val chartValueTextSize = if (isDenseRange) 9f else 11f
+        val shouldDrawValues = currentType != 2
 
         if (currentType == 0 || currentType == 2) {
             dataSets.add(
                 BarDataSet(expenseEntries, "支出").apply {
                     color = Color.parseColor("#FF5252")
                     setDrawValues(shouldDrawValues)
-                    valueTextSize = 11f
+                    valueTextSize = chartValueTextSize
                     valueTextColor = Color.parseColor("#FF5252")
-                    valueFormatter = formatterK
+                    valueFormatter = chartValueFormatter
                 }
             )
         }
@@ -339,16 +362,19 @@ internal class HomeChartController(
                 BarDataSet(incomeEntries, "收入").apply {
                     color = Color.parseColor("#4CAF50")
                     setDrawValues(shouldDrawValues)
-                    valueTextSize = 11f
+                    valueTextSize = chartValueTextSize
                     valueTextColor = Color.parseColor("#4CAF50")
-                    valueFormatter = formatterK
+                    valueFormatter = chartValueFormatter
                 }
             )
         }
 
         val barData = BarData(dataSets.toList() as List<com.github.mikephil.charting.interfaces.datasets.IBarDataSet>)
         barChart.data = barData
-        getRoundedBarChartRenderer()?.fullRound = (currentTimeRange == 0 || currentTimeRange == 2)
+        getRoundedBarChartRenderer()?.let {
+            it.fullRound = (currentTimeRange == 0 || currentTimeRange == 2)
+            it.denseValueLabels = isDenseRange
+        }
 
         if (currentType == 2) {
             val groupSpace: Float

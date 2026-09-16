@@ -91,6 +91,23 @@ class ChatAdapter(
 
     companion object {
         const val PAYLOAD_LOADING_TEXT = "loading_text"
+
+        /**
+         * 已知的加载状态文案。只有这些（以及同样短小、以省略号结尾的状态式文本）
+         * 才显示"打字点"小气泡；真实流式回复一律用与最终消息相同的气泡样式渲染，
+         * 避免流式期间 13sp 灰字、完成后跳变为 15sp 深色 Markdown 的"缩小→变大"感。
+         */
+        private val LOADING_STATUS_TEXTS = setOf(
+            "正在分析...",
+            "正在思考...",
+            "正在听语音...",
+            "正在读懂这笔账...",
+            "正在整理账单...",
+            "正在看图识别交易...",
+            "正在直接从图片生成账单...",
+            "正在按确认内容整理账单...",
+            "识别好了，等你核对草稿..."
+        )
     }
 
     override fun getItemCount(): Int = displayMessages.size
@@ -666,28 +683,39 @@ class ChatAdapter(
 
         fun updateLoadingText(text: String) {
             val display = text.trim()
-            val showDots = shouldShowTypingDots(display)
-            typingDots.visibility = if (showDots) View.VISIBLE else View.GONE
-            if (showDots) {
-                tvLoading.visibility = View.GONE
+            if (isTransientStatusText(display)) {
+                // 状态阶段：小气泡 = 打字点 + 状态文案（同一气泡内展示进度）
+                loadingRow.visibility = View.VISIBLE
+                tvText.visibility = View.GONE
+                typingDots.visibility = View.VISIBLE
+                tvLoading.visibility = if (display.isEmpty()) View.GONE else View.VISIBLE
+                if (display.isNotEmpty()) tvLoading.text = display
                 return
             }
-            tvLoading.visibility = View.VISIBLE
-            tvLoading.text = display
-            tvLoading.linksClickable = false
-            tvLoading.movementMethod = null
+            // 流式正文阶段：直接使用与最终消息完全相同的气泡（字号/颜色/边距/宽度一致），
+            // 完成后仅追加 Markdown 样式，不再发生几何跳变。
+            loadingRow.visibility = View.GONE
+            tvText.visibility = View.VISIBLE
+            typingDots.visibility = View.GONE
+            tvLoading.visibility = View.GONE
+            tvText.text = display
+            tvText.linksClickable = false
+            tvText.movementMethod = null
         }
 
-        private fun shouldShowTypingDots(text: String): Boolean {
-            if (text.isBlank()) return true
-            if (text.length > 96) return false
-            if (text.contains("```") || text.contains("\n\n")) return false
-            return text.startsWith("正在") ||
-                text.contains("思考") ||
-                text.contains("分析") ||
-                text.contains("识别") ||
-                text.contains("整理") ||
-                text.contains("听懂")
+        private fun isTransientStatusText(text: String): Boolean {
+            if (text.isEmpty()) return true
+            if (text in ChatAdapter.LOADING_STATUS_TEXTS) return true
+            // 短且以省略号结尾、无换行的状态式文案（如"正在从3张图片生成账单..."）
+            if (text.length <= 24 && !text.contains('\n') && text.endsWith("...")) {
+                return text.startsWith("正在") ||
+                    text.contains("思考") ||
+                    text.contains("分析") ||
+                    text.contains("识别") ||
+                    text.contains("整理") ||
+                    text.contains("听懂")
+            }
+            return false
         }
     }
 

@@ -232,16 +232,13 @@ class SensitivityActivity : AppCompatActivity() {
             restartTapDetection()
         }
 
-        switchHideRecents.isChecked = Prefs.isHideRecents(this)
-        switchHideRecentsBottom.isChecked = Prefs.isHideRecents(this)
-        switchHideRecents.setOnCheckedChangeListener { _, isChecked ->
-            if (isUpdatingHideRecentsSwitch) return@setOnCheckedChangeListener
-            syncHideRecentsSwitches(isChecked)
-        }
-        switchHideRecentsBottom.setOnCheckedChangeListener { _, isChecked ->
-            if (isUpdatingHideRecentsSwitch) return@setOnCheckedChangeListener
-            syncHideRecentsSwitches(isChecked)
-        }
+        // 隐藏后台卡片已废弃：实测证明卡片消失会导致进程被反复清理，
+        // 因此开关一律隐藏并强制关闭，同时无条件保证卡片存在。
+        switchHideRecents.isChecked = false
+        switchHideRecentsBottom.isChecked = false
+        switchHideRecents.setOnCheckedChangeListener(null)
+        switchHideRecentsBottom.setOnCheckedChangeListener(null)
+        RecentTasksHelper.ensureTaskVisible(this)
 
         switchVibrationFeedback.isChecked = Prefs.isVibrateFeedbackEnabled(this)
         switchVibrationFeedback.setOnCheckedChangeListener { _, isChecked ->
@@ -265,8 +262,9 @@ class SensitivityActivity : AppCompatActivity() {
         cardKeepAlive.visibility = if (anyGestureEnabled) View.VISIBLE else View.GONE
 
         groupLandscapeDisable.visibility = if (anyGestureEnabled) View.VISIBLE else View.GONE
+        // 隐藏后台卡片入口整体下线（group 与其内的 divider 一起隐藏）
         groupHideRecents.visibility = View.GONE
-        rowHideRecentsBottom.visibility = if (anyGestureEnabled) View.VISIBLE else View.GONE
+        rowHideRecentsBottom.visibility = View.GONE
         groupNotificationPermission.visibility = if (anyGestureEnabled) View.VISIBLE else View.GONE
         groupVibrationFeedback.visibility = if (tapEnabled) View.VISIBLE else View.GONE
         groupSaveVibrate.visibility = if (anyGestureEnabled) View.VISIBLE else View.GONE
@@ -279,27 +277,11 @@ class SensitivityActivity : AppCompatActivity() {
         groupWhitelist.visibility = if (anyGestureEnabled && shizukuReady) View.VISIBLE else View.GONE
     }
 
-    private fun syncHideRecentsSwitches(enabled: Boolean) {
-        isUpdatingHideRecentsSwitch = true
-        if (switchHideRecents.isChecked != enabled) switchHideRecents.isChecked = enabled
-        if (switchHideRecentsBottom.isChecked != enabled) switchHideRecentsBottom.isChecked = enabled
-        isUpdatingHideRecentsSwitch = false
-
-        Prefs.setHideRecents(this, enabled)
-        RecentTasksHelper.applyHideRecentsPreference(this)
-        Toast.makeText(
-            this,
-            if (enabled) getString(R.string.hide_recents_on) else getString(R.string.hide_recents_off),
-            Toast.LENGTH_SHORT
-        ).show()
-    }
-
     private fun makeSwitchRowsClickable() {
         val toggleIds = intArrayOf(
             R.id.switch_flip_enable,
             R.id.switch_tap_enable,
             R.id.switch_landscape_disable,
-            R.id.switch_hide_recents_bottom,
             R.id.switch_vibration_feedback,
             R.id.switch_save_vibrate,
             R.id.switch_notification_permission,
@@ -407,7 +389,9 @@ class SensitivityActivity : AppCompatActivity() {
             restartTapDetection()
         }
 
-        // 省电：开启后长时间无敲击切启发式待机；默认关（全程 ML）
+        // 敲击检测省电：开关 ON = 省电（静止约 3 分钟后切启发式待机），OFF = 全程 ML。
+        // 注意这个 switch 的 id 是 switch_tap_low_power，绑定的是 tap_power_saving，
+        // 不要再把它当成"全程 ML 开关"来写标签（历史上正因为文案相反误导过一次）。
         switchTapLowPower.isChecked = Prefs.isTapPowerSavingEnabled(this)
         switchTapLowPower.setOnCheckedChangeListener { _, isChecked ->
             Prefs.setTapPowerSavingEnabled(this, isChecked)

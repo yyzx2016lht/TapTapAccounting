@@ -8,7 +8,8 @@
     android:targetCellHeight="2"
     android:updatePeriodMillis="1800000"
     android:initialLayout="@layout/widget_expense_detailed"
-    android:previewImage="@mipmap/ic_launcher"
+    android:previewImage="@drawable/widget_preview_detailed"
+    android:previewLayout="@layout/widget_expense_detailed"
     android:configure="com.taostudio.tapaccounting.widget.WidgetConfigureActivity"
     android:resizeMode="horizontal|vertical"
     android:widgetCategory="home_screen" />

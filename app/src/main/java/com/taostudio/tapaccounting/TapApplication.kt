@@ -45,6 +45,9 @@ class TapApplication : Application() {
         ChatMarkdownFormatter.init(this)
         InvestmentInterestWorker.schedule(this)
 
+        // 手势服务看门狗：进程被 ColorOS 清掉后靠它自愈（WorkManager 在这台设备上实测可靠）
+        OverlayWatchdogWorker.schedule(this)
+
         // 首次启动：初始化默认备份目录并启用自动备份
         BackupInitHelper.initializeIfNeeded(this)
 

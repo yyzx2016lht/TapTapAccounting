@@ -27,6 +27,10 @@ class BootReceiver : BroadcastReceiver() {
 
         Log.d(TAG, "onReceive: action=${intent.action}, flip=$flipEnabled, tap=$tapEnabled")
 
+        // 开机/更新后重挂看门狗，保证"只要手势开着，就一定有自愈通路"
+        runCatching { OverlayWatchdogWorker.schedule(context.applicationContext) }
+            .onFailure { Log.w(TAG, "schedule overlay watchdog failed", it) }
+
         val action = intent.action
         if (Intent.ACTION_BOOT_COMPLETED == action ||
             Intent.ACTION_MY_PACKAGE_REPLACED == action ||

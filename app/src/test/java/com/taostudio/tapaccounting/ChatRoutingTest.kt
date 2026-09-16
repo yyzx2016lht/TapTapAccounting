@@ -15,11 +15,11 @@ import org.junit.Test
 class ChatRoutingTest {
 
     @Test
-    fun `removed query route falls back to general chat`() {
-        assertEquals("GENERAL_CHAT", normalizeChatRouterIntent("ACCOUNTING_QUERY"))
-        assertEquals("GENERAL_CHAT", normalizeChatRouterIntent("unexpected"))
-        assertEquals("ACCOUNTING_CREATE", normalizeChatRouterIntent("ACCOUNTING_CREATE"))
-        assertEquals("UNSUPPORTED_WRITE", normalizeChatRouterIntent("UNSUPPORTED_WRITE"))
+    fun `chat intent normalizes to two supported modes`() {
+        assertEquals("BOOKKEEPING", normalizeChatIntent("BOOKKEEPING"))
+        assertEquals("BOOKKEEPING", normalizeChatIntent("ACCOUNTING_CREATE"))
+        assertEquals("GENERAL_CHAT", normalizeChatIntent("GENERAL_CHAT"))
+        assertEquals("BOOKKEEPING", normalizeChatIntent("unexpected"))
     }
 
     // ---- Image payload encoding round-trip ---------------------------------

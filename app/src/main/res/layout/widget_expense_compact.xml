@@ -6,40 +6,62 @@
     android:background="@drawable/bg_widget_card">
 
     <LinearLayout
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_gravity="center_vertical|start"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:gravity="center_vertical"
         android:orientation="vertical"
         android:paddingHorizontal="12dp"
-        android:paddingVertical="6dp">
-
-        <TextView
-            android:id="@+id/tv_widget_primary_label"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:textSize="10sp"
-            android:textColor="@color/widget_text_secondary"
-            android:text="总支出" />
-
-        <TextView
-            android:id="@+id/tv_widget_primary_value"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="1dp"
-            android:textSize="18sp"
-            android:textStyle="bold"
-            android:textColor="@color/widget_accent"
-            android:text="¥0.00" />
+        android:paddingVertical="7dp">
 
         <TextView
             android:id="@+id/tv_widget_subtitle"
-            android:layout_width="wrap_content"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="2dp"
-            android:maxLines="1"
             android:ellipsize="end"
-            android:textSize="9sp"
+            android:maxLines="1"
+            android:text="日常账本 · 今日"
             android:textColor="@color/widget_text_secondary"
-            android:text="日常账本 · 本月" />
+            android:textSize="8sp" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <TextView
+                android:layout_width="3dp"
+                android:layout_height="36dp"
+                android:background="@color/widget_accent" />
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="9dp"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/tv_widget_primary_label"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:maxLines="1"
+                    android:text="今日支出"
+                    android:textColor="@color/widget_text_secondary"
+                    android:textSize="8sp" />
+
+                <TextView
+                    android:id="@+id/tv_widget_primary_value"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:includeFontPadding="false"
+                    android:maxLines="1"
+                    android:text="¥1,355.79"
+                    android:textColor="@color/widget_accent"
+                    android:textSize="21sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+        </LinearLayout>
     </LinearLayout>
 </FrameLayout>

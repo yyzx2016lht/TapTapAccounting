@@ -5,35 +5,57 @@ import android.content.ComponentName
 import android.content.Context
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
  * 统一的小组件刷新入口。
  *
- * 记账/预算相关的写操作分散在很多入口（记一笔、编辑账单、改预算……），逐一埋点刷新
- * 维护成本很高、也容易漏。这里采用更简单可靠的策略：
- * - [refreshAll] 在“用户离开 App 回到桌面”（[com.taostudio.tapaccounting.MainActivity.onPause]）时调用一次，
- *   覆盖绝大多数“改完数据 -> 回桌面看小组件”的场景；
- * - 小组件自身的 updatePeriodMillis（见 res/xml 下的 provider info）作为兜底轮询，
- *   保证跨天/跨月等没有用户操作也需要刷新的情况最终会更新。
+ * 记账/预算写操作入口很多（悬浮窗、聊天、编辑页、共享同步……），不能只依赖
+ * [com.taostudio.tapaccounting.MainActivity.onPause]。策略：
+ * - [refreshAllDebounced]：账单写成功后调用，短防抖合并连续多笔，覆盖不离开桌面也能立刻看到更新；
+ * - [refreshAll]：MainActivity 退出时立即刷一次（无防抖，保证回桌面即可见）；
+ * - updatePeriodMillis（见 res/xml 下的 provider info）作为跨天/跨月兜底轮询。
  */
 object ExpenseWidgetUpdater {
+
+    private const val REFRESH_DEBOUNCE_MS = 800L
 
     private val providerClasses = listOf(
         WidgetSize.COMPACT to CompactExpenseWidgetProvider::class.java,
         WidgetSize.STANDARD to StandardExpenseWidgetProvider::class.java,
+        WidgetSize.TODAY_BUDGET to TodayBudgetWidgetProvider::class.java,
         WidgetSize.DETAILED to DetailedExpenseWidgetProvider::class.java
     )
 
-    /** 遍历三种尺寸下已放置在桌面的所有小组件实例，逐一重新渲染。 */
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private var debouncedJob: Job? = null
+
+    /** 账单/预算写成功后调用；合并短时间内的多次写入，只渲染最后一次。 */
+    fun refreshAllDebounced(context: Context) {
+        val appContext = context.applicationContext
+        debouncedJob?.cancel()
+        debouncedJob = scope.launch {
+            delay(REFRESH_DEBOUNCE_MS)
+            refreshAllInternal(appContext)
+        }
+    }
+
+    /** 遍历四种样式下已放置在桌面的所有小组件实例，逐一重新渲染。 */
     fun refreshAll(context: Context) {
         val appContext = context.applicationContext
-        CoroutineScope(Dispatchers.IO).launch {
-            val manager = AppWidgetManager.getInstance(appContext)
-            providerClasses.forEach { (size, clazz) ->
-                val ids = manager.getAppWidgetIds(ComponentName(appContext, clazz))
-                ids.forEach { appWidgetId -> renderOne(appContext, manager, appWidgetId, size) }
-            }
+        scope.launch {
+            refreshAllInternal(appContext)
+        }
+    }
+
+    private suspend fun refreshAllInternal(appContext: Context) {
+        val manager = AppWidgetManager.getInstance(appContext)
+        providerClasses.forEach { (size, clazz) ->
+            val ids = manager.getAppWidgetIds(ComponentName(appContext, clazz))
+            ids.forEach { appWidgetId -> renderOne(appContext, manager, appWidgetId, size) }
         }
     }
 
@@ -49,7 +71,7 @@ object ExpenseWidgetUpdater {
 
     private suspend fun renderOne(context: Context, manager: AppWidgetManager, appWidgetId: Int, size: WidgetSize) {
         val config = WidgetConfigStore.load(context, appWidgetId) ?: WidgetConfig.default(context)
-        val snapshot = ExpenseWidgetRenderer.buildSnapshot(context, config)
+        val snapshot = ExpenseWidgetRenderer.buildSnapshot(context, config, size)
         ExpenseWidgetRenderer.render(context, manager, appWidgetId, size, snapshot)
     }
 

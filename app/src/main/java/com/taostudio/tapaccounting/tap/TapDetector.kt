@@ -49,6 +49,23 @@ class TapDetector(
     private var sensorThread: HandlerThread? = null
     private var sensorHandler: Handler? = null
 
+    /**
+     * 整个检测器会话共用的 TFLite 分类器。
+     *
+     * 原生解释器只在首次推理时创建（= 传感器回调线程），会话期间绝不重建、绝不从别的线程关闭，
+     * 这是避免 `libtensorflowlite_jni.so` SIGSEGV 的关键。
+     */
+    private var activeClassifier: TapTfClassifier? = null
+
+    /**
+     * 运行时世代号。
+     *
+     * 每次重建检测器运行时递增；传感器事件携带自己的世代号，世代号对不上就直接不做推理。
+     * 这样废弃运行时不会被继续使用，同时也保证 `tap` 永远不会被置空导致空指针。
+     */
+    @Volatile
+    private var generation = 0
+
     @Volatile
     private var isRunning = false
 
@@ -96,11 +113,20 @@ class TapDetector(
             val nnapiLowPower = Prefs.isTapNnapiLowPower(context)
             tripleEnabled = Prefs.isTapTripleEnabled(context)
 
+            // 会话内复用同一个分类器：模型和 NNAPI 开关在一次会话里不会变，
+            // 重建解释器只会凭空增加"关闭与推理并发"的窗口。
+            val classifier = activeClassifier ?: TapTfClassifier(
+                context.assets,
+                TapModel.resolve(context).path,
+                nnapiLowPower
+            ).also { activeClassifier = it }
+
+            generation++
             tap = createTapRuntime(
                 useHeuristic = false,
                 tripleEnabled = tripleEnabled,
                 sensitivity = sensitivity,
-                nnapiLowPower = nnapiLowPower
+                classifier = classifier
             )
 
             sensorThread = HandlerThread("TapSensorThread", Process.THREAD_PRIORITY_DEFAULT).apply {
@@ -139,22 +165,37 @@ class TapDetector(
     }
 
     fun stop() {
+        // ① 先关掉"入口"，让后续传感器回调立刻返回，不再启动新的推理
         isRunning = false
+        generation++
         sensorHandler?.removeCallbacks(powerProfileCheck)
+
+        // ② 注销监听。注意 unregisterListener 只保证"不再派发新事件"，
+        //    已经排在 Handler 队列里的回调仍会执行，所以不能就地关闭解释器。
         try {
             sensorManager.unregisterListener(this)
         } catch (_: Exception) {
         }
+
+        val runtime = tap
+        tap = null
+
+        // ③ 把原生释放排到传感器线程队尾：所有已排队的回调先跑完，最后才关解释器。
+        //    先 post 再 quitSafely —— quitSafely 会等队列里已排队的消息执行完才结束 Looper，
+        //    所以释放动作一定能在解释器的创建线程上完成。
+        val cleanerHandler = sensorHandler
+        if (cleanerHandler != null) {
+            runtime?.releaseClassifier(cleanerHandler, cleanerHandler)
+        } else {
+            // 传感器线程从未建立，直接从当前线程收取（此时不可能有并发推理）
+            runtime?.releaseClassifier(null, null)
+        }
+        activeClassifier = null
+
         sensorThread?.quitSafely()
         sensorThread = null
         sensorHandler = null
-        try {
-            tap?.closeClassifier()
-        } catch (e: Exception) {
-            Log.w(TAG, "close classifier failed", e)
-        }
-        tap = null
-        Log.d(TAG, "TapDetector stopped")
+        Log.d(TAG, "TapDetector stopped (classifier cleanup queued on sensor thread)")
     }
 
     fun restart() {
@@ -227,27 +268,29 @@ class TapDetector(
     private fun switchPowerProfile(profile: PowerProfile, reason: String) {
         if (forceFullMlMode || powerProfile == profile) return
         val handler = sensorHandler ?: return
+        // 重建运行时的全过程都排到传感器线程上，与传感器回调串行化，
+        // 这样就不存在"注销监听后、重新注册前"事件打在中间状态的窗口。
+        val scheduledGeneration = generation
         handler.post {
             if (!isRunning || forceFullMlMode || powerProfile == profile) return@post
+            if (generation != scheduledGeneration) return@post
             try {
                 sensorManager.unregisterListener(this, accelerometer)
                 sensorManager.unregisterListener(this, gyroscope)
             } catch (_: Exception) {
             }
-            try {
-                tap?.closeClassifier()
-            } catch (e: Exception) {
-                Log.w(TAG, "close classifier during profile switch failed", e)
-            }
+            // 关键：这里不再 close 分类器。分类器只跟会话绑定，与功耗档位无关；
+            // 在会话中途关闭原生解释器正是 SIGSEGV 的来源。
             powerProfile = profile
             val sensitivityLevel = Prefs.getTapSensitivityLevel(context)
             val sensitivity = TAP_SENSITIVITY_VALUES.getOrElse(sensitivityLevel) { 0.05f }
             tripleEnabled = Prefs.isTapTripleEnabled(context)
+            generation++
             tap = createTapRuntime(
                 useHeuristic = profile == PowerProfile.HeuristicStandby,
                 tripleEnabled = tripleEnabled,
                 sensitivity = sensitivity,
-                nnapiLowPower = Prefs.isTapNnapiLowPower(context)
+                classifier = activeClassifier
             )
             lastAccelMagnitude = null
             registerSensors(profile)
@@ -309,7 +352,7 @@ class TapDetector(
         useHeuristic: Boolean,
         tripleEnabled: Boolean,
         sensitivity: Float,
-        nnapiLowPower: Boolean
+        classifier: TapTfClassifier?
     ): TapRT {
         return when {
             useHeuristic && tripleEnabled -> HeuristicTapTapTapRT(
@@ -328,18 +371,26 @@ class TapDetector(
                 getNegativePeakDetection().setWindowSize(64)
                 reset(false)
             }
-            tripleEnabled -> {
-                val tapModel = TapModel.resolve(context)
-                TapTapTapRT(160000000L, true, sensitivity, TapTfClassifier(context.assets, tapModel.path, nnapiLowPower)).apply {
+            tripleEnabled && classifier != null -> {
+                TapTapTapRT(160000000L, true, sensitivity, classifier).apply {
+                    configureCommonFilters(sensitivity)
+                    reset(false)
+                }
+            }
+            classifier != null -> {
+                TapRT(160000000L).apply {
+                    setClassifier(classifier)
                     configureCommonFilters(sensitivity)
                     reset(false)
                 }
             }
             else -> {
-                val tapModel = TapModel.resolve(context)
-                TapRT(160000000L).apply {
-                    setClassifier(TapTfClassifier(context.assets, tapModel.path, nnapiLowPower))
+                // 分类器不可用（模型缺失等）：退化为不使用 ML 的运行时，避免空指针
+                Log.w(TAG, "classifier unavailable, falling back to heuristic runtime")
+                TapRT(160000000L, TapRT.HEURISTIC_MIN_TIME_GAP_NS).apply {
                     configureCommonFilters(sensitivity)
+                    getNegativePeakDetection().setMinNoiseTolerate(sensitivity)
+                    getNegativePeakDetection().setWindowSize(64)
                     reset(false)
                 }
             }

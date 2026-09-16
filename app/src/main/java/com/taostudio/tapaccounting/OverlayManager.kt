@@ -328,7 +328,6 @@ class OverlayManager(private val ctx: Context) {
 
         formController!!.layoutAiTextEntry.setOnClickListener {
             aiAssistant.showInputPanel(
-                isMultiMode = true,
                 hideStreamText = true,
                 onResult = handleAiResult
             )

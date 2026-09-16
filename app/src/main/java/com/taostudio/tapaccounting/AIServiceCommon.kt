@@ -60,7 +60,19 @@ internal fun cleanJsonString(input: String): String {
     if (s.startsWith("```json")) s = s.removePrefix("```json")
     if (s.startsWith("```")) s = s.removePrefix("```")
     if (s.endsWith("```")) s = s.removeSuffix("```")
-    return s.trim()
+    s = s.trim()
+    // Models sometimes prefix valid JSON with status text like "已记账：{...}".
+    if (s.startsWith("{") || s.startsWith("[")) return s
+    extractFirstJsonObjectText(s)?.let { return it }
+    val arrayStart = s.indexOf('[')
+    if (arrayStart >= 0) {
+        val arrayEnd = s.lastIndexOf(']')
+        if (arrayEnd > arrayStart) {
+            val candidate = s.substring(arrayStart, arrayEnd + 1).trim()
+            if (candidate.startsWith("[")) return candidate
+        }
+    }
+    return s
 }
 
 internal fun adaptChatRequestForProvider(
@@ -138,6 +150,63 @@ internal fun extractFirstJsonObjectText(input: String): String? {
         }
     }
     return null
+}
+
+/**
+ * 只抓阿拉伯数字的金额 token。中文数字（三十、两百）不入账，宁可漏检也不误判。
+ */
+private val DIGIT_NUMBER_REGEX = Regex("""\d+(?:\.\d+)?""")
+
+/**
+ * 单数字总价护栏。
+ *
+ * 触发条件（三者同时满足才动手，任一不满足即原样放行）：
+ * 1. 用户输入里只出现一个阿拉伯数字 N；
+ * 2. 模型却拆出了两条及以上账单；
+ * 3. 这些账单 amount 之和恰好等于 N，且 type / currency 一致。
+ *
+ * 这正是「用户只给了总价、模型自行分摊」的特征，收敛成一条总额账单即可，
+ * 合并前后总金额不变，不会丢钱。
+ * 「各10块」「给爸妈各转500」这类 Σ≠N 的情形不会命中，保持原样。
+ */
+internal fun collapseSingleTotalSplitBills(root: JSONObject, userInput: String): Boolean {
+    val bills = root.optJSONArray("bills") ?: return false
+    if (bills.length() < 2) return false
+
+    val numbers = DIGIT_NUMBER_REGEX.findAll(userInput)
+        .mapNotNull { it.value.toDoubleOrNull() }
+        .filter { it > 0.0 }
+        .toList()
+    if (numbers.size != 1) return false
+    val statedTotal = numbers[0]
+
+    val parsed = (0 until bills.length()).mapNotNull { bills.optJSONObject(it) }
+    if (parsed.size != bills.length()) return false
+
+    val first = parsed.first()
+    val firstType = first.optInt("type", 0)
+    val firstCurrency = first.optNullableString("currency") ?: "CNY"
+    val sum = parsed.sumOf { bill ->
+        if (bill.optInt("type", 0) != firstType) return false
+        val currency = bill.optNullableString("currency") ?: "CNY"
+        if (!currency.equals(firstCurrency, ignoreCase = true)) return false
+        bill.optNullableDouble("amount") ?: return false
+    }
+    if (kotlin.math.abs(sum - statedTotal) > 0.005) return false
+
+    val mergedRemarks = parsed
+        .mapNotNull { it.optNullableString("remarks") }
+        .map { it.trim('、', '，', ',', ' ', ';', '；') }
+        .filter { it.isNotBlank() }
+        .distinct()
+    first.put("amount", statedTotal)
+    if (mergedRemarks.isNotEmpty()) {
+        first.put("remarks", mergedRemarks.joinToString("、").take(200))
+    }
+    for (index in bills.length() - 1 downTo 1) {
+        bills.remove(index)
+    }
+    return true
 }
 
 internal fun buildProbeAudioBase64(): String {

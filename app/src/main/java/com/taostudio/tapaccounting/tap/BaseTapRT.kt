@@ -5,4 +5,3 @@ interface BaseTapRT {
     fun checkDoubleTapTiming(timestamp: Long): Int
     fun reset(justClearFv: Boolean)
 }
-

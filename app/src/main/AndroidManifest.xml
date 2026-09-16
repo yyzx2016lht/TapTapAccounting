@@ -5,6 +5,8 @@
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <!-- 对照实验：health 类型（传感器监测语义，需 Android 14+） -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_HEALTH" />
 
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
@@ -85,7 +87,10 @@
             android:name=".OverlayService"
             android:enabled="true"
             android:exported="false"
-            android:foregroundServiceType="microphone|specialUse">
+            android:foregroundServiceType="health|microphone|specialUse"
+            android:stopWithTask="false">
+            <!-- stopWithTask 默认即 false，这里显式写出：划掉最近任务卡片不应停掉手势服务。
+                 实测 ColorOS 会在任务被移除后清理进程，此声明是对 ROM 的明确表态。 -->
             <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                       android:value="flip_sensor_detection" />
         </service>
@@ -223,11 +228,11 @@
             android:taskAffinity=""
             android:excludeFromRecents="true"
             android:exported="false" />
-        <!-- 桌面小组件：三种尺寸共享同一套渲染逻辑，见 com.taostudio.tapaccounting.widget 包 -->
+        <!-- 桌面小组件：四种固定样式共享同一套渲染逻辑，见 com.taostudio.tapaccounting.widget 包 -->
         <receiver
             android:name=".widget.CompactExpenseWidgetProvider"
             android:exported="true"
-            android:label="记账小组件 · 精简">
+            android:label="支出金额 · 2×1">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
             </intent-filter>
@@ -238,7 +243,7 @@
         <receiver
             android:name=".widget.StandardExpenseWidgetProvider"
             android:exported="true"
-            android:label="记账小组件 · 标准">
+            android:label="预算金额 · 2×1">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
             </intent-filter>
@@ -247,9 +252,20 @@
                 android:resource="@xml/widget_info_standard" />
         </receiver>
         <receiver
+            android:name=".widget.TodayBudgetWidgetProvider"
+            android:exported="true"
+            android:label="今日花费与预算 · 2×1">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_info_today_budget" />
+        </receiver>
+        <receiver
             android:name=".widget.DetailedExpenseWidgetProvider"
             android:exported="true"
-            android:label="记账小组件 · 详细">
+            android:label="财务概览 · 4×2">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
             </intent-filter>

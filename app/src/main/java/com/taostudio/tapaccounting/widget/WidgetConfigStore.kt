@@ -1,7 +1,6 @@
 package com.taostudio.tapaccounting.widget
 
 import android.content.Context
-import org.json.JSONArray
 import org.json.JSONObject
 
 /**
@@ -20,27 +19,38 @@ object WidgetConfigStore {
         val json = JSONObject().apply {
             put("bookName", config.bookName)
             put("period", config.period.name)
-            put("metrics", JSONArray(config.metrics.map { it.name }))
         }
         prefs(context).edit().putString(KEY_PREFIX + appWidgetId, json.toString()).apply()
     }
 
     fun load(context: Context, appWidgetId: Int): WidgetConfig? {
         val raw = prefs(context).getString(KEY_PREFIX + appWidgetId, null) ?: return null
-        return runCatching {
+        val stored = runCatching {
             val json = JSONObject(raw)
-            val metricsArray = json.optJSONArray("metrics") ?: JSONArray()
-            val metrics = (0 until metricsArray.length())
-                .mapNotNull { index -> runCatching { WidgetMetric.valueOf(metricsArray.getString(index)) }.getOrNull() }
-                .toSet()
-                .ifEmpty { setOf(WidgetMetric.EXPENSE) }
             WidgetConfig(
                 bookName = json.getString("bookName"),
                 period = runCatching { WidgetPeriod.valueOf(json.optString("period")) }
-                    .getOrDefault(WidgetPeriod.THIS_MONTH),
-                metrics = metrics
+                    .getOrDefault(WidgetPeriod.THIS_MONTH)
             )
-        }.getOrNull()
+        }.getOrNull() ?: return null
+
+        val availableBooks = activeBooks(context)
+        val resolvedBook = stored.bookName.takeIf { it in availableBooks }
+            ?: com.taostudio.tapaccounting.BookAccountManager.getSelectedBook(context)
+                .takeIf { it in availableBooks }
+            ?: availableBooks.first()
+        return if (resolvedBook == stored.bookName) {
+            stored
+        } else {
+            stored.copy(bookName = resolvedBook).also { save(context, appWidgetId, it) }
+        }
+    }
+
+    fun activeBooks(context: Context): List<String> {
+        val manager = com.taostudio.tapaccounting.BookAccountManager
+        val allBooks = manager.getBookAccounts(context)
+        val collapsed = manager.getCollapsedBookAccounts(context, allBooks).toSet()
+        return (allBooks.filterNot { it in collapsed } + manager.ALL_BOOK).distinct()
     }
 
     fun delete(context: Context, appWidgetId: Int) {

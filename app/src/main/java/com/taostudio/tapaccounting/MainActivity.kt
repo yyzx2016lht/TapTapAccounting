@@ -243,7 +243,7 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
-        RecentTasksHelper.applyHideRecentsPreference(this)
+        RecentTasksHelper.ensureTaskVisible(this)
         KeepAliveDiagnostics.logSnapshot(this, "main-onCreate")
 
         bottomNavigationView = findViewById(R.id.bottom_navigation)
@@ -656,14 +656,14 @@ class MainActivity : AppCompatActivity() {
         super.onResume()
         checkSharedInviteClipboard()
         com.taostudio.tapaccounting.data.sync.SharedSyncScheduler.enqueueNow(this)
-        RecentTasksHelper.applyHideRecentsPreference(this)
+        RecentTasksHelper.ensureTaskVisible(this)
         refreshBottomNavigationTabs()
         swipeContainer.post { RecurringDuePromptController.maybeShow(this) }
     }
 
     override fun onPause() {
         super.onPause()
-        // 离开 App 时刷新所有已放置的桌面小组件，覆盖“记一笔/改预算 -> 回桌面看小组件”的主要场景。
+        // 离开 App 时立即刷新；账单写路径另有防抖刷新，这里保证回桌面即可见最新数据。
         com.taostudio.tapaccounting.widget.ExpenseWidgetUpdater.refreshAll(this)
     }
 

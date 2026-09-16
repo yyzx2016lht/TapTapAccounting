@@ -8,12 +8,18 @@ import com.taostudio.tapaccounting.data.local.AppDatabase
 import com.taostudio.tapaccounting.data.local.entity.Bill
 import com.taostudio.tapaccounting.data.local.entity.DeletedBill
 import com.taostudio.tapaccounting.data.sync.SharedMutationHooks
+import com.taostudio.tapaccounting.widget.ExpenseWidgetUpdater
 
 object BillDeleteHelper {
     private fun logFull(tag: String, message: String) {
         val ctx = runCatching { TapApplication.app() }.getOrNull() ?: return
         if (!Prefs.isDeveloperFullLoggingEnabled(ctx)) return
         Logger.d(ctx, tag, message)
+    }
+
+    private fun notifyWidgetsChanged() {
+        val ctx = runCatching { TapApplication.app() }.getOrNull() ?: return
+        ExpenseWidgetUpdater.refreshAllDebounced(ctx)
     }
 
     private fun billToDeletedBill(bill: Bill): DeletedBill {
@@ -48,10 +54,12 @@ object BillDeleteHelper {
             backfillLinks = true,
             scopeBillIds = null
         )
+        notifyWidgetsChanged()
     }
 
     suspend fun deleteBillsAndRevertBalance(db: AppDatabase, bills: List<Bill>) {
         deleteBillsAndRevertBalanceInternal(db, bills, scopeBillIds = null)
+        notifyWidgetsChanged()
     }
 
     suspend fun deleteBillsAndRevertBalanceScoped(
@@ -64,6 +72,7 @@ object BillDeleteHelper {
             bills = bills,
             scopeBillIds = scopeBillIds.filter { it > 0L }.toSet()
         )
+        notifyWidgetsChanged()
     }
 
     private suspend fun deleteBillsAndRevertBalanceInternal(

@@ -7,6 +7,7 @@ import com.taostudio.tapaccounting.Prefs
 import com.taostudio.tapaccounting.data.local.AppDatabase
 import com.taostudio.tapaccounting.data.local.entity.Bill
 import com.taostudio.tapaccounting.data.sync.SharedMutationHooks
+import com.taostudio.tapaccounting.widget.ExpenseWidgetUpdater
 
 object BillMutationService {
 
@@ -41,6 +42,12 @@ object BillMutationService {
         )
     }
 
+    /** 账单写成功后通知桌面小组件；防抖合并连续多笔，避免悬浮窗/聊天连记时刷爆。 */
+    private fun notifyWidgetsChanged() {
+        val ctx = runCatching { TapApplication.app() }.getOrNull() ?: return
+        ExpenseWidgetUpdater.refreshAllDebounced(ctx)
+    }
+
     suspend fun insertBillAndApplyImpact(
         db: AppDatabase,
         bill: Bill,
@@ -64,7 +71,7 @@ object BillMutationService {
             SharedMutationHooks.enqueueSaved(db, savedBill)
             matchRecurringQuietly(db, savedBill)
             db.billDao().getBillById(savedBill.id) ?: savedBill
-        }
+        }.also { notifyWidgetsChanged() }
     }
 
     suspend fun insertBillWithinActiveTransaction(
@@ -88,6 +95,7 @@ object BillMutationService {
         auditBill("insert_tx", savedBill)
         SharedMutationHooks.enqueueSaved(db, savedBill)
         matchRecurringQuietly(db, savedBill)
+        notifyWidgetsChanged()
         return db.billDao().getBillById(savedBill.id) ?: savedBill
     }
 
@@ -113,6 +121,7 @@ object BillMutationService {
         val savedBill = localBill.copy(id = db.billDao().insertBill(localBill))
         if (applyAssetImpact) BillAssetImpactService.applyBillBalanceImpact(db, savedBill)
         auditBill("insert_local_generated", savedBill)
+        notifyWidgetsChanged()
         return db.billDao().getBillById(savedBill.id) ?: savedBill
     }
 
@@ -219,7 +228,7 @@ object BillMutationService {
             SharedMutationHooks.enqueueSaved(db, savedBill)
             matchRecurringQuietly(db, savedBill)
             db.billDao().getBillById(savedBill.id) ?: savedBill
-        }
+        }.also { notifyWidgetsChanged() }
     }
 
     suspend fun saveRefundBill(
@@ -309,7 +318,7 @@ object BillMutationService {
             auditBill("refund", savedRefundBill)
             SharedMutationHooks.enqueueSaved(db, savedRefundBill)
             db.billDao().getBillById(savedRefundBill.id) ?: savedRefundBill
-        }
+        }.also { notifyWidgetsChanged() }
     }
 
     suspend fun resolveRefundSourceBill(db: AppDatabase, refundBill: Bill): Bill? {
@@ -340,6 +349,7 @@ object BillMutationService {
             db.billDao().updateBill(saved)
             SharedMutationHooks.enqueueSaved(db, saved)
         }
+        notifyWidgetsChanged()
     }
 
     private suspend fun validateRequiredRatesForBill(db: AppDatabase, bill: Bill) {

@@ -29,16 +29,11 @@ import java.util.concurrent.TimeUnit
 const val OCR_MODE_LOCAL      = 0   // 本地 ML Kit OCR + 文本 AI
 const val OCR_MODE_MULTIMODAL = 1   // 直接多模态 AI（发送图片）
 
-/** 聊天入口 Router 分类结果 */
-data class RouterResult(
-    val intent: String,  // ACCOUNTING_CREATE, GENERAL_CHAT, UNSUPPORTED_WRITE
-    val confidence: Double,
-    val reason: String?
-)
-
-internal fun normalizeChatRouterIntent(intent: String): String = when (intent) {
-    "ACCOUNTING_CREATE", "GENERAL_CHAT", "UNSUPPORTED_WRITE" -> intent
-    else -> "GENERAL_CHAT"
+/** 聊天入口的二分类结果。 */
+internal fun normalizeChatIntent(intent: String): String = when (intent.trim().uppercase(Locale.ROOT)) {
+    "BOOKKEEPING", "ACCOUNTING_CREATE" -> "BOOKKEEPING"
+    "GENERAL_CHAT" -> "GENERAL_CHAT"
+    else -> "BOOKKEEPING"
 }
 
 object AIService {
@@ -221,14 +216,13 @@ object AIService {
     suspend fun analyzeAccounting(
         ctx: Context,
         userInput: String,
-        isMultiModeOverride: Boolean? = null,
         onProgress: ((String) -> Unit)? = null,
         isFromChat: Boolean = false,
         chatTurns: List<ChatTurn> = emptyList()
     ): JSONObject? {
         val safeUserInput = shortenForModel(userInput, MAX_ACCOUNTING_INPUT_CHARS)
         Logger.d(ctx, AI_IO_LOG_TAG, "[记账] USER: ${safeUserInput.take(2000)}")
-        Logger.d(ctx, "AIService", "Accounting analyze request: inputLen=${safeUserInput.length}, multiOverride=$isMultiModeOverride, fromChat=$isFromChat")
+        Logger.d(ctx, "AIService", "Accounting analyze request: inputLen=${safeUserInput.length}, fromChat=$isFromChat")
         val apiKey = Prefs.getAiKey(ctx)
         val enableThinking = enableThinkingForAccounting(ctx)
         val model = if (isFromChat) {
@@ -293,11 +287,14 @@ object AIService {
             Logger.d(ctx, "AIService", "Accounting response received: len=${content.length}")
             Logger.d(ctx, AI_IO_LOG_TAG, "[记账] AI: ${content.take(3000)}")
 
-            val result = parseAnalyzeResult(content, isMultiMode = true)
+            val result = parseAnalyzeResult(content)
 
             result?.let { root ->
                 enforceExpenseForReceiptSummaries(root, safeUserInput)
                 normalizeAccountingWithLocalRules(ctx, root, promptContext, safeUserInput)
+                if (collapseSingleTotalSplitBills(root, safeUserInput)) {
+                    Logger.d(ctx, "AIService", "Collapsed split bills into one total bill (userInput had a single number)")
+                }
                 Logger.d(ctx, AI_IO_LOG_TAG, "[记账] FINAL: ${root.toString().take(3000)}")
             }
             result
@@ -367,10 +364,11 @@ object AIService {
             reasoningLogTag = ACCOUNTING_AUDIO_MULTI_LOG_TAG
         )
         Logger.d(ctx, AI_IO_LOG_TAG, "[语音记账] AI: ${content.take(3000)}")
-        val result = parseAnalyzeResult(content, isMultiMode = true)
+        val result = parseAnalyzeResult(content)
         result?.let { root ->
             if (!root.optBoolean("no_bill", false)) {
                 normalizeAccountingWithLocalRules(ctx, root, promptContext, "语音输入")
+                // 语音路径拿不到本地转写文本，单数字总价护栏无法在此生效，依赖 prompt 侧规则
             }
         }
         return result
@@ -393,7 +391,8 @@ object AIService {
             AIPrompts.buildReceiptVisionPaymentMethodRule(
                 promptContext.assetFeatureEnabled,
                 promptContext.assetNames
-            )
+            ) +
+            AIPrompts.buildSameItemMergeRule()
         val dataUrl = "data:$mimeType;base64,$imageBase64"
         val userText = buildString {
             append(AIPrompts.receiptVisionUserInstruction(1))
@@ -470,7 +469,6 @@ object AIService {
         ctx: Context,
         imageBase64: String,
         mimeType: String = "image/jpeg",
-        isMultiModeOverride: Boolean? = null,
         sourceKind: String = "screen_capture",
         supplementText: String = "",
         onProgress: ((String) -> Unit)? = null,
@@ -553,7 +551,7 @@ object AIService {
             val content = streamed.content
             Logger.d(ctx, "AIService", "Screen accounting multimodal response: $content")
             Logger.d(ctx, AI_IO_LOG_TAG, "[截图记账] AI: ${content.take(3000)}")
-            val result = parseAnalyzeResult(content, isMultiMode = true)
+            val result = parseAnalyzeResult(content)
 
             result?.let { root ->
                 normalizeAccountingWithLocalRules(ctx, root, promptContext, supplementText)
@@ -585,7 +583,6 @@ object AIService {
     suspend fun analyzeScreenAccountingByImages(
         ctx: Context,
         images: List<Pair<String, String>>,
-        isMultiModeOverride: Boolean? = null,
         sourceKind: String = "receipt_image",
         supplementText: String = "",
         onProgress: ((String) -> Unit)? = null,
@@ -668,7 +665,7 @@ object AIService {
             }
             val content = streamed.content
             Logger.d(ctx, "AIService", "Multi-image accounting response: $content")
-            val result = parseAnalyzeResult(content, isMultiMode = true)
+            val result = parseAnalyzeResult(content)
 
             result?.let { root ->
                 normalizeAccountingWithLocalRules(ctx, root, promptContext, supplementText)
@@ -713,7 +710,8 @@ object AIService {
             AIPrompts.buildReceiptVisionPaymentMethodRule(
                 promptContext.assetFeatureEnabled,
                 promptContext.assetNames
-            )
+            ) +
+            AIPrompts.buildSameItemMergeRule()
         val attachments = images.map { (base64, mime) ->
             MultimodalAttachmentPart(base64 = base64, mime = mime)
         }
@@ -854,18 +852,18 @@ object AIService {
     }
 
     /**
-     * 聊天入口 Router：区分 ACCOUNTING_CREATE / GENERAL_CHAT / UNSUPPORTED_WRITE。
-     * 有图片时走视觉模型，结合图片与文字一起判断。
+     * 聊天入口二分类。模型只判断当前输入是否是新增记账，具体账单字段交给
+     * analyzeAccounting，普通对话交给聊天模型。
      */
-    suspend fun classifyRouterIntent(
+    suspend fun classifyIntent(
         ctx: Context,
         userText: String,
         images: List<Pair<String, String>> = emptyList()
-    ): RouterResult {
+    ): String {
         val apiKey = Prefs.getAiKey(ctx)
-        if (apiKey.isBlank()) return RouterResult("ACCOUNTING_CREATE", 1.0, "no_api_key")
+        if (apiKey.isBlank()) return "BOOKKEEPING"
         val model = AiModelSlots.resolveVisionModel(ctx).ifBlank { AiModelSlots.resolveTextModel(ctx) }
-        if (model.isBlank()) return RouterResult("ACCOUNTING_CREATE", 1.0, "no_model")
+        if (model.isBlank()) return "BOOKKEEPING"
 
         val routerUserText = userText.trim().ifBlank {
             if (images.isNotEmpty()) "（用户未附带文字，请根据图片内容判断意图）" else ""
@@ -874,7 +872,7 @@ object AIService {
             buildTextChatRequest(
                 model = model,
                 temperature = 0.1,
-                systemPrompt = AIPrompts.CHAT_INPUT_ROUTER_PROMPT,
+                systemPrompt = AIPrompts.INTENT_ROUTER_PROMPT_DEFAULT,
                 userText = routerUserText,
                 jsonObjectResponse = true,
                 enableThinking = false
@@ -886,7 +884,7 @@ object AIService {
             buildMultimodalChatRequest(
                 model = model,
                 temperature = 0.1,
-                systemPrompt = AIPrompts.CHAT_INPUT_ROUTER_PROMPT,
+                systemPrompt = AIPrompts.INTENT_ROUTER_PROMPT_DEFAULT,
                 attachments = attachments,
                 userText = routerUserText,
                 jsonObjectResponse = true,
@@ -902,25 +900,22 @@ object AIService {
                 onProgress = null,
                 emitTextDelta = false,
                 logReasoning = false,
-                reasoningLogTag = if (images.isEmpty()) "IntentRouterV2" else "IntentRouterV2Vision"
+                reasoningLogTag = if (images.isEmpty()) "IntentRouter" else "IntentRouterVision"
             )
             val cleaned = cleanJsonString(content)
             val jsonText = extractFirstJsonObjectText(cleaned)
             val json = runCatching { jsonText?.let { org.json.JSONObject(it) } }.getOrNull()
-            val intent = json?.optString("intent", "GENERAL_CHAT") ?: "GENERAL_CHAT"
-            val confidence = json?.optDouble("confidence", 0.0) ?: 0.0
-            val reason = json?.optString("reason", "") ?: ""
+            val intent = json?.optString("intent", "BOOKKEEPING") ?: "BOOKKEEPING"
             Logger.d(
                 ctx,
                 "AIService",
-                "classifyRouterIntent: input=${routerUserText.take(50)} images=${images.size}, result=$intent"
+                "classifyIntent: input=${routerUserText.take(50)} images=${images.size}, result=$intent"
             )
-            val normalizedIntent = normalizeChatRouterIntent(intent)
-            RouterResult(normalizedIntent, confidence.coerceIn(0.0, 1.0), reason)
+            normalizeChatIntent(intent)
         } catch (e: Exception) {
             if (e is kotlinx.coroutines.CancellationException) throw e
-            Logger.d(ctx, "AIService", "classifyRouterIntent failed: ${e.message}, fallback to ACCOUNTING_CREATE")
-            RouterResult("ACCOUNTING_CREATE", 0.0, "error: ${e.message}")
+            Logger.d(ctx, "AIService", "classifyIntent failed: ${e.message}, fallback to BOOKKEEPING")
+            "BOOKKEEPING"
         }
     }
 
@@ -1504,7 +1499,7 @@ object AIService {
         }
     }
 
-    private fun parseAnalyzeResult(finalContent: String, isMultiMode: Boolean): JSONObject? {
+    private fun parseAnalyzeResult(finalContent: String): JSONObject? {
         val cleaned = cleanJsonString(finalContent)
         val json = try {
             if (cleaned.startsWith("[")) {

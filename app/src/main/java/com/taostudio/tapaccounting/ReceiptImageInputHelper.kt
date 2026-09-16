@@ -276,23 +276,28 @@ object ReceiptImageInputHelper {
         onConfirm("")
     }
 
+    /**
+     * 读图 → 压缩 → base64。
+     *
+     * 这里必须压缩：图片记账拿到的大多是长截图（实测 1216×3790 / 640KB），
+     * 原样 base64 后约 854KB，慢网下会长时间无响应，甚至被上游重置连接。
+     * 压到长边 1280px 后同一张图只需约 33KB，识别质量不受影响。
+     */
     suspend fun readImagePayload(ctx: Context, uri: android.net.Uri): ImagePayload? {
         val sourceMime = ctx.contentResolver.getType(uri) ?: "image/jpeg"
-        val ext = when {
-            sourceMime.contains("png", ignoreCase = true) -> "png"
-            else -> "jpg"
-        }
         val imageDir = File(ctx.filesDir, "receipt_inputs").also { it.mkdirs() }
-        val outFile = File(imageDir, "receipt_${System.currentTimeMillis()}.$ext")
+        val outFile = File(imageDir, "receipt_${System.currentTimeMillis()}.jpg")
         ctx.contentResolver.openInputStream(uri)?.use { input ->
             outFile.outputStream().use { output -> input.copyTo(output) }
         } ?: return null
 
+        // 压缩成功后文件内容一定是 JPEG，MIME 必须跟着改，否则会把 JPEG 字节标成 image/png
+        val compressed = AiImageCompressor.compressInPlace(outFile)
         val bytes = outFile.readBytes()
         if (bytes.isEmpty()) return null
         return ImagePayload(
             base64 = Base64.encodeToString(bytes, Base64.NO_WRAP),
-            mime = sourceMime,
+            mime = if (compressed) AiImageCompressor.JPEG_MIME else sourceMime,
             supplement = ""
         )
     }

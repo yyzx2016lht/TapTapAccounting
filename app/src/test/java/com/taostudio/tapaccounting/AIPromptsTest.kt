@@ -7,12 +7,12 @@ import org.junit.Test
 class AIPromptsTest {
     @Test
     fun intentRouterPromptContainsKeyElements() {
-        val prompt = AIPrompts.CHAT_INPUT_ROUTER_PROMPT
+        val prompt = AIPrompts.INTENT_ROUTER_PROMPT_DEFAULT
 
-        assertTrue(prompt.contains("ACCOUNTING_CREATE"))
+        assertTrue(prompt.contains("BOOKKEEPING"))
         assertTrue(prompt.contains("GENERAL_CHAT"))
-        assertTrue(prompt.contains("UNSUPPORTED_WRITE"))
-        assertFalse(prompt.contains("ACCOUNTING_QUERY"))
+        assertFalse(prompt.contains("ACCOUNTING_CREATE"))
+        assertFalse(prompt.contains("UNSUPPORTED_WRITE"))
         assertTrue(prompt.contains("intent"))
     }
 
@@ -72,6 +72,33 @@ class AIPromptsTest {
         assertTrue(rule.contains("未明确指定账本时"))
         assertTrue(rule.contains("禁止输出 `book_name`"))
         assertFalse(rule.contains("默认账本、伙食账本"))
+    }
+
+    @Test
+    fun visionPromptsMergeDuplicateRowsAndSumTheirAmounts() {
+        // 回归：订单详情页常把同款商品拆成多行（光明青柠棒冰 2.30 连排三行）。
+        // 旧提示词写「不要合并同名商品」，模型执行成了「同名只留一行」——15 行只记了 12 行，少记 6.10 元。
+        // 正确行为是合并成一条并累加金额，因此这里锁死两件事：不再出现旧口径、新规则必须要求累加。
+        val visionPrompts = listOf(
+            AIPrompts.IMAGE_ACCOUNTING_PROMPT,
+            AIPrompts.RECEIPT_VISION_RETRY_PROMPT_DEFAULT,
+            AIPrompts.receiptVisionUserInstruction(1),
+            AIPrompts.receiptVisionUserInstruction(3)
+        )
+        visionPrompts.forEach { prompt ->
+            assertFalse(
+                "视觉提示词不能再要求保留同名多行，否则模型会丢掉重复行",
+                prompt.contains("不要合并同名商品")
+            )
+        }
+
+        val rule = AIPrompts.buildSameItemMergeRule()
+        assertTrue(rule.contains("amount = 各行金额之和"))
+        assertTrue(rule.contains("xN"))
+        assertTrue(rule.contains("光明青柠棒冰 x3"))
+        // 同价才合并、不同商品不合并，避免把无关行凑成一条
+        assertTrue(rule.contains("单价不同"))
+        assertTrue(rule.contains("商品名不同则绝不合并"))
     }
 
     private fun promptContext() = AIAccountingPromptContext(

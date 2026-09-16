@@ -29,11 +29,25 @@ open class TapRT(
     protected var _tflite = TfClassifier()
 
     fun setClassifier(classifier: TfClassifier) {
+        // 换分类器前先切断旧解释器的推理入口，但原生释放要回到传感器线程上做，
+        // 这里只做"交接"；正常流程下分类器在整个会话内复用，不会走到这一步。
+        if (_tflite !== classifier) {
+            (_tflite as? TapTfClassifier)?.handOff()
+        }
         _tflite = classifier
     }
 
-    fun closeClassifier() {
-        (_tflite as? TapTfClassifier)?.close()
+    /**
+     * 释放本实例持有的原生解释器。
+     *
+     * [sensorHandler] 是解释器真正的创建/调用线程。原生解释器只能在创建它的线程上关闭，
+     * 否则一旦与正在执行的 `Interpreter.run()` 并发就会 SIGSEGV 杀掉整个进程。
+     * [fallbackHandler] 仅作为目标线程可能已经退出时的兜底。
+     */
+    fun releaseClassifier(sensorHandler: android.os.Handler?, fallbackHandler: android.os.Handler?) {
+        val classifier = _tflite as? TapTfClassifier ?: return
+        _tflite = TfClassifier()
+        classifier.closeOn(sensorHandler, fallbackHandler)
     }
 
     init {
@@ -191,7 +205,12 @@ open class TapRT(
             val featureVector = _fv
             scaleGyroData(featureVector, 10.0f)
             _fv = featureVector
-            _result = Util.getMaxId(_tflite.predict(featureVector, 7).first())
+            val probs = _tflite.predict(featureVector, 7)
+            if (probs.isNotEmpty()) {
+                // 分类器不可用时 predict 返回空列表，必须判空，
+                // 否则 first() 会抛 NoSuchElementException 把整个手势链路打断
+                _result = Util.getMaxId(probs.first())
+            }
         }
     }
 

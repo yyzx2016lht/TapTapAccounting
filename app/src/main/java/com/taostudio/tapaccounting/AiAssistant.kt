@@ -61,7 +61,6 @@ class AiAssistant(private val ctx: Context) {
     fun showInputPanel(
         defaultText: String? = null,
         mode: Int = MODE_INPUT,
-        isMultiMode: Boolean? = null,
         hideStreamText: Boolean = true,
         onResult: (JSONObject) -> Unit
     ) {
@@ -73,7 +72,7 @@ class AiAssistant(private val ctx: Context) {
         if (currentDialog?.isShowing == true) {
             updatePanelState(finalMode, defaultText)
             if (finalMode == MODE_LOADING && !defaultText.isNullOrEmpty() && defaultText != VOICE_PLACEHOLDER_TEXT) {
-                startAnalysis(defaultText, isMultiMode, onResult)
+                startAnalysis(defaultText, onResult)
             }
             return
         }
@@ -106,7 +105,7 @@ class AiAssistant(private val ctx: Context) {
                 return@setOnClickListener
             }
             updatePanelState(MODE_LOADING, ctx.getString(R.string.analyzing_semantic))
-            startAnalysis(text, isMultiMode, onResult)
+            startAnalysis(text, onResult)
         }
 
         updatePanelState(finalMode, defaultText)
@@ -114,7 +113,7 @@ class AiAssistant(private val ctx: Context) {
             etInput.setText(defaultText)
             etInput.setSelection(defaultText.length)
         } else if (finalMode == MODE_LOADING && !defaultText.isNullOrEmpty() && defaultText != VOICE_PLACEHOLDER_TEXT) {
-            startAnalysis(defaultText, isMultiMode, onResult)
+            startAnalysis(defaultText, onResult)
         }
     }
 
@@ -366,7 +365,6 @@ class AiAssistant(private val ctx: Context) {
 
     private fun startAnalysis(
         text: String,
-        isMultiMode: Boolean?,
         onResult: (JSONObject) -> Unit,
         visualReviewSource: String? = null,
         visualDraftText: String = ""
@@ -378,7 +376,7 @@ class AiAssistant(private val ctx: Context) {
             try {
                 val streamState = OverlayStreamUiState()
                 val streamedRaw = StringBuilder()
-                val result = AIService.analyzeAccounting(ctx, text, isMultiMode, onProgress = { status ->
+                val result = AIService.analyzeAccounting(ctx, text, onProgress = { status ->
                     Handler(Looper.getMainLooper()).post {
                         if (currentDialog?.isShowing == true) {
                             if (hideStream) {
@@ -892,7 +890,6 @@ class AiAssistant(private val ctx: Context) {
             )
             startAnalysis(
                 text = accountingInput,
-                isMultiMode = true,
                 onResult = onResult,
                 visualReviewSource = "receipt_image",
                 visualDraftText = accountingInput

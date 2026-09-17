@@ -30,10 +30,6 @@ class TapDetector(
         // Columbus/TapTap 原始实现：0 = 最快可用率，Resample3C 插值到 2.5ms 固定间隔
         private const val SENSOR_SAMPLING_PERIOD_US = 0
         private const val SENSOR_BATCHING_PERIOD_US = 0
-        // 省电模式：启发式只当"唤醒触发器"。敲一下先震动提示，再切到 ML 精确检测这个时长，
-        // 到期后无条件回到启发式待机——只看时间，不看用户是否还在动。
-        private const val WAKE_WINDOW_MS = 60_000L
-        private const val POWER_CHECK_INTERVAL_MS = 1_000L
         private const val TAP_THROTTLE_MS = 500L
         /**
          * 启发式档"负面峰值检测器"的噪声阈值。
@@ -65,27 +61,16 @@ class TapDetector(
          */
         private const val HE_TEST_FEEDBACK_THROTTLE_MS = 150L
 
-        /**
-         * 跨检测器实例存活的"精确检测窗口"截止时刻（进程级，绝对 uptime）。
-         *
-         * 有几条路径会把正在跑的检测器停掉再拉起来：AI 面板/悬浮窗的
-         * `ACTION_STOP_DOUBLE_TAP` → `ACTION_START_DOUBLE_TAP`、看门狗重建、转屏重建。
-         * 这些都只是"暂停一下"，不该让用户已经敲醒的那一分钟作废。
-         * 因为存的是绝对时刻，暂停期间它照常流逝，所以恢复时不会得到凭空续期。
-         */
-        @Volatile
-        private var carriedWakeWindowUntilMs = 0L
-
-        /** 用户真正关掉敲击功能时调用，避免把上一次的窗口带进下一次开启。 */
-        fun clearCarriedWakeWindow() {
-            carriedWakeWindowUntilMs = 0L
-        }
         val TAP_SENSITIVITY_VALUES = floatArrayOf(
             0.75f, 0.53f, 0.40f, 0.25f, 0.1f, 0.05f, 0.04f, 0.03f, 0.02f, 0.01f, 0.0f
         )
 
+        /** 会话模式：二选一，会话期间不再切换。 */
         private enum class PowerProfile(val samplingPeriodUs: Int) {
+            /** 默认：全程 ML（加速度计 + 陀螺仪 + 神经网络）。 */
             Full(SENSOR_SAMPLING_PERIOD_US),
+
+            /** 省电敲击：全程启发式，只注册加速度计，不做推理。 */
             HeuristicStandby(SENSOR_SAMPLING_PERIOD_US)
         }
     }
@@ -150,42 +135,15 @@ class TapDetector(
      */
     private var lastHeResult = 0
 
+    /** 会话模式，在 [start] 里根据"省电敲击"开关确定，会话期间不再改变。 */
     private var powerProfile = PowerProfile.Full
-
-    /**
-     * 精确检测窗口的截止时刻。
-     * 同时兼作"本次窗口是否已经震动提示过"的判据——档位切换是 post 到传感器线程队尾执行的，
-     * 这中间还可能进来几个传感器事件，必须靠这个时间戳去重，否则会连震好几次。
-     */
-    private var wakeWindowUntilUptimeMs = 0L
-
-    private val powerProfileCheck = object : Runnable {
-        override fun run() {
-            if (!isRunning || forceFullMlMode) return
-            if (powerProfile == PowerProfile.Full &&
-                SystemClock.uptimeMillis() >= wakeWindowUntilUptimeMs
-            ) {
-                carriedWakeWindowUntilMs = 0L
-                switchPowerProfile(PowerProfile.HeuristicStandby, "wake-window-expired")
-            }
-            sensorHandler?.postDelayed(this, POWER_CHECK_INTERVAL_MS)
-        }
-    }
 
     /** 供前台服务通知查询"现在是什么状态"。 */
     fun currentDetectionState(): TapDetectionState = when {
         !isRunning -> TapDetectionState.Off
         forceFullMlMode -> TapDetectionState.AlwaysMl
         heTestMode -> TapDetectionState.HeuristicTest
-        powerProfile == PowerProfile.HeuristicStandby -> TapDetectionState.HeuristicStandby
-        else -> TapDetectionState.PreciseWindow
-    }
-
-    /** 精确检测窗口剩余毫秒数；不在窗口内返回 0。用于通知里的倒计时。 */
-    fun preciseWindowRemainingMs(): Long {
-        if (!isRunning || forceFullMlMode || powerProfile != PowerProfile.Full) return 0L
-        val remain = wakeWindowUntilUptimeMs - SystemClock.uptimeMillis()
-        return if (remain > 0L) remain else 0L
+        else -> TapDetectionState.HeuristicStandby
     }
 
     private fun emitState() {
@@ -227,20 +185,15 @@ class TapDetector(
                 nnapiLowPower
             ).also { activeClassifier = it }
 
-            // 省电模式默认从启发式待机起步。但如果上一轮的精确窗口还没到期
-            // （悬浮窗/AI 面板刚把检测器停掉又拉起来，或看门狗重建），就接着用剩下的时间，
-            // 不能让用户已经"敲醒"的那一分钟白白丢掉。
-            val carriedUntil = carriedWakeWindowUntilMs
-            val resumePrecise = powerSaving && !heTestMode && carriedUntil > SystemClock.uptimeMillis()
-            val startProfile = when {
-                !powerSaving -> PowerProfile.Full
-                heTestMode -> PowerProfile.HeuristicStandby
-                resumePrecise -> PowerProfile.Full
-                else -> PowerProfile.HeuristicStandby
+            // 模式二选一，会话期间不再切换：
+            //   省电敲击开 → 全程启发式（只加速度计、不做推理）
+            //   省电敲击关 → 全程 ML（默认）
+            val startProfile = if (powerSaving) {
+                PowerProfile.HeuristicStandby
+            } else {
+                PowerProfile.Full
             }
-            if (!resumePrecise) carriedWakeWindowUntilMs = 0L
 
-            // 灵敏度必须按起始档位取：启发式那条链路要用更钝的省电档灵敏度。
             val sensitivity = sensitivityFor(startProfile)
 
             generation++
@@ -257,29 +210,24 @@ class TapDetector(
             }
 
             powerProfile = startProfile
-            wakeWindowUntilUptimeMs = if (resumePrecise) carriedUntil else 0L
             // 必须复位：否则上一轮的残留值会让本次会话的第一次敲击被边沿判断吞掉
             lastHeResult = 0
             registerSensors(powerProfile)
 
             isRunning = true
             lastSensorEventTimeMillis = System.currentTimeMillis()
-            if (powerSaving) {
-                sensorHandler?.postDelayed(powerProfileCheck, POWER_CHECK_INTERVAL_MS)
-            }
             emitState()
 
             val tapModelName = TapModel.resolve(context).displayName
             Log.d(TAG, "TapDetector started: model=$tapModelName, " +
                     "sensitivity=$sensitivity, nnapi=$nnapiLowPower, " +
-                    "powerSaving=$powerSaving, forceFullMlMode=$forceFullMlMode, " +
+                    "powerSaving=$powerSaving, " +
                     "gyroRegistered=${startProfile != PowerProfile.HeuristicStandby}, " +
-                    "startProfile=$startProfile, " +
+                    "mode=$startProfile, " +
                     "tripleEnabled=$tripleEnabled, " +
                     "samplingPeriodUs=${powerProfile.samplingPeriodUs}, " +
                     "samplingIntervalNs=$SAMPLING_INTERVAL_NS, " +
-                    "batchingUs=$SENSOR_BATCHING_PERIOD_US, " +
-                    "dynamicPower=$powerSaving, standby=heuristic")
+                    "batchingUs=$SENSOR_BATCHING_PERIOD_US")
             return true
         } catch (e: Exception) {
             Log.e(TAG, "Failed to start TapDetector", e)
@@ -292,7 +240,6 @@ class TapDetector(
         // ① 先关掉"入口"，让后续传感器回调立刻返回，不再启动新的推理
         isRunning = false
         generation++
-        sensorHandler?.removeCallbacks(powerProfileCheck)
 
         // ② 注销监听。注意 unregisterListener 只保证"不再派发新事件"，
         //    已经排在 Handler 队列里的回调仍会执行，所以不能就地关闭解释器。
@@ -349,22 +296,15 @@ class TapDetector(
 
             val result = currentTap.checkDoubleTapTiming(event.timestamp)
 
-            // 省电模式：启发式命中只当"唤醒触发器"。
-            // 不弹悬浮窗、不执行用户设置的双击动作，只震动 + 提示，然后切到 ML 精确检测一段时间。
-            // 用户在这个窗口里再敲一次，才走正常的 ML 识别与动作。
-            if (!forceFullMlMode && powerProfile == PowerProfile.HeuristicStandby) {
-                // result 在敲击后会保持 500ms 不变，所以只在它跳变时才算"检出一次"。
-                // 单击：0 → 1（报一次）；双击：0 → 1 → 2（报两次）。
+            // 省电敲击（启发式）：不再有"先唤醒、再进精确档"那套门控——
+            // 敲中就按和 ML 完全相同的方式直接执行用户配置的动作，只是检测算法不同。
+            if (heTestMode) {
+                // result 是**状态**不是事件：敲一下后队列里的时间戳要过 500ms 才老化，
+                // 这期间每次传感器事件都会返回 1。所以"检出一次"必须靠跳变识别。
+                // 只报 2 击（完整双击）——那正是正式模式下会触发动作的条件，所见即所得。
                 val isNewDetection = result >= 1 && result != lastHeResult
                 lastHeResult = result
-                if (isNewDetection) {
-                    if (heTestMode) {
-                        // 测试模式：给反馈但绝不切档，方便连续试灵敏度、不用等一分钟回落
-                        notifyHeTestHit(result)
-                    } else {
-                        wakeToPreciseMode(result)
-                    }
-                }
+                if (isNewDetection && result >= 2) notifyHeTestHit(result)
                 return
             }
             lastHeResult = result
@@ -396,11 +336,10 @@ class TapDetector(
             SENSOR_BATCHING_PERIOD_US,
             handler
         )
-        // 注意：这里与 crDroid 有意不同。
-        // crDroid 的 APSensor 对 HE 和 ML 都注册加速度计 + 陀螺仪，但它的启发式算法本身
-        // 会 `if (sensorType == Sensor.TYPE_GYROSCOPE) return` 直接忽略陀螺仪数据。
-        // 本项目的 HE 是"为了不被系统杀"的省电待机档，所以干脆连陀螺仪都不注册：
-        // 算法用不到它，而少一路 400Hz 传感器就少一半回调。
+        // 省电敲击档不注册陀螺仪：AOSP 的启发式算法本身第一行就
+        // `if (sensorType == Sensor.TYPE_GYROSCOPE) return`，用不到它；
+        // 而且现在没有"切到 ML"这个动作了，也就不需要为切档预留陀螺仪历史。
+        // 少一路 400Hz 传感器就是少一半回调，这正是省电敲击的意义。
         if (!shouldUseHeuristicRuntime()) {
             sensorManager.registerListener(
                 this,
@@ -410,60 +349,6 @@ class TapDetector(
                 handler
             )
         }
-    }
-
-    private fun switchPowerProfile(profile: PowerProfile, reason: String) {
-        if (forceFullMlMode || powerProfile == profile) return
-        val handler = sensorHandler ?: return
-        // 重建运行时的全过程都排到传感器线程上，与传感器回调串行化，
-        // 这样就不存在"注销监听后、重新注册前"事件打在中间状态的窗口。
-        val scheduledGeneration = generation
-        handler.post {
-            if (!isRunning || forceFullMlMode || powerProfile == profile) return@post
-            if (generation != scheduledGeneration) return@post
-            try {
-                sensorManager.unregisterListener(this, accelerometer)
-                sensorManager.unregisterListener(this, gyroscope)
-            } catch (_: Exception) {
-            }
-            // 关键：这里不再 close 分类器。分类器只跟会话绑定，与功耗档位无关；
-            // 在会话中途关闭原生解释器正是 SIGSEGV 的来源。
-            powerProfile = profile
-            lastHeResult = 0
-            val sensitivity = sensitivityFor(profile)
-            tripleEnabled = Prefs.isTapTripleEnabled(context)
-            generation++
-            tap = createTapRuntime(
-                useHeuristic = profile == PowerProfile.HeuristicStandby,
-                tripleEnabled = tripleEnabled,
-                sensitivity = sensitivity,
-                classifier = activeClassifier
-            )
-            registerSensors(profile)
-            emitState()
-            Log.d(
-                TAG,
-                "Dynamic power profile changed: profile=$profile, reason=$reason, " +
-                    "samplingPeriodUs=${profile.samplingPeriodUs}, batchingUs=$SENSOR_BATCHING_PERIOD_US, " +
-                    "gyroRegistered=${profile != PowerProfile.HeuristicStandby}, heuristic=${profile == PowerProfile.HeuristicStandby}"
-            )
-        }
-    }
-
-    /**
-     * 省电模式下的唤醒：震动 + 提示，然后切到 ML 精确检测 [WAKE_WINDOW_MS]。
-     *
-     * 这里刻意不看运动状态。旧实现用"静止 3 分钟"作为回落条件，只要用户一直拿着手机，
-     * 每一次微小移动都会把计时重置，于是永远回不到省电档——现在只看时间。
-     */
-    private fun wakeToPreciseMode(tapCount: Int) {
-        val now = SystemClock.uptimeMillis()
-        // 窗口内不重复震动/提示：切换动作是 post 到队尾执行的，这中间还会进来几个传感器事件。
-        if (now < wakeWindowUntilUptimeMs) return
-        wakeWindowUntilUptimeMs = now + WAKE_WINDOW_MS
-        carriedWakeWindowUntilMs = wakeWindowUntilUptimeMs
-        notifyWake()
-        switchPowerProfile(PowerProfile.Full, "heuristic-wake-$tapCount")
     }
 
     /**
@@ -488,30 +373,15 @@ class TapDetector(
         }
     }
 
-    /** 唤醒反馈：震动一下 + Toast 提示用户"可以再敲了"。 */
-    private fun notifyWake() {        val appContext = context.applicationContext
-        Handler(Looper.getMainLooper()).post {
-            Utils.vibrate(appContext, duration = 45L, reason = "tap-wake", amplitude = 210)
-            try {
-                Toast.makeText(appContext, R.string.tap_wake_hint, Toast.LENGTH_SHORT).show()
-            } catch (e: Exception) {
-                Log.w(TAG, "wake toast failed: ${e.message}")
-            }
-        }
-    }
-
     /**
-     * 取某个档位该用的峰值判定阈值。
+     * 取当前会话该用的峰值判定阈值（供 ML 内核使用）。
      *
-     * 启发式和 ML 用的是**两条独立链路**，同一个阈值表现完全不同：
-     * 启发式没有分类器兜底，主灵敏度那个值会让它频繁误触，所以单独给一档更钝的值。
+     * 两个模式**共用顶上那一个灵敏度滑块**，但映射方式不同：
+     * ML 用 TapTap 血统的 [TAP_SENSITIVITY_VALUES]，启发式用 AOSP 的公式
+     * （见 [aospHeSensitivity]）。滑块方向两边一致，都是"数字越大越灵敏"。
      */
     private fun sensitivityFor(profile: PowerProfile): Float {
-        val level = if (profile == PowerProfile.HeuristicStandby) {
-            Prefs.getTapHeSensitivityLevel(context)
-        } else {
-            Prefs.getTapSensitivityLevel(context)
-        }
+        val level = Prefs.getTapSensitivityLevel(context)
         return TAP_SENSITIVITY_VALUES.getOrElse(level) { 0.05f }
     }
 
@@ -569,7 +439,8 @@ class TapDetector(
      */
     private fun createAospHeRuntime(): BaseTapRT {
         runtimeIsAosp = true
-        val level = Prefs.getTapHeSensitivityLevel(context)
+        // 与 ML 共用顶上那一个灵敏度滑块，只是映射到 AOSP 的阈值公式
+        val level = Prefs.getTapSensitivityLevel(context)
         return AospTapRT(AOSP_HE_SIZE_WINDOW_NS).apply {
             lowpassAcc.para = 1f
             lowpassGyro.para = 1f

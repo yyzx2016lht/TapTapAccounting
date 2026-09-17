@@ -10,16 +10,7 @@ import android.os.Build
 import androidx.core.app.NotificationCompat
 
 object OverlayServiceNotifications {
-    /**
-     * @param countDownTo 非空时在通知右侧渲染一个由系统驱动的实时倒计时（无需 App 每秒刷新），
-     *                    传的是倒计时归零的 epoch 毫秒。
-     */
-    fun build(
-        ctx: Context,
-        channelId: String,
-        content: String,
-        countDownTo: Long? = null
-    ): Notification {
+    fun build(ctx: Context, channelId: String, content: String): Notification {
         ensureChannel(ctx, channelId)
         val pi = PendingIntent.getActivity(
             ctx,
@@ -27,7 +18,7 @@ object OverlayServiceNotifications {
             Intent(ctx, MainActivity::class.java),
             PendingIntent.FLAG_IMMUTABLE
         )
-        val builder = NotificationCompat.Builder(ctx, channelId)
+        return NotificationCompat.Builder(ctx, channelId)
             .setContentTitle("敲敲记账助手")
             .setContentText(content)
             .setSmallIcon(android.R.drawable.ic_menu_edit)
@@ -35,18 +26,9 @@ object OverlayServiceNotifications {
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setSilent(true)
             .setOngoing(true)
+            .setShowWhen(false)
             .setOnlyAlertOnce(true)
-
-        if (countDownTo != null) {
-            // 系统自己渲染倒计时，我们不需要为了跳秒去反复 notify。
-            builder.setShowWhen(true)
-                .setUsesChronometer(true)
-                .setChronometerCountDown(true)
-                .setWhen(countDownTo)
-        } else {
-            builder.setShowWhen(false)
-        }
-        return builder.build()
+            .build()
     }
 
     private fun ensureChannel(ctx: Context, channelId: String) {

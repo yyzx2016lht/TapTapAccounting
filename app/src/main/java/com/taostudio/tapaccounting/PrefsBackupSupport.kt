@@ -393,7 +393,6 @@ object PrefsBackupSupport {
             put("double_tap_enabled_v1", Prefs.isDoubleTapEnabled(ctx))
             put("tap_model_v1", Prefs.getTapModel(ctx))
             put("tap_sensitivity_level_v1", Prefs.getTapSensitivityLevel(ctx))
-            put("tap_he_sensitivity_v1", Prefs.getTapHeSensitivityLevel(ctx))
             put("tap_he_test_mode_v1", Prefs.isTapHeTestModeEnabled(ctx))
             put("tap_nnapi_low_power_v1", Prefs.isTapNnapiLowPower(ctx))
             put("tap_power_saving_v1", Prefs.isTapPowerSavingEnabled(ctx))

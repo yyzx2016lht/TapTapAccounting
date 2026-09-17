@@ -437,8 +437,6 @@ class OverlayService : Service() {
                 isDoubleTapEnabled = false
                 stopTapDetection()
                 if (userDisabledTap) {
-                    // 真正的关闭：不要把上一次的精确窗口带到下一次开启
-                    TapDetector.clearCarriedWakeWindow()
                     OverlayWatchdogWorker.cancel(this)
                     stopSelfIfIdle("double-tap-disabled")
                 } else {
@@ -693,7 +691,6 @@ class OverlayService : Service() {
             return when (detector.currentDetectionState()) {
                 TapDetectionState.HeuristicStandby -> getString(R.string.notif_tap_standby)
                 TapDetectionState.HeuristicTest -> getString(R.string.notif_tap_he_test)
-                TapDetectionState.PreciseWindow -> getString(R.string.notif_tap_precise)
                 TapDetectionState.AlwaysMl -> getString(R.string.notif_tap_always_ml)
                 TapDetectionState.Off -> getString(R.string.notif_tap_paused)
             }
@@ -713,22 +710,18 @@ class OverlayService : Service() {
         }
     }
 
-    /** 按当前状态重刷前台通知；精确窗口内带上系统渲染的剩余倒计时。 */
+    /** 按当前状态重刷前台通知。 */
     private fun refreshDetectionNotification() {
         if (isDestroying) return
-        val countDownTo = tapDetector
-            ?.preciseWindowRemainingMs()
-            ?.takeIf { it > 0L }
-            ?.let { System.currentTimeMillis() + it }
         try {
-            promoteToForeground(currentNotificationText(), countDownTo)
+            promoteToForeground(currentNotificationText())
         } catch (e: Exception) {
             Logger.d(this, "OverlayService", "refreshDetectionNotification failed: ${e.message}")
         }
     }
 
-    private fun promoteToForeground(content: String, countDownTo: Long? = null) {
-        val notification = OverlayServiceNotifications.build(this, CHANNEL_ID, content, countDownTo)
+    private fun promoteToForeground(content: String) {
+        val notification = OverlayServiceNotifications.build(this, CHANNEL_ID, content)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
             // 对照实验：health 是 Android 14 引入的传感器监测类型，
             // 语义上比 specialUse 更贴合"加速度计/陀螺仪持续检测"。

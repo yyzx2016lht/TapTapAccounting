@@ -83,9 +83,7 @@ class SensitivityActivity : AppCompatActivity() {
     private lateinit var tvFlipActionName: TextView
     private lateinit var seekBarTap: SeekBar
     private lateinit var tvTapCurrentValue: TextView
-    private lateinit var seekBarTapHe: SeekBar
-    private lateinit var tvTapHeCurrentValue: TextView
-    private lateinit var groupTapHeSensitivity: View
+    private lateinit var groupTapHeOptions: View
     private lateinit var switchTapHeTest: SwitchMaterial
     private lateinit var layoutTapHeTest: View
     private lateinit var tvTapModelName: TextView
@@ -148,7 +146,7 @@ class SensitivityActivity : AppCompatActivity() {
         btnTapModel = findViewById(R.id.btn_tap_model)
         layoutTapNnapi = findViewById(R.id.layout_tap_nnapi)
         layoutTapLowPower = findViewById(R.id.layout_tap_low_power)
-        groupTapHeSensitivity = findViewById(R.id.group_tap_he_sensitivity)
+        groupTapHeOptions = findViewById(R.id.group_tap_he_options)
         groupLandscapeDisable = findViewById(R.id.group_landscape_disable)
         groupHideRecents = findViewById(R.id.group_hide_recents)
         groupVibrationFeedback = findViewById(R.id.group_vibration_feedback)
@@ -357,24 +355,8 @@ class SensitivityActivity : AppCompatActivity() {
             }
         })
 
-        // 省电档灵敏度：独立于主灵敏度，数字越大越灵敏
-        seekBarTapHe = findViewById(R.id.seekBarTapHeSensitivity)
-        tvTapHeCurrentValue = findViewById(R.id.tvTapHeCurrentValue)
-        seekBarTapHe.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-            override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
-                updateTapHeUI(progress)
-            }
-            override fun onStartTrackingTouch(seekBar: SeekBar?) {}
-            override fun onStopTrackingTouch(seekBar: SeekBar?) {
-                seekBar?.progress?.let { level ->
-                    Prefs.setTapHeSensitivityLevel(this@SensitivityActivity, level)
-                    restartTapDetection()
-                }
-            }
-        })
-
-        // 省电档测试模式：锁定启发式，敲中只震动+提示，不切精确档也不记账。
-        // 这样调滑块可以立刻连续验证，不用每次等一分钟回落。
+        // 省电敲击测试模式：敲中只震动+提示，不执行动作。
+        // 这样调灵敏度可以立刻连续验证，不用真的把记账动作触发出来。
         switchTapHeTest = findViewById(R.id.switch_tap_he_test)
         layoutTapHeTest = findViewById(R.id.layout_tap_he_test)
         layoutTapHeTest.setOnClickListener { switchTapHeTest.performClick() }
@@ -604,10 +586,6 @@ class SensitivityActivity : AppCompatActivity() {
             val tapLevel = Prefs.getTapSensitivityLevel(this)
             seekBarTap.progress = tapLevel
             updateTapUI(tapLevel)
-
-            val heLevel = Prefs.getTapHeSensitivityLevel(this)
-            seekBarTapHe.progress = heLevel
-            updateTapHeUI(heLevel)
         }
     }
 
@@ -813,10 +791,6 @@ class SensitivityActivity : AppCompatActivity() {
         tvTapCurrentValue.text = getString(R.string.current_tap_level_fmt, sensitivityLabel(level))
     }
 
-    private fun updateTapHeUI(level: Int) {
-        tvTapHeCurrentValue.text = getString(R.string.current_tap_level_fmt, sensitivityLabel(level))
-    }
-
     private fun sensitivityLabel(level: Int): String = when (level) {
         in 0..1 -> getString(R.string.level_very_low)
         in 2..3 -> getString(R.string.level_low)
@@ -830,8 +804,8 @@ class SensitivityActivity : AppCompatActivity() {
         switchTapNnapi.isEnabled = true
         switchTapTriple.isEnabled = true
         groupTapActionTriple.visibility = if (Prefs.isTapTripleEnabled(this)) View.VISIBLE else View.GONE
-        // 省电档灵敏度只在省电模式开启时才有意义
-        groupTapHeSensitivity.visibility =
+        // 省电敲击测试模式只在省电敲击开启时才有意义
+        groupTapHeOptions.visibility =
             if (Prefs.isTapPowerSavingEnabled(this)) View.VISIBLE else View.GONE
     }
 

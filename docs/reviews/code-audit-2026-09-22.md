@@ -53,7 +53,7 @@
   - 状态：历史问题 **升级为 Critical**（恢复/结息路径）  
   - 修法：恢复/结息/一切 apply 前 `validateRequiredRatesForBill`，失败中止事务；评估是否禁止吞异常  
 
-- [ ] **P0-4 降级安装备份失败仍 destructive 清库**  
+- [x] **P0-4 降级安装备份失败仍 destructive 清库**  
   - 位置：`data/local/DatabaseDowngradeHelper.kt:60-75`；`data/local/AppDatabase.kt:777-778`（`fallbackToDestructiveMigrationOnDowngrade`）  
   - 现象：`createBackup` 返回 null 只打日志，随后仍清库  
   - 状态：新问题  

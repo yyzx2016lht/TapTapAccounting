@@ -47,7 +47,10 @@ object DatabaseDowngradeHelper {
 
     /**
      * 若检测到降级，将主库及 `-wal` / `-shm` 复制到 [BACKUP_DIR]。
-     * 失败只打日志，不阻止后续 Room 打开（可能清库后无备份可恢复）。
+     *
+     * **P0-4**：检测到降级且备份失败时抛出 [IllegalStateException]，阻断后续 Room
+     * `fallbackToDestructiveMigrationOnDowngrade()` 清库，避免「备份失败仍清空数据」。
+     * 非降级路径的检查失败只打日志，不阻止打开。
      */
     fun backupIfDowngrade(context: Context, dbName: String, currentCodeVersion: Int) {
         try {
@@ -61,18 +64,32 @@ object DatabaseDowngradeHelper {
                 Log.w(TAG, "检测到降级: 数据库版本=$dbVersion, 代码版本=$currentCodeVersion, 开始备份...")
                 walCheckpoint(context, dbName)
                 val backupFile = createBackup(context, dbFile, dbVersion)
-                if (backupFile != null) {
-                    Log.i(TAG, "备份完成: ${backupFile.absolutePath}")
-                    context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE).edit()
-                        .putString(PREF_LAST_BACKUP_PATH, backupFile.absolutePath)
-                        .putInt(PREF_LAST_BACKUP_VERSION, dbVersion)
-                        .apply()
+                if (backupFile == null || !isBackupComplete(dbFile, backupFile)) {
+                    throw IllegalStateException(
+                        "降级备份失败或不完整（db v$dbVersion → code v$currentCodeVersion），" +
+                            "已阻止打开以免 destructive 清库丢数据"
+                    )
                 }
+                Log.i(TAG, "备份完成: ${backupFile.absolutePath}")
+                context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE).edit()
+                    .putString(PREF_LAST_BACKUP_PATH, backupFile.absolutePath)
+                    .putInt(PREF_LAST_BACKUP_VERSION, dbVersion)
+                    .apply()
                 cleanupOldBackups(context)
             }
+        } catch (e: IllegalStateException) {
+            // 备份失败必须阻断清库：向上抛出，禁止 Room 打开
+            throw e
         } catch (e: Exception) {
             Log.e(TAG, "降级备份检查失败", e)
         }
+    }
+
+    /** 备份完整性：文件存在且与源库字节数一致（主库已 checkpoint 时长度应相同）。 */
+    fun isBackupComplete(source: File, backup: File): Boolean {
+        if (!source.exists() || !backup.exists()) return false
+        val sourceLen = source.length()
+        return sourceLen > 0L && backup.length() == sourceLen
     }
 
     /** 读 SQLite 文件头偏移 60 处的 `user_version`（大端 4 字节），避免为读版本单独开库连接。 */
@@ -115,6 +132,14 @@ object DatabaseDowngradeHelper {
             val shmFile = File(dbFile.path + "-shm")
             if (shmFile.exists()) {
                 shmFile.copyTo(File(backupFile.path + "-shm"), overwrite = true)
+            }
+
+            if (!isBackupComplete(dbFile, backupFile)) {
+                Log.e(TAG, "备份文件不完整，删除残件")
+                backupFile.delete()
+                File(backupFile.path + "-wal").delete()
+                File(backupFile.path + "-shm").delete()
+                return null
             }
 
             backupFile

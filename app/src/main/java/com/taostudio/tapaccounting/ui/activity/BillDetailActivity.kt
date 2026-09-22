@@ -79,6 +79,8 @@ class BillDetailActivity : AppCompatActivity() {
 
     private var currentUiType: Int = Bill.TYPE_EXPENSE
     private var currentCategoryName: String = ""
+    /** 非转账类型下的分类，用于转账↔支出切换时恢复，避免把「转账」写进分类 */
+    private var nonTransferCategoryName: String = ""
     private var currentCategoryIcon: String = ""
     private var currentAmountText: String = "0.00"
     private var currentAssetName: String = ""
@@ -107,6 +109,14 @@ class BillDetailActivity : AppCompatActivity() {
         initViews()
         setupListeners()
         loadBillData()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // 从退款页返回后账单可能已被改写，重新加载避免用旧内存数据覆盖退款
+        if (billId != -1L && bill != null) {
+            loadBillData()
+        }
     }
 
     private fun initViews() {
@@ -192,6 +202,11 @@ class BillDetailActivity : AppCompatActivity() {
         currentBookName = loadedBill.bookName.ifBlank { getString(R.string.default_book) }
         currentExcludeFromStats = loadedBill.excludeFromStats
         currentCategoryName = resolveDisplayedCategory(loadedBill)
+        nonTransferCategoryName = if (isTransferFamily(currentUiType)) {
+            loadedBill.categoryName
+        } else {
+            currentCategoryName
+        }
         currentCategoryIcon = ""
 
         etRemark.setText(loadedBill.remark)
@@ -491,9 +506,15 @@ class BillDetailActivity : AppCompatActivity() {
         }
         if (currentUiType == targetType) return
 
+        // 切换前先记住非转账分类，切回支出/收入时恢复
+        if (!isTransferFamily(currentUiType)) {
+            nonTransferCategoryName = currentCategoryName
+        }
         currentUiType = targetType
         if (isTransferFamily(currentUiType)) {
             currentCategoryName = getTypeDisplayName(currentUiType)
+        } else {
+            currentCategoryName = nonTransferCategoryName
         }
         renderBillState()
         loadCategoryIcon()
@@ -594,6 +615,14 @@ class BillDetailActivity : AppCompatActivity() {
         if (amount <= 0.0) {
             Toast.makeText(this, getString(R.string.invalid_amount), Toast.LENGTH_SHORT).show()
             return
+        }
+        // 支出已退款时，净额不能低于已退总额
+        if (originalBill.type == Bill.TYPE_EXPENSE && originalBill.subType != Bill.SUBTYPE_REFUND) {
+            val refunded = refundedAmountInBillCurrency(originalBill)
+            if (refunded > 0.0 && amount + 1e-9 < refunded) {
+                Toast.makeText(this, getString(R.string.toast_refund_exceeds_balance), Toast.LENGTH_SHORT).show()
+                return
+            }
         }
         // 分类允许为空（未分类是合法状态）；清空后可直接保存
 

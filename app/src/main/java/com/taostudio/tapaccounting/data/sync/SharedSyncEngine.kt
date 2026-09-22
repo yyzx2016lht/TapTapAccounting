@@ -407,7 +407,8 @@ class SharedSyncEngine(private val context: Context, private val db: AppDatabase
         internal fun wins(old: SyncOperation?, incoming: Operation): Boolean = when {
             old == null -> true
             old.action == "delete" -> incoming.type == "delete" && isLaterThan(old, incoming)
-            incoming.type == "delete" -> true
+            // 删除也要比 revision：过期删除不能覆盖更新的编辑
+            incoming.type == "delete" -> isLaterThan(old, incoming)
             else -> isLaterThan(old, incoming)
         }
 

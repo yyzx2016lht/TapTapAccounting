@@ -465,13 +465,15 @@ interface BillDao {
      */
     @Query("""
         UPDATE bills
-        SET categoryName = ''
+        SET categoryName = '', cateIcon = NULL
         WHERE categoryId IS NULL
           AND (
               categoryName = :name
               OR categoryName LIKE '% - ' || :name
+              OR categoryName LIKE :name || ' - %'
               OR categoryName = '退款：' || :name
               OR categoryName LIKE '退款：% - ' || :name
+              OR categoryName LIKE '退款：' || :name || ' - %'
           )
     """)
     suspend fun clearCategoryByName(name: String)

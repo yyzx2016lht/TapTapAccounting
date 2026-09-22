@@ -50,7 +50,7 @@ object BillAssetImpactService {
                     return 0
                 }
                 ensureRatesForImpact(bill, sourceAsset = asset, targetAsset = null)
-                val sourceDelta = convertAmountBetweenCurrencies(baseOriginalAmount(bill), bill.currency, asset.currency)
+                val sourceDelta = expenseDeltaInAssetCurrency(baseOriginalAmount(bill), bill, asset)
                 logAssetDelta(asset, -sourceDelta, "apply_expense", bill.id)
                 db.assetDao().addBalanceDelta(asset.id, -sourceDelta)
                 syncInvestmentPrincipalAfterExternalImpact(db, asset, bill)
@@ -134,7 +134,7 @@ object BillAssetImpactService {
                     return 0
                 }
                 ensureRatesForImpact(bill, sourceAsset = asset, targetAsset = null)
-                val sourceDelta = convertAmountBetweenCurrencies(baseOriginalAmount(bill), bill.currency, asset.currency)
+                val sourceDelta = expenseDeltaInAssetCurrency(baseOriginalAmount(bill), bill, asset)
                 logAssetDelta(asset, sourceDelta, "revert_expense", bill.id)
                 db.assetDao().addBalanceDelta(asset.id, sourceDelta)
                 syncInvestmentPrincipalAfterExternalImpact(db, asset, bill)
@@ -293,6 +293,19 @@ object BillAssetImpactService {
             asset = latestAsset,
             changedAt = bill.time
         )
+    }
+
+    /**
+     * 支出扣减折算到资产币种。
+     * 账户为 CNY 且账单币种不同时，优先用记账时写入的 exchangeRate（可能是用户确认汇率）；
+     * 其余情况仍走市场汇率表。
+     */
+    private fun expenseDeltaInAssetCurrency(amount: Double, bill: Bill, asset: Asset): Double {
+        if (bill.currency == asset.currency) return amount
+        if (asset.currency.equals("CNY", ignoreCase = true) && bill.exchangeRate > 0.0) {
+            return amount * bill.exchangeRate
+        }
+        return convertAmountBetweenCurrencies(amount, bill.currency, asset.currency)
     }
 
     private fun targetDeltaInCurrency(bill: Bill, _targetCurrency: String): Double {

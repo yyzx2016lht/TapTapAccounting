@@ -116,7 +116,12 @@ class RefundActivity : AppCompatActivity() {
     private fun displayBillData(sourceBill: Bill, existingRefund: Bill?) {
         tvTitle.text = if (existingRefund == null) getString(R.string.refund_label) else getString(R.string.edit_refund_label)
         tvOrigCategory.text = sourceBill.categoryName.ifBlank { getString(R.string.uncategorized) }
-        tvOrigAmount.text = getString(R.string.original_expense_fmt, formatMoney(sourceBill.amount))
+        val displayOriginal = if (sourceBill.originalAmount > 0.0) {
+            maxOf(sourceBill.originalAmount, sourceBill.amount)
+        } else {
+            sourceBill.amount
+        }
+        tvOrigAmount.text = getString(R.string.original_expense_fmt, formatMoney(displayOriginal))
         tvRefundCategoryInitial.text = buildInitial(tvOrigCategory.text.toString())
 
         refundAmount = String.format(Locale.getDefault(), "%.2f", existingRefund?.amount ?: sourceBill.amount)

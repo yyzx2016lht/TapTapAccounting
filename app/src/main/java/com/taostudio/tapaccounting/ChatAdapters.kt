@@ -921,26 +921,30 @@ class ChatAdapter(
                     OverlayDialogs.showGridCategoryPicker(context, bill.categoryName, pickerType) { selected ->
                         val originalBill = bill.copy()
                         lifecycleScope.launch {
-                            val updated = withContext(Dispatchers.IO) {
-                                val categoryEntity = CategoryRepository(db.categoryDao()).findCategoryByDisplayName(
-                                    categoryDbType,
-                                    selected
-                                )
-                                BillMutationService.replaceBill(
-                                    db = db,
-                                    oldBill = bill,
-                                    newBill = bill.copy(categoryName = selected, categoryId = categoryEntity?.id)
-                                )
-                            }
-                            val msgIdx = displayMessages.indexOfFirst { it.dbId == item.dbId }
-                            if (msgIdx >= 0) {
-                                val rowIdx = displayMessages[msgIdx].bills.indexOfFirst { it.id == bill.id }
-                                if (rowIdx >= 0) {
-                                    displayMessages[msgIdx].bills[rowIdx] = updated
-                                    this@ChatAdapter.notifyItemChanged(msgIdx)
+                            try {
+                                val updated = withContext(Dispatchers.IO) {
+                                    val categoryEntity = CategoryRepository(db.categoryDao()).findCategoryByDisplayName(
+                                        categoryDbType,
+                                        selected
+                                    )
+                                    BillMutationService.replaceBill(
+                                        db = db,
+                                        oldBill = bill,
+                                        newBill = bill.copy(categoryName = selected, categoryId = categoryEntity?.id)
+                                    )
                                 }
+                                val msgIdx = displayMessages.indexOfFirst { it.dbId == item.dbId }
+                                if (msgIdx >= 0) {
+                                    val rowIdx = displayMessages[msgIdx].bills.indexOfFirst { it.id == bill.id }
+                                    if (rowIdx >= 0) {
+                                        displayMessages[msgIdx].bills[rowIdx] = updated
+                                        this@ChatAdapter.notifyItemChanged(msgIdx)
+                                    }
+                                }
+                                onMaybeShowRuleDialogForChatBillCategoryEdit(item, originalBill, updated)
+                            } catch (e: Exception) {
+                                Utils.toast(context, context.getString(R.string.toast_save_failed))
                             }
-                            onMaybeShowRuleDialogForChatBillCategoryEdit(item, originalBill, updated)
                         }
                     }
                 }
@@ -987,27 +991,32 @@ class ChatAdapter(
                     }
                     savingAmount = true
                     lifecycleScope.launch {
-                        val updated = withContext(Dispatchers.IO) {
-                            val updatedBill = when {
-                                bill.subType == Bill.SUBTYPE_REFUND -> bill.copy(amount = editedAmount)
-                                bill.type == Bill.TYPE_EXPENSE -> bill.copy(amount = editedAmount, originalAmount = editedAmount)
-                                else -> bill.copy(amount = editedAmount)
+                        try {
+                            val updated = withContext(Dispatchers.IO) {
+                                val updatedBill = when {
+                                    bill.subType == Bill.SUBTYPE_REFUND -> bill.copy(amount = editedAmount)
+                                    bill.type == Bill.TYPE_EXPENSE -> bill.copy(amount = editedAmount, originalAmount = editedAmount)
+                                    else -> bill.copy(amount = editedAmount)
+                                }
+                                BillMutationService.replaceBill(
+                                    db = db,
+                                    oldBill = bill,
+                                    newBill = updatedBill
+                                )
                             }
-                            BillMutationService.replaceBill(
-                                db = db,
-                                oldBill = bill,
-                                newBill = updatedBill
-                            )
-                        }
-                        savingAmount = false
-                        closeInlineAmountEdit(hideKeyboardNow = true)
-                        val msgIdx = displayMessages.indexOfFirst { it.dbId == item.dbId }
-                        if (msgIdx >= 0) {
-                            val rowIdx = displayMessages[msgIdx].bills.indexOfFirst { it.id == bill.id }
-                            if (rowIdx >= 0) {
-                                displayMessages[msgIdx].bills[rowIdx] = updated
-                                this@ChatAdapter.notifyItemChanged(msgIdx)
+                            closeInlineAmountEdit(hideKeyboardNow = true)
+                            val msgIdx = displayMessages.indexOfFirst { it.dbId == item.dbId }
+                            if (msgIdx >= 0) {
+                                val rowIdx = displayMessages[msgIdx].bills.indexOfFirst { it.id == bill.id }
+                                if (rowIdx >= 0) {
+                                    displayMessages[msgIdx].bills[rowIdx] = updated
+                                    this@ChatAdapter.notifyItemChanged(msgIdx)
+                                }
                             }
+                        } catch (e: Exception) {
+                            Utils.toast(context, context.getString(R.string.toast_save_failed))
+                        } finally {
+                            savingAmount = false
                         }
                     }
                 }

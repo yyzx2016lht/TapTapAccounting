@@ -51,18 +51,18 @@ class SharedOperationCodecTest {
         assertFalse(SharedSyncEngine.wins(old, incoming))
     }
 
-    @Test fun `delete wins over an update regardless of device ordering`() {
+    @Test fun `delete wins over an update with same or higher revision`() {
         val old = SyncOperation("old", 1, "budget", "entity", "update", 2, "z-device", "member", null, 1)
         val incoming = Operation(
             "123e4567-e89b-42d3-a456-426614174000", "delete", "budget",
-            "123e4567-e89b-42d3-a456-426614174001", 2,
+            "123e4567-e89b-42d3-a456-426614174001", 3,
             "a-device", "123e4567-e89b-42d3-a456-426614174003", 1
         )
 
         assertTrue(SharedSyncEngine.wins(old, incoming))
     }
 
-    @Test fun `delete remains terminal even when an update has a higher revision`() {
+    @Test fun `stale delete loses to a newer update`() {
         val old = SyncOperation("old", 1, "budget", "entity", "update", 3, "z-device", "member", null, 1)
         val incoming = Operation(
             "123e4567-e89b-42d3-a456-426614174000", "delete", "budget",
@@ -70,6 +70,6 @@ class SharedOperationCodecTest {
             "a-device", "123e4567-e89b-42d3-a456-426614174003", 1
         )
 
-        assertTrue(SharedSyncEngine.wins(old, incoming))
+        assertFalse(SharedSyncEngine.wins(old, incoming))
     }
 }

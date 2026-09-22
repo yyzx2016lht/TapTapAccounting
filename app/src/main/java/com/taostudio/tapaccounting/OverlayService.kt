@@ -458,7 +458,7 @@ class OverlayService : Service() {
             ACTION_SHOW_AI_INPUT -> overlayManager.showAiInputPanel()
             ACTION_SCREEN_CAPTURE -> overlayManager.startScreenCaptureFromTap()
             ACTION_HIDE_OVERLAY -> {
-                overlayManager.removeOverlay()
+                overlayManager.removeOverlay(isSaved = false)
                 stopSelfIfIdle("overlay-hidden")
             }
             // RESTART_SERVICE 广播触发的重拉（BootReceiver 转发过来，已含相应 action，走上面分支）
@@ -486,7 +486,7 @@ class OverlayService : Service() {
         keepAliveManager.detach()
         stopFlipDetection()
         stopTapDetection()
-        overlayManager.removeOverlay()
+        overlayManager.removeOverlay(isSaved = false)
         isServiceRunning = false
         super.onDestroy()
     }

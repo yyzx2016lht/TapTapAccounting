@@ -1063,6 +1063,7 @@ class CalendarActivity : AppCompatActivity() {
                 withContext(Dispatchers.Main) {
                     Toast.makeText(this@CalendarActivity, if (editingRefund == null) "退款已保存" else "退款已更新", Toast.LENGTH_SHORT).show()
                     bottomSheet.dismiss()
+                    loadDataForMonth()
                 }
             }
         }

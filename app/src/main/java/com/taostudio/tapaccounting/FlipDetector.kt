@@ -80,8 +80,10 @@ class FlipDetector(
 
         val z = event.values[2]
         val now = SystemClock.uptimeMillis()
+        // progress：0=最稳定 100=最灵敏（与 SeekBar 方向一致：越右越灵敏）
         val progress = Prefs.getFlipSensitivity(ctx)
-        val baseThreshold = 5.5f + (progress / 100f) * 3.5f
+        // 阈值越低越容易判定朝上/朝下 → 灵敏度越高阈值应越低
+        val baseThreshold = 9.0f - (progress / 100f) * 3.5f
 
         val currentFace = when {
             z > baseThreshold -> Face.UP
@@ -108,7 +110,8 @@ class FlipDetector(
         if (currentFace == Face.DOWN) {
             faceDownTime = now
         } else if (currentFace == Face.UP && faceDownTime > 0L) {
-            val maxDuration = 800L - (progress * 5L)
+            // 时长窗口越宽越容易接受较慢的翻转 → 灵敏度越高窗口应越宽
+            val maxDuration = 300L + (progress * 5L)
             val flipDuration = now - faceDownTime
             if (flipDuration in 70L until maxDuration && now - lastTriggerTime > debounceMs) {
                 Logger.d(

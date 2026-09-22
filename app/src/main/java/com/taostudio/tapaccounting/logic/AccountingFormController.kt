@@ -535,7 +535,9 @@ class AccountingFormController(
     private fun isAccountPlaceholder(name: String): Boolean {
         val text = name.trim()
         if (text.isEmpty()) return true
-        return text.contains(ctx.getString(R.string.select_asset).take(2)) ||
+        // 仅精确匹配占位文案，避免误伤名称里含「选择」的真实资产
+        return text == ctx.getString(R.string.select_asset) ||
+            text == ctx.getString(R.string.select_asset_dialog) ||
             text == ctx.getString(R.string.from_account) ||
             text == ctx.getString(R.string.to_account) ||
             text == ctx.getString(R.string.payment_account) ||
@@ -669,6 +671,9 @@ class AccountingFormController(
                                     customTargetAmount = null
                                     savedTransferRateForEdit = null
                                     hasConfirmedExchangeRate = false
+                                    hasConfirmedCurrencyRate = false
+                                    customCurrencyRate = null
+                                    customCurrencyTargetAmount = null
                                     pendingInvestmentSchedule = null
                                     hasCheckedInvestmentSchedulePrompt = false
                                     // 自动将 spCurrency 同步为转出账户（账户1）的货币
@@ -1385,7 +1390,12 @@ class AccountingFormController(
         val dialog = AlertDialog.Builder(themeContext)
             .setTitle(ctx.getString(R.string.set_investment_time))
             .setView(content)
-            .setNegativeButton(ctx.getString(R.string.cancel), null)
+            .setNegativeButton(ctx.getString(R.string.cancel)) { _, _ ->
+                // 取消也标记已询问，避免下次保存反复弹窗；按无结息计划继续保存
+                hasCheckedInvestmentSchedulePrompt = true
+                pendingInvestmentSchedule = null
+                handleSave()
+            }
             .setPositiveButton(ctx.getString(R.string.confirm), null)
             .create()
         dialog.setOnShowListener {
@@ -1885,8 +1895,24 @@ class AccountingFormController(
                 }
             }
 
+            // 跨币种：账户为 CNY 时，把用户确认的扣款汇率写入 exchangeRate，使余额扣减与确认一致
+            if (type != 2 && customCurrencyRate != null && asset1?.currency == "CNY" && effectiveCurrency != "CNY") {
+                finalRate = customCurrencyRate!!
+            }
+
+            val resolvedCategoryId = if (type == 2) {
+                null
+            } else if (finalCategory.isBlank()) {
+                null
+            } else {
+                val categoryDbType = if (type == 1) 1 else 0
+                db.categoryDao().getCategoriesListByType(categoryDbType)
+                    .firstOrNull { it.name == finalCategory.substringAfterLast(" - ").substringAfterLast(" > ").trim() }
+                    ?.id
+            }
+
             var rBill = Bill(
-                id = editingBillId ?: 0,
+                id = editingBillId ?: 0L,
                 amount = money,
                 type = type,
                 subType = subType,
@@ -1894,15 +1920,18 @@ class AccountingFormController(
                 accountId = asset1?.id,
                 toAccountId = asset2?.id,
                 toAccountName = if (type == 2) accountName2 else "",
+                categoryId = resolvedCategoryId,
                 categoryName = finalCategory,
                 time = timeLong,
                 remark = etRemark.text.toString(),
                 currency = effectiveCurrency,
                 exchangeRate = finalRate,
                 fee = feeVal,
-                bookName = writableBook
+                bookName = writableBook,
+                excludeFromStats = oldBill?.excludeFromStats ?: false
             )
 
+            var didReplaceExisting = false
             if (editingBillId != null && oldBill != null) {
                 try {
                     rBill = BillMutationService.replaceBill(
@@ -1911,18 +1940,22 @@ class AccountingFormController(
                         newBill = rBill,
                         applyAssetImpact = true
                     )
+                    didReplaceExisting = true
                 } catch (e: IllegalArgumentException) {
                     withContext(Dispatchers.Main) {
                         Utils.toast(ctx, ctx.getString(R.string.toast_save_failed))
                     }
                     return@launch
                 }
+            } else if (editingBillId != null && oldBill == null) {
+                // 目标账单已被删除：降级为新增，避免静默丢失
+                rBill = rBill.copy(id = 0L)
             }
 
             // === 退款来源处理：若选择了退款来源账单，修改 rBill 为退款账单类型 ===
             val refundSourceBill = selectedRefundSourceBill
             var latestRefundSource: com.taostudio.tapaccounting.data.local.entity.Bill? = null
-            if (refundSourceBill != null && type == 1 && editingBillId == null) {
+            if (refundSourceBill != null && type == 1 && !didReplaceExisting) {
                 latestRefundSource = db.billDao().getBillById(refundSourceBill.id)
                 if (latestRefundSource != null
                     && latestRefundSource.type == com.taostudio.tapaccounting.data.local.entity.Bill.TYPE_EXPENSE
@@ -1944,7 +1977,7 @@ class AccountingFormController(
             }
 
             val scheduleForInvestment = pendingInvestmentSchedule
-            if (editingBillId == null) {
+            if (!didReplaceExisting) {
                 if (latestRefundSource != null) {
                     try {
                         rBill = BillMutationService.saveRefundBill(
@@ -2000,6 +2033,8 @@ class AccountingFormController(
                 customCurrencyTargetAmount = null
                 customCurrencyRate = null
                 hasConfirmedCurrencyRate = false
+                // 保存成功后清除编辑态，避免后续新记账误走 replace
+                editingBillId = null
                 // 重置退款来源选择（如果保存后表单不关闭继续使用，退出退款模式）
                 if (isRefundMode) exitRefundMode()
                 tvRefundToggle?.visibility = if (spType.selectedItemPosition == 1) View.VISIBLE else View.GONE
@@ -2390,6 +2425,8 @@ class AccountingFormController(
             onCloseRequest(true)
             return
         }
+        // 进入下一笔前退出退款模式，避免 selectedRefundSourceBill 泄漏到后续账单
+        if (isRefundMode) exitRefundMode()
         isProcessingPendingBillQueue = true
         updateQueueActionUi()
         val next = pendingBills.removeAt(0)
@@ -2525,13 +2562,13 @@ class AccountingFormController(
                                 if (cat.isBlank() || cat == "转账") cat = "其他"
                             }
                         }
-                        
+
                         val timeStr = obj.optString("time", SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date()))
                         val parsedTime = try { SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).parse(timeStr)?.time ?: System.currentTimeMillis() } catch(e:Exception){ System.currentTimeMillis() }
                         val remark = obj.optString("remarks", "")
                         val currency = obj.optString("currency", "CNY").ifBlank { "CNY" }
                         val fee = obj.optDouble("fee", 0.0).coerceAtLeast(0.0)
-                        
+
                         val a2 = if (toAssetId != null) db.assetDao().getAssetById(toAssetId) else null
                         val exchangeRate = when {
                             typeIndex == Bill.TYPE_TRANSFER && a2 != null && amt > 0.0 ->
@@ -2542,7 +2579,16 @@ class AccountingFormController(
                                 if (rateToCurrency != 0.0) 1.0 / rateToCurrency else 1.0
                             }
                         }
-                        
+
+                        val categoryId = if (typeIndex == 2 || cat.isBlank()) {
+                            null
+                        } else {
+                            val categoryDbType = if (typeIndex == 1) 1 else 0
+                            val leaf = cat.substringAfterLast(" - ").substringAfterLast(" > ").trim()
+                            db.categoryDao().getCategoriesListByType(categoryDbType)
+                                .firstOrNull { it.name == leaf }?.id
+                        }
+
                         val bill = Bill(
                             amount = amt,
                             type = typeIndex,
@@ -2553,6 +2599,7 @@ class AccountingFormController(
                             accountId = a1?.id,
                             toAccountId = toAssetId,
                             toAccountName = toAssetNm,
+                            categoryId = categoryId,
                             categoryName = cat,
                             time = parsedTime,
                             remark = remark,
@@ -2594,10 +2641,16 @@ class AccountingFormController(
             if (spinnerPos in 0..maxSpinnerPos) spType.setSelection(spinnerPos)
         }
         
-        val assetNameFromJson = json.optString("asset_name", "")
-        if (isAssetFeatureEnabled && assetNameFromJson.isNotEmpty()) {
-            tvAccount.text = assetNameFromJson
-            refreshAccountIconForName(assetNameFromJson)
+        val assetNameFromJson = json.optString("asset_name", json.optString("account", ""))
+        if (isAssetFeatureEnabled) {
+            if (assetNameFromJson.isNotEmpty()) {
+                tvAccount.text = assetNameFromJson
+                refreshAccountIconForName(assetNameFromJson)
+            } else {
+                // 队列/AI 预填缺资产时重置为占位，避免沿用上一笔账户
+                tvAccount.text = ctx.getString(R.string.select_asset)
+                resetAccountIconToEmoji()
+            }
         }
 
         // 自动匹配资产对应的币种：
@@ -2626,15 +2679,15 @@ class AccountingFormController(
             if (aiCurrency.isNotEmpty()) setCurrency(aiCurrency)
         }
 
-        if (isAssetFeatureEnabled && json.has("to_asset_name")) {
-            val toA = json.optString("to_asset_name")
-            if (toA.isNotEmpty()) {
-                tvAccount2.text = toA
-                refreshAccount2IconForName(toA)
+        val toAssetFromJson = json.optString("to_asset_name", json.optString("to_account", ""))
+        if (isAssetFeatureEnabled) {
+            if (toAssetFromJson.isNotEmpty()) {
+                tvAccount2.text = toAssetFromJson
+                refreshAccount2IconForName(toAssetFromJson)
                 // 如果当前是转账且转入是信用卡，自动切换为还款
                 if (spType.selectedItemPosition == 2) {
                     scope.launch(Dispatchers.IO) {
-                        val asset = AppDatabase.getDatabase(ctx).assetDao().getAssetByName(toA)
+                        val asset = AppDatabase.getDatabase(ctx).assetDao().getAssetByName(toAssetFromJson)
                         withContext(Dispatchers.Main) {
                             if (asset?.assetCategory == com.taostudio.tapaccounting.data.local.entity.Asset.CATEGORY_CREDIT_CARD) {
                                 spType.setSelection(3)
@@ -2642,10 +2695,18 @@ class AccountingFormController(
                         }
                     }
                 }
+            } else if (spType.selectedItemPosition >= 2) {
+                tvAccount2.text = ctx.getString(R.string.to_account)
+                resetAccount2IconToEmoji()
             }
         }
-        
-        val categoryText = json.optString("category_name", tvCategory.text.toString()).replace("/::/", " - ")
+
+        val rawCategory = json.optString("category_name", json.optString("category", ""))
+        val categoryText = if (rawCategory.isBlank()) {
+            ctx.getString(R.string.select_category)
+        } else {
+            rawCategory.replace("/::/", " - ")
+        }
         tvCategory.text = categoryText
         refreshCategoryIconForSelection(categoryText)
         etRemark.setText(json.optString("remarks", json.optString("remark", "")))
@@ -2665,7 +2726,10 @@ class AccountingFormController(
 
         if (json.has("recordTime")) {
             val idStr = json.optString("recordTime", "")
-            if (idStr.isNotEmpty()) editingBillId = idStr.toLongOrNull()
+            editingBillId = idStr.toLongOrNull()
+        } else {
+            // 未指定编辑目标时必须清空，避免覆盖上一笔编辑的账单
+            editingBillId = null
         }
 
         enforceTransferAssetConstraintIfNeeded(json, showToast)

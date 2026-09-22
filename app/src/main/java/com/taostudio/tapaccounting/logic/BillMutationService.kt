@@ -141,25 +141,27 @@ object BillMutationService {
     ): Bill {
         logFull("BILL_MUTATION", "replace:start oldId=${oldBill.id}, oldType=${oldBill.type}, oldAmount=${oldBill.amount}, newType=${newBill.type}, newAmount=${newBill.amount}, assetImpact=$applyAssetImpact")
         return db.withTransaction {
-            SharedMutationHooks.requireOwner(db, oldBill)
-            require(oldBill.subType != Bill.SUBTYPE_INVESTMENT_ESTIMATE) {
+            // 事务内重读，避免并发编辑用过期快照回滚余额
+            val freshOldBill = db.billDao().getBillById(oldBill.id) ?: oldBill
+            SharedMutationHooks.requireOwner(db, freshOldBill)
+            require(freshOldBill.subType != Bill.SUBTYPE_INVESTMENT_ESTIMATE) {
                 "自动估算收益不能直接编辑，请在资产详情修改收益设置"
             }
             val normalizedBill = when {
-                oldBill.subType == Bill.SUBTYPE_REFUND -> {
-                    val fallbackCategory = stripRefundPrefix(oldBill.categoryName)
+                freshOldBill.subType == Bill.SUBTYPE_REFUND -> {
+                    val fallbackCategory = stripRefundPrefix(freshOldBill.categoryName)
                     val inputCategory = stripRefundPrefix(newBill.categoryName)
                     val normalizedCategory = if (inputCategory.isNotEmpty()) inputCategory else fallbackCategory
                     newBill.copy(
                         subType = Bill.SUBTYPE_REFUND,
-                        relatedBillId = oldBill.relatedBillId,
+                        relatedBillId = freshOldBill.relatedBillId,
                         categoryName = "$REFUND_CATEGORY_PREFIX$normalizedCategory",
                         originalAmount = newBill.amount
                     )
                 }
 
-                oldBill.type == Bill.TYPE_EXPENSE && baseOriginalAmount(oldBill) > oldBill.amount -> {
-                    val oldBaseOriginalAmount = baseOriginalAmount(oldBill)
+                freshOldBill.type == Bill.TYPE_EXPENSE && baseOriginalAmount(freshOldBill) > freshOldBill.amount -> {
+                    val oldBaseOriginalAmount = baseOriginalAmount(freshOldBill)
                     newBill.copy(
                         amount = newBill.amount.coerceIn(0.0, oldBaseOriginalAmount),
                         originalAmount = oldBaseOriginalAmount
@@ -172,21 +174,41 @@ object BillMutationService {
                     )
                 }
             }
+            // 换账本时不复用旧 sharedId，否则同步可能把账单拽回原共享账本
+            val bookChanged = normalizedBill.bookName.isNotBlank() &&
+                freshOldBill.bookName.isNotBlank() &&
+                normalizedBill.bookName != freshOldBill.bookName
+            val sharedFields = if (bookChanged) {
+                normalizedBill.copy(
+                    sharedId = null,
+                    memberId = null,
+                    isShared = false,
+                    relatedSharedId = null,
+                    sharedRevision = 0,
+                    sharedDeviceId = null
+                )
+            } else {
+                normalizedBill.copy(
+                    sharedId = freshOldBill.sharedId,
+                    memberId = freshOldBill.memberId,
+                    isShared = freshOldBill.isShared,
+                    relatedSharedId = freshOldBill.relatedSharedId
+                )
+            }
             val normalizedBillForStorage = normalizeBillCategoryName(
-                SharedMutationHooks.prepareLocalBill(db, normalizedBill.copy(
-                    sharedId = oldBill.sharedId,
-                    memberId = oldBill.memberId,
-                    isShared = oldBill.isShared,
-                    relatedSharedId = oldBill.relatedSharedId
-                ))
+                SharedMutationHooks.prepareLocalBill(db, sharedFields)
             )
 
-            if (oldBill.subType == Bill.SUBTYPE_REFUND && oldBill.relatedBillId != null) {
-                val sourceBill = db.billDao().getBillById(oldBill.relatedBillId)
+            if (freshOldBill.subType == Bill.SUBTYPE_REFUND && freshOldBill.relatedBillId != null) {
+                val sourceBill = db.billDao().getBillById(freshOldBill.relatedBillId)
                 if (sourceBill != null) {
                     SharedMutationHooks.requireOwner(db, sourceBill)
                     val sourceBaseOriginalAmount = baseOriginalAmount(sourceBill)
-                    val delta = normalizedBillForStorage.amount - oldBill.amount
+                    val delta = normalizedBillForStorage.amount - freshOldBill.amount
+                    // 与 saveRefundBill 一致：超额退款直接拒绝，而不是静默截断
+                    require(delta <= sourceBill.amount + 1e-9) {
+                        "Refund amount exceeds remaining expense"
+                    }
                     val newSourceActualAmount = (sourceBill.amount - delta).coerceIn(0.0, sourceBaseOriginalAmount)
                     val savedSource = SharedMutationHooks.prepareLocalBill(
                         db,
@@ -204,9 +226,9 @@ object BillMutationService {
                 validateRequiredRatesForBill(db, normalizedBillForStorage)
             }
 
-            val oldImpacted = BillAssetImpactService.revertBillBalanceImpact(db, oldBill)
-            if (applyAssetImpact && oldImpacted == 0 && oldBill.type in setOf(Bill.TYPE_EXPENSE, Bill.TYPE_INCOME, Bill.TYPE_TRANSFER)) {
-                logFull("BILL_GUARD", "（警告）replace 回滚旧账单时资产未变化，oldBillId=${oldBill.id}, type=${oldBill.type}, asset=${oldBill.accountName}, toAsset=${oldBill.toAccountName}")
+            val oldImpacted = BillAssetImpactService.revertBillBalanceImpact(db, freshOldBill)
+            if (applyAssetImpact && oldImpacted == 0 && freshOldBill.type in setOf(Bill.TYPE_EXPENSE, Bill.TYPE_INCOME, Bill.TYPE_TRANSFER)) {
+                logFull("BILL_GUARD", "（警告）replace 回滚旧账单时资产未变化，oldBillId=${freshOldBill.id}, type=${freshOldBill.type}, asset=${freshOldBill.accountName}, toAsset=${freshOldBill.toAccountName}")
             }
 
             // 编辑路径：使用 updateBill 而非 insertBill，避免外键级联删除/重建
@@ -222,7 +244,7 @@ object BillMutationService {
                     logFull("BILL_GUARD", "（警告）replace 写入新账单后资产未变化，billId=${savedBill.id}, type=${savedBill.type}, asset=${savedBill.accountName}, toAsset=${savedBill.toAccountName}")
                 }
             }
-            InvestmentInterestService.syncLotAfterBillReplacement(db, oldBill, savedBill)
+            InvestmentInterestService.syncLotAfterBillReplacement(db, freshOldBill, savedBill)
             logFull("BILL_MUTATION", "replace:done id=${savedBill.id}, type=${savedBill.type}, amount=${savedBill.amount}, category=${savedBill.categoryName}")
             auditBill("replace", savedBill)
             SharedMutationHooks.enqueueSaved(db, savedBill)

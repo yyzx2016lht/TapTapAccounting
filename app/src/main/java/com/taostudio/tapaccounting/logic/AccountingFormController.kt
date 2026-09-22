@@ -48,7 +48,12 @@ class AccountingFormController(
 ) {
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     private var editingBillId: Long? = null
-    private var isSaving: Boolean = false
+    private val saveLock = SaveReentryLock()
+    private var isSaving: Boolean
+        get() = saveLock.isLocked()
+        set(value) {
+            if (value) saveLock.tryAcquire() else saveLock.release()
+        }
     private val etMoney: EditText = rootView.findViewById(R.id.et_amount)
     private val spType: Spinner = rootView.findViewById(R.id.spinner_type)
     private val layoutAccount: View = rootView.findViewById(R.id.layout_account)
@@ -1159,18 +1164,21 @@ class AccountingFormController(
                     hasConfirmedExchangeRate = true
                 } else {
                     // 币种不同，弹出汇率确认对话框
+                    // 本对话框确认后不自动保存；dismiss（确认/取消）时释放 isSaving
                     OverlayDialogs.showExchangeRateDialog(
                         ctx,
                         money,
                         sourceCurrency,
                         targetCurrency,
-                        customTransferRate ?: savedTransferRateForEdit
-                    ) { src, tgt, rate ->
-                        etMoney.setText(String.format("%.2f", src))
-                        customTargetAmount = tgt
-                        customTransferRate = rate
-                        hasConfirmedExchangeRate = true
-                    }
+                        customTransferRate ?: savedTransferRateForEdit,
+                        onConfirm = { src, tgt, rate ->
+                            etMoney.setText(String.format("%.2f", src))
+                            customTargetAmount = tgt
+                            customTransferRate = rate
+                            hasConfirmedExchangeRate = true
+                        },
+                        onDismissed = { isSaving = false }
+                    )
                 }
             }
         }
@@ -1192,19 +1200,26 @@ class AccountingFormController(
             val asset1 = db.assetDao().getAssetByName(accountName1)
             val assetCurrency = asset1?.currency?.takeIf { it.isNotEmpty() } ?: "CNY"
             withContext(Dispatchers.Main) {
+                var confirmedContinue = false
                 OverlayDialogs.showExchangeRateDialog(
                     ctx,
                     money,
                     selectedCurrency,
                     assetCurrency,
-                    customCurrencyRate
-                ) { src, tgt, rate ->
-                    // tgt = 账户币种的实际扣减金额
-                    customCurrencyTargetAmount = tgt
-                    customCurrencyRate = if (src != 0.0) rate else customCurrencyRate
-                    hasConfirmedCurrencyRate = true
-                    onConfirmed()
-                }
+                    customCurrencyRate,
+                    onConfirm = { src, tgt, rate ->
+                        // tgt = 账户币种的实际扣减金额
+                        customCurrencyTargetAmount = tgt
+                        customCurrencyRate = if (src != 0.0) rate else customCurrencyRate
+                        hasConfirmedCurrencyRate = true
+                        confirmedContinue = true
+                        onConfirmed()
+                    },
+                    onDismissed = {
+                        // 取消时释放锁；确认继续保存时保持锁直至写路径 finally 复位
+                        if (!confirmedContinue) isSaving = false
+                    }
+                )
             }
         }
     }
@@ -1387,6 +1402,7 @@ class AccountingFormController(
             setPadding(0, dp(10), 0, 0)
         })
 
+        var continuedSave = false
         val dialog = AlertDialog.Builder(themeContext)
             .setTitle(ctx.getString(R.string.set_investment_time))
             .setView(content)
@@ -1394,10 +1410,15 @@ class AccountingFormController(
                 // 取消也标记已询问，避免下次保存反复弹窗；按无结息计划继续保存
                 hasCheckedInvestmentSchedulePrompt = true
                 pendingInvestmentSchedule = null
-                handleSave()
+                continuedSave = true
+                performSaveWithLock()
             }
             .setPositiveButton(ctx.getString(R.string.confirm), null)
             .create()
+        dialog.setOnDismissListener {
+            // 外点取消等未继续保存的路径：释放 isSaving
+            if (!continuedSave) isSaving = false
+        }
         dialog.setOnShowListener {
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
                 val annualRate = if (usePreviousRate) {
@@ -1410,6 +1431,7 @@ class AccountingFormController(
                     return@setOnClickListener
                 }
                 hasCheckedInvestmentSchedulePrompt = true
+                continuedSave = true
                 onConfirm(
                     InvestmentInterestService.InvestmentSchedule(
                         startEarningAt = startEarningAt,
@@ -1640,6 +1662,21 @@ class AccountingFormController(
             Utils.toast(ctx, ctx.getString(R.string.toast_no_asset_mode))
             return
         }
+        // P0-5：所有入口（含汇率确认旁路）共用同一把锁，禁止双击/动画重入双写
+        isSaving = true
+        performSaveWithLock()
+    }
+
+    private fun performSaveWithLock() {
+        val money = parseAmountInput() ?: 0.0
+        if (money <= 0) {
+            isSaving = false
+            Utils.toast(ctx, ctx.getString(R.string.toast_input_amount))
+            return
+        }
+        val spinnerPos = spType.selectedItemPosition
+        val isRepayment = isAssetFeatureEnabled && spinnerPos == 3
+        var type = if (spinnerPos > 2) 2 else spinnerPos
 
         // 开启多币种且为转账时，检查是否需要确认汇率
         if (isAssetFeatureEnabled && type == 2 && !isRepayment && Prefs.isShowMultiCurrency(ctx) && !hasConfirmedExchangeRate) {
@@ -1665,10 +1702,10 @@ class AccountingFormController(
                         customTargetAmount = money
                         customTransferRate = 1.0
                         hasConfirmedExchangeRate = true
-                        // 继续保存流程，递归调用 handleSave，此时会跳过汇率检查
-                        handleSave()
+                        // 持锁继续保存（禁止再走 handleSave 入口）
+                        performSaveWithLock()
                     } else {
-                        // 币种不同，弹出汇率对话框
+                        // 币种不同，弹出汇率对话框（dismiss 时释放锁）
                         showExchangeDialog()
                     }
                 }
@@ -1685,13 +1722,13 @@ class AccountingFormController(
                 val assetCurrency = asset1?.currency?.takeIf { it.isNotEmpty() } ?: "CNY"
                 withContext(Dispatchers.Main) {
                     if (selectedCurrency != assetCurrency) {
-                        showCurrencyExchangeDialog { handleSave() }
+                        showCurrencyExchangeDialog { performSaveWithLock() }
                     } else {
                         // 币种一致，无需汇率确认，直接继续保存
                         customCurrencyRate = null
                         customCurrencyTargetAmount = null
                         hasConfirmedCurrencyRate = true
-                        handleSave()
+                        performSaveWithLock()
                     }
                 }
             }
@@ -1727,18 +1764,17 @@ class AccountingFormController(
                             previousSettlementCycle = previousLot?.settlementCycle
                         ) { schedule ->
                             pendingInvestmentSchedule = schedule
-                            handleSave()
+                            performSaveWithLock()
                         }
                     }
                     return@launch
                 }
                 hasCheckedInvestmentSchedulePrompt = true
-                withContext(Dispatchers.Main) { handleSave() }
+                withContext(Dispatchers.Main) { performSaveWithLock() }
             }
             return
         }
 
-        isSaving = true
         scope.launch(Dispatchers.IO) {
             try {
                 val db = AppDatabase.getDatabase(ctx)

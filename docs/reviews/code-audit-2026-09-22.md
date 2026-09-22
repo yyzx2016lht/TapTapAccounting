@@ -59,7 +59,7 @@
   - 状态：新问题  
   - 修法：备份失败时阻断 destructive（抛错/阻塞打开）或强制先落可验证备份  
 
-- [ ] **P0-5 多币种汇率确认路径 `isSaving` 旁路 → 可双写账单**  
+- [x] **P0-5 多币种汇率确认路径 `isSaving` 旁路 → 可双写账单**  
   - 位置：`logic/AccountingFormController.kt:1645-1698`（launch 后 return）、`isSaving = true` 在 `:1741`；动画 `withEndAction { handleSave() }` 约 `:842`  
   - 现象：汇率确认分支在加锁前返回，双击/动画重入可双写  
   - 状态：新问题（`isSaving` 主路径已修，旁路仍在）  

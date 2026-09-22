@@ -1386,7 +1386,8 @@ object OverlayDialogs {
         sourceCurrency: String,
         targetCurrency: String,
         initialRate: Double?,
-        onConfirm: (Double, Double, Double) -> Unit
+        onConfirm: (Double, Double, Double) -> Unit,
+        onDismissed: (() -> Unit)? = null
     ) {
         fun createDialog(baseCtx: Context): AlertDialog {
             val themeContext = ContextThemeWrapper(baseCtx, R.style.Theme_TapAccounting)
@@ -1476,6 +1477,8 @@ object OverlayDialogs {
                 onConfirm(sVal, tVal, rVal)
                 dialog.dismiss()
             }
+            // P0-5：确认/取消都会 dismiss；调用方用于释放 isSaving 等锁
+            dialog.setOnDismissListener { onDismissed?.invoke() }
             return dialog
         }
 

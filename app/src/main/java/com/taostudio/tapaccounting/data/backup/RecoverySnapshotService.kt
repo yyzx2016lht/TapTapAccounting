@@ -33,7 +33,8 @@ class RecoverySnapshotService(
     suspend fun create(
         outputFile: File,
         policy: BackupContentPolicy,
-        suppliedPasswordKey: BackupPasswordKeyMaterial? = null
+        suppliedPasswordKey: BackupPasswordKeyMaterial? = null,
+        apiPin: String? = null
     ): CreatedRecoverySnapshot {
         val sourceKey = suppliedPasswordKey ?: BackupPasswordKeyStore.load(context)
             ?: throw BackupPasswordKeyUnavailableException("请先设置 8 至 12 位备份密码")
@@ -84,8 +85,22 @@ class RecoverySnapshotService(
 
             val settings = Prefs.serializeSettingsModules(context)
             policy.settingsModules.forEach { moduleName ->
-                settings[moduleName]?.let { jsonModules[moduleName] = JsonModule(it) }
+                settings[moduleName]?.let { raw ->
+                    jsonModules[moduleName] = JsonModule(
+                        BackupSecretPolicy.prepareEncryptedModule(moduleName, raw, apiPin)
+                    )
+                }
             }
+
+            // Shared recovery credentials stay in the encrypted-only module; settings are
+            // secret-free unless PIN-encrypted API key fields are intentionally present.
+            BackupSecretPolicy.requireSecretFree(
+                jsonModules.mapValues { it.value.json },
+                allowedSecretModules = buildSet {
+                    add(BackupModuleId.SHARED_SECRETS)
+                    if (apiPin != null) add("settings_ai_core")
+                }
+            )
 
             val bannerDir = if (policy.includeBanners) {
                 File(context.filesDir, "banners").takeIf(File::isDirectory)

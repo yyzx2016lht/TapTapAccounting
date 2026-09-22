@@ -43,16 +43,86 @@ object BackupSecretPolicy {
         return root.toString()
     }
 
-    fun requireSecretFree(jsonModules: Map<String, String>) {
-        val forbiddenModule = jsonModules.keys.firstOrNull(forbiddenModules::contains)
+    /**
+     * Removes every forbidden secret field from a module JSON.
+     * Used before writing any user-readable or field-level-plain archive.
+     */
+    fun stripSecretValues(moduleName: String, json: String): String {
+        val root = parse(moduleName, json)
+        stripSecrets(root)
+        return root.toString()
+    }
+
+    /**
+     * Production entry for the whole-archive encrypted path:
+     * URL credentials are always stripped; API keys are PIN-encrypted when [apiPin]
+     * is present, otherwise remaining secret fields are dropped so plaintext never
+     * lands in the intermediate clear ZIP.
+     */
+    fun prepareEncryptedModule(moduleName: String, json: String, apiPin: String?): String {
+        val sanitized = sanitizePortableModule(moduleName, json)
+        if (apiPin != null && moduleName == "settings_ai_core") {
+            val pinned = runCatching {
+                val root = org.json.JSONObject(sanitized)
+                BackupPinCrypto.encryptApiKeyInSettings(root, apiPin)
+                stripNonApiSecrets(moduleName, root.toString())
+            }.getOrNull()
+            if (pinned != null) return pinned
+        }
+        return stripSecretValues(moduleName, sanitized)
+    }
+
+    /** Asserts a module set is free of secrets. [allowedSecretModules] are encrypted-only. */
+    fun requireSecretFree(jsonModules: Map<String, String>, allowedSecretModules: Set<String> = emptySet()) {
+        val forbiddenModule = jsonModules.keys
+            .firstOrNull { it !in allowedSecretModules && it in forbiddenModules }
         require(forbiddenModule == null) { "秘密模块不得写入备份：$forbiddenModule" }
 
         jsonModules.forEach { (moduleName, json) ->
+            if (moduleName in allowedSecretModules) return@forEach
             val root = parse(moduleName, json)
             val forbiddenKey = findForbiddenKey(root)
             require(forbiddenKey == null) {
                 "备份模块 $moduleName 包含禁止写入的秘密字段：$forbiddenKey"
             }
+        }
+    }
+
+    private fun stripSecrets(element: JsonElement) {
+        when {
+            element.isJsonObject -> {
+                val obj = element.asJsonObject
+                val toRemove = obj.entrySet()
+                    .map { it.key }
+                    .filter { normalizeKey(it) in forbiddenNormalizedKeys }
+                toRemove.forEach(obj::remove)
+                obj.entrySet().forEach { stripSecrets(it.value) }
+            }
+            element.isJsonArray -> element.asJsonArray.forEach(::stripSecrets)
+            else -> Unit
+        }
+    }
+
+    /** Keeps PIN-encrypted API key fields; strips every other secret (e.g. WebDAV password). */
+    private fun stripNonApiSecrets(moduleName: String, json: String): String {
+        val root = parse(moduleName, json)
+        stripSecretsExceptApiEnc(root)
+        return root.toString()
+    }
+
+    private fun stripSecretsExceptApiEnc(element: JsonElement) {
+        val keep = setOf("aiapikeyencv1", "aiproviderkeysencv1")
+        when {
+            element.isJsonObject -> {
+                val obj = element.asJsonObject
+                val toRemove = obj.entrySet()
+                    .map { it.key }
+                    .filter { normalizeKey(it) in forbiddenNormalizedKeys && normalizeKey(it) !in keep }
+                toRemove.forEach(obj::remove)
+                obj.entrySet().forEach { stripSecretsExceptApiEnc(it.value) }
+            }
+            element.isJsonArray -> element.asJsonArray.forEach(::stripSecretsExceptApiEnc)
+            else -> Unit
         }
     }
 

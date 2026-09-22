@@ -130,8 +130,9 @@
 - [x] **P1-19 AI API Key / 多提供商 Key 明文 prefs**  
   - `PrefsAiSupport.kt:8-10,51-99,123-130`  
   - 2026-09-22：`ai_api_key` / `ai_provider_keys_v1` 经 `KeystoreSecretBox` 加密；旧明文自动迁移；导入走 `PrefsAiSupport`  
-- [ ] **P1-20 `BackupSecretPolicy` / PIN 加密 API Key 未接入生产**  
+- [x] **P1-20 `BackupSecretPolicy` / PIN 加密 API Key 未接入生产**  
   - `BackupSecretPolicy.kt` 仅测试；`PrefsBackupSupport` 仍导出明文 `ai_api_key_v1` 等  
+  - 2026-09-22：`prepareEncryptedModule`/`stripSecretValues`/`requireSecretFree(allowedSecretModules)` 接入 `RecoverySnapshotService.create`；无 PIN 时剥离明文密钥，有 PIN 时 `BackupPinCrypto` 字段级加密  
 - [ ] **P1-21 4 位 PIN + 60k PBKDF2；V2 恢复无限重试**  
   - `BackupPinCrypto.kt:15-29`；`BackupActivity.kt` 恢复递归重弹  
 - [ ] **P1-22 Manifest 导出与 cleartext**  

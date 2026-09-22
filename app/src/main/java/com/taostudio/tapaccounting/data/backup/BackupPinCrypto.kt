@@ -1,9 +1,9 @@
 package com.taostudio.tapaccounting.data.backup
 
-import android.util.Base64
 import org.json.JSONObject
 import java.nio.charset.StandardCharsets
 import java.security.SecureRandom
+import java.util.Base64
 import javax.crypto.Cipher
 import javax.crypto.SecretKeyFactory
 import javax.crypto.spec.GCMParameterSpec
@@ -73,9 +73,9 @@ object BackupPinCrypto {
             .put("v", 1)
             .put("kdf", "PBKDF2WithHmacSHA256")
             .put("iter", ITERATIONS)
-            .put("salt", Base64.encodeToString(salt, Base64.NO_WRAP))
-            .put("iv", Base64.encodeToString(iv, Base64.NO_WRAP))
-            .put("ct", Base64.encodeToString(cipherText, Base64.NO_WRAP))
+            .put("salt", Base64.getEncoder().encodeToString(salt))
+            .put("iv", Base64.getEncoder().encodeToString(iv))
+            .put("ct", Base64.getEncoder().encodeToString(cipherText))
 
         settings.remove(plainField)
         settings.put(encField, payload)
@@ -98,9 +98,9 @@ object BackupPinCrypto {
         }
 
         val iter = payload.optInt("iter", ITERATIONS)
-        val salt = Base64.decode(payload.getString("salt"), Base64.NO_WRAP)
-        val iv = Base64.decode(payload.getString("iv"), Base64.NO_WRAP)
-        val ct = Base64.decode(payload.getString("ct"), Base64.NO_WRAP)
+        val salt = Base64.getDecoder().decode(payload.getString("salt"))
+        val iv = Base64.getDecoder().decode(payload.getString("iv"))
+        val ct = Base64.getDecoder().decode(payload.getString("ct"))
 
         try {
             val key = deriveKey(pin, salt, iter)

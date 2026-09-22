@@ -97,6 +97,19 @@ internal fun resolveBudgetCategoryForRestore(
  * 新增 [com.taostudio.tapaccounting.data.local.entity] 后请同步 [getFullData] 与 [restoreFullData]。
  */
 class BackupRepository(private val db: AppDatabase) {
+    companion object {
+        /**
+         * Merge-restore dedup key: time + amount + type + account + bookName.
+         * Without bookName two books can collide and remap IDs across ledgers.
+         */
+        fun isSameBillForMerge(existing: Bill, incoming: Bill): Boolean =
+            existing.time == incoming.time &&
+                existing.amount == incoming.amount &&
+                existing.type == incoming.type &&
+                existing.accountName == incoming.accountName &&
+                existing.bookName == incoming.bookName
+    }
+
 
     suspend fun getFullData(): Map<String, Any> {
         return db.withTransaction {
@@ -427,13 +440,14 @@ class BackupRepository(private val db: AppDatabase) {
                         restoredBill.sharedId?.let { db.billDao().getBySharedId(it) }
                     } else {
                         db.billDao().getBillsBetweenTimesList(bill.time, bill.time).firstOrNull {
-                            it.amount == bill.amount &&
-                                it.type == bill.type &&
-                                it.accountName == bill.accountName
+                            isSameBillForMerge(it, bill)
                         }
                     }
 
                     if (existingBill != null) {
+                        check(existingBill.bookName == restoredBill.bookName) {
+                            "合并恢复去重命中跨账本账单 old=${bill.id} book=${bill.bookName} existingBook=${existingBill.bookName}"
+                        }
                         billIdMap[bill.id] = existingBill.id
                         skippedBills++
                         return@forEach

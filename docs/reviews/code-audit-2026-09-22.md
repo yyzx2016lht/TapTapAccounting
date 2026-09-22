@@ -96,9 +96,10 @@
 
 #### P1-B 备份 / 恢复 / 同步
 
-- [ ] **P1-8 合并恢复去重不按 bookName → 串账**  
+- [x] **P1-8 合并恢复去重不按 bookName → 串账**  
   - `data/repository/BackupRepository.kt:429-439`  
   - 修法：去重键含 `bookName`/`bookId`；重映射校验  
+  - 2026-09-22：`isSameBillForMerge` 含 `bookName`；重映射前 `check` 同账本  
 - [ ] **P1-9 CSV 导入无事务**  
   - `BackupActivity.kt:2435-2474`  
   - 修法：整段 `db.withTransaction`  

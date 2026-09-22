@@ -33,8 +33,7 @@ class BootReceiver : BroadcastReceiver() {
 
         val action = intent.action
         if (Intent.ACTION_BOOT_COMPLETED == action ||
-            Intent.ACTION_MY_PACKAGE_REPLACED == action ||
-            "com.taostudio.tapaccounting.RESTART_SERVICE" == action) {
+            Intent.ACTION_MY_PACKAGE_REPLACED == action) {
 
             // 交给 OverlayService 从 Prefs 恢复 tap 状态
             val serviceIntent = Intent(context, OverlayService::class.java)

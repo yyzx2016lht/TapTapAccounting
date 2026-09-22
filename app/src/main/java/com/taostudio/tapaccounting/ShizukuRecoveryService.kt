@@ -69,13 +69,11 @@ object ShizukuRecoveryService {
     }
 
     private fun buildStartCommand(pkg: String): String {
-        val restartAction = "$pkg.RESTART_SERVICE"
         return """
             cat > $SCRIPT <<'TAPACCOUNTING_RECOVERY'
             #!/system/bin/sh
             PKG="@PKG@"
             USER_ID=0
-            RESTART_ACTION="@RESTART_ACTION@"
             MARKER="@MARKER@"
             PID_FILE="@PID_FILE@"
             LOG_FILE="@LOG_FILE@"
@@ -114,11 +112,11 @@ object ShizukuRecoveryService {
             }
 
             restart_app() {
-              am broadcast --user "__D__USER_ID" -a "__D__RESTART_ACTION" -p "__D__PKG" >> "__D__LOG_FILE" 2>&1
+              am start-foreground-service --user "__D__USER_ID" -n "__D__PKG/.OverlayService" >> "__D__LOG_FILE" 2>&1
               sleep 3
               has_process && return 0
 
-              am start-foreground-service --user "__D__USER_ID" -n "__D__PKG/.OverlayService" >> "__D__LOG_FILE" 2>&1
+              am broadcast --user "__D__USER_ID" -n "__D__PKG/.BootReceiver" -a "android.intent.action.BOOT_COMPLETED" >> "__D__LOG_FILE" 2>&1
               sleep 3
               has_process && return 0
             }
@@ -172,7 +170,6 @@ object ShizukuRecoveryService {
             fi
             """.trimIndent()
             .replace("@PKG@", pkg)
-            .replace("@RESTART_ACTION@", restartAction)
             .replace("@MARKER@", MARKER)
             .replace("@PID_FILE@", PID_FILE)
             .replace("@LOG_FILE@", LOG_FILE)

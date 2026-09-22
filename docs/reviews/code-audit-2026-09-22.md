@@ -136,12 +136,14 @@
 - [x] **P1-21 4 位 PIN + 60k PBKDF2；V2 恢复无限重试**  
   - `BackupPinCrypto.kt:15-29`；`BackupActivity.kt` 恢复递归重弹  
   - 2026-09-22：新 PIN 6–8 位 + 200k PBKDF2（解密兼容旧 4 位/60k）；恢复码/备份密码重试上限 10 次  
-- [ ] **P1-22 Manifest 导出与 cleartext**  
+- [x] **P1-22 Manifest 导出与 cleartext**  
   - `usesCleartextTraffic=true`（`AndroidManifest.xml:52`）  
   - `BootReceiver` exported + `RESTART_SERVICE`（约 123–131）  
   - `QuickStartActivity` exported（约 70–76）  
   - `BackupActivity` exported + VIEW `.bak`（约 159–171）  
+  - 2026-09-22：cleartext=false；移除 RESTART_SERVICE filter（恢复改直接拉服务）；QuickStart/Backup 均 exported=false；去掉 VIEW `.bak`  
 - [ ] **P1-23 历史 git 中可能残留 keystore/API（需轮换确认，勿打印密钥）**  
+  - 2026-09-22：提醒用户轮换历史泄露面的 API Key / keystore 口令（不在仓库打印密钥）  
 
 #### P1-D AI / 聊天
 

@@ -461,7 +461,7 @@ class OverlayService : Service() {
                 overlayManager.removeOverlay(isSaved = false)
                 stopSelfIfIdle("overlay-hidden")
             }
-            // RESTART_SERVICE 广播触发的重拉（BootReceiver 转发过来，已含相应 action，走上面分支）
+            // 开机/看门狗重拉路径（BootReceiver 或直接 startService）
         }
 
         when (action) {

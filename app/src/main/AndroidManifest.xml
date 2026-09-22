@@ -49,7 +49,7 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.TapAccounting"
-        android:usesCleartextTraffic="true">
+        android:usesCleartextTraffic="false">
 
         <activity
             android:name=".MainActivity"
@@ -70,7 +70,7 @@
         <activity
             android:name=".QuickStartActivity"
             android:enabled="true"
-            android:exported="true"
+            android:exported="false"
             android:excludeFromRecents="true"
             android:noHistory="true"
             android:theme="@android:style/Theme.Translucent.NoTitleBar" />
@@ -127,7 +127,6 @@
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
-                <action android:name="com.taostudio.tapaccounting.RESTART_SERVICE" />
             </intent-filter>
         </receiver>
 
@@ -159,16 +158,7 @@
         <activity
             android:name=".BackupActivity"
             android:label="本地备份与恢复"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="android.intent.action.VIEW" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <data android:mimeType="application/octet-stream" android:scheme="file" />
-                <data android:mimeType="application/octet-stream" android:scheme="content" />
-                <data android:host="*" android:pathPattern=".*\\.bak" />
-                <data android:host="*" android:pathPattern=".*\\.flip" />
-            </intent-filter>
-        </activity>
+            android:exported="false" />
     <activity android:name=".AddCategoryActivity" android:label="新增分类" />
         <activity android:name=".LogViewerActivity" android:label="日志查看器" />
     <activity android:name=".ui.CurrencyManagerActivity" android:label="货币管理" />

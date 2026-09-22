@@ -117,6 +117,7 @@ class BackupActivity : AppCompatActivity() {
         private const val KEY_WEBDAV_USER = "webdav_user"
         private const val KEY_WEBDAV_DIR = "webdav_dir"
         private const val KEY_DEVICE_NAME = "webdav_device_name"
+        private const val MAX_AUTH_ATTEMPTS = 10
         private val RESTORE_MUTEX = Mutex()
     }
 
@@ -1421,25 +1422,7 @@ class BackupActivity : AppCompatActivity() {
 
             BackupFileFormat.V2_ENCRYPTED -> {
                 withContext(Dispatchers.Main) {
-                    promptRecoveryCode(onCancelled = { sourceFile.delete() }) { enteredCode ->
-                        lifecycleScope.launch(Dispatchers.IO) {
-                            if (!tryPrepareEncryptedRestore(sourceFile, enteredCode)) {
-                                withContext(Dispatchers.Main) {
-                                    Utils.toast(this@BackupActivity, getString(R.string.recovery_code_wrong))
-                                    promptRecoveryCode(onCancelled = { sourceFile.delete() }) { retryCode ->
-                                        lifecycleScope.launch(Dispatchers.IO) {
-                                            if (!tryPrepareEncryptedRestore(sourceFile, retryCode)) {
-                                                withContext(Dispatchers.Main) {
-                                                    Utils.toast(this@BackupActivity, getString(R.string.recovery_code_wrong))
-                                                    sourceFile.delete()
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
+                    promptRecoveryCodeWithAttempts(sourceFile)
                 }
             }
 
@@ -1499,7 +1482,8 @@ class BackupActivity : AppCompatActivity() {
     private fun requestPasswordRestore(
         sourceFile: File,
         parameters: BackupPasswordKdfParameters,
-        rememberKey: Boolean
+        rememberKey: Boolean,
+        attemptsRemaining: Int = MAX_AUTH_ATTEMPTS
     ) {
         lifecycleScope.launch(Dispatchers.Main) {
             promptBackupPasswordForRestore(
@@ -1524,13 +1508,39 @@ class BackupActivity : AppCompatActivity() {
                         }
                         if (!opened) {
                             withContext(Dispatchers.Main) {
-                                Utils.toast(this@BackupActivity, getString(R.string.backup_password_wrong))
-                                requestPasswordRestore(sourceFile, parameters, rememberKey)
+                                if (attemptsRemaining <= 1) {
+                                    Utils.toast(this@BackupActivity, getString(R.string.auth_too_many_attempts))
+                                    sourceFile.delete()
+                                } else {
+                                    Utils.toast(this@BackupActivity, getString(R.string.backup_password_wrong))
+                                    requestPasswordRestore(sourceFile, parameters, rememberKey, attemptsRemaining - 1)
+                                }
                             }
                         }
                     }
                 }
             )
+        }
+    }
+
+    private fun promptRecoveryCodeWithAttempts(
+        sourceFile: File,
+        attemptsRemaining: Int = MAX_AUTH_ATTEMPTS
+    ) {
+        promptRecoveryCode(onCancelled = { sourceFile.delete() }) { enteredCode ->
+            lifecycleScope.launch(Dispatchers.IO) {
+                if (!tryPrepareEncryptedRestore(sourceFile, enteredCode)) {
+                    withContext(Dispatchers.Main) {
+                        if (attemptsRemaining <= 1) {
+                            Utils.toast(this@BackupActivity, getString(R.string.auth_too_many_attempts))
+                            sourceFile.delete()
+                        } else {
+                            Utils.toast(this@BackupActivity, getString(R.string.recovery_code_wrong))
+                            promptRecoveryCodeWithAttempts(sourceFile, attemptsRemaining - 1)
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -2272,7 +2282,7 @@ class BackupActivity : AppCompatActivity() {
                 var root = parseSettingsRoot(payload)
                 if (BackupPinCrypto.hasEncryptedApi(root)) {
                     val pin = settingsPin
-                        ?: throw IllegalArgumentException("该旧备份中的 API Key 受 PIN 保护，请输入 4 位 PIN")
+                        ?: throw IllegalArgumentException("该旧备份中的 API Key 受 PIN 保护，请输入备份 PIN")
                     root = BackupPinCrypto.decryptApiKeyInSettings(root, pin)
                 }
                 roots += root
@@ -2325,12 +2335,13 @@ class BackupActivity : AppCompatActivity() {
 
     private fun promptPinForRestore(
         onCancelled: () -> Unit = {},
+        attemptsRemaining: Int = MAX_AUTH_ATTEMPTS,
         onPinConfirmed: (String) -> Unit
     ) {
         val etPin = EditText(this).apply {
-            hint = getString(R.string.input_4digit_pin)
+            hint = getString(R.string.input_backup_pin)
             inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_VARIATION_PASSWORD
-            filters = arrayOf(InputFilter.LengthFilter(4))
+            filters = arrayOf(InputFilter.LengthFilter(BackupPinCrypto.MAX_PIN_DIGITS))
         }
         val dialog = AlertDialog.Builder(this)
             .setTitle(R.string.input_backup_pin)
@@ -2338,8 +2349,8 @@ class BackupActivity : AppCompatActivity() {
             .setView(etPin)
             .setPositiveButton(R.string.continue_restore) { _, _ ->
                 val pin = etPin.text?.toString().orEmpty().trim()
-                if (!pin.matches(Regex("^\\d{4}$"))) {
-                    Utils.toast(this, getString(R.string.pin_must_4digit))
+                if (!pin.matches(Regex("^\\d{${BackupPinCrypto.LEGACY_MIN_PIN_DIGITS},${BackupPinCrypto.MAX_PIN_DIGITS}}$"))) {
+                    Utils.toast(this, getString(R.string.pin_must_be_digits))
                 } else {
                     onPinConfirmed(pin)
                 }

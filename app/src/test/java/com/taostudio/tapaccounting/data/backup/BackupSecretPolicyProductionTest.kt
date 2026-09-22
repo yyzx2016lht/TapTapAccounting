@@ -36,7 +36,7 @@ class BackupSecretPolicyProductionTest {
         val source = """
             {"ai_api_key_v1":"sk-secret","ai_api_url_v1":"https://api.example.test/"}
         """.trimIndent()
-        val prepared = BackupSecretPolicy.prepareEncryptedModule("settings_ai_core", source, apiPin = "1234")
+        val prepared = BackupSecretPolicy.prepareEncryptedModule("settings_ai_core", source, apiPin = "123456")
         assertFalse(prepared.contains("sk-secret"))
         assertFalse(prepared.contains("\"ai_api_key_v1\""))
         assertTrue(prepared.contains("ai_api_key_enc_v1"))

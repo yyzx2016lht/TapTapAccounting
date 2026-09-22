@@ -121,8 +121,8 @@
     <string name="restore_merge_desc">只补充不存在的数据，不删除现有记录</string>
     <string name="restore_overwrite_desc">资产、分类、账单、预算、周期和聊天将整组覆盖，避免关联关系断裂</string>
     <string name="restore_overwrite_requires_complete_data">该备份缺少资产、分类或账单，不能安全覆盖；请改用合并恢复</string>
-    <string name="backup_pin_setup_prompt">检测到 AI 配置含 API Key，请设置 4 位 PIN</string>
-    <string name="backup_pin_verify_prompt">这是旧版备份，其中的 AI 密钥曾用 PIN 单独保护。请输入当时的 4 位 PIN。</string>
+    <string name="backup_pin_setup_prompt">检测到 AI 配置含 API Key，请设置 6 位 PIN</string>
+    <string name="backup_pin_verify_prompt">这是旧版备份，其中的 AI 密钥曾用 PIN 单独保护。请输入当时的 PIN（旧备份为 4 位）。</string>
     <string name="backup_pin_match_prompt">当前备份已启用 PIN，请输入同一 PIN 验证</string>
 
     <!-- 个人页 Kotlin 代码 -->
@@ -1450,11 +1450,10 @@
     <string name="merge_restore_asset_fmt">资产：新增 %1$d，跳过 %2$d</string>
     <string name="merge_restore_category_fmt">分类：新增 %1$d，跳过 %2$d</string>
     <string name="set_backup_pin">设置备份 PIN</string>
-    <string name="input_4digit_pin">输入4位PIN</string>
-    <string name="confirm_4digit_pin">再次输入4位PIN</string>
-    <string name="pin_must_4digit">PIN 必须是 4 位数字</string>
-    <string name="pin_mismatch">两次输入的 PIN 不一致</string>
     <string name="input_backup_pin">输入旧版备份 PIN</string>
+    <string name="pin_must_be_digits">PIN 必须是 4 至 8 位数字</string>
+    <string name="auth_too_many_attempts">尝试次数过多，已停止恢复</string>
+    <string name="pin_mismatch">两次输入的 PIN 不一致</string>
     <string name="continue_restore">继续恢复</string>
     <string name="exported_bills_fmt">已导出 %1$d 条账单</string>
     <string name="export_failed">导出失败，请稍后重试</string>

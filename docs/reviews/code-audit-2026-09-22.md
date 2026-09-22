@@ -133,8 +133,9 @@
 - [x] **P1-20 `BackupSecretPolicy` / PIN 加密 API Key 未接入生产**  
   - `BackupSecretPolicy.kt` 仅测试；`PrefsBackupSupport` 仍导出明文 `ai_api_key_v1` 等  
   - 2026-09-22：`prepareEncryptedModule`/`stripSecretValues`/`requireSecretFree(allowedSecretModules)` 接入 `RecoverySnapshotService.create`；无 PIN 时剥离明文密钥，有 PIN 时 `BackupPinCrypto` 字段级加密  
-- [ ] **P1-21 4 位 PIN + 60k PBKDF2；V2 恢复无限重试**  
+- [x] **P1-21 4 位 PIN + 60k PBKDF2；V2 恢复无限重试**  
   - `BackupPinCrypto.kt:15-29`；`BackupActivity.kt` 恢复递归重弹  
+  - 2026-09-22：新 PIN 6–8 位 + 200k PBKDF2（解密兼容旧 4 位/60k）；恢复码/备份密码重试上限 10 次  
 - [ ] **P1-22 Manifest 导出与 cleartext**  
   - `usesCleartextTraffic=true`（`AndroidManifest.xml:52`）  
   - `BootReceiver` exported + `RESTART_SERVICE`（约 123–131）  

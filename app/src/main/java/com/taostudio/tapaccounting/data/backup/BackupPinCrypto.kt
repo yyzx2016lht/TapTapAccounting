@@ -12,7 +12,8 @@ import javax.crypto.spec.SecretKeySpec
 
 /**
  * 备份中 AI 凭据的 PIN 保护。
- * - 使用 4 位数字 PIN
+ * - 新备份使用 6 至 8 位数字 PIN + 200k PBKDF2
+ * - 解密兼容旧版 4 位 PIN / 60k 轮数载荷
  * - PBKDF2 派生密钥 + AES-GCM 加密
  */
 object BackupPinCrypto {
@@ -21,12 +22,20 @@ object BackupPinCrypto {
     private const val FIELD_PROVIDER_KEYS = "ai_provider_keys_v1"
     private const val FIELD_PROVIDER_KEYS_ENC = "ai_provider_keys_enc_v1"
 
-    private const val ITERATIONS = 60_000
+    const val MIN_PIN_DIGITS = 6
+    const val MAX_PIN_DIGITS = 8
+    const val LEGACY_MIN_PIN_DIGITS = 4
+    const val DEFAULT_ITERATIONS = 200_000
+    private const val LEGACY_ITERATIONS = 60_000
     private const val KEY_BITS = 256
     private const val SALT_SIZE = 16
     private const val IV_SIZE = 12
 
-    private val pinRegex = Regex("^\\d{4}$")
+    /** New writes require a stronger PIN. */
+    private val pinRegex = Regex("^\\d{$MIN_PIN_DIGITS,$MAX_PIN_DIGITS}$")
+
+    /** Reads accept legacy 4-digit PINs used by older archives. */
+    private val anyPinRegex = Regex("^\\d{$LEGACY_MIN_PIN_DIGITS,$MAX_PIN_DIGITS}$")
 
     fun hasEncryptedApi(settings: JSONObject): Boolean {
         return settings.has(FIELD_API_KEY_ENC) || settings.has(FIELD_PROVIDER_KEYS_ENC)
@@ -46,7 +55,7 @@ object BackupPinCrypto {
      * 若 settings 中存在加密 AI 凭据，则尝试用 PIN 解密恢复明文字段。
      */
     fun decryptApiKeyInSettings(settings: JSONObject, pin: String): JSONObject {
-        requireValidPin(pin)
+        requireValidPinForRead(pin)
         decryptFieldIfPresent(settings, pin, FIELD_API_KEY, FIELD_API_KEY_ENC, "API Key")
         decryptFieldIfPresent(settings, pin, FIELD_PROVIDER_KEYS, FIELD_PROVIDER_KEYS_ENC, "提供商 API Key")
         return settings
@@ -63,16 +72,16 @@ object BackupPinCrypto {
 
         val salt = ByteArray(SALT_SIZE).also { SecureRandom().nextBytes(it) }
         val iv = ByteArray(IV_SIZE).also { SecureRandom().nextBytes(it) }
-        val key = deriveKey(pin, salt)
+        val key = deriveKey(pin, salt, DEFAULT_ITERATIONS)
 
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
         cipher.init(Cipher.ENCRYPT_MODE, key, GCMParameterSpec(128, iv))
         val cipherText = cipher.doFinal(plain.toByteArray(StandardCharsets.UTF_8))
 
         val payload = JSONObject()
-            .put("v", 1)
+            .put("v", 2)
             .put("kdf", "PBKDF2WithHmacSHA256")
-            .put("iter", ITERATIONS)
+            .put("iter", DEFAULT_ITERATIONS)
             .put("salt", Base64.getEncoder().encodeToString(salt))
             .put("iv", Base64.getEncoder().encodeToString(iv))
             .put("ct", Base64.getEncoder().encodeToString(cipherText))
@@ -97,7 +106,7 @@ object BackupPinCrypto {
             else -> throw IllegalArgumentException("备份中的加密 $labelForError 格式不受支持")
         }
 
-        val iter = payload.optInt("iter", ITERATIONS)
+        val iter = payload.optInt("iter", LEGACY_ITERATIONS)
         val salt = Base64.getDecoder().decode(payload.getString("salt"))
         val iv = Base64.getDecoder().decode(payload.getString("iv"))
         val ct = Base64.getDecoder().decode(payload.getString("ct"))
@@ -116,7 +125,7 @@ object BackupPinCrypto {
         }
     }
 
-    private fun deriveKey(pin: String, salt: ByteArray, iterations: Int = ITERATIONS): SecretKeySpec {
+    private fun deriveKey(pin: String, salt: ByteArray, iterations: Int): SecretKeySpec {
         val spec = PBEKeySpec(pin.toCharArray(), salt, iterations, KEY_BITS)
         val factory = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256")
         val encoded = factory.generateSecret(spec).encoded
@@ -124,6 +133,14 @@ object BackupPinCrypto {
     }
 
     private fun requireValidPin(pin: String) {
-        require(pinRegex.matches(pin)) { "PIN 必须是 4 位数字" }
+        require(pinRegex.matches(pin)) {
+            "PIN 必须是 $MIN_PIN_DIGITS 至 $MAX_PIN_DIGITS 位数字"
+        }
+    }
+
+    private fun requireValidPinForRead(pin: String) {
+        require(anyPinRegex.matches(pin)) {
+            "PIN 必须是 $LEGACY_MIN_PIN_DIGITS 至 $MAX_PIN_DIGITS 位数字"
+        }
     }
 }

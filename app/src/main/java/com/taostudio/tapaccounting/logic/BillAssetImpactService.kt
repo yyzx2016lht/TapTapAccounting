@@ -308,8 +308,22 @@ object BillAssetImpactService {
         return convertAmountBetweenCurrencies(amount, bill.currency, asset.currency)
     }
 
-    private fun targetDeltaInCurrency(bill: Bill, _targetCurrency: String): Double {
-        return bill.amount * bill.exchangeRate
+    /**
+     * 转账目标端入账金额（目标资产币种）。
+     *
+     * 转账的 [Bill.exchangeRate] 语义是 `bill.currency → targetCurrency`（表单/AI 确认汇率），
+     * 与支出/收入的「→CNY」语义不同。目标端必须按目标货币舍入，且不能忽略 [targetCurrency]。
+     */
+    fun targetDeltaInCurrency(bill: Bill, targetCurrency: String): Double {
+        if (bill.currency.equals(targetCurrency, ignoreCase = true)) {
+            return roundMoneyForCurrency(bill.amount, targetCurrency)
+        }
+        // 优先采用记账时确认的源→目标汇率，并按目标货币舍入。
+        if (bill.exchangeRate > 0.0) {
+            return roundMoneyForCurrency(bill.amount * bill.exchangeRate, targetCurrency)
+        }
+        // 汇率缺失时走市场汇率换算（与源端对称），禁止把源币金额直接记入目标账户。
+        return convertAmountBetweenCurrencies(bill.amount, bill.currency, targetCurrency)
     }
 
     private fun sourceDeltaInCurrency(bill: Bill, sourceCurrency: String): Double {

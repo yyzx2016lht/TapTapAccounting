@@ -35,7 +35,7 @@
 
 ### P0 — 资金 / 数据丢失 / 可双写（建议最先修）
 
-- [ ] **P0-1 跨币种转账目标端金额错误**  
+- [x] **P0-1 跨币种转账目标端金额错误**  
   - 位置：`app/src/main/java/com/taostudio/tapaccounting/logic/BillAssetImpactService.kt:311-313`（`targetDeltaInCurrency`）；时间线同源 `logic/AssetBillBalanceHistory.kt:71-72`  
   - 现象：`amount * exchangeRate`，忽略 `_targetCurrency` / `bill.currency`，无 `roundMoneyForCurrency`；目标非 CNY 时余额写成错误币种金额  
   - 状态：历史 Critical **仍存在**  

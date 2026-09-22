@@ -69,7 +69,7 @@ object AssetBillBalanceHistory {
                     delta -= principal + fee
                 }
                 if (matchesTarget(bill, assetId, assetName)) {
-                    delta += bill.amount * bill.exchangeRate
+                    delta += BillAssetImpactService.targetDeltaInCurrency(bill, assetCurrency)
                 }
                 return delta
             }

@@ -104,7 +104,8 @@ class StatsViewModel(private val billDao: BillDao, private val localMemberIdForB
     private val dfDateLabel = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
 
     private fun statsAmountOf(bill: Bill, selectedCurrency: String?): Double {
-        return if (selectedCurrency == null) bill.amount * bill.exchangeRate else bill.amount
+        // 转账 exchangeRate 是源→目标，不能当 →CNY；见 StatsAmountResolver
+        return com.taostudio.tapaccounting.logic.StatsAmountResolver.resolve(bill, selectedCurrency)
     }
 
     init {

@@ -41,7 +41,7 @@
   - 状态：历史 Critical **仍存在**  
   - 修法：按源/目标币种 `convertAmountBetweenCurrencies` + 按目标货币舍入；与源端对称；补跨币种转账单测  
 
-- [ ] **P0-2 转账统计把「源→目标」汇率当「→CNY」**  
+- [x] **P0-2 转账统计把「源→目标」汇率当「→CNY」**  
   - 位置：`ui/main/stats/StatsViewModel.kt:106-107,724-725`（`statsAmountOf` / `totalTransfer`）  
   - 现象：多币种且未筛币种时，`amount * exchangeRate` 对转账语义错误，汇总折错  
   - 状态：新问题  

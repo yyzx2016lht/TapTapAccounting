@@ -8,9 +8,17 @@ import kotlinx.coroutines.withContext
 import java.net.HttpURLConnection
 import java.net.URL
 
+/**
+ * 远程配置（已停用）。
+ *
+ * P0-6：原先从固定 GitHub Gist 拉取 JSON 并静默写入 AI API Key / URL，无签名、无用户确认。
+ * 该能力已不需要，**整体关闭**——不拉取、不写入本地凭据或模型配置。
+ * 若将来恢复，必须改为签名校验 + 用户逐项确认，且禁止静默覆盖 Key。
+ */
 object RemoteConfigManager {
 
-    private const val CONFIG_URL = "https://gist.githubusercontent.com/yyzx2016lht/410018a849271da1a0e39efaa0978c2a/raw/flipaccounting-config.json"
+    /** 已停用：留空则 [isConfigUrlConfigured] 为 false，UI 入口自动隐藏。 */
+    private const val CONFIG_URL = ""
 
     data class RemoteConfig(
         @SerializedName("apiKey") val apiKey: String = "",
@@ -39,90 +47,19 @@ object RemoteConfigManager {
         @SerializedName("ocrRefineEnabled") val ocrRefineEnabled: Boolean = true
     )
 
-    private fun firstNonBlank(vararg values: String): String =
-        values.firstOrNull { it.isNotBlank() }?.trim().orEmpty()
-
     fun isConfigUrlConfigured(): Boolean = CONFIG_URL.isNotBlank()
 
-    suspend fun syncIfConfigured(context: Context): Boolean {
-        val config = fetchConfig() ?: return false
-        applyConfig(context, config)
-        return true
-    }
+    /** 已停用：不再拉取或应用远程配置。 */
+    suspend fun syncIfConfigured(context: Context): Boolean = false
 
-    suspend fun fetchConfig(): RemoteConfig? {
-        if (CONFIG_URL.isBlank()) return null
+    /** 已停用：不发起网络请求。 */
+    suspend fun fetchConfig(): RemoteConfig? = null
 
-        return withContext(Dispatchers.IO) {
-            try {
-                val url = URL(CONFIG_URL)
-                val connection = url.openConnection() as HttpURLConnection
-                connection.requestMethod = "GET"
-                connection.connectTimeout = 10000
-                connection.readTimeout = 10000
-
-                if (connection.responseCode == 200) {
-                    val response = connection.inputStream.bufferedReader().readText()
-                    Gson().fromJson(response, RemoteConfig::class.java)
-                } else {
-                    null
-                }
-            } catch (e: Exception) {
-                null
-            }
-        }
-    }
-
+    /**
+     * 已停用：禁止任何远程来源写入本地 AI Key / URL / 模型配置。
+     * 即使误传入 [config] 也绝不写 Prefs（P0-6）。
+     */
     fun applyConfig(context: Context, config: RemoteConfig) {
-        if (config.apiKey.isNotBlank()) {
-            Prefs.setAiKey(context, config.apiKey)
-        }
-        if (config.apiUrl.isNotBlank()) {
-            Prefs.setAiUrl(context, config.apiUrl)
-        }
-        if (config.provider.isNotBlank()) {
-            Prefs.setAiProvider(context, config.provider)
-        }
-        val textModel = firstNonBlank(
-            config.textModelId,
-            config.multiModelId,
-            config.modelId,
-            config.singleModelId,
-            config.modifyModelId,
-            config.categoryRefineModelId,
-            config.routerModelId,
-            config.queryModelId,
-            config.ruleModelId,
-            config.receiptModelId,
-            config.ocrRefineModelId
-        )
-        if (textModel.isNotBlank()) {
-            Prefs.setAiModel(context, textModel)
-            Prefs.setAiMultiModel(context, textModel)
-            Prefs.setAiModifyModel(context, textModel)
-            Prefs.setAiCategoryRefineModel(context, textModel)
-            Prefs.setAiRouterModel(context, textModel)
-            Prefs.setAiRuleModel(context, textModel)
-            Prefs.setAiReceiptModel(context, textModel)
-            Prefs.setAiReceiptOcrRefineModel(context, textModel)
-        }
-
-        val visionModel = firstNonBlank(config.visionModelId, config.receiptVisionModelId)
-        if (visionModel.isNotBlank()) {
-            Prefs.setAiReceiptVisionModel(context, visionModel)
-            Prefs.setAiScreenModel(context, visionModel)
-        }
-
-        val speechModel = firstNonBlank(config.onlineSpeechModelId, config.speechModelId)
-        if (speechModel.isNotBlank()) {
-            Prefs.setAiSpeechModel(context, speechModel)
-        }
-
-        if (config.chatModelId.isNotBlank()) {
-            Prefs.setAiChatModel(context, config.chatModelId)
-        }
-
-        Prefs.setReceiptOcrRefineEnabled(context, config.ocrRefineEnabled)
+        // intentionally no-op
     }
 }
-

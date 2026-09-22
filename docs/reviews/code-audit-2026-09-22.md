@@ -65,7 +65,7 @@
   - 状态：新问题（`isSaving` 主路径已修，旁路仍在）  
   - 修法：所有 `handleSave` 入口先置 `isSaving`，确认回调路径共用同一把锁  
 
-- [ ] **P0-6 远程 Gist 静默覆盖 AI API Key / URL**  
+- [x] **P0-6 远程 Gist 静默覆盖 AI API Key / URL**  （2026-09-22 用户确认：远程配置功能整体关闭）  
   - 位置：`RemoteConfigManager.kt:13,76-82`  
   - 现象：固定 GitHub Gist 配置非空则直接 `Prefs.setAiKey` / `setAiUrl`，无签名、无用户确认  
   - 状态：新问题  

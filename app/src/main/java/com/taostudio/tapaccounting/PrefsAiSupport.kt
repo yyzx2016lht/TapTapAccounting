@@ -1,14 +1,20 @@
 package com.taostudio.tapaccounting
 
 import android.content.Context
+import android.content.SharedPreferences
+import com.taostudio.tapaccounting.data.crypto.KeystoreSecretBox
+import com.taostudio.tapaccounting.data.crypto.SecretEnvelope
 import org.json.JSONArray
 import org.json.JSONObject
 
 object PrefsAiSupport {
     private const val PREFS_NAME = "flip_prefs"
     private const val KEY_AI_KEY = "ai_api_key"
+    private const val KEY_AI_KEY_ENC = "ai_api_key_enc"
     private const val KEY_AI_PROVIDER_KEYS = "ai_provider_keys_v1"
+    private const val KEY_AI_PROVIDER_KEYS_ENC = "ai_provider_keys_enc_v1"
     private const val KEY_AI_PROVIDER_KEYS_MIGRATED = "ai_provider_keys_migrated_v1"
+    private const val AI_SECRET_ALIAS = "flip_ai_secrets"
     // Legacy text-model key kept for backward compatibility.
     private const val KEY_AI_MODEL = "ai_model_id"
     private const val KEY_AI_MULTI_MODEL = "ai_multi_model_id"
@@ -50,7 +56,7 @@ object PrefsAiSupport {
 
     fun getAiKey(ctx: Context): String {
         migrateLegacyProviderKeysIfNeeded(ctx)
-        return prefs(ctx).getString(KEY_AI_KEY, "")?.trim().orEmpty()
+        return readSecret(prefs(ctx), KEY_AI_KEY, KEY_AI_KEY_ENC).trim()
     }
 
     fun getAiProviderKey(ctx: Context, providerId: String): String {
@@ -65,18 +71,16 @@ object PrefsAiSupport {
 
     fun exportAiProviderKeysJson(ctx: Context): String {
         migrateLegacyProviderKeysIfNeeded(ctx)
-        return prefs(ctx).getString(KEY_AI_PROVIDER_KEYS, "").orEmpty()
+        return readSecret(prefs(ctx), KEY_AI_PROVIDER_KEYS, KEY_AI_PROVIDER_KEYS_ENC)
     }
 
     fun importAiProviderKeysFromBackup(ctx: Context, json: String) {
         val map = decodeProviderKeys(json)
         val editor = prefs(ctx).edit()
-            .putString(KEY_AI_PROVIDER_KEYS, encodeProviderKeys(map))
             .putBoolean(KEY_AI_PROVIDER_KEYS_MIGRATED, true)
+        writeSecret(editor, KEY_AI_PROVIDER_KEYS, KEY_AI_PROVIDER_KEYS_ENC, encodeProviderKeys(map))
         val activeKey = map[getAiProvider(ctx)].orEmpty()
-        if (activeKey.isNotBlank()) {
-            editor.putString(KEY_AI_KEY, activeKey)
-        }
+        writeSecret(editor, KEY_AI_KEY, KEY_AI_KEY_ENC, activeKey)
         editor.commit()
     }
 
@@ -91,23 +95,63 @@ object PrefsAiSupport {
             map[id] = trimmed
         }
         val editor = prefs(ctx).edit()
-            .putString(KEY_AI_PROVIDER_KEYS, encodeProviderKeys(map))
+        writeSecret(editor, KEY_AI_PROVIDER_KEYS, KEY_AI_PROVIDER_KEYS_ENC, encodeProviderKeys(map))
         if (getAiProvider(ctx) == id) {
-            editor.putString(KEY_AI_KEY, trimmed)
+            writeSecret(editor, KEY_AI_KEY, KEY_AI_KEY_ENC, trimmed)
         }
         editor.commit()
     }
 
+    /** Writes a secret under [plainKey]/[encKey]; empty clears both. Always encrypts at rest. */
+    internal fun writeSecret(
+        editor: SharedPreferences.Editor,
+        plainKey: String,
+        encKey: String,
+        value: String
+    ) {
+        if (value.isEmpty()) {
+            editor.remove(plainKey).remove(encKey)
+            return
+        }
+        editor.putString(encKey, KeystoreSecretBox.encrypt(AI_SECRET_ALIAS, value)).remove(plainKey)
+    }
+
+    /**
+     * Reads a secret, migrating leftover plaintext under [plainKey] to ciphertext.
+     * Never returns the legacy slot after a successful encrypt.
+     */
+    internal fun readSecret(sp: SharedPreferences, plainKey: String, encKey: String): String {
+        val encrypted = sp.getString(encKey, null)
+        if (SecretEnvelope.isEncrypted(encrypted)) {
+            val decrypted = KeystoreSecretBox.decrypt(AI_SECRET_ALIAS, encrypted!!)
+            if (decrypted != null) return decrypted
+        }
+        val legacy = sp.getString(plainKey, null)
+        if (legacy.isNullOrEmpty()) return ""
+        runCatching {
+            sp.edit().putString(encKey, KeystoreSecretBox.encrypt(AI_SECRET_ALIAS, legacy))
+                .remove(plainKey).commit()
+        }
+        return legacy
+    }
+
     private fun migrateLegacyProviderKeysIfNeeded(ctx: Context) {
         val p = prefs(ctx)
-        if (p.getBoolean(KEY_AI_PROVIDER_KEYS_MIGRATED, false)) return
+        if (p.getBoolean(KEY_AI_PROVIDER_KEYS_MIGRATED, false)) {
+            // Still migrate any leftover plaintext secrets.
+            readSecret(p, KEY_AI_KEY, KEY_AI_KEY_ENC)
+            readSecret(p, KEY_AI_PROVIDER_KEYS, KEY_AI_PROVIDER_KEYS_ENC)
+            return
+        }
         val map = readProviderKeysMapRaw(ctx).toMutableMap()
-        val legacyKey = p.getString(KEY_AI_KEY, "")?.trim().orEmpty()
+        val legacyKey = readSecret(p, KEY_AI_KEY, KEY_AI_KEY_ENC).trim()
         if (legacyKey.isNotEmpty()) {
             map.putIfAbsent(getAiProvider(ctx), legacyKey)
         }
         if (map.isNotEmpty()) {
-            p.edit().putString(KEY_AI_PROVIDER_KEYS, encodeProviderKeys(map)).apply()
+            val editor = p.edit()
+            writeSecret(editor, KEY_AI_PROVIDER_KEYS, KEY_AI_PROVIDER_KEYS_ENC, encodeProviderKeys(map))
+            editor.apply()
         }
         p.edit().putBoolean(KEY_AI_PROVIDER_KEYS_MIGRATED, true).apply()
     }
@@ -118,7 +162,9 @@ object PrefsAiSupport {
     }
 
     private fun readProviderKeysMapRaw(ctx: Context): Map<String, String> =
-        decodeProviderKeys(prefs(ctx).getString(KEY_AI_PROVIDER_KEYS, null))
+        decodeProviderKeys(
+            readSecret(prefs(ctx), KEY_AI_PROVIDER_KEYS, KEY_AI_PROVIDER_KEYS_ENC).ifEmpty { null }
+        )
 
     private fun encodeProviderKeys(map: Map<String, String>): String {
         val obj = JSONObject()
@@ -292,8 +338,9 @@ object PrefsAiSupport {
         val editor = prefs(ctx).edit()
             .putString(KEY_AI_PROVIDER, providerId)
             .putString(KEY_AI_URL, preset.baseUrl)
-            .putString(KEY_AI_KEY, apiKey.trim())
-            .putString(KEY_AI_PROVIDER_KEYS, encodeProviderKeys(providerKeys))
+        writeSecret(editor, KEY_AI_KEY, KEY_AI_KEY_ENC, apiKey.trim())
+        writeSecret(editor, KEY_AI_PROVIDER_KEYS, KEY_AI_PROVIDER_KEYS_ENC, encodeProviderKeys(providerKeys))
+        editor
             .putString(KEY_AI_MODEL, textModel)
             .putString(KEY_AI_MULTI_MODEL, textModel)
             .putString(KEY_AI_MODIFY_MODEL, textModel)

@@ -35,9 +35,6 @@ object PrefsBackupSupport {
     private const val KEY_SHOW_BOOK_ENTRY = "show_book_entry"
     private const val KEY_SHOW_AI_CHAT_ENTRY = "show_ai_chat_entry"
     private const val KEY_SAVE_OCR_DEBUG = "save_ocr_debug_before_ai"
-    private const val KEY_AI_KEY = "ai_api_key"
-    private const val KEY_AI_PROVIDER_KEYS = "ai_provider_keys_v1"
-    private const val KEY_AI_PROVIDER_KEYS_MIGRATED = "ai_provider_keys_migrated_v1"
     private const val KEY_AI_URL = "ai_api_url"
     private const val KEY_AI_MODEL = "ai_model_id"
     private const val KEY_AI_PROMPT = "ai_system_prompt"
@@ -228,13 +225,9 @@ object PrefsBackupSupport {
         if (root.has("ai_chat_reply_style_custom_v1")) edit.putString(KEY_AI_CHAT_REPLY_STYLE_CUSTOM, root.getString("ai_chat_reply_style_custom_v1"))
         if (root.has("ai_chat_model_audio_support_v1")) edit.putString(KEY_AI_CHAT_MODEL_AUDIO_SUPPORT, root.getString("ai_chat_model_audio_support_v1"))
 
-        if (root.has("ai_api_key_v1")) edit.putString(KEY_AI_KEY, root.getString("ai_api_key_v1"))
+        // Secrets are applied after commit via PrefsAiSupport (Keystore-encrypted).
         if (root.has("ai_api_url_v1")) edit.putString(KEY_AI_URL, root.getString("ai_api_url_v1"))
         if (root.has("ai_provider_v1")) edit.putString(KEY_AI_PROVIDER, root.getString("ai_provider_v1"))
-        if (root.has("ai_provider_keys_v1")) {
-            edit.putString(KEY_AI_PROVIDER_KEYS, root.getString("ai_provider_keys_v1"))
-            edit.putBoolean(KEY_AI_PROVIDER_KEYS_MIGRATED, true)
-        }
         val importedTextModel = firstNonBlank(
             root.optString("ai_text_model_v1"),
             root.optString("ai_multi_model_v1"),
@@ -330,6 +323,8 @@ object PrefsBackupSupport {
 
         if (root.has("ai_provider_keys_v1")) {
             Prefs.importAiProviderKeysFromBackup(ctx, root.getString("ai_provider_keys_v1"))
+        } else if (root.has("ai_api_key_v1")) {
+            Prefs.setAiKey(ctx, root.getString("ai_api_key_v1"))
         }
 
         if (root.has("book_colors_v1")) {

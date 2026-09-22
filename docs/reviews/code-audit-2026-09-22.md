@@ -127,8 +127,9 @@
 - [x] **P1-18 备份派生密钥 Base64 明文 prefs**  
   - `data/backup/BackupPasswordKeyStore.kt:49-60`  
   - 2026-09-22：派生密钥经 `KeystoreSecretBox` 加密存储；旧 Base64 明文读取时自动迁移  
-- [ ] **P1-19 AI API Key / 多提供商 Key 明文 prefs**  
+- [x] **P1-19 AI API Key / 多提供商 Key 明文 prefs**  
   - `PrefsAiSupport.kt:8-10,51-99,123-130`  
+  - 2026-09-22：`ai_api_key` / `ai_provider_keys_v1` 经 `KeystoreSecretBox` 加密；旧明文自动迁移；导入走 `PrefsAiSupport`  
 - [ ] **P1-20 `BackupSecretPolicy` / PIN 加密 API Key 未接入生产**  
   - `BackupSecretPolicy.kt` 仅测试；`PrefsBackupSupport` 仍导出明文 `ai_api_key_v1` 等  
 - [ ] **P1-21 4 位 PIN + 60k PBKDF2；V2 恢复无限重试**  

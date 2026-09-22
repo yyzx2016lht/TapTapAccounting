@@ -33,7 +33,6 @@ class AutoBackupWorker(
         private const val CLOUD_PREFS = "tap_cloud_backup_prefs"
         private const val KEY_WEBDAV_URL = "webdav_url"
         private const val KEY_WEBDAV_USER = "webdav_user"
-        private const val KEY_WEBDAV_PASS = "webdav_pass"
         private const val KEY_WEBDAV_DIR = "webdav_dir"
         private const val KEY_DEVICE_NAME = "webdav_device_name"
 
@@ -135,7 +134,7 @@ class AutoBackupWorker(
             val sp = ctx.getSharedPreferences(CLOUD_PREFS, Context.MODE_PRIVATE)
             val url = sp.getString(KEY_WEBDAV_URL, "")?.trim().orEmpty()
             val user = sp.getString(KEY_WEBDAV_USER, "")?.trim().orEmpty()
-            val pass = sp.getString(KEY_WEBDAV_PASS, "").orEmpty()
+            val pass = CloudBackupCredentials.loadPassword(ctx).orEmpty()
             val dir = sp.getString(KEY_WEBDAV_DIR, "TapAccount")?.trim()?.ifBlank { "TapAccount" } ?: "TapAccount"
             val device = sp.getString(KEY_DEVICE_NAME, "")?.trim()?.ifBlank { android.os.Build.MODEL ?: "device" } ?: (android.os.Build.MODEL ?: "device")
             if (url.isBlank() || user.isBlank() || pass.isBlank()) return null

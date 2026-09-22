@@ -48,6 +48,7 @@ import com.taostudio.tapaccounting.data.backup.BackupPasswordKeyMaterial
 import com.taostudio.tapaccounting.data.backup.BackupPasswordKeyStore
 import com.taostudio.tapaccounting.data.backup.BackupRecoveryCode
 import com.taostudio.tapaccounting.data.backup.CloudBackupConfig
+import com.taostudio.tapaccounting.data.backup.CloudBackupCredentials
 import com.taostudio.tapaccounting.data.backup.CloudBackupEntry
 import com.taostudio.tapaccounting.data.backup.CsvManager
 import com.taostudio.tapaccounting.data.backup.DataExportManager
@@ -114,7 +115,6 @@ class BackupActivity : AppCompatActivity() {
         private const val CLOUD_PREFS = "tap_cloud_backup_prefs"
         private const val KEY_WEBDAV_URL = "webdav_url"
         private const val KEY_WEBDAV_USER = "webdav_user"
-        private const val KEY_WEBDAV_PASS = "webdav_pass"
         private const val KEY_WEBDAV_DIR = "webdav_dir"
         private const val KEY_DEVICE_NAME = "webdav_device_name"
         private val RESTORE_MUTEX = Mutex()
@@ -870,20 +870,21 @@ class BackupActivity : AppCompatActivity() {
     }
 
     private fun saveCloudSettings() {
+        val password = findViewById<EditText>(R.id.et_webdav_pass).text?.toString().orEmpty()
         getSharedPreferences(CLOUD_PREFS, MODE_PRIVATE).edit()
             .putString(KEY_WEBDAV_URL, findViewById<EditText>(R.id.et_webdav_url).text?.toString().orEmpty().trim())
             .putString(KEY_WEBDAV_USER, findViewById<EditText>(R.id.et_webdav_user).text?.toString().orEmpty().trim())
-            .putString(KEY_WEBDAV_PASS, findViewById<EditText>(R.id.et_webdav_pass).text?.toString().orEmpty())
             .putString(KEY_WEBDAV_DIR, findViewById<EditText>(R.id.et_webdav_dir).text?.toString().orEmpty().trim())
             .putString(KEY_DEVICE_NAME, findViewById<EditText>(R.id.et_device_name).text?.toString().orEmpty().trim())
             .apply()
+        CloudBackupCredentials.savePassword(this, password)
     }
 
     private fun loadCloudSettings() {
         val sp = getSharedPreferences(CLOUD_PREFS, MODE_PRIVATE)
         findViewById<EditText>(R.id.et_webdav_url).setText(sp.getString(KEY_WEBDAV_URL, "https://dav.jianguoyun.com/dav/") ?: "")
         findViewById<EditText>(R.id.et_webdav_user).setText(sp.getString(KEY_WEBDAV_USER, "") ?: "")
-        findViewById<EditText>(R.id.et_webdav_pass).setText(sp.getString(KEY_WEBDAV_PASS, "") ?: "")
+        findViewById<EditText>(R.id.et_webdav_pass).setText(CloudBackupCredentials.loadPassword(this) ?: "")
         findViewById<EditText>(R.id.et_webdav_dir).setText(sp.getString(KEY_WEBDAV_DIR, "TapAccount") ?: "TapAccount")
         findViewById<EditText>(R.id.et_device_name).setText(sp.getString(KEY_DEVICE_NAME, android.os.Build.MODEL ?: "android") ?: "android")
     }

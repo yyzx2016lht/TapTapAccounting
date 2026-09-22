@@ -365,7 +365,13 @@ object PrefsBackupSupport {
 
         if (root.has("cloud_webdav_url_v1")) cloudEdit.putString(KEY_CLOUD_WEBDAV_URL, root.getString("cloud_webdav_url_v1"))
         if (root.has("cloud_webdav_user_v1")) cloudEdit.putString(KEY_CLOUD_WEBDAV_USER, root.getString("cloud_webdav_user_v1"))
-        if (root.has("cloud_webdav_pass_v1")) cloudEdit.putString(KEY_CLOUD_WEBDAV_PASS, root.getString("cloud_webdav_pass_v1"))
+        if (root.has("cloud_webdav_pass_v1")) {
+            val importedPass = root.getString("cloud_webdav_pass_v1")
+            if (importedPass.isNotEmpty()) {
+                com.taostudio.tapaccounting.data.backup.CloudBackupCredentials.savePassword(ctx, importedPass)
+            }
+            cloudEdit.remove(KEY_CLOUD_WEBDAV_PASS)
+        }
         if (root.has("cloud_webdav_dir_v1")) cloudEdit.putString(KEY_CLOUD_WEBDAV_DIR, root.getString("cloud_webdav_dir_v1"))
         if (root.has("cloud_device_name_v1")) cloudEdit.putString(KEY_CLOUD_DEVICE_NAME, root.getString("cloud_device_name_v1"))
         check(cloudEdit.commit()) { "无法恢复云备份设置" }
@@ -521,7 +527,8 @@ object PrefsBackupSupport {
             put("ai_chat_session_titles_v1", serializeChatSessionTitles(ctx).toString())
             put("cloud_webdav_url_v1", cloudPrefs.getString(KEY_CLOUD_WEBDAV_URL, "") ?: "")
             put("cloud_webdav_user_v1", cloudPrefs.getString(KEY_CLOUD_WEBDAV_USER, "") ?: "")
-            put("cloud_webdav_pass_v1", cloudPrefs.getString(KEY_CLOUD_WEBDAV_PASS, "") ?: "")
+            // Never read the legacy plaintext key; export the live secret (encrypted archives only).
+            put("cloud_webdav_pass_v1", com.taostudio.tapaccounting.data.backup.CloudBackupCredentials.loadPassword(ctx) ?: "")
             put("cloud_webdav_dir_v1", cloudPrefs.getString(KEY_CLOUD_WEBDAV_DIR, "") ?: "")
             put("cloud_device_name_v1", cloudPrefs.getString(KEY_CLOUD_DEVICE_NAME, "") ?: "")
         }.toString()

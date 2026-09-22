@@ -124,8 +124,9 @@
   - `BackupActivity.kt:114-117,873-876`；`AutoBackupWorker.kt:36,138`；prefs `tap_cloud_backup_prefs`  
   - 修法：对齐 `SharedCredentials` Keystore  
   - 2026-09-22：`CloudBackupCredentials` + `KeystoreSecretBox`/`SecretEnvelope`；自动迁移旧明文；`AutoBackupWorker`/`PrefsBackupSupport` 已接入  
-- [ ] **P1-18 备份派生密钥 Base64 明文 prefs**  
+- [x] **P1-18 备份派生密钥 Base64 明文 prefs**  
   - `data/backup/BackupPasswordKeyStore.kt:49-60`  
+  - 2026-09-22：派生密钥经 `KeystoreSecretBox` 加密存储；旧 Base64 明文读取时自动迁移  
 - [ ] **P1-19 AI API Key / 多提供商 Key 明文 prefs**  
   - `PrefsAiSupport.kt:8-10,51-99,123-130`  
 - [ ] **P1-20 `BackupSecretPolicy` / PIN 加密 API Key 未接入生产**  

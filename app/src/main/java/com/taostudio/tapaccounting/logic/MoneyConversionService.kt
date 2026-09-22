@@ -15,7 +15,10 @@ object MoneyConversionService {
         return currencies
             .map(::normalizeCurrency)
             .filter { it.isNotBlank() && it != "CNY" }
-            .filter { rateProvider(it) == null }
+            .filter { code ->
+                val rate = rateProvider(code)
+                rate == null || rate == 0.0
+            }
             .toSet()
     }
 

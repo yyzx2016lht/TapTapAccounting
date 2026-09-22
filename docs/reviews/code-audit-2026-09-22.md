@@ -47,7 +47,7 @@
   - 状态：新问题  
   - 修法：转账单独 CNY 折算或只展示原币；与支出/收入 `exchangeRate` 语义分离  
 
-- [ ] **P0-3 汇率缺失静默跳过余额影响**  
+- [x] **P0-3 汇率缺失静默跳过余额影响**  
   - 位置：`BillAssetImpactService.kt:32-38,101-107`（catch 后返回 0）；未校验入口：`logic/BillRestoreHelper.kt:50-57`、`logic/InvestmentInterestService.kt:497+`（`insertLocalGeneratedBillWithinActiveTransaction`）  
   - 现象：账单落库、余额不动；删除/恢复不对称  
   - 状态：历史问题 **升级为 Critical**（恢复/结息路径）  

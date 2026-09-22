@@ -54,6 +54,8 @@ object BillRestoreHelper {
                     idRemapping[origId] = insertedId
                 }
 
+                // P0-3：恢复前校验汇率；失败中止整个事务，禁止「恢复账单但余额不动」
+                BillMutationService.validateRequiredRatesForBill(db, restoredBill)
                 BillAssetImpactService.applyBillBalanceImpact(db, restoredBill)
                 InvestmentInterestService.applyEstimateBillLotImpact(
                     db = db,

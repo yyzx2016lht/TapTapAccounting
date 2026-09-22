@@ -119,7 +119,11 @@ object BillMutationService {
             )
         )
         val savedBill = localBill.copy(id = db.billDao().insertBill(localBill))
-        if (applyAssetImpact) BillAssetImpactService.applyBillBalanceImpact(db, savedBill)
+        if (applyAssetImpact) {
+            // P0-3：apply 前校验汇率；失败抛出以中止事务，禁止「落库但余额不动」
+            validateRequiredRatesForBill(db, savedBill)
+            BillAssetImpactService.applyBillBalanceImpact(db, savedBill)
+        }
         auditBill("insert_local_generated", savedBill)
         notifyWidgetsChanged()
         return db.billDao().getBillById(savedBill.id) ?: savedBill
@@ -374,7 +378,7 @@ object BillMutationService {
         notifyWidgetsChanged()
     }
 
-    private suspend fun validateRequiredRatesForBill(db: AppDatabase, bill: Bill) {
+    suspend fun validateRequiredRatesForBill(db: AppDatabase, bill: Bill) {
         val sourceAsset = bill.accountId?.let { db.assetDao().getAssetById(it) }
             ?: bill.accountName.takeIf { it.isNotBlank() }?.let { db.assetDao().getAssetByName(it) }
         val targetAsset = bill.toAccountId?.let { db.assetDao().getAssetById(it) }

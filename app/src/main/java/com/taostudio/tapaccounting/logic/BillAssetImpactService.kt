@@ -29,13 +29,13 @@ object BillAssetImpactService {
         logFull("ASSET_IMPACT", "AUDIT_ASSET|action=$action|billId=$billId|assetId=${asset.id}|asset=${asset.name}|delta=$delta|before=$before|after=$after")
     }
 
+    /**
+     * 应用账单对资产余额的影响。
+     * 汇率缺失时抛出 [MissingCurrencyRateException]（禁止吞掉后跳过余额），
+     * 调用方应在事务内调用以便失败回滚。
+     */
     suspend fun applyBillBalanceImpact(db: AppDatabase, bill: Bill): Int {
-        return try {
-            applyBillBalanceImpactInternal(db, bill)
-        } catch (e: MissingCurrencyRateException) {
-            Logger.d("BillAssetImpact", "汇率缺失，跳过余额更新: ${e.missingCurrencies}, billId=${bill.id}")
-            0
-        }
+        return applyBillBalanceImpactInternal(db, bill)
     }
 
     private suspend fun applyBillBalanceImpactInternal(db: AppDatabase, bill: Bill): Int {
@@ -98,13 +98,12 @@ object BillAssetImpactService {
         return impactedAssets
     }
 
+    /**
+     * 回滚账单对资产余额的影响。
+     * 汇率缺失时抛出 [MissingCurrencyRateException]，禁止「账单删了余额不动」。
+     */
     suspend fun revertBillBalanceImpact(db: AppDatabase, bill: Bill): Int {
-        return try {
-            revertBillBalanceImpactInternal(db, bill)
-        } catch (e: MissingCurrencyRateException) {
-            Logger.d("BillAssetImpact", "汇率缺失，跳过余额回滚: ${e.missingCurrencies}, billId=${bill.id}")
-            0
-        }
+        return revertBillBalanceImpactInternal(db, bill)
     }
 
     private suspend fun revertBillBalanceImpactInternal(db: AppDatabase, bill: Bill): Int {

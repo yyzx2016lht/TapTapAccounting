@@ -72,6 +72,8 @@ class EditBillActivity : AppCompatActivity() {
         // P2-14: prevent window leak
         bottomSheet?.dismiss()
         bottomSheet = null
+        formController?.destroy()
+        formController = null
         super.onDestroy()
     }
 

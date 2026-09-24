@@ -492,6 +492,7 @@ class OverlayService : Service() {
         stopFlipDetection()
         stopTapDetection()
         overlayManager.removeOverlay(isSaved = false)
+        overlayManager.destroy()
         isServiceRunning = false
         super.onDestroy()
     }

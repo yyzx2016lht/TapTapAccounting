@@ -10,7 +10,6 @@ import com.k2fsa.sherpa.onnx.OfflineSenseVoiceModelConfig
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -31,13 +30,11 @@ object LocalAsrService {
     private var sherpaRecognizer: OfflineRecognizer? = null
     private var isDownloading = false
     @Volatile private var cancelDownload = false
-    // P1-29: 可取消的后台作用域
+    // P1-29: 可取消的后台作用域。
+    // 注意：本对象是进程级单例，serviceScope 随进程生命周期存续，不提供 shutdown——
+    // scope 取消后无法重建，之后所有 serviceScope.launch 都会静默失效（曾经的死代码 shutdown 已移除）。
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-    fun shutdown() {
-        cancelDownload = true
-        serviceScope.cancel()
-    }
     @Volatile private var isInitializing = false
     @Volatile private var switchToMirrorRequested = false
     @Volatile private var slowPromptShown = false

@@ -50,6 +50,8 @@ class AccountingFormController(
 
     /** P1-29: 界面销毁时取消协程。 */
     fun destroy() {
+        aiAssistantInstance?.shutdown()
+        aiAssistantInstance = null
         scope.cancel()
     }
     private var editingBillId: Long? = null
@@ -112,7 +114,9 @@ class AccountingFormController(
     private var selectedFormBook: String =
         BookAccountManager.resolveWritableBook(ctx, BookAccountManager.getSelectedBook(ctx))
 
-    private val aiAssistant by lazy { AiAssistant(ctx) }
+    private var aiAssistantInstance: AiAssistant? = null
+    private val aiAssistant: AiAssistant
+        get() = aiAssistantInstance ?: AiAssistant(ctx).also { aiAssistantInstance = it }
     private val isAssetFeatureEnabled: Boolean
         get() = Prefs.isAssetFeatureEnabled(ctx)
 

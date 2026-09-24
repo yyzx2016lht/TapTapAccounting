@@ -899,6 +899,13 @@ class OverlayManager(private val ctx: Context) {
         }
     }
 
+    /** OverlayService 销毁时调用：释放管理器级常驻资源（removeOverlay 只处理单次表单的资源） */
+    fun destroy() {
+        formController?.destroy()
+        formController = null
+        aiAssistant.shutdown()
+    }
+
     fun removeOverlay(isSaved: Boolean = true) {
         hideScreenCaptureLoadingOverlay()
         finishScreenCaptureFlow(restoreOverlay = false)
@@ -906,6 +913,7 @@ class OverlayManager(private val ctx: Context) {
         voiceHandler = null
 
         if (overlayView == null || isRemovingOverlay) {
+            formController?.destroy()
             formController = null
             overlayParams = null
             return
@@ -917,6 +925,7 @@ class OverlayManager(private val ctx: Context) {
         runCatching { ImagePickerActivity.clearCallbacks() }
 
         // 立即锁定表单，阻止用户继续交互
+        formController?.destroy()
         formController = null
         val view = overlayView!!
         cancelOverlayAnimations(view)

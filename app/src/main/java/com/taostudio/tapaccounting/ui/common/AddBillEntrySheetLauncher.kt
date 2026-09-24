@@ -85,6 +85,8 @@ object AddBillEntrySheetLauncher {
         }
         bottomSheet.setOnDismissListener {
             voiceHandler.release()
+            formController.destroy()
+            aiAssistant.shutdown()
             onDismiss?.invoke()
         }
         bottomSheet.setContentView(view)

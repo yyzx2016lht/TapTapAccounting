@@ -94,8 +94,8 @@ object InsightEngine {
     ): InsightCardModel? {
         if (current.size < 3 || previous.size < 3) return null
 
-        val currentAmount = current.sumOf { it.amount }
-        val previousAmount = previous.sumOf { it.amount }
+        val currentAmount = current.sumOf { amountInCny(it) }
+        val previousAmount = previous.sumOf { amountInCny(it) }
         if (previousAmount <= 0) return null
 
         val delta = (currentAmount - previousAmount) / previousAmount
@@ -135,9 +135,9 @@ object InsightEngine {
         val results = mutableListOf<InsightCardModel>()
 
         val currentByCategory = current.groupBy { it.categoryName }
-            .mapValues { (_, bills) -> bills.sumOf { it.amount } }
+            .mapValues { (_, bills) -> bills.sumOf { amountInCny(it) } }
         val previousByCategory = previous.groupBy { it.categoryName }
-            .mapValues { (_, bills) -> bills.sumOf { it.amount } }
+            .mapValues { (_, bills) -> bills.sumOf { amountInCny(it) } }
 
         for ((category, currentAmount) in currentByCategory) {
             if (category.isBlank()) continue
@@ -185,7 +185,7 @@ object InsightEngine {
         if (expenses.size < 3) return emptyList()
 
         val results = mutableListOf<InsightCardModel>()
-        val amounts = expenses.map { it.amount }.sorted()
+        val amounts = expenses.map { amountInCny(it) }.sorted()
         val p90Index = (amounts.size * 0.9).toInt().coerceIn(0, amounts.size - 1)
         val p90 = amounts[p90Index]
         val avg = amounts.average()
@@ -195,7 +195,7 @@ object InsightEngine {
         val anchorTime = expenses.maxOf { it.time }
         val sevenDaysAgo = anchorTime - 7L * 24 * 60 * 60 * 1000
         val recentLarge = expenses
-            .filter { it.amount >= threshold && it.time >= sevenDaysAgo }
+            .filter { amountInCny(it) >= threshold && it.time >= sevenDaysAgo }
             .sortedByDescending { it.time }
 
         for (bill in recentLarge.take(1)) { // 最多 1 条
@@ -234,11 +234,12 @@ object InsightEngine {
         var totalAmount = 0.0
 
         for (bill in expenses) {
-            totalAmount += bill.amount
+            val cny = amountInCny(bill)
+            totalAmount += cny
             calendar.timeInMillis = bill.time
             val dayOfWeek = calendar.get(Calendar.DAY_OF_WEEK)
             if (dayOfWeek == Calendar.SATURDAY || dayOfWeek == Calendar.SUNDAY) {
-                weekendAmount += bill.amount
+                weekendAmount += cny
             }
         }
 
@@ -280,7 +281,7 @@ object InsightEngine {
             if (bills.size < 3) continue
 
             // 金额波动 ±15%
-            val amounts = bills.map { it.amount }
+            val amounts = bills.map { amountInCny(it) }
             val median = amounts.sorted()[amounts.size / 2]
             val toleranceOk = amounts.all { abs(it - median) / median <= 0.15 }
             if (!toleranceOk) continue
@@ -320,12 +321,12 @@ object InsightEngine {
 
     private fun buildCategoryConcentrationInsight(expenses: List<Bill>): InsightCardModel? {
         if (expenses.size < 5) return null
-        val total = expenses.sumOf { it.amount }
+        val total = expenses.sumOf { amountInCny(it) }
         if (total < 300.0) return null
 
         val top = expenses
             .groupBy { it.categoryName.ifBlank { "未分类" } }
-            .mapValues { (_, bills) -> bills.sumOf { it.amount } }
+            .mapValues { (_, bills) -> bills.sumOf { amountInCny(it) } }
             .maxByOrNull { it.value } ?: return null
         val ratio = top.value / total
         if (ratio < 0.45 || top.value < 200.0) return null
@@ -359,6 +360,18 @@ object InsightEngine {
         } else {
             String.format("%.2f", amount)
         }
+    }
+
+    /** P1-6: 多币种账单折算到 CNY 再汇总，优先记账时汇率。 */
+    private fun amountInCny(bill: Bill): Double {
+        if (bill.currency.isBlank() || bill.currency.equals("CNY", ignoreCase = true)) {
+            return bill.amount
+        }
+        if (bill.exchangeRate > 0.0) {
+            return bill.amount * bill.exchangeRate
+        }
+        return com.taostudio.tapaccounting.logic.BillAssetImpactService
+            .convertAmountBetweenCurrencies(bill.amount, bill.currency, "CNY")
     }
 
     private fun isToday(cal: Calendar): Boolean {

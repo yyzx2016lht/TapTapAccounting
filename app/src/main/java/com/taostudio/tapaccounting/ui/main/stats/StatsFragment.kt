@@ -94,7 +94,8 @@ class StatsFragment : Fragment() {
     private val homeViewModel: HomeViewModel by activityViewModels()
 
     private val viewModel: StatsViewModel by viewModels {
-        val db = AppDatabase.getDatabase(requireContext().applicationContext)
+        // P2-9: use application context
+        val db = AppDatabase.getDatabase(requireNotNull(activity).application)
         StatsViewModelFactory(db.billDao()) { bookName -> db.sharedLedgerDao().getByBookName(bookName)?.localMemberId }
     }
 
@@ -936,7 +937,8 @@ class StatsFragment : Fragment() {
         featureEntryStatusJob?.cancel()
         featureEntryStatusJob = viewLifecycleOwner.lifecycleScope.launch {
             val status = withContext(Dispatchers.IO) {
-                val db = AppDatabase.getDatabase(requireContext().applicationContext)
+                // P2-9: use application context
+        val db = AppDatabase.getDatabase(requireNotNull(activity).application)
                 val budgetService = BudgetService(db.budgetDao(), db.billDao(), db.categoryDao())
                 val budgets = if (supportsBudgetSummary) {
                     budgetService.getMonthBudgetsWithProgress(daoBookName, yearMonth)

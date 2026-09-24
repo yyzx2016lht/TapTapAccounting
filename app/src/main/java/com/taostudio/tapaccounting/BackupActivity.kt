@@ -21,6 +21,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
+import androidx.room.withTransaction
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.card.MaterialCardView
 import com.google.android.material.checkbox.MaterialCheckBox
@@ -1884,10 +1885,11 @@ class BackupActivity : AppCompatActivity() {
                                 newDeviceId = newDeviceId,
                                 mediaTransaction = mediaTransaction
                             )
+                            // P1-16: prefs 提交放进 Room 事务 beforeCommit，与库写入同成败
+                            preferenceTx.commit()
                         }
                     )
                     roomCommitted = true
-                    preferenceTx.commit()
                     mediaTransaction?.let { media ->
                         runCatching(media::commit).onFailure {
                             Log.w("BackupActivity", "恢复已提交，但媒体事务临时文件清理失败", it)
@@ -2005,10 +2007,11 @@ class BackupActivity : AppCompatActivity() {
                                 newDeviceId = newDeviceId,
                                 mediaTransaction = mediaTransaction
                             )
+                            // P1-16: prefs 提交放进 Room 事务 beforeCommit，与库写入同成败
+                            preferenceTx.commit()
                         }
                     )
                     roomCommitted = true
-                    preferenceTx.commit()
                     mediaTransaction?.let { media ->
                         runCatching(media::commit).onFailure {
                             Log.w("BackupActivity", "合并恢复已提交，但媒体事务临时文件清理失败", it)
@@ -2445,44 +2448,46 @@ class BackupActivity : AppCompatActivity() {
     }
 
     private suspend fun importCsvBills(db: AppDatabase, bills: List<Bill>): CsvImportResult {
-        val importedIdMap = mutableMapOf<Long, Long>()
-        val pendingRelations = mutableListOf<Pair<Long, Long>>()
-        val importedIds = bills.mapNotNull { it.id.takeIf { id -> id > 0L } }.toSet()
-        val assetResolution = ensureCsvImportAssets(db, bills)
-        val assetByName = assetResolution.assetByName
+        return db.withTransaction {
+            val importedIdMap = mutableMapOf<Long, Long>()
+            val pendingRelations = mutableListOf<Pair<Long, Long>>()
+            val importedIds = bills.mapNotNull { it.id.takeIf { id -> id > 0L } }.toSet()
+            val assetResolution = ensureCsvImportAssets(db, bills)
+            val assetByName = assetResolution.assetByName
 
-        for (bill in bills) {
-            val accountAsset = assetByName[normalizeAssetImportName(bill.accountName)]
-            val toAccountAsset = assetByName[normalizeAssetImportName(bill.toAccountName)]
-            val newId = db.billDao().insertBill(
-                bill.copy(
-                    id = 0L,
-                    accountId = accountAsset?.id,
-                    toAccountId = toAccountAsset?.id,
-                    categoryName = CategoryNameNormalizer.normalizeForStorage(bill.categoryName),
-                    relatedBillId = null
+            for (bill in bills) {
+                val accountAsset = assetByName[normalizeAssetImportName(bill.accountName)]
+                val toAccountAsset = assetByName[normalizeAssetImportName(bill.toAccountName)]
+                val newId = db.billDao().insertBill(
+                    bill.copy(
+                        id = 0L,
+                        accountId = accountAsset?.id,
+                        toAccountId = toAccountAsset?.id,
+                        categoryName = CategoryNameNormalizer.normalizeForStorage(bill.categoryName),
+                        relatedBillId = null
+                    )
                 )
+                if (bill.id > 0L) {
+                    importedIdMap[bill.id] = newId
+                }
+                val oldRelatedId = bill.relatedBillId
+                if (oldRelatedId != null && oldRelatedId in importedIds) {
+                    pendingRelations += newId to oldRelatedId
+                }
+            }
+
+            pendingRelations.forEach { (newBillId, oldRelatedId) ->
+                val mappedRelatedId = importedIdMap[oldRelatedId] ?: return@forEach
+                val savedBill = db.billDao().getBillById(newBillId) ?: return@forEach
+                db.billDao().updateBill(savedBill.copy(relatedBillId = mappedRelatedId))
+            }
+
+            db.billDao().backfillAssetLinksByName()
+            CsvImportResult(
+                billCount = bills.size,
+                createdAssetNames = assetResolution.createdAssetNames
             )
-            if (bill.id > 0L) {
-                importedIdMap[bill.id] = newId
-            }
-            val oldRelatedId = bill.relatedBillId
-            if (oldRelatedId != null && oldRelatedId in importedIds) {
-                pendingRelations += newId to oldRelatedId
-            }
         }
-
-        pendingRelations.forEach { (newBillId, oldRelatedId) ->
-            val mappedRelatedId = importedIdMap[oldRelatedId] ?: return@forEach
-            val savedBill = db.billDao().getBillById(newBillId) ?: return@forEach
-            db.billDao().updateBill(savedBill.copy(relatedBillId = mappedRelatedId))
-        }
-
-        db.billDao().backfillAssetLinksByName()
-        return CsvImportResult(
-            billCount = bills.size,
-            createdAssetNames = assetResolution.createdAssetNames
-        )
     }
 
     private fun repairMissingCsvAssetBindings() {

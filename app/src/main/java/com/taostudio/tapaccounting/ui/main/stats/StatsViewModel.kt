@@ -89,7 +89,9 @@ class StatsViewModel(private val billDao: BillDao, private val localMemberIdForB
         private const val MAX_STATS_CACHE_ENTRIES = 24
         private const val FLOW_SAMPLE_MS = 120L
         private val CATEGORY_SPLIT_REGEX = Regex("\\s*>\\s*|/::/| - |::|·")
+        // P2-13: 多协程读写缓存，必须加锁
         private val statsSnapshotCache = linkedMapOf<String, StatsUiState>()
+        private val statsSnapshotCacheLock = Any()
     }
 
     private val _uiState = MutableStateFlow(StatsUiState())
@@ -436,7 +438,8 @@ class StatsViewModel(private val billDao: BillDao, private val localMemberIdForB
             val cacheKey = buildCacheKey(snapshot, start, end, prevStart, prevEnd)
 
             _uiState.update { it.copy(dateLabel = label, isLoading = true) }
-            statsSnapshotCache[cacheKey]?.let { cached ->
+            val cached = synchronized(statsSnapshotCacheLock) { statsSnapshotCache[cacheKey] }
+            cached?.let {
                 _uiState.value = cached.copy(
                     year = snapshot.year,
                     month = snapshot.month,
@@ -529,11 +532,13 @@ class StatsViewModel(private val billDao: BillDao, private val localMemberIdForB
     }
 
     private fun putStatsCache(key: String, state: StatsUiState) {
-        statsSnapshotCache.remove(key)
-        statsSnapshotCache[key] = state
-        while (statsSnapshotCache.size > MAX_STATS_CACHE_ENTRIES) {
-            val eldest = statsSnapshotCache.entries.firstOrNull()?.key ?: break
-            statsSnapshotCache.remove(eldest)
+        synchronized(statsSnapshotCacheLock) {
+            statsSnapshotCache.remove(key)
+            statsSnapshotCache[key] = state
+            while (statsSnapshotCache.size > MAX_STATS_CACHE_ENTRIES) {
+                val eldest = statsSnapshotCache.entries.firstOrNull()?.key ?: break
+                statsSnapshotCache.remove(eldest)
+            }
         }
     }
 

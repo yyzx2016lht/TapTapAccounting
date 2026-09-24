@@ -66,7 +66,7 @@ object ShizukuShell {
                 exec("cmd appops set $pkg WAKE_LOCK allow")
                 exec("cmd appops set $pkg SYSTEM_ALERT_WINDOW allow")
                 // 关闭 Android 12+ 幽灵进程杀手（如果系统支持）
-                exec("device_config put activity_manager max_phantom_processes 2147483647")
+                // P2-22: 勿改全局 max_phantom_processes，影响整机
             } catch (e: Exception) {
                 android.util.Log.e("ShizukuShell", "保活执行异常: ${e.message}")
             }

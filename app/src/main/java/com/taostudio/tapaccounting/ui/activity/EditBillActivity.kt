@@ -68,13 +68,23 @@ class EditBillActivity : AppCompatActivity() {
         bottomSheet?.show()
     }
 
+    override fun onDestroy() {
+        // P2-14: prevent window leak
+        bottomSheet?.dismiss()
+        bottomSheet = null
+        super.onDestroy()
+    }
+
     private fun loadBillData() {
         val app = application as TapApplication
         lifecycleScope.launch(Dispatchers.IO) {
             val bill = app.billRepository.getBillById(billId)
             if (bill != null) {
                 val json = JSONObject()
-                json.put("amount", bill.amount)
+                // P1-1: 有退款的支出 amount 是净额；编辑表单展示 original
+                val formAmount = if (bill.originalAmount > bill.amount) bill.originalAmount else bill.amount
+                json.put("amount", formAmount)
+                json.put("originalAmount", bill.originalAmount)
                 json.put("type", bill.type) // 0-支出, 1-收入...
                 json.put("category_name", bill.categoryName)
                 json.put("asset_name", bill.accountName)

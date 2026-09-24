@@ -80,7 +80,15 @@ internal fun adaptChatRequestForProvider(
     requestJson: JsonObject
 ): JsonObject {
     val adapted = requestJson.deepCopy()
-    val thinkingEnabled = adapted.remove("enable_thinking")?.asBoolean == true
+    // P1-24: 二次 adapt 时 enable_thinking 已被移除，不能据此关掉 thinking
+    val thinkingEnabled = when {
+        adapted.has("thinking") -> adapted.get("thinking")?.asJsonObject
+            ?.get("type")?.asString == "enabled"
+        else -> adapted.remove("enable_thinking")?.asBoolean == true
+    }
+    if (adapted.has("thinking") && !adapted.has("enable_thinking")) {
+        return adapted
+    }
     val model = adapted.get("model")?.asString.orEmpty()
 
     when (providerId) {

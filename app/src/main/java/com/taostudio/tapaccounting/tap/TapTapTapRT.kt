@@ -35,24 +35,27 @@ class TapTapTapRT(
             return 0
         }
 
-        var tapCount = 0
-        val secondPassIterator = _tBackTapTimestamps.iterator()
-        val timeNow = SystemClock.elapsedRealtimeNanos()
-        while (secondPassIterator.hasNext()) {
-            val pastTimestamp = secondPassIterator.next()
-            if (_tBackTapTimestamps.last() - pastTimestamp <= mMinTimeGapNs) {
-                continue
+        // P2-2: 按相邻间隔计数，避免把非连续击打叠成三击
+        var tapCount = 1
+        val timestamps = _tBackTapTimestamps.toList()
+        for (i in 1 until timestamps.size) {
+            val gap = timestamps[i] - timestamps[i - 1]
+            if (gap > mMinTimeGapNs && gap <= mMaxTimeGapTripleNs) {
+                tapCount++
+            } else {
+                tapCount = 1
             }
-            tapCount++
         }
 
-        if (tapCount >= 3 || timeNow.minus(_tBackTapTimestamps.first()) > mMaxTimeGapTripleNs) {
+        val timeNow = SystemClock.elapsedRealtimeNanos()
+        if (tapCount >= 3) {
             _tBackTapTimestamps.clear()
-            if (tapCount == 1) {
-                return 2
-            } else if (tapCount >= 2) {
-                return 3
-            }
+            return 3
+        }
+        if (timeNow.minus(_tBackTapTimestamps.first()) > mMaxTimeGapTripleNs) {
+            _tBackTapTimestamps.clear()
+            // P2-2: 超时且仅 1 击，不得当作双击
+            return if (tapCount >= 2) 2 else 0
         }
 
         return 1

@@ -119,9 +119,8 @@ class CreditCardCycleService {
      * 获取还款日。
      */
     fun getDueDay(asset: Asset): Int {
-        return if (asset.dueDay > 0) asset.dueDay
-        else if (asset.billingDay > 0) asset.billingDay
-        else 0
+        // P2-8: dueDay==0 表示未设置还款日，勿回落 billingDay（语义不同）
+        return if (asset.dueDay > 0) asset.dueDay else 0
     }
 
     /**

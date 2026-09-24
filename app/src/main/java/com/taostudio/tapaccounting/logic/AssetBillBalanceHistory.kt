@@ -15,7 +15,7 @@ object AssetBillBalanceHistory {
         assetCurrency: String,
         currentBalance: Double
     ): Map<Long, Double> {
-        var running = BillAssetImpactService.roundMoney(currentBalance)
+        var running = BillAssetImpactService.roundMoneyForCurrency(currentBalance, assetCurrency)
         val sorted = bills.sortedWith(compareByDescending<Bill> { it.time }.thenByDescending { it.id })
         val result = LinkedHashMap<Long, Double>(sorted.size)
         for (bill in sorted) {
@@ -23,7 +23,7 @@ object AssetBillBalanceHistory {
             if (delta == 0.0) continue
             if (bill.id <= 0L) continue
             result[bill.id] = running
-            running = BillAssetImpactService.roundMoney(running - delta)
+            running = BillAssetImpactService.roundMoneyForCurrency(running - delta, assetCurrency)
         }
         return result
     }
@@ -44,25 +44,25 @@ object AssetBillBalanceHistory {
 
             bill.subType == Bill.SUBTYPE_REFUND -> {
                 if (!matchesSource(bill, assetId, assetName)) return 0.0
-                return convert(bill.amount, bill.currency, assetCurrency)
+                return convert(bill.amount, bill, assetCurrency)
             }
 
             bill.type == Bill.TYPE_EXPENSE -> {
                 if (!matchesSource(bill, assetId, assetName)) return 0.0
-                return -convert(amountAtTransactionTime(bill), bill.currency, assetCurrency)
+                return -convert(amountAtTransactionTime(bill), bill, assetCurrency)
             }
 
             bill.type == Bill.TYPE_INCOME -> {
                 if (!matchesSource(bill, assetId, assetName)) return 0.0
-                return convert(bill.amount, bill.currency, assetCurrency)
+                return convert(bill.amount, bill, assetCurrency)
             }
 
             bill.type == Bill.TYPE_TRANSFER -> {
                 var delta = 0.0
                 if (matchesSource(bill, assetId, assetName)) {
-                    val principal = convert(bill.amount, bill.currency, assetCurrency)
+                    val principal = convert(bill.amount, bill, assetCurrency)
                     val fee = if (bill.fee > 0.0) {
-                        convert(bill.fee, bill.currency, assetCurrency)
+                        convert(bill.fee, bill, assetCurrency)
                     } else {
                         0.0
                     }
@@ -94,8 +94,17 @@ object AssetBillBalanceHistory {
         }
     }
 
-    private fun convert(amount: Double, fromCurrency: String, toCurrency: String): Double {
-        return BillAssetImpactService.convertAmountBetweenCurrencies(amount, fromCurrency, toCurrency)
+    private fun convert(amount: Double, bill: Bill, toCurrency: String): Double {
+        if (bill.currency.equals(toCurrency, ignoreCase = true)) return amount
+        // P1-3: 支出/收入/退款优先记账时 exchangeRate（bill.currency→CNY），避免历史时间线随实时汇率漂移
+        if (
+            bill.type != Bill.TYPE_TRANSFER &&
+            bill.exchangeRate > 0.0 &&
+            toCurrency.equals("CNY", ignoreCase = true)
+        ) {
+            return BillAssetImpactService.roundMoneyForCurrency(amount * bill.exchangeRate, toCurrency)
+        }
+        return BillAssetImpactService.convertAmountBetweenCurrencies(amount, bill.currency, toCurrency)
     }
 
     fun matchesSource(bill: Bill, assetId: Long, assetName: String): Boolean {

@@ -121,7 +121,12 @@ class OverlayService : Service() {
             }
             try {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                    registerReceiver(screenReceiver, filter, Context.RECEIVER_EXPORTED)
+                    // P2-11: 优先 NOT_EXPORTED；旧 API 无 flag 时回退
+                    try {
+                        registerReceiver(screenReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+                    } catch (_: Throwable) {
+                        registerReceiver(screenReceiver, filter)
+                    }
                 } else {
                     registerReceiver(screenReceiver, filter)
                 }
@@ -169,7 +174,7 @@ class OverlayService : Service() {
 
         // ── Watchdog ──────────────────────────────────────────
         fun startWatchdog() {
-            if (isWatchdogCoolingDown(System.currentTimeMillis())) return
+            if (isWatchdogCoolingDown(SystemClock.elapsedRealtime())) return
             if (watchdogJob?.isActive == true) return
             watchdogJob = serviceScope.launch {
                 Logger.d(this@OverlayService, "OverlayService", "Watchdog started (interval=${WATCHDOG_INTERVAL_MS}ms)")
@@ -233,7 +238,7 @@ class OverlayService : Service() {
                 return
             }
 
-            val now = System.currentTimeMillis()
+            val now = SystemClock.elapsedRealtime()
             if (isWatchdogCoolingDown(now)) {
                 stopWatchdog()
                 return

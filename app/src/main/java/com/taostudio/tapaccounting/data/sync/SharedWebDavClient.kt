@@ -27,7 +27,13 @@ class SharedWebDavClient {
     private val json = "application/json; charset=utf-8".toMediaType()
     private val gzip = "application/gzip".toMediaType()
     private val xml = "text/xml; charset=utf-8".toMediaType()
-    private val client = OkHttpClient.Builder().connectTimeout(20, TimeUnit.SECONDS).readTimeout(60, TimeUnit.SECONDS).build()
+    private val client = OkHttpClient.Builder()
+        .connectTimeout(20, TimeUnit.SECONDS)
+        .readTimeout(60, TimeUnit.SECONDS)
+        // P1-14: 禁止重定向，避免凭据被带到其他主机（对齐备份侧 WebDavClient）
+        .followRedirects(false)
+        .followSslRedirects(false)
+        .build()
 
     data class Config(val baseUrl: String, val username: String, val password: String)
     data class TextResource(val content: String, val etag: String?)
@@ -99,7 +105,9 @@ class SharedWebDavClient {
                 when {
                     child.endsWith(".json", true) || child.endsWith(".json.gz", true) -> {
                         val relativeToRoot = child.substringAfter(path.trim('/')).trimStart('/')
-                        if (result.size < 10_000) result += relativeToRoot
+                        // P1-13: 禁止静默截断；超限时显式失败，避免丢同步操作
+                        if (result.size >= 50_000) error("Shared operations list exceeded safety cap")
+                        result += relativeToRoot
                     }
                     depth < 4 -> pending.add(child to depth + 1)
                 }

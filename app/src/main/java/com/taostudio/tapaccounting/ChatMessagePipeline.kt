@@ -970,16 +970,13 @@ class ChatMessagePipeline(
         parseFailureHint: String = "我这次没能正确解析，你可以说得更具体一点，我继续帮你记账。"
     ) {
         if (result == null) {
-            if (forceTextReply) {
-                finalizeAi(
-                    loadingKey,
-                    parseFailureHint,
-                    requestContext.bookName,
-                    requestContext.conversationId
-                )
-            } else {
-                removeLoadingMessage(loadingKey)
-            }
+            // P1-26: forceTextReply=false 时也要给用户反馈，不能静默移除加载气泡
+            finalizeAi(
+                loadingKey,
+                parseFailureHint,
+                requestContext.bookName,
+                requestContext.conversationId
+            )
             return
         }
         if (result.optBoolean("no_bill", false)) {

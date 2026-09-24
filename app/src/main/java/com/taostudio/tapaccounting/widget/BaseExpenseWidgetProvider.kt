@@ -33,7 +33,8 @@ abstract class BaseExpenseWidgetProvider(private val size: WidgetSize) : AppWidg
 
     private fun refreshWidget(context: Context, appWidgetManager: AppWidgetManager, appWidgetId: Int) {
         val pendingResult = goAsync()
-        CoroutineScope(Dispatchers.IO).launch {
+        // P2-16: 刷新失败不能让协程异常裸奔
+        CoroutineScope(Dispatchers.IO + kotlinx.coroutines.CoroutineExceptionHandler { _, _ -> }).launch {
             try {
                 val config = WidgetConfigStore.load(context, appWidgetId) ?: WidgetConfig.default(context)
                 val snapshot = ExpenseWidgetRenderer.buildSnapshot(context, config, size)

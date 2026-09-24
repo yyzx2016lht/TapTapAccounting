@@ -315,14 +315,16 @@ internal class HomeChartController(
             override fun getFormattedValue(value: Float): String {
                 if (value == 0f) return ""
                 if (value >= 1000) {
+                    // P2-4: 不能用 replace("0K","K")，会把 100K 削成 10K
                     val k = value / 1000f
-                    val s = String.format(Locale.getDefault(), "%.2fK", k)
-                    return if (s.endsWith("0K")) s.replace(".00K", "K").replace("0K", "K") else s
+                    return if (k == kotlin.math.floor(k)) {
+                        "${k.toLong()}K"
+                    } else {
+                        trimTrailingZero(String.format(Locale.US, "%.2fK", k))
+                    }
                 }
-                val s = String.format(Locale.getDefault(), "%.2f", value)
-                return if (s.endsWith(".00")) s.replace(".00", "")
-                else if (s.endsWith("0")) s.substring(0, s.length - 1)
-                else s
+                val s = String.format(Locale.US, "%.2f", value)
+                return trimTrailingZero(s)
             }
         }
         // 密集柱（最近15日）专用金额格式：标签最多 4 个字符（如 "85"、"1.2K"、"99K"），

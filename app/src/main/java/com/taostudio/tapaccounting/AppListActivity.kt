@@ -46,7 +46,9 @@ class AppListActivity : AppCompatActivity() {
         pbLoading.visibility = View.VISIBLE
         listView.visibility = View.GONE
 
-        MainScope().launch {
+        // P1-29: 可取消的 UI 作用域
+        val uiScope = kotlinx.coroutines.MainScope()
+        uiScope.launch {
             val allApps = withContext(Dispatchers.IO) {
                 pm.getInstalledApplications(PackageManager.GET_META_DATA).filter { app ->
                     val isSystemApp = (app.flags and ApplicationInfo.FLAG_SYSTEM) != 0

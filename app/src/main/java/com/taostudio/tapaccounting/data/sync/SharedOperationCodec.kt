@@ -30,7 +30,8 @@ object SharedOperationCodec {
         if (!amount.isFinite() || amount < 0) return@runCatching false
         when (op.entityType) {
             "bill" -> StrictJsonParser.parseInt(payload.get("type"), "bill.type") in setOf(0, 1) &&
-                StrictJsonParser.parseInt(payload.get("subType"), "bill.subType") in setOf(0, 2) &&
+                // P1-12: 接受全部合法 subType（0..5），避免丢弃还款/平账/理财估算等
+                (StrictJsonParser.parseInt(payload.get("subType"), "bill.subType") ?: -1) in 0..5 &&
                 (StrictJsonParser.parseLong(payload.get("time"), "bill.time") ?: -1) >= 0
             "budget" -> Regex("^\\d{4}-(0[1-9]|1[0-2])$").matches(payload.get("yearMonth")?.asString.orEmpty()) &&
                 (payload.get("alertThreshold")?.asDouble ?: -1.0) in 0.0..1.0

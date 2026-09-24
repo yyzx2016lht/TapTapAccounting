@@ -36,8 +36,9 @@ class AssetRepository(
     }
 
     suspend fun deleteAssetWithCleanup(asset: Asset) {
-        val dao = billDao ?: return assetDao.deleteAsset(asset)
-        val db = appDatabase
+        // P2-19: 缺 billDao/appDatabase 时禁止静默跳过清理
+        val dao = requireNotNull(billDao) { "AssetRepository requires billDao" }
+        val db = requireNotNull(appDatabase) { "AssetRepository requires appDatabase" }
         val deletedNameLabel = "${asset.name}（已删除）"
 
         if (db != null) {

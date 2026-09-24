@@ -23,6 +23,9 @@ import android.view.ViewGroup
 import android.widget.*
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import android.os.PowerManager
 import android.os.SystemClock
@@ -42,6 +45,8 @@ import com.taostudio.tapaccounting.ui.dialog.OverlayDialogs
 class ProfileFragment : Fragment(R.layout.fragment_profile) {
 
     private var rootRef: View? = null
+    // P1-29: 视图级协程作用域，onDestroyView 时取消
+    private val viewScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var suppressHomeTrendCardSwitchCallback = false
     private data class ToggleTracker(var count: Int = 0, var firstToggleAtMs: Long = 0L)
     private val toggleTimers = mutableMapOf<String, ToggleTracker>()
@@ -121,6 +126,8 @@ class ProfileFragment : Fragment(R.layout.fragment_profile) {
     }
 
     override fun onDestroyView() {
+        // P1-29: 取消本视图协程
+        viewScope.cancel()
         rootRef = null
         super.onDestroyView()
     }
@@ -184,7 +191,7 @@ class ProfileFragment : Fragment(R.layout.fragment_profile) {
         groupSyncRemoteConfig = view.findViewById(R.id.group_sync_remote_config)
         refreshSyncRemoteConfigVisibility()
         btnSyncRemoteConfig?.setOnClickListener {
-            CoroutineScope(Dispatchers.IO).launch {
+            viewScope.launch {
                 val ok = RemoteConfigManager.syncIfConfigured(requireContext())
                 withContext(Dispatchers.Main) {
                     Utils.toast(requireContext(), if (ok) getString(R.string.remote_config_synced) else getString(R.string.remote_config_failed))
@@ -523,7 +530,7 @@ class ProfileFragment : Fragment(R.layout.fragment_profile) {
                 Utils.toast(ctx, getString(R.string.please_input_api_key))
                 return@setNeutralButton
             }
-            CoroutineScope(Dispatchers.IO).launch {
+            viewScope.launch {
                 try {
                     val models = AIService.fetchModelsWithDetails(url, key)
                     withContext(Dispatchers.Main) {

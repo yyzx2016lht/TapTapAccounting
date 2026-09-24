@@ -267,7 +267,7 @@ class MainActivity : AppCompatActivity() {
                 tx.add(R.id.fragment_container, f, "tab_$i")
                 if (i != currentTabIndex) tx.hide(f)
             }
-            tx.commitNow()
+            tx.commitNowAllowingStateLoss()
             bottomNavigationView?.selectedItemId = tabIds[currentTabIndex]
             updateFabVisibility()
 
@@ -349,7 +349,7 @@ class MainActivity : AppCompatActivity() {
                         hideAssetFabForTransition(frag)
                         supportFragmentManager.beginTransaction()
                             .show(frag)
-                            .commitNow()
+                            .commitNowAllowingStateLoss()
                         // 目标页初始贴在当前页对侧
                         frag.view?.apply {
                             translationX = if (dir > 0) w else -w
@@ -908,7 +908,7 @@ class MainActivity : AppCompatActivity() {
             try {
                 supportFragmentManager.beginTransaction()
                     .hide(peekFragment!!)
-                    .commitNow()
+                    .commitNowAllowingStateLoss()
             } catch (_: Exception) {}
             peekFragment = null; peekIndex = -1; swipeDir = 0
         }
@@ -918,7 +918,7 @@ class MainActivity : AppCompatActivity() {
         val newFrag = tabFragments[newIndex] ?: makeFragment(newIndex).also { tabFragments[newIndex] = it }
         val tx = supportFragmentManager.beginTransaction()
         tx.show(newFrag)
-        tx.commitNow()
+        tx.commitNowAllowingStateLoss()
 
         hideAssetFabForTransition(curFrag)
         hideAssetFabForTransition(newFrag)

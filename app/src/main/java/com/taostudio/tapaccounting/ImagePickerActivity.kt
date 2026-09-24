@@ -20,7 +20,11 @@ class ImagePickerActivity : Activity() {
     companion object {
         private const val REQUEST_PICK_IMAGE = 1001
 
-        /** 多图选择结果回调（由 OverlayManager 注册） */
+        /** P2-25: 宿主销毁时清空静态回调，避免悬挂 OverlayManager */
+        fun clearCallbacks() {
+            onImagesPicked = null
+            onPickCancelled = null
+        }
         var onImagesPicked: ((List<Uri>) -> Unit)? = null
         /** 单图兼容回调 */
         var onImagePicked: ((Uri) -> Unit)? = null

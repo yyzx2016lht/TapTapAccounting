@@ -129,6 +129,9 @@ class ChatAudioRecordController(
                 updateWavHeader(file, totalAudioLen)
             }
         } catch (_: IOException) {
+            // P1-27: 录音线程异常面收严，避免 stop/release 竞态崩溃
+        } catch (_: IllegalStateException) {
+        } catch (_: RuntimeException) {
         }
     }
 

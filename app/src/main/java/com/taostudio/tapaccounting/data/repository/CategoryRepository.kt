@@ -1,6 +1,7 @@
 package com.taostudio.tapaccounting.data.repository
 
 import kotlinx.coroutines.flow.Flow
+import androidx.room.withTransaction
 import com.taostudio.tapaccounting.data.local.AppDatabase
 import com.taostudio.tapaccounting.CategoryNode
 import com.taostudio.tapaccounting.data.local.dao.BillDao
@@ -45,25 +46,23 @@ class CategoryRepository(
         categoryDao.getCategoriesListByType(type)
 
     /** 鎶婃墎骞?List<Category> 閲嶅缓涓虹埗瀛愬祵濂楃殑 List<CategoryNode>锛堝吋瀹规棫 UI锛?*/
-    fun buildCategoryTree(flatList: List<Category>): List<CategoryNode> {
-        val roots = flatList.filter { it.parentId == null }
+        fun buildCategoryTree(flatList: List<Category>): List<CategoryNode> {
         val childrenByParent = flatList.filter { it.parentId != null }.groupBy { it.parentId }
-        return roots.map { root ->
-            val node = CategoryNode(root.name, root.iconId)
-            node.id = root.id
-            childrenByParent[root.id]?.forEach { child ->
-                // 瀛愬垎绫?iconId 涓虹┖鏃讹紝缁ф壙鐖跺垎绫荤殑鍥炬爣锛堥伩鍏嶅瓙绫绘樉绀虹孩鑹插崰浣嶅潡锛?
-                val childIcon = if (child.iconId.isNotEmpty()) child.iconId else root.iconId
-                val childNode = CategoryNode(child.name, childIcon)
-                childNode.id = child.id
-                node.subs.add(childNode)
+
+        fun buildNode(cat: Category, parentIcon: String): CategoryNode {
+            val icon = if (cat.iconId.isNotEmpty()) cat.iconId else parentIcon
+            val node = CategoryNode(cat.name, icon)
+            node.id = cat.id
+            childrenByParent[cat.id]?.forEach { child ->
+                node.subs.add(buildNode(child, icon))
             }
-            node
+            return node
         }
+
+        return flatList.filter { it.parentId == null }.map { buildNode(it, it.iconId) }
     }
 
-    /** 鎸夌被鍨嬪悓姝ヨ鍙栧苟杩斿洖 CategoryNode 鏍戯紙闇€鍗忕▼ IO 涓婁笅鏂囷級 */
-    suspend fun getCategoryTree(type: Int): List<CategoryNode> =
+    /** Get category tree by type (IO context). */suspend fun getCategoryTree(type: Int): List<CategoryNode> =
         buildCategoryTree(categoryDao.getCategoriesListByType(type))
 
     suspend fun findCategoryByDisplayName(type: Int, displayName: String): Category? {
@@ -191,64 +190,66 @@ class CategoryRepository(
      * 鍒犻櫎鍙跺瓙鍒嗙被锛屽苟灏嗚鍒嗙被涓嬭处鍗曡縼绉诲埌 targetCategoryId銆?
      * 鑻?targetCategoryId 涓?null锛屽垯灏嗚处鍗曠殑 categoryId 缃?null銆?
      */
-    suspend fun deleteCategoryAndMigrateBills(categoryId: Long, targetCategoryId: Long?) {
-        val dao = billDao
-        val self = categoryDao.getAllCategoriesList().find { it.id == categoryId }
-        val children = categoryDao.getChildrenByParentId(categoryId)
-        val allCats = listOfNotNull(self) + children
+    suspend fun deleteCategoryAndMigrateBills(categoryId: Long, targetCategoryId: Long?, db: AppDatabase? = null) {
+        // P1-11: 迁移 + 删分类必须同一事务
+        val block: suspend () -> Unit = {
+            val dao = billDao
+            val self = categoryDao.getAllCategoriesList().find { it.id == categoryId }
+            val children = categoryDao.getChildrenByParentId(categoryId)
+            val allCats = listOfNotNull(self) + children
 
-        if (dao != null) {
-            for (cat in allCats) {
-                if (targetCategoryId != null) {
-                    // 鎸?id 杩佺Щ
-                    dao.migrateCategoryId(cat.id, targetCategoryId)
-                    // 鎸?categoryName 鏂囨湰杩佺Щ锛堝吋瀹规棫璐﹀崟锛?
-                    dao.migrateCategoryByName(cat.name, targetCategoryId)
-                } else {
-                    dao.clearCategoryId(cat.id)
-                    dao.clearCategoryByName(cat.name)
+            if (dao != null) {
+                for (cat in allCats) {
+                    if (targetCategoryId != null) {
+                        dao.migrateCategoryId(cat.id, targetCategoryId)
+                        dao.migrateCategoryByName(cat.name, targetCategoryId)
+                    } else {
+                        dao.clearCategoryId(cat.id)
+                        dao.clearCategoryByName(cat.name)
+                    }
                 }
             }
+            children.forEach { categoryDao.deleteById(it.id) }
+            categoryDao.deleteById(categoryId)
         }
-        // 鍏堝垹瀛愬垎绫伙紝鍐嶅垹鑷韩
-        children.forEach { categoryDao.deleteById(it.id) }
-        categoryDao.deleteById(categoryId)
+        if (db != null) db.withTransaction { block() } else block()
     }
 
     /**
      * 鍒犻櫎鍙跺瓙鍒嗙被锛屽苟杩炲悓璇ュ垎绫讳笅鐨勮处鍗曚竴璧峰垹闄ゃ€?
      */
     suspend fun deleteCategoryAndBills(categoryId: Long, db: AppDatabase? = null) {
-        val dao = billDao
-        val self = categoryDao.getAllCategoriesList().find { it.id == categoryId }
-        val children = categoryDao.getChildrenByParentId(categoryId)
-        val allCats = listOfNotNull(self) + children
+        // P1-11: delete bills + category in one transaction
+        val block: suspend () -> Unit = {
+            val dao = billDao
+            val self = categoryDao.getAllCategoriesList().find { it.id == categoryId }
+            val children = categoryDao.getChildrenByParentId(categoryId)
+            val allCats = listOfNotNull(self) + children
 
-        if (dao != null) {
-            for (cat in allCats) {
-                // 鎸?id 鏌ュ嚭骞跺垹闄?
-                val billsById = dao.getBillsByCategoryIdList(cat.id)
-                // 鍚屾椂鍒犻櫎鎸?categoryName 鍏宠仈浣?categoryId 涓?null 鐨勬棫璐﹀崟
-                // 锛堥€氳繃鍏堟煡鍑哄啀鍒犻櫎锛岄伩鍏嶆棤 @Query DELETE by name 鏂规硶锛?
-                val billsByName = dao.getBillsByCategoryNameList(cat.name)
-                val billsToDelete = (billsById + billsByName)
-                    .distinctBy { it.id }
-                    .filter { it.id > 0L }
-                if (billsToDelete.isNotEmpty()) {
-                    if (db != null) {
-                        BillDeleteHelper.deleteBillsAndRevertBalance(db, billsToDelete)
-                    } else {
-                        dao.delete(billsToDelete)
+            if (dao != null) {
+                for (cat in allCats) {
+                    val billsById = dao.getBillsByCategoryIdList(cat.id)
+                    val billsByName = dao.getBillsByCategoryNameList(cat.name)
+                    val billsToDelete = (billsById + billsByName)
+                        .distinctBy { it.id }
+                        .filter { it.id > 0L }
+                    if (billsToDelete.isNotEmpty()) {
+                        if (db != null) {
+                            BillDeleteHelper.deleteBillsAndRevertBalance(db, billsToDelete)
+                        } else {
+                            dao.delete(billsToDelete)
+                        }
                     }
                 }
             }
+            children.forEach { categoryDao.deleteById(it.id) }
+            categoryDao.deleteById(categoryId)
         }
-        children.forEach { categoryDao.deleteById(it.id) }
-        categoryDao.deleteById(categoryId)
+        if (db != null) db.withTransaction { block() } else block()
     }
 
     /**
-     * 灏嗕簩绾у垎绫绘彁鍗囦负涓€绾у垎绫伙紙parentId 缃?null锛夈€?
+     * Promote a secondary category to a top-level category (parentId = null).
      */
     suspend fun promoteToParent(categoryId: Long) {
         val cat = categoryDao.getAllCategoriesList().find { it.id == categoryId } ?: return

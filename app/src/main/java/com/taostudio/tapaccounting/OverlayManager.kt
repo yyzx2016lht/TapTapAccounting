@@ -913,6 +913,8 @@ class OverlayManager(private val ctx: Context) {
 
         isRemovingOverlay = true
         Logger.d(ctx, "OverlayManager", "Removing Overlay with animation")
+        // P2-25: 清理静态回调，避免悬挂
+        runCatching { ImagePickerActivity.clearCallbacks() }
 
         // 立即锁定表单，阻止用户继续交互
         formController = null

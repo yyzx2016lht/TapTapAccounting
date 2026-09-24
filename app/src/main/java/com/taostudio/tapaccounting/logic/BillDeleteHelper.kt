@@ -119,7 +119,12 @@ object BillDeleteHelper {
             if (backfillLinks) {
                 billDao.backfillAssetLinksByName()
             }
-            val latestBill = if (bill.id > 0L) billDao.getBillById(bill.id) ?: bill else bill
+            // 已被级联删除的账单直接跳过，避免批量删除时二次回滚
+            val latestBill = if (bill.id > 0L) {
+                billDao.getBillById(bill.id) ?: return@withTransaction
+            } else {
+                bill
+            }
             SharedMutationHooks.requireOwner(db, latestBill)
             SharedMutationHooks.enqueueDelete(db, latestBill)
 
@@ -171,13 +176,10 @@ object BillDeleteHelper {
                 }
 
                 latestBill.type == Bill.TYPE_EXPENSE -> {
+                    // P1-2: 删除支出时级联删除全部关联退款，再按全额 original 回滚，避免部分退款残留导致账实不符
                     val refunds = billDao.getRefundBillsBySourceId(latestBill.id)
-                    val refundsToDelete = when (scopeBillIds) {
-                        null -> refunds
-                        else -> refunds.filter { refund -> refund.id > 0L && scopeBillIds.contains(refund.id) }
-                    }
-                    if (refundsToDelete.isNotEmpty()) {
-                        refundsToDelete.forEach { refund ->
+                    if (refunds.isNotEmpty()) {
+                        refunds.forEach { refund ->
                             SharedMutationHooks.requireOwner(db, refund)
                             SharedMutationHooks.enqueueDelete(db, refund)
                             deletedBillDao.insert(billToDeletedBill(refund))
@@ -186,7 +188,7 @@ object BillDeleteHelper {
                                 logFull("BILL_GUARD", "（警告）delete_refund_linked 删除关联退款时资产未变化，billId=${refund.id}, asset=${refund.accountName}, toAsset=${refund.toAccountName}")
                             }
                         }
-                        billDao.delete(refundsToDelete)
+                        billDao.delete(refunds)
                     }
                     val impacted = BillAssetImpactService.revertBillBalanceImpact(db, latestBill)
                     if (impacted == 0) {

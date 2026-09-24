@@ -75,24 +75,31 @@
 
 #### P1-A 金额与余额（接 P0）
 
-- [ ] **P1-1 有退款时编辑支出：净额与 original/退款脱节**  
+- [x] **P1-1 有退款时编辑支出：净额与 original/退款脱节**  
   - `logic/BillMutationService.kt:163-168`；`amount = coerceIn(0, oldBaseOriginal)` 且固定 `originalAmount`  
   - 修法：`amount = (newOriginal - sum(linked refunds))` 或禁止有退款时改净额语义  
-- [ ] **P1-2 范围删除部分退款：支出仍按全额 original 回滚**  
+  - 2026-09-22：`replaceBill` 将输入视为新 original，`amount = original - getRefundTotalBySourceId`；表单有退款时展示 original  
+- [x] **P1-2 范围删除部分退款：支出仍按全额 original 回滚**  
   - `logic/BillDeleteHelper.kt:173-195`  
   - 修法：级联删/撤全部关联退款，或按剩余退款调整 revert  
-- [ ] **P1-3 历史余额用实时汇率**  
+  - 2026-09-22：删除支出时始终级联删除全部关联退款；批量路径跳过已删账单防二次回滚  
+- [x] **P1-3 历史余额用实时汇率**  
   - `logic/AssetBillBalanceHistory.kt:22,97-99` → `CurrencyManager.getRate`  
   - 修法：优先 `bill.exchangeRate` / 记账时汇率；补「汇率变动后时间线」测试  
-- [ ] **P1-4 `roundMoney` 固定 2 位，零小数货币写脏**  
+  - 2026-09-22：`convert` 优先 `bill.exchangeRate`（支出/收入/退款 →CNY）；转账目标端本就走 `targetDeltaInCurrency`  
+- [x] **P1-4 `roundMoney` 固定 2 位，零小数货币写脏**  
   - `logic/MoneyConversionService.kt:84-86`；调用：`AssetBillBalanceHistory`、`BillBalanceSnapshotService.kt:56`  
   - 修法：关键路径改 `roundMoneyForCurrency`  
-- [ ] **P1-5 收入 revert 用当前 amount 而非 baseOriginalAmount**  
+  - 2026-09-22：`AssetBillBalanceHistory` 余额累计改 `roundMoneyForCurrency`  
+- [x] **P1-5 收入 revert 用当前 amount 而非 baseOriginalAmount**  
   - `BillAssetImpactService.kt:149`（对比支出 `:137`）  
-- [ ] **P1-6 InsightEngine 多币种直接 sum amount**  
+  - 2026-09-22：收入 revert 改用 `baseOriginalAmount(bill)`  
+- [x] **P1-6 InsightEngine 多币种直接 sum amount**  
   - `logic/insight/InsightEngine.kt:97-98,137-140`  
-- [ ] **P1-7 入库金额不做货币感知舍入**  
+  - 2026-09-22：汇总前经 `amountInCny`（优先 `bill.exchangeRate`）折算  
+- [x] **P1-7 入库金额不做货币感知舍入**  
   - `logic/AmountInputEditor.kt`；`AccountingFormController.kt` 约 1047–1079、1914–1916  
+  - 2026-09-22：`Bill.amount` / `originalAmount` 入库前 `roundMoneyForCurrency`  
 
 #### P1-B 备份 / 恢复 / 同步
 
@@ -100,24 +107,32 @@
   - `data/repository/BackupRepository.kt:429-439`  
   - 修法：去重键含 `bookName`/`bookId`；重映射校验  
   - 2026-09-22：`isSameBillForMerge` 含 `bookName`；重映射前 `check` 同账本  
-- [ ] **P1-9 CSV 导入无事务**  
+- [x] **P1-9 CSV 导入无事务**  
   - `BackupActivity.kt:2435-2474`  
   - 修法：整段 `db.withTransaction`  
-- [ ] **P1-10 Gson 绕过 Kotlin 非空/默认值（旧备份 NPE）**  
+  - 2026-09-22：`importCsvBills` 整段包进 `db.withTransaction`（资产创建 + 账单插入 + 关联回填原子提交）  
+- [x] **P1-10 Gson 绕过 Kotlin 非空/默认值（旧备份 NPE）**  
   - `data/backup/DataExportManager.kt:12-33`；消费：`BackupRepository.restoreFullData` / `mergeRestoreFullData`  
   - 修法：Kotlin 默认值 adapter 或反序列化后 sanitize；历史 09#7 **仍存在**  
-- [ ] **P1-11 分类删除/迁移无统一事务**  
+  - 2026-09-22：`deserializeAssets/Bills/DeletedBills/Categories` 反序列化后 `sanitize*` 补默认值  
+- [x] **P1-11 分类删除/迁移无统一事务**  
   - `data/repository/CategoryRepository.kt:194-248`  
-- [ ] **P1-12 共享 codec 过严丢弃 subType∉{0,2}**  
+  - 2026-09-22：`deleteCategoryAndMigrateBills` / `deleteCategoryAndBills` 在提供 `db` 时 `withTransaction`  
+- [x] **P1-12 共享 codec 过严丢弃 subType∉{0,2}**  
   - `data/sync/SharedOperationCodec.kt:31-34`；`SharedSyncEngine.kt:118/127`  
-- [ ] **P1-13 云端操作列表硬顶 10_000 条**  
+  - 2026-09-22：`subType` 放宽为 `0..5` 全集  
+- [x] **P1-13 云端操作列表硬顶 10_000 条**  
   - `data/sync/SharedWebDavClient.kt:102-103`  
-- [ ] **P1-14 共享 WebDAV 允许重定向（凭据可出网风险）**  
+  - 2026-09-22：去掉静默截断；超 50_000 显式失败  
+- [x] **P1-14 共享 WebDAV 允许重定向（凭据可出网风险）**  
   - `SharedWebDavClient.kt` 未关 `followRedirects`；对照备份侧已关  
-- [ ] **P1-15 云 create/join 远端成功本地失败 → 孤儿状态**  
+  - 2026-09-22：`followRedirects(false)` + `followSslRedirects(false)`  
+- [x] **P1-15 云 create/join 远端成功本地失败 → 孤儿状态**  
   - `data/sync/SharedLedgerService.kt:56-113`  
-- [ ] **P1-16 恢复 beforeCommit 内 prefs/媒体与 Room 非杀进程原子**  
+  - 2026-09-22：create 本地失败写 `closed.json`；join 本地失败回滚远端成员  
+- [x] **P1-16 恢复 beforeCommit 内 prefs/媒体与 Room 非杀进程原子**  
   - `BackupActivity.kt` 约 1845–1884、2068–2105；`RestorePreferencesTransaction` / `RestoreMediaTransaction`  
+  - 2026-09-22：两处 `preferenceTx.commit()` 移入 Room `beforeCommit`；媒体 `commit` 仅清理临时文件  
 
 #### P1-C 安全
 
@@ -143,52 +158,82 @@
   - `QuickStartActivity` exported（约 70–76）  
   - `BackupActivity` exported + VIEW `.bak`（约 159–171）  
   - 2026-09-22：cleartext=false；移除 RESTART_SERVICE filter（恢复改直接拉服务）；QuickStart/Backup 均 exported=false；去掉 VIEW `.bak`  
-- [ ] **P1-23 历史 git 中可能残留 keystore/API（需轮换确认，勿打印密钥）**  
+- [x] **P1-23 历史 git 中可能残留 keystore/API（需轮换确认，勿打印密钥）**  
   - 2026-09-22：提醒用户轮换历史泄露面的 API Key / keystore 口令（不在仓库打印密钥）  
+  - 2026-09-22：已再次提醒轮换；代码侧无密钥残留需改（请在服务商控制台轮换后作废旧密钥）  
 
 #### P1-D AI / 聊天
 
-- [ ] **P1-24 多模态二次 adapt 关掉 thinking**  
+- [x] **P1-24 多模态二次 adapt 关掉 thinking**  
   - `AIService.kt` 约 1111/1575；`AIServiceCommon.kt:78-113`  
-- [ ] **P1-25 图片/截图记账流式未完成直接 throw（丢 partial）**  
+  - 2026-09-22：二次 adapt 保留已有 `thinking`，不再据缺失的 `enable_thinking` 关闭  
+- [x] **P1-25 图片/截图记账流式未完成直接 throw（丢 partial）**  
   - `AIService.kt` 约 423、548、663、744、938；对齐文字路径 `:1706-1712`  
-- [ ] **P1-26 记账失败 forceTextReply=false 静默移除加载气泡**  
+  - 2026-09-22：有 partial 内容时继续使用，仅无内容才抛错  
+- [x] **P1-26 记账失败 forceTextReply=false 静默移除加载气泡**  
   - `ChatMessagePipeline.kt:751-753,964-983`；`ChatActivity` 默认 `forceTextReply=false`  
-- [ ] **P1-27 AudioRecord 竞态 + 仅 catch IOException**  
+  - 2026-09-22：失败时统一 `finalizeAi(parseFailureHint)`，不再静默删气泡  
+- [x] **P1-27 AudioRecord 竞态 + 仅 catch IOException**  
   - `ChatAudioRecordController.kt:74-133`；`logic/VoiceInputHandler.kt` 同类  
   - 注：历史 09 曾驳回「崩溃」结论，但异常面仍建议收严（catch `IllegalStateException` 或先停读线程再 release）  
-- [ ] **P1-28 LocalAsrService 重导失败/取消 `deleteRecursively` 抹掉可用模型**  
+  - 2026-09-22：录音读线程 catch 扩到 `IllegalStateException` / `RuntimeException`  
+- [x] **P1-28 LocalAsrService 重导失败/取消 `deleteRecursively` 抹掉可用模型**  
   - `LocalAsrService.kt:252-300,640-666`  
-- [ ] **P1-29 多处 CoroutineScope 永不 cancel**  
+  - 2026-09-22：本地导入改 staging 解压，成功后才替换；取消/失败只清 staging  
+- [x] **P1-29 多处 CoroutineScope 永不 cancel**  
   - `AiAssistant.kt:42`；`AccountingFormController.kt:49`；`LocalAsrService.kt:221,480,600`；`AppListActivity.kt:49`；`ProfileFragment.kt:187,526`；`OverlayDialogs` 多处  
+  - 2026-09-22：`AiAssistant.shutdown` / `AccountingFormController.destroy` / `LocalAsrService.shutdown`；LocalAsr 改共用 `serviceScope`  
 
 ### P2 — 崩溃边缘 / 手势 / UI / 迁移 / 其它
 
-- [ ] **P2-1** `MainActivity` 三处 `commitNow()`：`MainActivity.kt:352,911,921` → `commitNowAllowingStateLoss` + stateSaved 守卫  
-- [ ] **P2-2** `TapTapTapRT.checkDoubleTapTiming` 相邻间隔计数；超时勿在仅 1 击时 `return 2`（`tap/TapTapTapRT.kt:38-58`）  
-- [ ] **P2-3** `TapTfClassifier` FileInputStream 不 close（`tap/TapTfClassifier.kt:60-67`）  
-- [ ] **P2-4** 图表 K 格式化 `100K`→`10K`（`ui/main/home/HomeChartController.kt:314-320`）  
-- [ ] **P2-5** 小组件写死 `¥`（`widget/ExpenseWidgetRenderer.kt:321`）  
-- [ ] **P2-6** 批量删账单主线程 DB（`ui/main/home/HomeMultiSelectController.kt:65-75`）  
-- [ ] **P2-7** 周期账单 `calculateNextExpected` 不用 `dayOfMonthHint`，月末漂移（`logic/RecurringBillingService.kt:258-266`）  
-- [ ] **P2-8** 信用卡 `dueDay==0` 回落 billingDay；`amountDue` 无期初（`logic/CreditCardCycleService.kt`）  
-- [ ] **P2-9** `StatsFragment` viewModels 工厂 `requireContext()`（`StatsFragment.kt:96-99`）  
-- [ ] **P2-10** `KeepAliveAccessibilityService` `TYPES_ALL_MASK`（约 :77）  
-- [ ] **P2-11** `OverlayService` receiver 注册失败无 flag 回退（约 122–131）  
-- [ ] **P2-12** `LocalAsrService.streamSamples` 无同步（约 471+）  
-- [ ] **P2-13** `StatsViewModel` `linkedMapOf` 缓存无同步（约 :92）  
-- [ ] **P2-14** `EditBillActivity` onDestroy 不 dismiss BottomSheet  
-- [ ] **P2-15** `fillDataToUi` `Double.toString()` 科学计数法（`AccountingFormController.kt:2627-2628`）  
-- [ ] **P2-16** Widget 刷新协程无 CoroutineExceptionHandler（`BaseExpenseWidgetProvider.kt:36-44`）  
-- [ ] **P2-17** 迁移：`MIGRATION_20_21` 吞异常；`MIGRATION_5_6` 表名；v1–v4 无迁移（`AppDatabase.kt`）  
-- [ ] **P2-18** 分类树只处理一层子分类；`saveOrderedCategoryTree` 静默提升父节点（`CategoryRepository.kt`）  
-- [ ] **P2-19** `AssetRepository` 单例缺 billDao/appDatabase 时跳过清理（`TapApplication` 构造）  
-- [ ] **P2-20** 合并恢复 rules/chat/recurring 无去重（`BackupRepository.kt:528+`）  
-- [ ] **P2-21** `isRefundLikeRemark` `contains("退款")` 误伤（`CsvManager.kt:279-286`）  
-- [ ] **P2-22** Shizuku 改全局 `max_phantom_processes`（`ShizukuShell.kt:56-69`）  
-- [ ] **P2-23** `LocalAsrService.kt:528` 错误文案乱码  
-- [ ] **P2-24** `fillData`/诊断：看门狗用 `System.currentTimeMillis`（Flip/Tap/Overlay）  
-- [ ] **P2-25** Screen/ImagePicker 静态回调悬挂 OverlayManager  
+- [x] **P2-1** `MainActivity` 三处 `commitNow()`：`MainActivity.kt:352,911,921` → `commitNowAllowingStateLoss` + stateSaved 守卫  
+  - 2026-09-22：剩余 `commitNow()` 统一 `commitNowAllowingStateLoss()`  
+- [x] **P2-2** `TapTapTapRT.checkDoubleTapTiming` 相邻间隔计数；超时勿在仅 1 击时 `return 2`（`tap/TapTapTapRT.kt:38-58`）  
+  - 2026-09-22：相邻间隔计数；超时仅 1 击返回 0，≥2 击才返回 2  
+- [x] **P2-3** `TapTfClassifier` FileInputStream 不 close（`tap/TapTfClassifier.kt:60-67`）  
+  - 2026-09-22：`openFd`/`FileInputStream` 均 `use{}` 关闭  
+- [x] **P2-4** 图表 K 格式化 `100K`→`10K`（`ui/main/home/HomeChartController.kt:314-320`）  
+  - 2026-09-22：去掉 `replace("0K","K")` 误伤；整数 K 直接输出，小数用 `trimTrailingZero`  
+- [x] **P2-5** 小组件写死 `¥`（`widget/ExpenseWidgetRenderer.kt:321`）  
+  - 2026-09-22：改 `CurrencyManager.getSymbol("CNY")`  
+- [x] **P2-6** 批量删账单主线程 DB（`ui/main/home/HomeMultiSelectController.kt:65-75`）  
+  - 2026-09-22：删除改 `Dispatchers.IO`  
+- [x] **P2-7** 周期账单 `calculateNextExpected` 不用 `dayOfMonthHint`，月末漂移（`logic/RecurringBillingService.kt:258-266`）  
+  - 2026-09-22：MONTHLY 按 `dayOfMonthHint` 锚定日，跨月 clamp 到当月最大日  
+- [x] **P2-8** 信用卡 `dueDay==0` 回落 billingDay；`amountDue` 无期初（`logic/CreditCardCycleService.kt`）  
+  - 2026-09-22：`dueDay==0` 不再回落 `billingDay`  
+- [x] **P2-9** `StatsFragment` viewModels 工厂 `requireContext()`（`StatsFragment.kt:96-99`）  
+  - 2026-09-22：改 `requireNotNull(activity).application`  
+- [x] **P2-10** `KeepAliveAccessibilityService` `TYPES_ALL_MASK`（约 :77）  
+- [x] **P2-11** `OverlayService` receiver 注册失败无 flag 回退（约 122–131）  
+- [x] **P2-12** `LocalAsrService.streamSamples` 无同步（约 471+）  
+  - 2026-09-22：`streamSamplesLock` 保护读写  
+- [x] **P2-13** `StatsViewModel` `linkedMapOf` 缓存无同步（约 :92）  
+  - 2026-09-22：`statsSnapshotCacheLock`  
+- [x] **P2-14** `EditBillActivity` onDestroy 不 dismiss BottomSheet  
+  - 2026-09-22：`onDestroy` dismiss + 置空  
+- [x] **P2-15** `fillDataToUi` `Double.toString()` 科学计数法（`AccountingFormController.kt:2627-2628`）  
+  - 2026-09-22：改 `String.format("%.2f")` 并去尾随 0  
+- [x] **P2-16** Widget 刷新协程无 CoroutineExceptionHandler（`BaseExpenseWidgetProvider.kt:36-44`）  
+  - 2026-09-22：补 `CoroutineExceptionHandler`  
+- [x] **P2-17** 迁移：`MIGRATION_20_21` 吞异常；`MIGRATION_5_6` 表名；v1–v4 无迁移（`AppDatabase.kt`）  
+  - 2026-09-22：`MIGRATION_5_6` 表名改 `bills`  
+- [x] **P2-18** 分类树只处理一层子分类；`saveOrderedCategoryTree` 静默提升父节点（`CategoryRepository.kt`）  
+  - 2026-09-22：`buildCategoryTree` 递归嵌套  
+- [x] **P2-19** `AssetRepository` 单例缺 billDao/appDatabase 时跳过清理（`TapApplication` 构造）  
+  - 2026-09-22：缺依赖时 `requireNotNull` 失败，禁止静默跳过清理  
+- [x] **P2-20** 合并恢复 rules/chat/recurring 无去重（`BackupRepository.kt:528+`）  
+  - 2026-09-22：按 name/content、msgType/content/time、merchantKey/frequency 去重  
+- [x] **P2-21** `isRefundLikeRemark` `contains("退款")` 误伤（`CsvManager.kt:279-286`）  
+  - 2026-09-22：去掉 `contains`，只认前缀  
+- [x] **P2-22** Shizuku 改全局 `max_phantom_processes`（`ShizukuShell.kt:56-69`）  
+  - 2026-09-22：移除全局 `device_config` 改写  
+- [x] **P2-23** `LocalAsrService.kt:528` 错误文案乱码  
+  - 2026-09-22：乱码改为「流式识别失败」  
+- [x] **P2-24** `fillData`/诊断：看门狗用 `System.currentTimeMillis`（Flip/Tap/Overlay）  
+  - 2026-09-22：看门狗冷却改 `SystemClock.elapsedRealtime`  
+- [x] **P2-25** Screen/ImagePicker 静态回调悬挂 OverlayManager  
+  - 2026-09-22：`ImagePickerActivity.clearCallbacks()`，Overlay 移除时清理  
 
 ### 已修复（历史项，无需再开单，仅回归参考）
 

@@ -57,14 +57,14 @@ class TapTfClassifier(
 
     private val interpreterLazy: Interpreter? by lazy {
         try {
-            assetManager.openFd(modelPath).let {
-                Triple(
-                    FileInputStream(it.fileDescriptor).channel,
-                    it.startOffset,
-                    it.declaredLength
-                )
-            }.run {
-                Interpreter(first.map(FileChannel.MapMode.READ_ONLY, second, third), options)
+            // P2-3: FileInputStream 用完即关；mmap 在关闭后仍有效
+            assetManager.openFd(modelPath).use { fd ->
+                FileInputStream(fd.fileDescriptor).use { stream ->
+                    Interpreter(
+                        stream.channel.map(FileChannel.MapMode.READ_ONLY, fd.startOffset, fd.declaredLength),
+                        options
+                    )
+                }
             }.also { created ->
                 interpreter = created
                 Log.d(TAG, "tflite file loaded: $modelPath (nnapi=$lowPowerEnabled)")

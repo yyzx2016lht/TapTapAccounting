@@ -292,8 +292,14 @@ class BackupRepository(private val db: AppDatabase) {
                 if (existingIds.isNotEmpty()) {
                     db.chatMessageDao().deleteByIds(existingIds)
                 }
+                val existingMsgs = db.chatMessageDao().getAll()
                 chatMessages.forEach { msg ->
-                    db.chatMessageDao().insert(remapChatBillReferences(msg, billIdMap).copy(id = 0))
+                    val mapped = remapChatBillReferences(msg, billIdMap).copy(id = 0)
+                    val isDup = existingMsgs.any { e ->
+                        e.msgType == mapped.msgType && e.content == mapped.content && e.time == mapped.time
+                    }
+                    if (isDup) return@forEach
+                    db.chatMessageDao().insert(mapped)
                 }
             }
 
@@ -541,16 +547,27 @@ class BackupRepository(private val db: AppDatabase) {
 
             // ── 规则：追加 ──
             if (rules != null) {
+                // P2-20: merge restore dedup
+                val existingRules = db.aiRuleDao().getAllRulesList()
                 rules.forEach {
-                    db.aiRuleDao().insertRule(it.copy(id = 0))
-                    insertedRules++
+                    val isDup = existingRules.any { e -> e.name == it.name && e.content == it.content }
+                    if (!isDup) {
+                        db.aiRuleDao().insertRule(it.copy(id = 0))
+                        insertedRules++
+                    }
                 }
             }
 
             // ── 聊天记录：追加 ──
             if (chatMessages != null) {
+                val existingMsgs = db.chatMessageDao().getAll()
                 chatMessages.forEach { msg ->
-                    db.chatMessageDao().insert(remapChatBillReferences(msg, billIdMap).copy(id = 0))
+                    val mapped = remapChatBillReferences(msg, billIdMap).copy(id = 0)
+                    val isDup = existingMsgs.any { e ->
+                        e.msgType == mapped.msgType && e.content == mapped.content && e.time == mapped.time
+                    }
+                    if (isDup) return@forEach
+                    db.chatMessageDao().insert(mapped)
                     insertedChatMessages++
                 }
             }

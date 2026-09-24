@@ -421,7 +421,11 @@ object AIService {
                 reasoningLogTag = RECEIPT_VISION_LOG_TAG
             )
             if (!streamed.completed) {
-                throw streamed.parseError ?: streamed.transportError ?: IllegalStateException("图片识别流式回复未完整结束")
+                // P1-25: 有 partial 内容时优先使用，避免直接丢弃
+                if (streamed.content.isBlank()) {
+                    throw streamed.parseError ?: streamed.transportError ?: IllegalStateException("图片识别流式回复未完整结束")
+                }
+                Logger.d(ctx, "AIService", "Stream incomplete but has content (${streamed.content.length} chars), using partial result")
             }
             val content = ReceiptImageInputHelper.normalizeVisionSummary(streamed.content)
             Logger.d(ctx, "AIService", "Receipt multimodal response received: contentLen=${content.length}")
@@ -546,7 +550,11 @@ object AIService {
                 onProgressChars = null
             )
             if (!streamed.completed) {
-                throw streamed.parseError ?: streamed.transportError ?: IllegalStateException("截图记账流式回复未完整结束")
+                // P1-25: 有 partial 内容时优先使用，避免直接丢弃
+                if (streamed.content.isBlank()) {
+                    throw streamed.parseError ?: streamed.transportError ?: IllegalStateException("截图记账流式回复未完整结束")
+                }
+                Logger.d(ctx, "AIService", "Stream incomplete but has content (${streamed.content.length} chars), using partial result")
             }
             val content = streamed.content
             Logger.d(ctx, "AIService", "Screen accounting multimodal response: $content")
@@ -661,7 +669,11 @@ object AIService {
                 onProgressChars = null
             )
             if (!streamed.completed) {
-                throw streamed.parseError ?: streamed.transportError ?: IllegalStateException("多图记账流式回复未完整结束")
+                // P1-25: 有 partial 内容时优先使用，避免直接丢弃
+                if (streamed.content.isBlank()) {
+                    throw streamed.parseError ?: streamed.transportError ?: IllegalStateException("多图记账流式回复未完整结束")
+                }
+                Logger.d(ctx, "AIService", "Stream incomplete but has content (${streamed.content.length} chars), using partial result")
             }
             val content = streamed.content
             Logger.d(ctx, "AIService", "Multi-image accounting response: $content")
@@ -742,7 +754,11 @@ object AIService {
                 reasoningLogTag = RECEIPT_VISION_LOG_TAG
             )
             if (!streamed.completed) {
-                throw streamed.parseError ?: streamed.transportError ?: IllegalStateException("多图识别流式回复未完整结束")
+                // P1-25: 有 partial 内容时优先使用，避免直接丢弃
+                if (streamed.content.isBlank()) {
+                    throw streamed.parseError ?: streamed.transportError ?: IllegalStateException("多图识别流式回复未完整结束")
+                }
+                Logger.d(ctx, "AIService", "Stream incomplete but has content (${streamed.content.length} chars), using partial result")
             }
             val content = ReceiptImageInputHelper.normalizeVisionSummary(streamed.content)
             Logger.d(ctx, "AIService", "Multi-image receipt response received: contentLen=${content.length}")
@@ -936,7 +952,11 @@ object AIService {
             reasoningLogTag = SIMPLE_CHAT_LOG_TAG
         )
         if (!streamed.completed) {
-            throw streamed.parseError ?: streamed.transportError ?: IllegalStateException("简单聊天流式回复未完整结束")
+            // P1-25: 有 partial 内容时优先使用，避免直接丢弃
+            if (streamed.content.isBlank()) {
+                throw streamed.parseError ?: streamed.transportError ?: IllegalStateException("简单聊天流式回复未完整结束")
+            }
+            Logger.d(ctx, "AIService", "Stream incomplete but has content (${streamed.content.length} chars), using partial result")
         }
         return streamed.content
     }

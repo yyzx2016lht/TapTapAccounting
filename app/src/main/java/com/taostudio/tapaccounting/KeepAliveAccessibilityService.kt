@@ -74,7 +74,9 @@ class KeepAliveAccessibilityService : AccessibilityService() {
         instance = this
         try {
             serviceInfo = serviceInfo.apply {
-                eventTypes = AccessibilityEvent.TYPES_ALL_MASK
+                // P2-10: 勿用 TYPES_ALL_MASK，只监听窗口状态变化即可保活
+                eventTypes = AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED or
+                    AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED
                 feedbackType = AccessibilityServiceInfo.FEEDBACK_GENERIC
                 flags = AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS
             }

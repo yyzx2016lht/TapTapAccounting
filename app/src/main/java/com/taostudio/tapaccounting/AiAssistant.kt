@@ -40,6 +40,12 @@ class AiAssistant(private val ctx: Context) {
     private var btnStartRecordNow: View? = null
     private var analyzeJob: Job? = null
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    /** P1-29: 宿主销毁时取消协程，避免 scope 永不 cancel。 */
+    fun shutdown() {
+        analyzeJob?.cancel()
+        scope.cancel()
+    }
     private var lastReceiptImageUri: Uri? = null
     private var currentHideStreamText: Boolean = false
 

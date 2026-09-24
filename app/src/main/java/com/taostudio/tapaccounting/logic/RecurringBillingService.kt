@@ -255,12 +255,22 @@ class RecurringBillingService(
         fun normalizeMerchantKey(text: String): String =
             text.trim().lowercase().replace("\\s+".toRegex(), "")
 
-        fun calculateNextExpected(lastSeen: Long, frequency: RecurringFrequency): Long {
+        fun calculateNextExpected(
+            lastSeen: Long,
+            frequency: RecurringFrequency,
+            dayOfMonthHint: Int? = null
+        ): Long {
             val cal = java.util.Calendar.getInstance()
             cal.timeInMillis = lastSeen
             when (frequency) {
                 RecurringFrequency.WEEKLY -> cal.add(java.util.Calendar.DAY_OF_YEAR, 7)
-                RecurringFrequency.MONTHLY -> cal.add(java.util.Calendar.MONTH, 1)
+                RecurringFrequency.MONTHLY -> {
+                    // P2-7: 用 dayOfMonthHint 锚定日，避免 1/31→2/28→3/28 月末漂移
+                    val hintDay = dayOfMonthHint ?: cal.get(java.util.Calendar.DAY_OF_MONTH)
+                    cal.add(java.util.Calendar.MONTH, 1)
+                    val maxDay = cal.getActualMaximum(java.util.Calendar.DAY_OF_MONTH)
+                    cal.set(java.util.Calendar.DAY_OF_MONTH, hintDay.coerceIn(1, maxDay))
+                }
                 RecurringFrequency.YEARLY -> cal.add(java.util.Calendar.YEAR, 1)
             }
             return cal.timeInMillis

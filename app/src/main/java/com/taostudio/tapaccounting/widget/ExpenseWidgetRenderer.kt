@@ -13,6 +13,7 @@ import android.util.TypedValue
 import android.view.View
 import android.widget.RemoteViews
 import com.taostudio.tapaccounting.AmountFormatHelper
+import com.taostudio.tapaccounting.logic.CurrencyManager
 import com.taostudio.tapaccounting.BookAccountManager
 import com.taostudio.tapaccounting.MainActivity
 import com.taostudio.tapaccounting.R
@@ -318,5 +319,7 @@ object ExpenseWidgetRenderer {
         }
     }
 
-    private fun money(amount: Double): String = AmountFormatHelper.formatCurrency("¥", amount)
+    // P2-5: 勿写死 ¥，走 CurrencyManager 符号
+    private fun money(amount: Double): String =
+        AmountFormatHelper.formatCurrency(CurrencyManager.getSymbol("CNY"), amount)
 }

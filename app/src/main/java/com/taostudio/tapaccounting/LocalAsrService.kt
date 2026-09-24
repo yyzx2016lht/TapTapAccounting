@@ -9,6 +9,8 @@ import com.k2fsa.sherpa.onnx.OfflineRecognizerConfig
 import com.k2fsa.sherpa.onnx.OfflineSenseVoiceModelConfig
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -29,6 +31,13 @@ object LocalAsrService {
     private var sherpaRecognizer: OfflineRecognizer? = null
     private var isDownloading = false
     @Volatile private var cancelDownload = false
+    // P1-29: 可取消的后台作用域
+    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    fun shutdown() {
+        cancelDownload = true
+        serviceScope.cancel()
+    }
     @Volatile private var isInitializing = false
     @Volatile private var switchToMirrorRequested = false
     @Volatile private var slowPromptShown = false
@@ -201,6 +210,8 @@ object LocalAsrService {
 
     fun installLocalModelWithUI(ctx: Context, uri: android.net.Uri, onComplete: () -> Unit = {}) {
         val targetDir = File(ctx.filesDir, MODEL_DIR_NAME)
+        // P1-28: 先解压到 staging，成功后再替换，取消/失败不抹掉可用模型
+        val stagingDir = File(ctx.filesDir, MODEL_DIR_NAME + ".staging")
         val importArchive = File(ctx.cacheDir, "sense_voice_import.tar.bz2")
         cancelDownload = false
 
@@ -218,7 +229,7 @@ object LocalAsrService {
             useSolidPanelBackground = true
         )
 
-        CoroutineScope(Dispatchers.IO).launch {
+        serviceScope.launch {
             try {
                 withContext(Dispatchers.Main) { dialog.setMessage(ctx.getString(R.string.reading_file)) }
 
@@ -251,7 +262,7 @@ object LocalAsrService {
 
                 if (cancelDownload) {
                     importArchive.delete()
-                    targetDir.deleteRecursively()
+                    stagingDir.deleteRecursively()
                     withContext(Dispatchers.Main) {
                         dialog.dismiss()
                         Utils.toast(ctx, ctx.getString(R.string.import_canceled))
@@ -260,22 +271,26 @@ object LocalAsrService {
                 }
 
                 withContext(Dispatchers.Main) { dialog.setMessage(ctx.getString(R.string.extracting_model)) }
-                targetDir.deleteRecursively()
-                targetDir.mkdirs()
+                stagingDir.deleteRecursively()
+                stagingDir.mkdirs()
 
                 FileInputStream(importArchive).use { fis ->
-                    extractTarBz2(ctx, fis, targetDir)
+                    extractTarBz2(ctx, fis, stagingDir)
                 }
                 importArchive.delete()
 
                 if (cancelDownload) {
-                    targetDir.deleteRecursively()
+                    stagingDir.deleteRecursively()
                     withContext(Dispatchers.Main) {
                         dialog.dismiss()
                         Utils.toast(ctx, ctx.getString(R.string.import_canceled))
                     }
                     return@launch
                 }
+
+                // 成功后才替换正式模型目录
+                targetDir.deleteRecursively()
+                stagingDir.renameTo(targetDir)
 
                 withContext(Dispatchers.Main) { dialog.setMessage(ctx.getString(R.string.initializing_model)) }
                 val ok = initModel(ctx, allowAutoDownload = false)
@@ -297,7 +312,8 @@ object LocalAsrService {
                     "installLocalModelWithUI detail=${e.message.orEmpty()}"
                 )
                 importArchive.delete()
-                targetDir.deleteRecursively()
+                // P1-28: 失败只清 staging，保留原可用模型
+                stagingDir.deleteRecursively()
                 lastInitError = "导入失败: ${e.message ?: e.javaClass.simpleName}"
                 withContext(Dispatchers.Main) {
                     dialog.dismiss()
@@ -468,7 +484,9 @@ object LocalAsrService {
         }
     }
 
+    // P2-12: 音频线程与识别线程共用，必须加锁
     private val streamSamples = mutableListOf<Float>()
+    private val streamSamplesLock = Any()
 
     /**
      * 在后台提前加载 recognizer（不阻塞调用线程）。
@@ -477,7 +495,7 @@ object LocalAsrService {
     fun warmUp(ctx: Context) {
         if (sherpaRecognizer != null || isInitializing || isDownloading) return
         Logger.d(ctx, "LocalAsrService", "warmUp: triggering background initModel")
-        CoroutineScope(Dispatchers.IO).launch {
+        serviceScope.launch {
             initModel(ctx, allowAutoDownload = false)
         }
     }
@@ -494,7 +512,7 @@ object LocalAsrService {
             Logger.d(ctx, "LocalAsrService", "startStreaming: recognizer already initialized")
         }
         if (sherpaRecognizer == null) return false
-        streamSamples.clear()
+        synchronized(streamSamplesLock) { streamSamples.clear() }
         return true
     }
 
@@ -502,30 +520,31 @@ object LocalAsrService {
         var i = 0
         while (i + 1 < length) {
             val sample = (data[i].toInt() and 0xFF) or (data[i + 1].toInt() shl 8)
-            streamSamples.add(sample.toShort().toFloat() / 32768.0f)
+            synchronized(streamSamplesLock) { streamSamples.add(sample.toShort().toFloat() / 32768.0f) }
             i += 2
         }
         return null
     }
 
     fun resetStreamingBuffer() {
-        streamSamples.clear()
+        synchronized(streamSamplesLock) { streamSamples.clear() }
     }
 
     fun finishStreaming(): String? {
         val rec = sherpaRecognizer ?: return null
         return try {
             val stream = rec.createStream()
-            stream.acceptWaveform(streamSamples.toFloatArray(), 16000)
+            val samplesCopy = synchronized(streamSamplesLock) { streamSamples.toFloatArray() }
+            stream.acceptWaveform(samplesCopy, 16000)
             rec.decode(stream)
 
             val text = rec.getResult(stream).text
             stream.release()
 
-            streamSamples.clear()
+            synchronized(streamSamplesLock) { streamSamples.clear() }
             if (text.isNotBlank()) text else null
         } catch (e: Throwable) {
-            lastInitError = "娴佸紡璇嗗埆澶辫触: ${e.message ?: e.javaClass.simpleName}"
+            lastInitError = "流式识别失败: ${e.message ?: e.javaClass.simpleName}"
             null
         }
     }
@@ -597,7 +616,7 @@ object LocalAsrService {
         }
 
         isDownloading = true
-        CoroutineScope(Dispatchers.IO).launch {
+        serviceScope.launch {
             val tarFile = File(ctx.cacheDir, "sense_voice.tar.bz2")
             val extractedDir = File(targetDir, EXTRACTED_FOLDER_NAME)
             val preferredSource = DownloadSource.fromPrefValue(Prefs.getAsrDownloadSource(ctx))

@@ -58,16 +58,27 @@ class SharedLedgerService(private val context: Context, private val db: AppDatab
         require(ManifestValidator.validate(manifest).isValid) { "共享账本信息无效" }
         webDav.put(config, "$remotePath/meta.json", gson.toJson(manifest))
 
-        val ledgerId = db.withTransaction {
-            val ledgerId = db.sharedLedgerDao().insert(SharedLedger(
-                uuid = ledgerUuid, bookId = book.id, name = ledgerName, webdavUrl = normalizedWebdavUrl,
-                webdavUser = webdavUser, remotePath = remotePath, localMemberId = members.first().memberId,
-                createdAt = manifest.createdAt
-            ))
-            db.sharedMemberDao().insertAll(members.map { SharedMember(ledgerId = ledgerId, memberId = it.memberId, displayName = it.displayName, joinOrder = it.joinOrder, isLocal = it.joinOrder == 1) })
-            db.syncStateDao().save(SyncState(ledgerId, DeviceIdManager.getDeviceId(context)))
-            seedHistory(ledgerId, ledgerUuid, book.name, book.id, members.first().memberId)
-            ledgerId
+        val ledgerId = try {
+            db.withTransaction {
+                val ledgerId = db.sharedLedgerDao().insert(SharedLedger(
+                    uuid = ledgerUuid, bookId = book.id, name = ledgerName, webdavUrl = normalizedWebdavUrl,
+                    webdavUser = webdavUser, remotePath = remotePath, localMemberId = members.first().memberId,
+                    createdAt = manifest.createdAt
+                ))
+                db.sharedMemberDao().insertAll(members.map { SharedMember(ledgerId = ledgerId, memberId = it.memberId, displayName = it.displayName, joinOrder = it.joinOrder, isLocal = it.joinOrder == 1) })
+                db.syncStateDao().save(SyncState(ledgerId, DeviceIdManager.getDeviceId(context)))
+                seedHistory(ledgerId, ledgerUuid, book.name, book.id, members.first().memberId)
+                ledgerId
+            }
+        } catch (e: Exception) {
+            // P1-15: 远端已建目录但本地失败 → 标记 closed，避免孤儿共享账本
+            runCatching {
+                webDav.put(config, "$remotePath/closed.json", gson.toJson(mapOf(
+                    "closedAt" to System.currentTimeMillis(),
+                    "reason" to "local_create_failed"
+                )))
+            }
+            throw e
         }
         SharedCredentials.save(context, ledgerUuid, password)
         SharedSyncScheduler.enqueueNow(context)
@@ -83,11 +94,13 @@ class SharedLedgerService(private val context: Context, private val db: AppDatab
         check(db.sharedLedgerDao().getByUuid(invite.ledgerId) == null) { "已经加入该共享账本" }
         val config = SharedWebDavClient.Config(invite.webdavUrl, invite.webdavUser, password)
         check(!webDav.exists(config, "${invite.remotePath}/closed.json")) { "该共享账本已解散" }
+        var previousMember: ManifestMember? = null
         val (manifest, _) = updateManifest(config, "${invite.remotePath}/meta.json") { current ->
             require(current.sharedBookId == invite.ledgerId) { "邀请与远端账本不一致" }
             val invitedMember = current.members.singleOrNull { it.memberId == invite.memberId }
                 ?: error("邀请成员不存在")
             require(invitedMember.joinOrder == invite.joinOrder) { "邀请成员顺序不一致" }
+            previousMember = invitedMember
             val joinedMember = SharedInvitePolicy.joinWithName(invitedMember, memberName)
             current.copy(members = current.members.map { member ->
                 if (member.memberId == joinedMember.memberId) joinedMember else member
@@ -96,16 +109,31 @@ class SharedLedgerService(private val context: Context, private val db: AppDatab
         val localName = existingBookName?.trim()?.takeIf { it.isNotBlank() } ?: uniqueBookName(manifest.name)
         val bookId = db.bookDao().resolveOrCreateId(localName)
         check(db.sharedLedgerDao().getByBookId(bookId) == null) { "所选账本已经是共享账本" }
-        val ledgerId = db.withTransaction {
-            val id = db.sharedLedgerDao().insert(SharedLedger(
-                uuid = manifest.sharedBookId, bookId = bookId, name = manifest.name,
-                webdavUrl = invite.webdavUrl, webdavUser = invite.webdavUser,
-                remotePath = invite.remotePath, localMemberId = invite.memberId, createdAt = manifest.createdAt
-            ))
-            db.sharedMemberDao().insertAll(manifest.members.map { SharedMember(ledgerId = id, memberId = it.memberId, displayName = it.displayName, joinOrder = it.joinOrder, isLocal = it.memberId == invite.memberId) })
-            db.syncStateDao().save(SyncState(id, DeviceIdManager.getDeviceId(context)))
-            seedHistory(id, manifest.sharedBookId, localName, bookId, invite.memberId)
-            id
+        val ledgerId = try {
+            db.withTransaction {
+                val id = db.sharedLedgerDao().insert(SharedLedger(
+                    uuid = manifest.sharedBookId, bookId = bookId, name = manifest.name,
+                    webdavUrl = invite.webdavUrl, webdavUser = invite.webdavUser,
+                    remotePath = invite.remotePath, localMemberId = invite.memberId, createdAt = manifest.createdAt
+                ))
+                db.sharedMemberDao().insertAll(manifest.members.map { SharedMember(ledgerId = id, memberId = it.memberId, displayName = it.displayName, joinOrder = it.joinOrder, isLocal = it.memberId == invite.memberId) })
+                db.syncStateDao().save(SyncState(id, DeviceIdManager.getDeviceId(context)))
+                seedHistory(id, manifest.sharedBookId, localName, bookId, invite.memberId)
+                id
+            }
+        } catch (e: Exception) {
+            // P1-15: 远端已标记加入但本地失败 → 回滚远端成员状态
+            val restore = previousMember
+            if (restore != null) {
+                runCatching {
+                    updateManifest(config, "${invite.remotePath}/meta.json") { current ->
+                        current.copy(members = current.members.map { member ->
+                            if (member.memberId == restore.memberId) restore else member
+                        }) to Unit
+                    }
+                }
+            }
+            throw e
         }
         SharedCredentials.save(context, invite.ledgerId, password)
         runCatching { SharedSyncEngine(context, db).syncLedger(ledgerId) }

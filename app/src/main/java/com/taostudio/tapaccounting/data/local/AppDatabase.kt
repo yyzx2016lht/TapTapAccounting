@@ -114,7 +114,8 @@ abstract class AppDatabase : RoomDatabase() {
 
         private val MIGRATION_5_6 = object : Migration(5, 6) {
             override fun migrate(database: SupportSQLiteDatabase) {
-                database.execSQL("ALTER TABLE Bill ADD COLUMN fee REAL NOT NULL DEFAULT 0.0")
+                // P2-17: 表名与 Room entity 对齐为 bills
+                database.execSQL("ALTER TABLE bills ADD COLUMN fee REAL NOT NULL DEFAULT 0.0")
             }
         }
 
@@ -336,10 +337,16 @@ abstract class AppDatabase : RoomDatabase() {
                 // Asset columns (may already exist if user ran the v21 build previously)
                 try {
                     database.execSQL("ALTER TABLE assets ADD COLUMN billBalanceFromTime INTEGER NOT NULL DEFAULT 0")
-                } catch (_: Exception) { /* column already exists */ }
+                } catch (e: Exception) {
+                    // P2-17: 仅容忍列已存在，其它异常必须抛出
+                    if (e.message?.contains("duplicate column", ignoreCase = true) != true) throw e
+                }
                 try {
                     database.execSQL("ALTER TABLE assets ADD COLUMN showBillBalanceAfter INTEGER NOT NULL DEFAULT 0")
-                } catch (_: Exception) { /* column already exists */ }
+                } catch (e: Exception) {
+                    // P2-17: 仅容忍列已存在，其它异常必须抛出
+                    if (e.message?.contains("duplicate column", ignoreCase = true) != true) throw e
+                }
                 // Bill columns
                 database.execSQL("ALTER TABLE bills ADD COLUMN accountBalanceAfter REAL")
                 database.execSQL("ALTER TABLE bills ADD COLUMN toAccountBalanceAfter REAL")

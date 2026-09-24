@@ -31,7 +31,7 @@ object BillBalanceSnapshotService {
 
         val toUpdate = bills.mapNotNull { bill ->
             val balanceAfter = balanceAfterByBillId[bill.id] ?: return@mapNotNull null
-            val patched = applySnapshotForAsset(bill, asset.id, asset.name, balanceAfter)
+            val patched = applySnapshotForAsset(bill, asset.id, asset.name, asset.currency, balanceAfter)
             if (patched != bill) patched else null
         }
         if (toUpdate.isNotEmpty()) {
@@ -51,9 +51,11 @@ object BillBalanceSnapshotService {
         bill: Bill,
         assetId: Long,
         assetName: String,
+        assetCurrency: String,
         balanceAfter: Double
     ): Bill {
-        val rounded = BillAssetImpactService.roundMoney(balanceAfter)
+        // P1-4: 按资产币种舍入，避免零小数货币写脏
+        val rounded = BillAssetImpactService.roundMoneyForCurrency(balanceAfter, assetCurrency)
         return when {
             AssetBillBalanceHistory.matchesSource(bill, assetId, assetName) ->
                 bill.copy(accountBalanceAfter = rounded)

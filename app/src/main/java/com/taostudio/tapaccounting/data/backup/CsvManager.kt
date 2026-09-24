@@ -279,10 +279,10 @@ object CsvManager {
     private fun isRefundLikeRemark(remark: String): Boolean {
         val text = remark.trim()
         if (text.isBlank()) return false
+        // P2-21: 勿用 contains("退款")，会误伤「咨询退款政策」等备注
         return text.startsWith("[退款]") ||
             text.startsWith("【退款】") ||
-            text.startsWith("退款") ||
-            text.contains("退款")
+            text.startsWith("退款")
     }
 
     private fun estimateExchangeRate(currency: String): Double {

@@ -145,7 +145,8 @@ object BillAssetImpactService {
                     return 0
                 }
                 ensureRatesForImpact(bill, sourceAsset = asset, targetAsset = null)
-                val sourceDelta = convertAmountBetweenCurrencies(bill.amount, bill.currency, asset.currency)
+                // P1-5: 与支出一致，按 baseOriginalAmount 回滚，避免 amount 被改后回滚不足
+                val sourceDelta = convertAmountBetweenCurrencies(baseOriginalAmount(bill), bill.currency, asset.currency)
                 logAssetDelta(asset, -sourceDelta, "revert_income", bill.id)
                 db.assetDao().addBalanceDelta(asset.id, -sourceDelta)
                 syncInvestmentPrincipalAfterExternalImpact(db, asset, bill)

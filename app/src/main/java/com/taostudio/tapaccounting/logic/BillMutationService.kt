@@ -165,10 +165,12 @@ object BillMutationService {
                 }
 
                 freshOldBill.type == Bill.TYPE_EXPENSE && baseOriginalAmount(freshOldBill) > freshOldBill.amount -> {
-                    val oldBaseOriginalAmount = baseOriginalAmount(freshOldBill)
+                    // P1-1: 用户输入视为新的 original；净额 = original - 已关联退款，保持 original = net + refunds
+                    val refundTotal = db.billDao().getRefundTotalBySourceId(freshOldBill.id)
+                    val newOriginal = newBill.amount.coerceAtLeast(refundTotal)
                     newBill.copy(
-                        amount = newBill.amount.coerceIn(0.0, oldBaseOriginalAmount),
-                        originalAmount = oldBaseOriginalAmount
+                        amount = (newOriginal - refundTotal).coerceAtLeast(0.0),
+                        originalAmount = newOriginal
                     )
                 }
 

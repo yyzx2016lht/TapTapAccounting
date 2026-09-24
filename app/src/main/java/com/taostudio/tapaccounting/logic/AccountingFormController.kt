@@ -47,6 +47,11 @@ class AccountingFormController(
     val onHeightLocked: ((lockedHeight: Int) -> Unit)? = null
 ) {
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
+
+    /** P1-29: 界面销毁时取消协程。 */
+    fun destroy() {
+        scope.cancel()
+    }
     private var editingBillId: Long? = null
     private val saveLock = SaveReentryLock()
     private var isSaving: Boolean
@@ -1949,7 +1954,8 @@ class AccountingFormController(
 
             var rBill = Bill(
                 id = editingBillId ?: 0L,
-                amount = money,
+                // P1-7: 入库金额按币种舍入，避免零小数货币写脏
+                amount = BillAssetImpactService.roundMoneyForCurrency(money, effectiveCurrency),
                 type = type,
                 subType = subType,
                 accountName = accountName1,
@@ -2005,7 +2011,7 @@ class AccountingFormController(
                         subType = com.taostudio.tapaccounting.data.local.entity.Bill.SUBTYPE_REFUND,
                         relatedBillId = latestRefundSource.id,
                         categoryName = "退款：$sourceCategory",
-                        originalAmount = money
+                        originalAmount = BillAssetImpactService.roundMoneyForCurrency(money, effectiveCurrency)
                     )
                 } else {
                     latestRefundSource = null // 来源账单无效，按普通收入处理
@@ -2660,8 +2666,12 @@ class AccountingFormController(
             return
         }
 
-        val amount = json.optDouble("amount", 0.0)
-        if (amount > 0) etMoney.setText(amount.toString())
+        val rawAmount = json.optDouble("amount", 0.0)
+        val originalAmount = json.optDouble("originalAmount", rawAmount)
+        // P1-1: 有退款的支出 amount 是净额；表单编辑 original，保存时再减退款得净额
+        val amount = if (originalAmount > rawAmount) originalAmount else rawAmount
+        // P2-15: 避免 Double.toString() 科学计数法
+        if (amount > 0) etMoney.setText(String.format(Locale.US, "%.2f", amount).trimEnd('0').trimEnd('.'))
         
         if (json.has("type")) {
             var t = json.optInt("type")

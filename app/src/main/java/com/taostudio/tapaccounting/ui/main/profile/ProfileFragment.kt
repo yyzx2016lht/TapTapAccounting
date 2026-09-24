@@ -29,7 +29,6 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import android.os.PowerManager
 import android.os.SystemClock
-import kotlinx.coroutines.Dispatchers
 import com.taostudio.tapaccounting.R
 import com.taostudio.tapaccounting.ui.SensitivityActivity
 import androidx.core.view.ViewCompat

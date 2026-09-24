@@ -292,14 +292,9 @@ class BackupRepository(private val db: AppDatabase) {
                 if (existingIds.isNotEmpty()) {
                     db.chatMessageDao().deleteByIds(existingIds)
                 }
-                val existingMsgs = db.chatMessageDao().getAll()
+                // 整表覆盖式恢复：上面已清空原有聊天记录，此处无需再去重
                 chatMessages.forEach { msg ->
-                    val mapped = remapChatBillReferences(msg, billIdMap).copy(id = 0)
-                    val isDup = existingMsgs.any { e ->
-                        e.msgType == mapped.msgType && e.content == mapped.content && e.time == mapped.time
-                    }
-                    if (isDup) return@forEach
-                    db.chatMessageDao().insert(mapped)
+                    db.chatMessageDao().insert(remapChatBillReferences(msg, billIdMap).copy(id = 0))
                 }
             }
 
@@ -547,12 +542,19 @@ class BackupRepository(private val db: AppDatabase) {
 
             // ── 规则：追加 ──
             if (rules != null) {
-                // P2-20: merge restore dedup
-                val existingRules = db.aiRuleDao().getAllRulesList()
+                // P2-20: 合并恢复按「关键词 + 目标映射」去重（AiRule 无 name/content 字段）
+                val existingRules = db.aiRuleDao().getAllRulesList().toMutableList()
                 rules.forEach {
-                    val isDup = existingRules.any { e -> e.name == it.name && e.content == it.content }
+                    val isDup = existingRules.any { e ->
+                        e.keyword == it.keyword &&
+                            e.targetType == it.targetType &&
+                            e.targetCategory == it.targetCategory &&
+                            e.targetAccount1 == it.targetAccount1 &&
+                            e.targetAccount2 == it.targetAccount2
+                    }
                     if (!isDup) {
                         db.aiRuleDao().insertRule(it.copy(id = 0))
+                        existingRules += it
                         insertedRules++
                     }
                 }
@@ -560,14 +562,16 @@ class BackupRepository(private val db: AppDatabase) {
 
             // ── 聊天记录：追加 ──
             if (chatMessages != null) {
-                val existingMsgs = db.chatMessageDao().getAll()
+                // P2-20: 合并恢复按「类型 + 内容 + 时间戳」去重（ChatMessage 时间字段为 timestamp）
+                val existingMsgs = db.chatMessageDao().getAll().toMutableList()
                 chatMessages.forEach { msg ->
                     val mapped = remapChatBillReferences(msg, billIdMap).copy(id = 0)
                     val isDup = existingMsgs.any { e ->
-                        e.msgType == mapped.msgType && e.content == mapped.content && e.time == mapped.time
+                        e.msgType == mapped.msgType && e.content == mapped.content && e.timestamp == mapped.timestamp
                     }
                     if (isDup) return@forEach
                     db.chatMessageDao().insert(mapped)
+                    existingMsgs += mapped
                     insertedChatMessages++
                 }
             }

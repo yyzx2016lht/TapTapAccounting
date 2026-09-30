@@ -13,6 +13,7 @@ import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.view.ContextThemeWrapper
 import com.google.android.material.switchmaterial.SwitchMaterial
+import com.taostudio.tapaccounting.AmountFormatHelper
 import com.taostudio.tapaccounting.R
 import com.taostudio.tapaccounting.data.local.entity.Asset
 import com.taostudio.tapaccounting.data.local.entity.InvestmentLot
@@ -70,7 +71,7 @@ object InvestmentLotManagerDialog {
             val rateText = if (lot.annualInterestRate == 0.0) {
                 "仅跟踪本金"
             } else {
-                "固定年化 ${formatCompactDecimal(lot.annualInterestRate)}% · ${InvestmentInterestService.cycleLabel(lot.settlementCycle)}结息"
+                "固定年化 ${AmountFormatHelper.formatRate(lot.annualInterestRate)}% · ${InvestmentInterestService.cycleLabel(lot.settlementCycle)}结息"
             }
             card.addView(TextView(context).apply {
                 text = rateText
@@ -150,7 +151,7 @@ object InvestmentLotManagerDialog {
             inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL or
                 InputType.TYPE_NUMBER_FLAG_SIGNED
             hint = "留空仅跟踪本金"
-            if (lot.annualInterestRate != 0.0) setText(formatCompactDecimal(lot.annualInterestRate))
+            if (lot.annualInterestRate != 0.0) setText(AmountFormatHelper.formatRate(lot.annualInterestRate))
         }
         content.addView(rateInput)
 
@@ -218,9 +219,6 @@ object InvestmentLotManagerDialog {
 
     private fun formatDate(timeMillis: Long): String =
         SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date(timeMillis))
-
-    private fun formatCompactDecimal(value: Double): String =
-        String.format(Locale.getDefault(), "%.4f", value).trimEnd('0').trimEnd('.')
 
     private fun formatCarry(value: Double, currency: String): String {
         val decimals = maxOf(CurrencyUtils.decimalPlaces(currency) + 3, 4)

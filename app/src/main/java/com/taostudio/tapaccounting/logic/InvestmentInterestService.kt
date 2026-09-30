@@ -1,6 +1,7 @@
 package com.taostudio.tapaccounting.logic
 
 import androidx.room.withTransaction
+import com.taostudio.tapaccounting.AmountFormatHelper
 import com.taostudio.tapaccounting.BookAccountManager
 import com.taostudio.tapaccounting.TapApplication
 import com.taostudio.tapaccounting.data.local.AppDatabase
@@ -554,7 +555,7 @@ object InvestmentInterestService {
     private fun buildSettlementRemark(lot: InvestmentLot, projection: SettlementProjection): String {
         val from = formatDate(lot.lastSettledAt)
         val to = formatDate(projection.lastSettledAt)
-        return "批次 #${lot.id} · 固定年化 ${formatCompactDecimal(lot.annualInterestRate)}% ${cycleLabel(lot.settlementCycle)}自动结息" +
+        return "批次 #${lot.id} · 固定年化 ${AmountFormatHelper.formatRate(lot.annualInterestRate)}% ${cycleLabel(lot.settlementCycle)}自动结息" +
             "（$from 至 $to，共 ${projection.settledPeriods} 期）；本机估算值，以实际到账为准"
     }
 
@@ -628,10 +629,6 @@ object InvestmentInterestService {
             count++
         }
         return count
-    }
-
-    private fun formatCompactDecimal(value: Double): String {
-        return String.format(Locale.getDefault(), "%.4f", value).trimEnd('0').trimEnd('.')
     }
 
     private fun formatDate(timeMillis: Long): String {

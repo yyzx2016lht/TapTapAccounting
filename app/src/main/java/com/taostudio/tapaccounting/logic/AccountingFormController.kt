@@ -25,6 +25,7 @@ import com.bumptech.glide.load.engine.DiskCacheStrategy
 import kotlinx.coroutines.*
 import org.json.JSONObject
 import com.taostudio.tapaccounting.*
+import com.taostudio.tapaccounting.AmountFormatHelper
 import com.taostudio.tapaccounting.data.local.AppDatabase
 import com.taostudio.tapaccounting.data.local.entity.Asset
 import com.taostudio.tapaccounting.data.local.entity.AiRule
@@ -1283,7 +1284,7 @@ class AccountingFormController(
             setTextColor(Color.parseColor("#1F2A38"))
             setHintTextColor(Color.parseColor("#8A9099"))
             background = null
-            if (annualInterestRate != 0.0) setText(formatCompactDecimal(annualInterestRate))
+            if (annualInterestRate != 0.0) setText(AmountFormatHelper.formatRate(annualInterestRate))
             layoutParams = LinearLayout.LayoutParams(dp(96), LinearLayout.LayoutParams.WRAP_CONTENT)
         }
 
@@ -1297,7 +1298,7 @@ class AccountingFormController(
             val newId = View.generateViewId()
             rateModeGroup.addView(RadioButton(themeContext).apply {
                 id = previousId
-                text = ctx.getString(R.string.investment_rate_use_previous, formatCompactDecimal(previousRate))
+                text = ctx.getString(R.string.investment_rate_use_previous, AmountFormatHelper.formatRate(previousRate))
                 textSize = 15f
                 setTextColor(Color.parseColor("#1F2A38"))
                 isChecked = true
@@ -1312,16 +1313,16 @@ class AccountingFormController(
                 usePreviousRate = checkedId == previousId
                 etAnnualRate.isEnabled = !usePreviousRate
                 if (usePreviousRate) {
-                    etAnnualRate.setText(formatCompactDecimal(previousRate))
+                    etAnnualRate.setText(AmountFormatHelper.formatRate(previousRate))
                 } else if (annualInterestRate != 0.0) {
-                    etAnnualRate.setText(formatCompactDecimal(annualInterestRate))
+                    etAnnualRate.setText(AmountFormatHelper.formatRate(annualInterestRate))
                 } else {
                     etAnnualRate.text = null
                 }
             }
             content.addView(rateModeGroup)
             etAnnualRate.isEnabled = false
-            etAnnualRate.setText(formatCompactDecimal(previousRate))
+            etAnnualRate.setText(AmountFormatHelper.formatRate(previousRate))
         }
 
         rateRow.addView(etAnnualRate)
@@ -1654,12 +1655,6 @@ class AccountingFormController(
             .replace(',', '.')
 
         return normalized.toDoubleOrNull() ?: 0.0
-    }
-
-    private fun formatCompactDecimal(value: Double): String {
-        return String.format(Locale.getDefault(), "%.4f", value)
-            .trimEnd('0')
-            .trimEnd('.')
     }
 
     private fun handleSave() {

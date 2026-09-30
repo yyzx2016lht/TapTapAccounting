@@ -19,6 +19,7 @@ import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.view.ContextThemeWrapper
 import androidx.core.content.ContextCompat
+import com.taostudio.tapaccounting.AmountFormatHelper
 import com.taostudio.tapaccounting.R
 import com.taostudio.tapaccounting.logic.BillAssetImpactService
 import com.taostudio.tapaccounting.logic.CurrencyUtils
@@ -227,14 +228,14 @@ object InvestmentLotSplitDialog {
                 })
                 val draft = preservedDrafts.getOrNull(index) ?: initialDrafts.getOrNull(index)
                 val amountText = when {
-                    draft != null && draft.amount > 0.0 -> formatCompactDecimal(draft.amount)
-                    count == 1 -> formatCompactDecimal(totalAmount)
+                    draft != null && draft.amount > 0.0 -> AmountFormatHelper.formatRate(draft.amount)
+                    count == 1 -> AmountFormatHelper.formatRate(totalAmount)
                     else -> ""
                 }
                 val rateText = when {
                     draft != null && draft.schedule.annualInterestRate != 0.0 ->
-                        formatCompactDecimal(draft.schedule.annualInterestRate)
-                    annualInterestRate != 0.0 -> formatCompactDecimal(annualInterestRate)
+                        AmountFormatHelper.formatRate(draft.schedule.annualInterestRate)
+                    annualInterestRate != 0.0 -> AmountFormatHelper.formatRate(annualInterestRate)
                     else -> ""
                 }
                 val amountInput = addField(
@@ -501,12 +502,6 @@ object InvestmentLotSplitDialog {
             .replace(',', '.')
 
         return normalized.toDoubleOrNull() ?: 0.0
-    }
-
-    private fun formatCompactDecimal(value: Double): String {
-        return String.format(Locale.getDefault(), "%.4f", value)
-            .trimEnd('0')
-            .trimEnd('.')
     }
 
     private fun formatMoney(value: Double, currency: String): String {

@@ -33,6 +33,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
+import com.taostudio.tapaccounting.AmountFormatHelper
 import com.taostudio.tapaccounting.data.local.AppDatabase
 import com.taostudio.tapaccounting.data.local.entity.Asset
 import com.taostudio.tapaccounting.data.local.entity.Bill
@@ -338,7 +339,7 @@ class AddAssetActivity : AppCompatActivity() {
 
                 etRemark.setText(it.remark)
                 etAnnualInterestRate.setText(
-                    if (it.annualInterestRate == 0.0) "" else formatCompactDecimal(it.annualInterestRate)
+                    if (it.annualInterestRate == 0.0) "" else AmountFormatHelper.formatRate(it.annualInterestRate)
                 )
                 tvTypeName.text = it.type
                 tvTypeName.setTextColor(brandColor)
@@ -353,7 +354,7 @@ class AddAssetActivity : AppCompatActivity() {
                 updateAssetCategoryUI()
 
                 // P1-5: 加载信用卡字段
-                if (it.creditLimit > 0) etCreditLimit.setText(formatCompactDecimal(it.creditLimit))
+                if (it.creditLimit > 0) etCreditLimit.setText(AmountFormatHelper.formatRate(it.creditLimit))
                 selectedStatementDay = if (it.statementDay > 0) it.statementDay else 0
                 selectedDueDay = when {
                     it.dueDay > 0 -> it.dueDay
@@ -875,12 +876,6 @@ class AddAssetActivity : AppCompatActivity() {
             .replace(',', '.')
 
         return normalized.toDoubleOrNull() ?: 0.0
-    }
-
-    private fun formatCompactDecimal(value: Double): String {
-        return String.format(Locale.getDefault(), "%.4f", value)
-            .trimEnd('0')
-            .trimEnd('.')
     }
 
     private fun showCurrencyChangeConfirmDialog(

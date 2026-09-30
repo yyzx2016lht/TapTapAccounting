@@ -31,6 +31,7 @@ import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.bumptech.glide.Glide
 import com.google.android.material.floatingactionbutton.FloatingActionButton
 import org.json.JSONObject
+import com.taostudio.tapaccounting.AmountFormatHelper
 import com.taostudio.tapaccounting.logic.AccountingFormController
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -532,7 +533,7 @@ class AssetDetailActivity : AppCompatActivity() {
         val balanceText = CurrencyUtils.formatAmount(asset.balance, asset.currency)
         val noteParts = mutableListOf<String>()
         if (asset.assetCategory == Asset.CATEGORY_INVESTMENT && asset.annualInterestRate != 0.0) {
-            noteParts += "新批次默认年利率 ${formatCompactDecimal(asset.annualInterestRate)}%"
+            noteParts += "新批次默认年利率 ${AmountFormatHelper.formatRate(asset.annualInterestRate)}%"
         }
         if (asset.remark.isNotBlank()) noteParts += asset.remark.trim()
         creditCycleSummaryText = null
@@ -1474,12 +1475,6 @@ class AssetDetailActivity : AppCompatActivity() {
 
     private fun formatMoney(amount: Double, currency: String): String =
         BillDisplayFormatter.formatMoney(amount, currency)
-
-    private fun formatCompactDecimal(value: Double): String {
-        return String.format(Locale.getDefault(), "%.4f", value)
-            .trimEnd('0')
-            .trimEnd('.')
-    }
 
     private fun amountInAssetCurrency(bill: Bill, ownerAssetId: Long, isInflow: Boolean): Double {
         val assetCurrency = currentAsset?.currency ?: bill.currency

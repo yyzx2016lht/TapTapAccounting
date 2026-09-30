@@ -40,6 +40,7 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import com.taostudio.tapaccounting.Prefs
+import com.taostudio.tapaccounting.AmountFormatHelper
 import com.taostudio.tapaccounting.BookAccountManager
 import com.taostudio.tapaccounting.CategoryIconHelper
 import com.taostudio.tapaccounting.R
@@ -1521,8 +1522,6 @@ class CalendarActivity : AppCompatActivity() {
         return ((offset + daysInMonth) + 6) / 7
     }
 
-    private fun formatAmt(amt: Double): String {
-        val text = String.format(Locale.getDefault(), "%.2f", amt)
-        return if (text.endsWith(".00")) text.replace(".00", "") else text
-    }
+    private fun formatAmt(amt: Double): String =
+        AmountFormatHelper.formatCompact(amt)
 }

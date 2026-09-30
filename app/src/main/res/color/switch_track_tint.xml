@@ -1,5 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  开关开启态轨道色。
+  原为 #4F6DFF，与保存按钮的 #4F6EDB 仅差 1 个色阶，肉眼无法分辨却是两个值；
+  且与品牌主色 #5C6BC0、徽章色板均不属同一体系。
+  现统一为品牌主色 @color/brand_primary。
+-->
 <selector xmlns:android="http://schemas.android.com/apk/res/android">
-    <item android:state_checked="true" android:color="#4F6DFF" />
+    <item android:state_checked="true" android:color="@color/brand_primary" />
     <item android:color="#C8D4F2" />
 </selector>

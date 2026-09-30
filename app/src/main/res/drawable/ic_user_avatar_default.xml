@@ -1,11 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- 默认头像。原为 #3B82F6（Tailwind 蓝），与 App 自身品牌色 #5C6BC0
+     及徽章色板均不属同一体系，改为品牌主色。 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="48dp"
     android:height="48dp"
     android:viewportWidth="48"
     android:viewportHeight="48">
     <path
-        android:fillColor="#3B82F6"
+        android:fillColor="@color/brand_primary"
         android:pathData="M24,4C12.95,4 4,12.95 4,24C4,35.05 12.95,44 24,44C35.05,44 44,35.05 44,24C44,12.95 35.05,4 24,4Z" />
     <path
         android:fillColor="#FFFFFF"

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 图标徽章背景 - 粉色 (完全圆形) -->
+<!-- list badge "pink" -> @color/badge_pink -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android"
     android:shape="oval">
-    <solid android:color="#FF3D8F" />
+    <solid android:color="@color/badge_pink" />
 </shape>

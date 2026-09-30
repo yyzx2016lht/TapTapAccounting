@@ -607,8 +607,8 @@
                                 android:id="@+id/switch_auto_backup"
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                app:thumbTint="#5C80EA"
-                                app:trackTint="#C8D6EC" />
+                                app:thumbTint="@color/switch_thumb_tint"
+                                app:trackTint="@color/switch_track_tint" />
                         </LinearLayout>
 
                         <LinearLayout
@@ -749,8 +749,8 @@
                                     android:id="@+id/switch_auto_cloud"
                                     android:layout_width="wrap_content"
                                     android:layout_height="wrap_content"
-                                    app:thumbTint="#5C80EA"
-                                    app:trackTint="#C8D6EC" />
+                                    app:thumbTint="@color/switch_thumb_tint"
+                                    app:trackTint="@color/switch_track_tint" />
                             </LinearLayout>
 
                             <View

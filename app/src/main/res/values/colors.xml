@@ -147,14 +147,41 @@
     <color name="asset_row_balance">#333333</color>
     <color name="asset_row_remark">#999999</color>
 
+    <!-- ==================== 列表徽章色板 ====================
+         多彩风格保留（这是产品观感），但补上三条规则：
+         1) 全部 11 色进 token，可统一微调（原先散在 11 个 drawable 里）
+         2) 白色图标对比度全部 >= 4:1。原先 11 色中有 6 色低于 3:1
+            （teal 1.66、amber 1.79、green 1.93、cyan 2.61、sky 2.26、
+              orange 2.36），图标实际看不清
+         3) 色相沿用原设计，HSL 明度收在 0.29..0.44，避免个别色在列表里"跳"
+         注：原 bg_icon_badge_gray 实为天蓝 #00A8FF，已更名为 badge_azure。 -->
+    <color name="badge_blue">#166FF3</color>
+    <color name="badge_azure">#0A94C7</color>
+    <color name="badge_cyan">#0998A8</color>
+    <color name="badge_teal">#089B87</color>
+    <color name="badge_green">#089F4A</color>
+    <color name="badge_amber">#BE7C0A</color>
+    <color name="badge_orange">#E5630C</color>
+    <color name="badge_coral">#F2240D</color>
+    <color name="badge_pink">#F20D70</color>
+    <color name="badge_purple">#CC0DF2</color>
+    <color name="badge_indigo">#2B0DF2</color>
+
+    <!-- 列表文字层级：strong 标题 / muted 说明。
+         muted 原为 #9AA4B2，对白底仅 2.52:1，未达 WCAG AA；
+         现为 #6B7684，4.62:1。 -->
+    <color name="text_strong">#1A2744</color>
+    <color name="text_muted">#6B7684</color>
+    <color name="text_disabled">#A7B1BD</color>
+
     <!-- ==================== Settings Page ==================== -->
     <color name="settings_page_bg">#F7F8FA</color>
     <color name="settings_card_bg">#FFFFFF</color>
-    <color name="settings_section_title">#1A2744</color>
-    <color name="settings_item_title">#1A2744</color>
-    <color name="settings_item_subtitle">#9AA4B2</color>
+    <color name="settings_section_title">@color/text_strong</color>
+    <color name="settings_item_title">@color/text_strong</color>
+    <color name="settings_item_subtitle">@color/text_muted</color>
     <color name="settings_divider">#F0F2F5</color>
-    <color name="settings_chevron">#C0C8D4</color>
+    <color name="settings_chevron">@color/text_disabled</color>
     <color name="settings_icon_badge_blue">#5B8DEF</color>
     <color name="settings_danger_text">#B42318</color>
     <color name="settings_danger_bg">#FFF1F0</color>

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 图标徽章背景 - 青绿色（teal，完全圆形） -->
+<!-- list badge "teal" -> @color/badge_teal -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android"
     android:shape="oval">
-    <solid android:color="#00C2B8" />
+    <solid android:color="@color/badge_teal" />
 </shape>

@@ -147,4 +147,7 @@
     <dimen name="settings_subtitle_size">12sp</dimen>
     <dimen name="settings_section_title_size">13sp</dimen>
     <dimen name="settings_chevron_size">18dp</dimen>
+    <!-- 列表文字左边缘 = 18(内边距) + 40(徽章) + 14(间距) = 72dp
+         原先分隔线用 68dp，与文字左边缘差 4dp，肉眼可见未对齐。 -->
+    <dimen name="settings_item_text_inset">72dp</dimen>
 </resources>

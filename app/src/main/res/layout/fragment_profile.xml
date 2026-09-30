@@ -41,7 +41,7 @@
                 android:layout_height="wrap_content"
                 android:layout_centerInParent="true"
                 android:text="@string/settings_center"
-                android:textColor="#1A2744"
+                android:textColor="@color/settings_item_title"
                 android:textSize="@dimen/text_size_18"
                 android:textStyle="bold" />
         </RelativeLayout>
@@ -102,7 +102,7 @@
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:text="@string/profile_me"
-                            android:textColor="#1A2744"
+                            android:textColor="@color/settings_item_title"
                             android:textSize="@dimen/text_size_16"
                             android:textStyle="bold" />
 
@@ -120,7 +120,7 @@
                         android:layout_width="20dp"
                         android:layout_height="20dp"
                         android:src="@drawable/ic_chevron_right"
-                        android:tint="#A7B1BD" />
+                        android:tint="@color/settings_chevron" />
                 </LinearLayout>
             </androidx.cardview.widget.CardView>
 
@@ -157,7 +157,7 @@
                             android:padding="9dp"
                             android:src="@drawable/ic_profile_alert"
                             android:tint="#FFFFFF"
-                            android:background="@drawable/bg_icon_badge_warn" />
+                            android:background="@drawable/bg_icon_badge_amber" />
 
                         <LinearLayout
                             android:layout_width="0dp"
@@ -302,31 +302,30 @@
                                     android:layout_width="wrap_content"
                                     android:layout_height="wrap_content"
                                     android:text="@string/category_management"
-                                    android:textColor="#1A2744"
+                                    android:textColor="@color/settings_item_title"
                                     android:textSize="@dimen/text_size_15"
                                     android:textStyle="bold" />
                                 <TextView
                                     android:layout_width="wrap_content"
                                     android:layout_height="wrap_content"
                                     android:text="@string/category_management_desc"
-                                    android:textColor="#9AA4B2"
+                                    android:textColor="@color/settings_item_subtitle"
                                     android:textSize="@dimen/text_size_11"
                                     android:layout_marginTop="1dp" />
                             </LinearLayout>
 
-                            <TextView
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="›"
-                                android:textColor="#C0C8D4"
-                                android:textSize="22sp" />
+                            <ImageView
+                                android:layout_width="@dimen/settings_chevron_size"
+                                android:layout_height="@dimen/settings_chevron_size"
+                                android:src="@drawable/ic_chevron_right"
+                                android:tint="@color/settings_chevron" />
                         </LinearLayout>
 
                         <View
                             android:id="@+id/divider_after_categories"
                             android:layout_width="match_parent"
                             android:layout_height="0.5dp"
-                            android:layout_marginStart="68dp"
+                            android:layout_marginStart="@dimen/settings_item_text_inset"
                             android:background="@color/settings_divider" />
                     </LinearLayout>
 
@@ -370,31 +369,30 @@
                                     android:layout_width="wrap_content"
                                     android:layout_height="wrap_content"
                                     android:text="@string/bill_display_effect"
-                                    android:textColor="#1A2744"
+                                    android:textColor="@color/settings_item_title"
                                     android:textSize="@dimen/text_size_15"
                                     android:textStyle="bold" />
                                 <TextView
                                     android:layout_width="wrap_content"
                                     android:layout_height="wrap_content"
                                     android:text="@string/bill_display_desc"
-                                    android:textColor="#9AA4B2"
+                                    android:textColor="@color/settings_item_subtitle"
                                     android:textSize="@dimen/text_size_11"
                                     android:layout_marginTop="1dp" />
                             </LinearLayout>
 
-                            <TextView
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="›"
-                                android:textColor="#C0C8D4"
-                                android:textSize="22sp" />
+                            <ImageView
+                                android:layout_width="@dimen/settings_chevron_size"
+                                android:layout_height="@dimen/settings_chevron_size"
+                                android:src="@drawable/ic_chevron_right"
+                                android:tint="@color/settings_chevron" />
                         </LinearLayout>
 
                         <View
                             android:id="@+id/divider_after_bill_display"
                             android:layout_width="match_parent"
                             android:layout_height="0.5dp"
-                            android:layout_marginStart="68dp"
+                            android:layout_marginStart="@dimen/settings_item_text_inset"
                             android:background="@color/settings_divider" />
                     </LinearLayout>
 
@@ -439,31 +437,30 @@
                                     android:layout_width="wrap_content"
                                     android:layout_height="wrap_content"
                                     android:text="@string/multi_currency_rate"
-                                    android:textColor="#1A2744"
+                                    android:textColor="@color/settings_item_title"
                                     android:textSize="@dimen/text_size_15"
                                     android:textStyle="bold" />
                                 <TextView
                                     android:layout_width="wrap_content"
                                     android:layout_height="wrap_content"
                                     android:text="@string/multi_currency_desc_setting"
-                                    android:textColor="#9AA4B2"
+                                    android:textColor="@color/settings_item_subtitle"
                                     android:textSize="@dimen/text_size_11"
                                     android:layout_marginTop="1dp" />
                             </LinearLayout>
 
-                            <TextView
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="›"
-                                android:textColor="#C0C8D4"
-                                android:textSize="22sp" />
+                            <ImageView
+                                android:layout_width="@dimen/settings_chevron_size"
+                                android:layout_height="@dimen/settings_chevron_size"
+                                android:src="@drawable/ic_chevron_right"
+                                android:tint="@color/settings_chevron" />
                         </LinearLayout>
 
                         <View
                             android:id="@+id/divider_after_currencies"
                             android:layout_width="match_parent"
                             android:layout_height="0.5dp"
-                            android:layout_marginStart="68dp"
+                            android:layout_marginStart="@dimen/settings_item_text_inset"
                             android:background="@color/settings_divider" />
                     </LinearLayout>
 
@@ -507,31 +504,30 @@
                                     android:layout_width="wrap_content"
                                     android:layout_height="wrap_content"
                                     android:text="@string/quick_accounting"
-                                    android:textColor="#1A2744"
+                                    android:textColor="@color/settings_item_title"
                                     android:textSize="@dimen/text_size_15"
                                     android:textStyle="bold" />
                                 <TextView
                                     android:layout_width="wrap_content"
                                     android:layout_height="wrap_content"
                                     android:text="@string/quick_accounting_desc"
-                                    android:textColor="#9AA4B2"
+                                    android:textColor="@color/settings_item_subtitle"
                                     android:textSize="@dimen/text_size_11"
                                     android:layout_marginTop="1dp" />
                             </LinearLayout>
 
-                            <TextView
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="›"
-                                android:textColor="#C0C8D4"
-                                android:textSize="22sp" />
+                            <ImageView
+                                android:layout_width="@dimen/settings_chevron_size"
+                                android:layout_height="@dimen/settings_chevron_size"
+                                android:src="@drawable/ic_chevron_right"
+                                android:tint="@color/settings_chevron" />
                         </LinearLayout>
 
                         <View
                             android:id="@+id/divider_after_sensitivity"
                             android:layout_width="match_parent"
                             android:layout_height="0.5dp"
-                            android:layout_marginStart="68dp"
+                            android:layout_marginStart="@dimen/settings_item_text_inset"
                             android:background="@color/settings_divider" />
                     </LinearLayout>
 
@@ -575,31 +571,30 @@
                                     android:layout_width="wrap_content"
                                     android:layout_height="wrap_content"
                                     android:text="@string/backup_restore"
-                                    android:textColor="#1A2744"
+                                    android:textColor="@color/settings_item_title"
                                     android:textSize="@dimen/text_size_15"
                                     android:textStyle="bold" />
                                 <TextView
                                     android:layout_width="wrap_content"
                                     android:layout_height="wrap_content"
                                     android:text="@string/backup_restore_desc"
-                                    android:textColor="#9AA4B2"
+                                    android:textColor="@color/settings_item_subtitle"
                                     android:textSize="@dimen/text_size_11"
                                     android:layout_marginTop="1dp" />
                             </LinearLayout>
 
-                            <TextView
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="›"
-                                android:textColor="#C0C8D4"
-                                android:textSize="22sp" />
+                            <ImageView
+                                android:layout_width="@dimen/settings_chevron_size"
+                                android:layout_height="@dimen/settings_chevron_size"
+                                android:src="@drawable/ic_chevron_right"
+                                android:tint="@color/settings_chevron" />
                         </LinearLayout>
 
                         <View
                             android:id="@+id/divider_sync_remote_config"
                             android:layout_width="match_parent"
                             android:layout_height="0.5dp"
-                            android:layout_marginStart="68dp"
+                            android:layout_marginStart="@dimen/settings_item_text_inset"
                             android:background="@color/settings_divider"
                             android:visibility="gone" />
                     </LinearLayout>
@@ -647,7 +642,7 @@
                                     android:layout_width="wrap_content"
                                     android:layout_height="wrap_content"
                                     android:text="@string/sync_remote_config"
-                                    android:textColor="#1A2744"
+                                    android:textColor="@color/settings_item_title"
                                     android:textSize="@dimen/text_size_15"
                                     android:textStyle="bold" />
 
@@ -656,23 +651,22 @@
                                     android:layout_height="wrap_content"
                                     android:layout_marginTop="2dp"
                                     android:text="@string/sync_remote_desc"
-                                    android:textColor="#9AA4B2"
+                                    android:textColor="@color/settings_item_subtitle"
                                     android:textSize="@dimen/text_size_11" />
                             </LinearLayout>
 
-                            <TextView
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="›"
-                                android:textColor="#C0C8D4"
-                                android:textSize="22sp" />
+                            <ImageView
+                                android:layout_width="@dimen/settings_chevron_size"
+                                android:layout_height="@dimen/settings_chevron_size"
+                                android:src="@drawable/ic_chevron_right"
+                                android:tint="@color/settings_chevron" />
                         </LinearLayout>
 
                         <View
                             android:id="@+id/divider_ai_feature_entry"
                             android:layout_width="match_parent"
                             android:layout_height="0.5dp"
-                            android:layout_marginStart="68dp"
+                            android:layout_marginStart="@dimen/settings_item_text_inset"
                             android:background="@color/settings_divider"
                             android:visibility="visible" />
                     </LinearLayout>
@@ -718,7 +712,7 @@
                                     android:layout_width="wrap_content"
                                     android:layout_height="wrap_content"
                                     android:text="@string/ai_feature_title"
-                                    android:textColor="#1A2744"
+                                    android:textColor="@color/settings_item_title"
                                     android:textSize="@dimen/text_size_15"
                                     android:textStyle="bold" />
                                 <TextView
@@ -726,24 +720,22 @@
                                     android:layout_height="wrap_content"
                                     android:layout_marginTop="1dp"
                                     android:text="@string/ai_feature_manage_desc"
-                                    android:textColor="#9AA4B2"
+                                    android:textColor="@color/settings_item_subtitle"
                                     android:textSize="@dimen/text_size_11" />
                             </LinearLayout>
 
-                            <TextView
-                                android:id="@+id/btn_open_ai_feature_settings"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="›"
-                                android:textColor="#C0C8D4"
-                                android:textSize="22sp" />
+                            <ImageView
+                                android:layout_width="@dimen/settings_chevron_size"
+                                android:layout_height="@dimen/settings_chevron_size"
+                                android:src="@drawable/ic_chevron_right"
+                                android:tint="@color/settings_chevron" />
                         </LinearLayout>
 
                         <View
                             android:id="@+id/divider_storage_cleanup_entry"
                             android:layout_width="match_parent"
                             android:layout_height="0.5dp"
-                            android:layout_marginStart="68dp"
+                            android:layout_marginStart="@dimen/settings_item_text_inset"
                             android:background="@color/settings_divider" />
                     </LinearLayout>
 
@@ -768,7 +760,7 @@
                             <FrameLayout
                                 android:layout_width="40dp"
                                 android:layout_height="40dp"
-                                android:background="@drawable/bg_icon_badge_red">
+                                android:background="@drawable/bg_icon_badge_coral">
                                 <ImageView
                                     android:layout_width="24dp"
                                     android:layout_height="24dp"
@@ -787,7 +779,7 @@
                                     android:layout_width="wrap_content"
                                     android:layout_height="wrap_content"
                                     android:text="@string/storage_cleanup"
-                                    android:textColor="#1A2744"
+                                    android:textColor="@color/settings_item_title"
                                     android:textSize="@dimen/text_size_15"
                                     android:textStyle="bold" />
                                 <TextView
@@ -795,16 +787,15 @@
                                     android:layout_height="wrap_content"
                                     android:layout_marginTop="1dp"
                                     android:text="@string/storage_cleanup_desc"
-                                    android:textColor="#9AA4B2"
+                                    android:textColor="@color/settings_item_subtitle"
                                     android:textSize="@dimen/text_size_11" />
                             </LinearLayout>
 
-                            <TextView
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="›"
-                                android:textColor="#C0C8D4"
-                                android:textSize="22sp" />
+                            <ImageView
+                                android:layout_width="@dimen/settings_chevron_size"
+                                android:layout_height="@dimen/settings_chevron_size"
+                                android:src="@drawable/ic_chevron_right"
+                                android:tint="@color/settings_chevron" />
                         </LinearLayout>
                     </LinearLayout>
 
@@ -848,7 +839,7 @@
                                     android:layout_width="wrap_content"
                                     android:layout_height="wrap_content"
                                     android:text="桌面小组件"
-                                    android:textColor="#1A2744"
+                                    android:textColor="@color/settings_item_title"
                                     android:textSize="@dimen/text_size_15"
                                     android:textStyle="bold" />
                                 <TextView
@@ -856,16 +847,15 @@
                                     android:layout_height="wrap_content"
                                     android:layout_marginTop="1dp"
                                     android:text="在桌面显示总支出、预算和预算剩余"
-                                    android:textColor="#9AA4B2"
+                                    android:textColor="@color/settings_item_subtitle"
                                     android:textSize="@dimen/text_size_11" />
                             </LinearLayout>
 
-                            <TextView
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="‹"
-                                android:textColor="#C0C8D4"
-                                android:textSize="22sp" />
+                            <ImageView
+                                android:layout_width="@dimen/settings_chevron_size"
+                                android:layout_height="@dimen/settings_chevron_size"
+                                android:src="@drawable/ic_chevron_right"
+                                android:tint="@color/settings_chevron" />
                         </LinearLayout>
                     </LinearLayout>
 
@@ -954,7 +944,7 @@
                                     android:layout_width="wrap_content"
                                     android:layout_height="wrap_content"
                                     android:text="@string/use_quick_gesture"
-                                    android:textColor="#1A2744"
+                                    android:textColor="@color/settings_item_title"
                                     android:textSize="@dimen/text_size_15"
                                     android:textStyle="bold" />
                                 <TextView
@@ -962,7 +952,7 @@
                                     android:layout_height="wrap_content"
                                     android:layout_marginTop="1dp"
                                     android:text="@string/gesture_desc_setting"
-                                    android:textColor="#9AA4B2"
+                                    android:textColor="@color/settings_item_subtitle"
                                     android:textSize="@dimen/text_size_11" />
                             </LinearLayout>
 
@@ -1019,7 +1009,7 @@
                                     android:layout_width="wrap_content"
                                     android:layout_height="wrap_content"
                                     android:text="@string/show_book_entry"
-                                    android:textColor="#1A2744"
+                                    android:textColor="@color/settings_item_title"
                                     android:textSize="@dimen/text_size_15"
                                     android:textStyle="bold" />
 
@@ -1028,7 +1018,7 @@
                                     android:layout_height="wrap_content"
                                     android:layout_marginTop="1dp"
                                     android:text="@string/book_entry_desc"
-                                    android:textColor="#9AA4B2"
+                                    android:textColor="@color/settings_item_subtitle"
                                     android:textSize="@dimen/text_size_11" />
                             </LinearLayout>
 
@@ -1085,7 +1075,7 @@
                                     android:layout_width="wrap_content"
                                     android:layout_height="wrap_content"
                                     android:text="@string/enable_asset_feature"
-                                    android:textColor="#1A2744"
+                                    android:textColor="@color/settings_item_title"
                                     android:textSize="@dimen/text_size_15"
                                     android:textStyle="bold" />
 
@@ -1094,7 +1084,7 @@
                                     android:layout_height="wrap_content"
                                     android:layout_marginTop="1dp"
                                     android:text="@string/asset_disable_hint"
-                                    android:textColor="#9AA4B2"
+                                    android:textColor="@color/settings_item_subtitle"
                                     android:textSize="@dimen/text_size_11" />
                             </LinearLayout>
 
@@ -1151,7 +1141,7 @@
                                     android:layout_width="wrap_content"
                                     android:layout_height="wrap_content"
                                     android:text="@string/show_trend_card"
-                                    android:textColor="#1A2744"
+                                    android:textColor="@color/settings_item_title"
                                     android:textSize="@dimen/text_size_15"
                                     android:textStyle="bold" />
 
@@ -1160,7 +1150,7 @@
                                     android:layout_height="wrap_content"
                                     android:layout_marginTop="1dp"
                                     android:text="@string/trend_card_desc"
-                                    android:textColor="#9AA4B2"
+                                    android:textColor="@color/settings_item_subtitle"
                                     android:textSize="@dimen/text_size_11" />
                             </LinearLayout>
 
@@ -1211,14 +1201,14 @@
                                     android:layout_width="wrap_content"
                                     android:layout_height="wrap_content"
                                     android:text="@string/enable_ai_feature"
-                                    android:textColor="#1A2744"
+                                    android:textColor="@color/settings_item_title"
                                     android:textSize="@dimen/text_size_15"
                                     android:textStyle="bold" />
                                 <TextView
                                     android:layout_width="wrap_content"
                                     android:layout_height="wrap_content"
                                     android:text="@string/ai_feature_entry_hint"
-                                    android:textColor="#9AA4B2"
+                                    android:textColor="@color/settings_item_subtitle"
                                     android:textSize="@dimen/text_size_11"
                                     android:layout_marginTop="1dp" />
                             </LinearLayout>
@@ -1258,7 +1248,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="@string/ai_feature_title"
-                    android:textColor="#1A2744"
+                    android:textColor="@color/settings_item_title"
                     android:textSize="@dimen/text_size_14"
                     android:textStyle="bold"
                     android:letterSpacing="0.02" />
@@ -1310,7 +1300,7 @@
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:text="@string/ai_feature_title"
-                            android:textColor="#1A2744"
+                            android:textColor="@color/settings_item_title"
                             android:textSize="@dimen/text_size_15"
                             android:textStyle="bold" />
 
@@ -1319,16 +1309,15 @@
                             android:layout_height="wrap_content"
                             android:layout_marginTop="1dp"
                             android:text="@string/ai_config_entry"
-                            android:textColor="#9AA4B2"
+                            android:textColor="@color/settings_item_subtitle"
                             android:textSize="@dimen/text_size_11" />
                     </LinearLayout>
 
-                    <TextView
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="‹"
-                                android:textColor="#C0C8D4"
-                                android:textSize="22sp" />
+                    <ImageView
+                                android:layout_width="@dimen/settings_chevron_size"
+                                android:layout_height="@dimen/settings_chevron_size"
+                                android:src="@drawable/ic_chevron_right"
+                                android:tint="@color/settings_chevron" />
                 </LinearLayout>
             </androidx.cardview.widget.CardView>
 
@@ -1415,14 +1404,14 @@
                                     android:layout_width="wrap_content"
                                     android:layout_height="wrap_content"
                                     android:text="@string/shizuku_mode"
-                                    android:textColor="#1A2744"
+                                    android:textColor="@color/settings_item_title"
                                     android:textSize="@dimen/text_size_15"
                                     android:textStyle="bold" />
                                 <TextView
                                     android:layout_width="wrap_content"
                                     android:layout_height="wrap_content"
                                     android:text="@string/shizuku_mode_hint"
-                                    android:textColor="#9AA4B2"
+                                    android:textColor="@color/settings_item_subtitle"
                                     android:textSize="@dimen/text_size_11"
                                     android:layout_marginTop="1dp" />
                             </LinearLayout>
@@ -1464,7 +1453,7 @@
                             <FrameLayout
                                 android:layout_width="40dp"
                                 android:layout_height="40dp"
-                                android:background="@drawable/bg_icon_badge_warn">
+                                android:background="@drawable/bg_icon_badge_amber">
                                 <ImageView
                                     android:layout_width="wrap_content"
                                     android:layout_height="wrap_content"
@@ -1483,14 +1472,14 @@
                                     android:layout_width="wrap_content"
                                     android:layout_height="wrap_content"
                                     android:text="@string/shizuku_auto_restore"
-                                    android:textColor="#1A2744"
+                                    android:textColor="@color/settings_item_title"
                                     android:textSize="@dimen/text_size_15"
                                     android:textStyle="bold" />
                                 <TextView
                                     android:layout_width="wrap_content"
                                     android:layout_height="wrap_content"
                                     android:text="@string/keep_alive_auto_restart_desc"
-                                    android:textColor="#9AA4B2"
+                                    android:textColor="@color/settings_item_subtitle"
                                     android:textSize="@dimen/text_size_11"
                                     android:layout_marginTop="1dp" />
                             </LinearLayout>
@@ -1549,7 +1538,7 @@
                                     android:layout_width="wrap_content"
                                     android:layout_height="wrap_content"
                                     android:text="@string/enable_multi_currency"
-                                    android:textColor="#1A2744"
+                                    android:textColor="@color/settings_item_title"
                                     android:textSize="@dimen/text_size_15"
                                     android:textStyle="bold" />
 
@@ -1558,7 +1547,7 @@
                                     android:layout_height="wrap_content"
                                     android:layout_marginTop="1dp"
                                     android:text="@string/multi_currency_desc"
-                                    android:textColor="#9AA4B2"
+                                    android:textColor="@color/settings_item_subtitle"
                                     android:textSize="@dimen/text_size_11" />
                             </LinearLayout>
 
@@ -1595,7 +1584,7 @@
                             <FrameLayout
                                 android:layout_width="40dp"
                                 android:layout_height="40dp"
-                                android:background="@drawable/bg_icon_badge_gray">
+                                android:background="@drawable/bg_icon_badge_cyan">
                                 <ImageView
                                     android:layout_width="wrap_content"
                                     android:layout_height="wrap_content"
@@ -1614,7 +1603,7 @@
                                     android:layout_width="wrap_content"
                                     android:layout_height="wrap_content"
                                     android:text="@string/developer_log"
-                                    android:textColor="#1A2744"
+                                    android:textColor="@color/settings_item_title"
                                     android:textSize="@dimen/text_size_15"
                                     android:textStyle="bold" />
                                 <TextView

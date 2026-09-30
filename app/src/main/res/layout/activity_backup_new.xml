@@ -34,7 +34,7 @@
                 app:cardBackgroundColor="@color/settings_card_bg"
                 app:cardCornerRadius="@dimen/settings_card_radius"
                 app:cardElevation="0dp"
-                app:strokeColor="#DEE6F2"
+                app:strokeColor="@color/divider_soft"
                 app:strokeWidth="0dp">
 
                 <LinearLayout
@@ -58,7 +58,7 @@
                         android:layout_marginBottom="14dp"
                         android:lineSpacingExtra="2dp"
                         android:text="@string/backup_group_hint"
-                        android:textColor="#8C98A8"
+                        android:textColor="@color/text_disabled"
                         android:textSize="13sp" />
 
                     <LinearLayout
@@ -72,7 +72,7 @@
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:text="@string/backup_preset"
-                            android:textColor="#2D3C57"
+                            android:textColor="@color/text_strong"
                             android:textSize="14sp"
                             android:textStyle="bold" />
 
@@ -88,10 +88,11 @@
                                 android:layout_width="0dp"
                                 android:layout_height="wrap_content"
                                 android:layout_weight="1"
+                                android:buttonTint="@color/radio_button_tint"
                                 android:checked="true"
                                 android:singleLine="true"
                                 android:text="@string/backup_lite"
-                                android:textColor="#2D3C57"
+                                android:textColor="@color/text_strong"
                                 android:textSize="13sp" />
 
                             <RadioButton
@@ -99,9 +100,10 @@
                                 android:layout_width="0dp"
                                 android:layout_height="wrap_content"
                                 android:layout_weight="1"
+                                android:buttonTint="@color/radio_button_tint"
                                 android:singleLine="true"
                                 android:text="@string/backup_full"
-                                android:textColor="#2D3C57"
+                                android:textColor="@color/text_strong"
                                 android:textSize="13sp" />
 
                             <RadioButton
@@ -109,9 +111,10 @@
                                 android:layout_width="0dp"
                                 android:layout_height="wrap_content"
                                 android:layout_weight="1"
+                                android:buttonTint="@color/radio_button_tint"
                                 android:singleLine="true"
                                 android:text="@string/backup_custom"
-                                android:textColor="#2D3C57"
+                                android:textColor="@color/text_strong"
                                 android:textSize="13sp" />
                         </RadioGroup>
 
@@ -121,7 +124,7 @@
                             android:layout_height="wrap_content"
                             android:layout_marginTop="4dp"
                             android:text="@string/backup_lite_short_hint"
-                            android:textColor="#6E7D95"
+                            android:textColor="@color/text_muted"
                             android:textSize="12sp" />
 
                         <TextView
@@ -130,7 +133,7 @@
                             android:layout_height="wrap_content"
                             android:layout_marginTop="10dp"
                             android:text="@string/backup_portable_desc"
-                            android:textColor="#6E7D95"
+                            android:textColor="@color/text_muted"
                             android:textSize="12sp" />
                     </LinearLayout>
 
@@ -147,7 +150,7 @@
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:text="@string/core_bookkeeping"
-                            android:textColor="#2D3C57"
+                            android:textColor="@color/text_strong"
                             android:textSize="14sp"
                             android:textStyle="bold" />
 
@@ -156,7 +159,7 @@
                             android:layout_height="wrap_content"
                             android:layout_marginTop="4dp"
                             android:text="@string/backup_module_core_desc"
-                            android:textColor="#7A879A"
+                            android:textColor="@color/text_muted"
                             android:textSize="12sp" />
 
                         <GridLayout
@@ -172,9 +175,9 @@
                                 android:layout_columnWeight="1"
                                 android:checked="true"
                                 android:text="@string/asset_data"
-                                android:textColor="#23324A"
+                                android:textColor="@color/text_strong"
                                 android:textSize="14sp"
-                                app:buttonTint="#5C80EA" />
+                                app:buttonTint="@color/backup_accent" />
 
                             <com.google.android.material.checkbox.MaterialCheckBox
                                 android:id="@+id/cb_categories"
@@ -183,9 +186,9 @@
                                 android:layout_columnWeight="1"
                                 android:checked="true"
                                 android:text="@string/category_settings"
-                                android:textColor="#23324A"
+                                android:textColor="@color/text_strong"
                                 android:textSize="14sp"
-                                app:buttonTint="#5C80EA" />
+                                app:buttonTint="@color/backup_accent" />
 
                             <com.google.android.material.checkbox.MaterialCheckBox
                                 android:id="@+id/cb_bills"
@@ -194,9 +197,9 @@
                                 android:layout_columnWeight="1"
                                 android:checked="true"
                                 android:text="@string/bill_records"
-                                android:textColor="#23324A"
+                                android:textColor="@color/text_strong"
                                 android:textSize="14sp"
-                                app:buttonTint="#5C80EA" />
+                                app:buttonTint="@color/backup_accent" />
 
                             <com.google.android.material.checkbox.MaterialCheckBox
                                 android:id="@+id/cb_rules"
@@ -205,9 +208,9 @@
                                 android:layout_columnWeight="1"
                                 android:checked="true"
                                 android:text="@string/accounting_habits"
-                                android:textColor="#23324A"
+                                android:textColor="@color/text_strong"
                                 android:textSize="14sp"
-                                app:buttonTint="#5C80EA" />
+                                app:buttonTint="@color/backup_accent" />
                         </GridLayout>
                     </LinearLayout>
 
@@ -224,7 +227,7 @@
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:text="@string/chat_and_dialog"
-                            android:textColor="#2D3C57"
+                            android:textColor="@color/text_strong"
                             android:textSize="14sp"
                             android:textStyle="bold" />
 
@@ -233,7 +236,7 @@
                             android:layout_height="wrap_content"
                             android:layout_marginTop="4dp"
                             android:text="@string/backup_module_chat_desc"
-                            android:textColor="#7A879A"
+                            android:textColor="@color/text_muted"
                             android:textSize="12sp" />
 
                         <GridLayout
@@ -249,9 +252,9 @@
                                 android:layout_columnWeight="1"
                                 android:checked="true"
                                 android:text="@string/chat_records"
-                                android:textColor="#23324A"
+                                android:textColor="@color/text_strong"
                                 android:textSize="14sp"
-                                app:buttonTint="#5C80EA" />
+                                app:buttonTint="@color/backup_accent" />
 
                             <com.google.android.material.checkbox.MaterialCheckBox
                                 android:id="@+id/cb_chat_media"
@@ -260,9 +263,9 @@
                                 android:layout_columnWeight="1"
                                 android:checked="true"
                                 android:text="@string/chat_resources"
-                                android:textColor="#23324A"
+                                android:textColor="@color/text_strong"
                                 android:textSize="14sp"
-                                app:buttonTint="#5C80EA" />
+                                app:buttonTint="@color/backup_accent" />
                         </GridLayout>
 
                         <TextView
@@ -270,7 +273,7 @@
                             android:layout_height="wrap_content"
                             android:layout_marginTop="4dp"
                             android:text="@string/backup_module_chat_res_desc"
-                            android:textColor="#8C98A8"
+                            android:textColor="@color/text_disabled"
                             android:textSize="12sp" />
                     </LinearLayout>
 
@@ -287,7 +290,7 @@
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:text="@string/preferences_and_ui"
-                            android:textColor="#2D3C57"
+                            android:textColor="@color/text_strong"
                             android:textSize="14sp"
                             android:textStyle="bold" />
 
@@ -296,7 +299,7 @@
                             android:layout_height="wrap_content"
                             android:layout_marginTop="4dp"
                             android:text="@string/backup_module_ui_desc"
-                            android:textColor="#7A879A"
+                            android:textColor="@color/text_muted"
                             android:textSize="12sp" />
 
                         <GridLayout
@@ -312,9 +315,9 @@
                                 android:layout_columnWeight="1"
                                 android:checked="true"
                                 android:text="@string/basic_settings"
-                                android:textColor="#23324A"
+                                android:textColor="@color/text_strong"
                                 android:textSize="14sp"
-                                app:buttonTint="#5C80EA" />
+                                app:buttonTint="@color/backup_accent" />
 
                             <com.google.android.material.checkbox.MaterialCheckBox
                                 android:id="@+id/cb_settings_general_assets"
@@ -323,9 +326,9 @@
                                 android:layout_columnWeight="1"
                                 android:checked="true"
                                 android:text="@string/asset_and_rate"
-                                android:textColor="#23324A"
+                                android:textColor="@color/text_strong"
                                 android:textSize="14sp"
-                                app:buttonTint="#5C80EA" />
+                                app:buttonTint="@color/backup_accent" />
 
                             <com.google.android.material.checkbox.MaterialCheckBox
                                 android:id="@+id/cb_settings_general_cloud"
@@ -334,9 +337,9 @@
                                 android:layout_columnWeight="1"
                                 android:checked="true"
                                 android:text="@string/cloud_config"
-                                android:textColor="#23324A"
+                                android:textColor="@color/text_strong"
                                 android:textSize="14sp"
-                                app:buttonTint="#5C80EA" />
+                                app:buttonTint="@color/backup_accent" />
 
                             <com.google.android.material.checkbox.MaterialCheckBox
                                 android:id="@+id/cb_settings_display_entries"
@@ -345,9 +348,9 @@
                                 android:layout_columnWeight="1"
                                 android:checked="true"
                                 android:text="@string/entry_and_card"
-                                android:textColor="#23324A"
+                                android:textColor="@color/text_strong"
                                 android:textSize="14sp"
-                                app:buttonTint="#5C80EA" />
+                                app:buttonTint="@color/backup_accent" />
 
                             <com.google.android.material.checkbox.MaterialCheckBox
                                 android:id="@+id/cb_settings_display_bills"
@@ -356,9 +359,9 @@
                                 android:layout_columnWeight="1"
                                 android:checked="true"
                                 android:text="@string/bill_display"
-                                android:textColor="#23324A"
+                                android:textColor="@color/text_strong"
                                 android:textSize="14sp"
-                                app:buttonTint="#5C80EA" />
+                                app:buttonTint="@color/backup_accent" />
 
                             <com.google.android.material.checkbox.MaterialCheckBox
                                 android:id="@+id/cb_settings_display_multibill"
@@ -367,9 +370,9 @@
                                 android:layout_columnWeight="1"
                                 android:checked="true"
                                 android:text="@string/multi_book_ocr"
-                                android:textColor="#23324A"
+                                android:textColor="@color/text_strong"
                                 android:textSize="14sp"
-                                app:buttonTint="#5C80EA" />
+                                app:buttonTint="@color/backup_accent" />
 
                             <com.google.android.material.checkbox.MaterialCheckBox
                                 android:id="@+id/cb_settings_ai_core"
@@ -378,9 +381,9 @@
                                 android:layout_columnWeight="1"
                                 android:checked="true"
                                 android:text="@string/ai_core_model"
-                                android:textColor="#23324A"
+                                android:textColor="@color/text_strong"
                                 android:textSize="14sp"
-                                app:buttonTint="#5C80EA" />
+                                app:buttonTint="@color/backup_accent" />
 
                             <com.google.android.material.checkbox.MaterialCheckBox
                                 android:id="@+id/cb_settings_ai_chat"
@@ -389,9 +392,9 @@
                                 android:layout_columnWeight="1"
                                 android:checked="true"
                                 android:text="@string/ai_chat_settings"
-                                android:textColor="#23324A"
+                                android:textColor="@color/text_strong"
                                 android:textSize="14sp"
-                                app:buttonTint="#5C80EA" />
+                                app:buttonTint="@color/backup_accent" />
 
                             <com.google.android.material.checkbox.MaterialCheckBox
                                 android:id="@+id/cb_settings_books"
@@ -400,9 +403,9 @@
                                 android:layout_columnWeight="1"
                                 android:checked="true"
                                 android:text="@string/book_preference"
-                                android:textColor="#23324A"
+                                android:textColor="@color/text_strong"
                                 android:textSize="14sp"
-                                app:buttonTint="#5C80EA" />
+                                app:buttonTint="@color/backup_accent" />
 
                             <com.google.android.material.checkbox.MaterialCheckBox
                                 android:id="@+id/cb_settings_advanced_runtime"
@@ -411,9 +414,9 @@
                                 android:layout_columnWeight="1"
                                 android:checked="true"
                                 android:text="@string/system_and_debug"
-                                android:textColor="#23324A"
+                                android:textColor="@color/text_strong"
                                 android:textSize="14sp"
-                                app:buttonTint="#5C80EA" />
+                                app:buttonTint="@color/backup_accent" />
 
 
                             <com.google.android.material.checkbox.MaterialCheckBox
@@ -423,9 +426,9 @@
                                 android:layout_columnWeight="1"
                                 android:checked="true"
                                 android:text="@string/book_cover"
-                                android:textColor="#23324A"
+                                android:textColor="@color/text_strong"
                                 android:textSize="14sp"
-                                app:buttonTint="#5C80EA" />
+                                app:buttonTint="@color/backup_accent" />
                         </GridLayout>
 
                         <TextView
@@ -433,7 +436,7 @@
                             android:layout_height="wrap_content"
                             android:layout_marginTop="6dp"
                             android:text="@string/ai_core_model_description"
-                            android:textColor="#8C98A8"
+                            android:textColor="@color/text_disabled"
                             android:textSize="12sp" />
                     </LinearLayout>
 
@@ -443,7 +446,7 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="10dp"
                         android:layout_marginBottom="8dp"
-                        android:textColor="#5A6B84"
+                        android:textColor="@color/text_muted"
                         android:textSize="12sp" />
 
                     <com.google.android.material.button.MaterialButton
@@ -456,12 +459,12 @@
                         android:textAllCaps="false"
                         android:textStyle="bold"
                         android:textSize="15sp"
-                        app:backgroundTint="#5C80EA"
+                        app:backgroundTint="@color/backup_accent"
                         app:cornerRadius="14dp"
                         app:icon="@drawable/ic_backup_action"
                         app:iconGravity="textStart"
                         app:iconPadding="10dp"
-                        app:iconTint="#FFFFFF" />
+                        app:iconTint="@color/surface_card" />
 
                     <LinearLayout
                         android:layout_width="match_parent"
@@ -478,15 +481,15 @@
                             android:layout_weight="1"
                             android:text="@string/save_as"
                             android:textAllCaps="false"
-                            android:textColor="#36507D"
+                            android:textColor="@color/backup_accent_deep"
                             android:textSize="14sp"
-                            app:backgroundTint="#FFFFFF"
+                            app:backgroundTint="@color/surface_card"
                             app:cornerRadius="14dp"
                             app:icon="@drawable/ic_backup_overwrite_action"
                             app:iconGravity="textStart"
                             app:iconPadding="8dp"
-                            app:iconTint="#4B73C8"
-                            app:strokeColor="#CFE0FA"
+                            app:iconTint="@color/backup_accent_alt"
+                            app:strokeColor="@color/backup_panel_bg"
                             app:strokeWidth="1.2dp" />
 
                     </LinearLayout>
@@ -501,7 +504,7 @@
                 app:cardBackgroundColor="@color/settings_card_bg"
                 app:cardCornerRadius="@dimen/settings_card_radius"
                 app:cardElevation="0dp"
-                app:strokeColor="#DEE6F2"
+                app:strokeColor="@color/divider_soft"
                 app:strokeWidth="0dp">
 
                 <LinearLayout
@@ -524,7 +527,7 @@
                         android:layout_marginTop="4dp"
                         android:layout_marginBottom="14dp"
                         android:text="@string/restore_module_desc"
-                        android:textColor="#8C98A8"
+                        android:textColor="@color/text_disabled"
                         android:textSize="13sp" />
 
                     <com.google.android.material.button.MaterialButton
@@ -534,14 +537,14 @@
                         android:layout_height="48dp"
                         android:letterSpacing="0"
                         android:text="@string/select_backup_file"
-                        android:textColor="#5C80EA"
+                        android:textColor="@color/backup_accent"
                         android:textSize="15sp"
                         app:cornerRadius="12dp"
                         app:icon="@drawable/ic_restore_action"
                         app:iconGravity="textStart"
                         app:iconPadding="10dp"
-                        app:iconTint="#5C80EA"
-                        app:strokeColor="#AFC1F4"
+                        app:iconTint="@color/backup_accent"
+                        app:strokeColor="@color/backup_accent_soft"
                         app:strokeWidth="1dp" />
 
                 </LinearLayout>
@@ -555,7 +558,7 @@
                 app:cardBackgroundColor="@color/settings_card_bg"
                 app:cardCornerRadius="@dimen/settings_card_radius"
                 app:cardElevation="0dp"
-                app:strokeColor="#DEE6F2"
+                app:strokeColor="@color/divider_soft"
                 app:strokeWidth="0dp">
 
                 <LinearLayout
@@ -579,7 +582,7 @@
                         android:layout_marginBottom="12dp"
                         android:lineSpacingExtra="2dp"
                         android:text="@string/auto_backup_desc"
-                        android:textColor="#8C98A8"
+                        android:textColor="@color/text_disabled"
                         android:textSize="13sp" />
 
                     <LinearLayout
@@ -600,7 +603,7 @@
                                 android:layout_height="wrap_content"
                                 android:layout_weight="1"
                                 android:text="@string/enable_auto_backup"
-                                android:textColor="#2D3C57"
+                                android:textColor="@color/text_strong"
                                 android:textSize="14sp" />
 
                             <com.google.android.material.switchmaterial.SwitchMaterial
@@ -622,14 +625,14 @@
                             <View
                                 android:layout_width="match_parent"
                                 android:layout_height="0.5dp"
-                                android:background="#E0E7F0" />
+                                android:background="@color/divider_soft" />
 
                             <TextView
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
                                 android:layout_marginTop="12dp"
                                 android:text="@string/backup_interval"
-                                android:textColor="#2D3C57"
+                                android:textColor="@color/text_strong"
                                 android:textSize="14sp"
                                 android:textStyle="bold" />
 
@@ -647,7 +650,7 @@
                                     android:layout_weight="1"
                                     android:singleLine="true"
                                     android:text="@string/interval_6h"
-                                    android:textColor="#2D3C57"
+                                    android:textColor="@color/text_strong"
                                     android:textSize="13sp" />
 
                                 <RadioButton
@@ -658,7 +661,7 @@
                                     android:checked="true"
                                     android:singleLine="true"
                                     android:text="@string/interval_12h"
-                                    android:textColor="#2D3C57"
+                                    android:textColor="@color/text_strong"
                                     android:textSize="13sp" />
 
                                 <RadioButton
@@ -668,7 +671,7 @@
                                     android:layout_weight="1"
                                     android:singleLine="true"
                                     android:text="@string/interval_24h"
-                                    android:textColor="#2D3C57"
+                                    android:textColor="@color/text_strong"
                                     android:textSize="13sp" />
                             </RadioGroup>
 
@@ -677,7 +680,7 @@
                                 android:layout_height="wrap_content"
                                 android:layout_marginTop="10dp"
                                 android:text="@string/backup_mode"
-                                android:textColor="#2D3C57"
+                                android:textColor="@color/text_strong"
                                 android:textSize="14sp"
                                 android:textStyle="bold" />
 
@@ -696,7 +699,7 @@
                                     android:checked="true"
                                     android:singleLine="true"
                                     android:text="@string/backup_lite"
-                                    android:textColor="#2D3C57"
+                                    android:textColor="@color/text_strong"
                                     android:textSize="13sp" />
 
                                 <RadioButton
@@ -706,7 +709,7 @@
                                     android:layout_weight="1"
                                     android:singleLine="true"
                                     android:text="@string/backup_full"
-                                    android:textColor="#2D3C57"
+                                    android:textColor="@color/text_strong"
                                     android:textSize="13sp" />
                             </RadioGroup>
 
@@ -714,7 +717,7 @@
                                 android:layout_width="match_parent"
                                 android:layout_height="0.5dp"
                                 android:layout_marginTop="12dp"
-                                android:background="#E0E7F0" />
+                                android:background="@color/divider_soft" />
 
                             <LinearLayout
                                 android:layout_width="match_parent"
@@ -733,7 +736,7 @@
                                         android:layout_width="wrap_content"
                                         android:layout_height="wrap_content"
                                         android:text="@string/auto_cloud_sync"
-                                        android:textColor="#2D3C57"
+                                        android:textColor="@color/text_strong"
                                         android:textSize="14sp" />
 
                                     <TextView
@@ -741,7 +744,7 @@
                                         android:layout_height="wrap_content"
                                         android:layout_marginTop="2dp"
                                         android:text="@string/need_webdav_first"
-                                        android:textColor="#8C98A8"
+                                        android:textColor="@color/text_disabled"
                                         android:textSize="12sp" />
                                 </LinearLayout>
 
@@ -757,7 +760,7 @@
                                 android:layout_width="match_parent"
                                 android:layout_height="0.5dp"
                                 android:layout_marginTop="12dp"
-                                android:background="#E0E7F0" />
+                                android:background="@color/divider_soft" />
 
                             <TextView
                                 android:id="@+id/tv_auto_backup_status"
@@ -765,7 +768,7 @@
                                 android:layout_height="wrap_content"
                                 android:layout_marginTop="10dp"
                                 android:text="@string/not_backed_up_yet"
-                                android:textColor="#6E7D95"
+                                android:textColor="@color/text_muted"
                                 android:textSize="12sp" />
 
                         </LinearLayout>
@@ -782,7 +785,7 @@
                 app:cardBackgroundColor="@color/settings_card_bg"
                 app:cardCornerRadius="@dimen/settings_card_radius"
                 app:cardElevation="0dp"
-                app:strokeColor="#DEE6F2"
+                app:strokeColor="@color/divider_soft"
                 app:strokeWidth="0dp">
 
                 <LinearLayout
@@ -805,7 +808,7 @@
                         android:layout_marginTop="4dp"
                         android:layout_marginBottom="12dp"
                         android:text="@string/webdav_example_hint"
-                        android:textColor="#8C98A8"
+                        android:textColor="@color/text_disabled"
                         android:textSize="12sp" />
 
                     <EditText
@@ -816,8 +819,8 @@
                         android:hint="@string/hint_webdav_url"
                         android:paddingHorizontal="12dp"
                         android:singleLine="true"
-                        android:textColor="#223047"
-                        android:textColorHint="#8793A5"
+                        android:textColor="@color/text_strong"
+                        android:textColorHint="@color/text_disabled"
                         android:textSize="13sp" />
 
                     <EditText
@@ -829,8 +832,8 @@
                         android:hint="@string/hint_webdav_account"
                         android:paddingHorizontal="12dp"
                         android:singleLine="true"
-                        android:textColor="#223047"
-                        android:textColorHint="#8793A5"
+                        android:textColor="@color/text_strong"
+                        android:textColorHint="@color/text_disabled"
                         android:textSize="13sp" />
 
                     <EditText
@@ -843,8 +846,8 @@
                         android:inputType="textPassword"
                         android:paddingHorizontal="12dp"
                         android:singleLine="true"
-                        android:textColor="#223047"
-                        android:textColorHint="#8793A5"
+                        android:textColor="@color/text_strong"
+                        android:textColorHint="@color/text_disabled"
                         android:textSize="13sp" />
 
                     <EditText
@@ -856,8 +859,8 @@
                         android:hint="@string/hint_webdav_subdir"
                         android:paddingHorizontal="12dp"
                         android:singleLine="true"
-                        android:textColor="#223047"
-                        android:textColorHint="#8793A5"
+                        android:textColor="@color/text_strong"
+                        android:textColorHint="@color/text_disabled"
                         android:textSize="13sp" />
 
                     <EditText
@@ -869,8 +872,8 @@
                         android:hint="@string/hint_device_name"
                         android:paddingHorizontal="12dp"
                         android:singleLine="true"
-                        android:textColor="#223047"
-                        android:textColorHint="#8793A5"
+                        android:textColor="@color/text_strong"
+                        android:textColorHint="@color/text_disabled"
                         android:textSize="13sp" />
 
                     <LinearLayout
@@ -888,14 +891,14 @@
                             android:layout_marginEnd="6dp"
                             android:layout_weight="1"
                             android:text="@string/save_settings"
-                            android:textColor="#44556E"
+                            android:textColor="@color/text_muted"
                             android:textSize="13sp"
-                            app:backgroundTint="#EAF0FB"
+                            app:backgroundTint="@color/backup_panel_bg"
                             app:cornerRadius="10dp"
                             app:icon="@drawable/ic_cloud_save_action"
                             app:iconGravity="textStart"
                             app:iconPadding="8dp"
-                            app:iconTint="#5F7088" />
+                            app:iconTint="@color/text_muted" />
 
                         <com.google.android.material.button.MaterialButton
                             android:id="@+id/btn_test_cloud_connection"
@@ -905,14 +908,14 @@
                             android:layout_marginStart="6dp"
                             android:layout_weight="1"
                             android:text="@string/test_connection_btn"
-                            android:textColor="#44556E"
+                            android:textColor="@color/text_muted"
                             android:textSize="13sp"
-                            app:backgroundTint="#EAF0FB"
+                            app:backgroundTint="@color/backup_panel_bg"
                             app:cornerRadius="10dp"
                             app:icon="@drawable/ic_cloud_test_action"
                             app:iconGravity="textStart"
                             app:iconPadding="8dp"
-                            app:iconTint="#5F7088" />
+                            app:iconTint="@color/text_muted" />
                     </LinearLayout>
 
                     <LinearLayout
@@ -935,7 +938,7 @@
                             app:icon="@drawable/ic_cloud_upload_action"
                             app:iconGravity="textStart"
                             app:iconPadding="8dp"
-                            app:iconTint="#FFFFFF" />
+                            app:iconTint="@color/surface_card" />
 
                         <com.google.android.material.button.MaterialButton
                             android:id="@+id/btn_manual_download"
@@ -952,7 +955,7 @@
                             app:iconGravity="textStart"
                             app:iconPadding="8dp"
                             app:iconTint="@color/brand_primary"
-                            app:strokeColor="#AFC1F4"
+                            app:strokeColor="@color/backup_accent_soft"
                             app:strokeWidth="1dp" />
                     </LinearLayout>
 
@@ -963,14 +966,14 @@
                         android:layout_height="46dp"
                         android:layout_marginTop="10dp"
                         android:text="@string/view_retention_policy"
-                        android:textColor="#44556E"
+                        android:textColor="@color/text_muted"
                         android:textSize="13sp"
-                        app:backgroundTint="#EAF0FB"
+                        app:backgroundTint="@color/backup_panel_bg"
                         app:cornerRadius="10dp"
                         app:icon="@drawable/ic_policy_action"
                         app:iconGravity="textStart"
                         app:iconPadding="8dp"
-                        app:iconTint="#5F7088" />
+                        app:iconTint="@color/text_muted" />
 
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
@@ -982,7 +985,7 @@
                 app:cardBackgroundColor="@color/settings_card_bg"
                 app:cardCornerRadius="@dimen/settings_card_radius"
                 app:cardElevation="0dp"
-                app:strokeColor="#DEE6F2"
+                app:strokeColor="@color/divider_soft"
                 app:strokeWidth="0dp">
 
                 <LinearLayout
@@ -1006,7 +1009,7 @@
                         android:layout_marginBottom="14dp"
                         android:lineSpacingExtra="2dp"
                         android:text="@string/csv_export_import_desc"
-                        android:textColor="#8C98A8"
+                        android:textColor="@color/text_disabled"
                         android:textSize="13sp" />
 
                     <LinearLayout
@@ -1024,14 +1027,14 @@
                             android:layout_marginEnd="6dp"
                             android:letterSpacing="0"
                             android:text="@string/export_csv"
-                            android:textColor="#4F5E74"
+                            android:textColor="@color/text_body"
                             android:textSize="14sp"
-                            app:backgroundTint="#EAF0FB"
+                            app:backgroundTint="@color/backup_panel_bg"
                             app:cornerRadius="10dp"
                             app:icon="@drawable/ic_csv_export_action"
                             app:iconGravity="textStart"
                             app:iconPadding="8dp"
-                            app:iconTint="#6C7F9B" />
+                            app:iconTint="@color/text_muted" />
 
                         <com.google.android.material.button.MaterialButton
                             android:id="@+id/btn_import_csv"
@@ -1042,14 +1045,14 @@
                             android:layout_marginStart="6dp"
                             android:letterSpacing="0"
                             android:text="@string/import_bills"
-                            android:textColor="#4F5E74"
+                            android:textColor="@color/text_body"
                             android:textSize="14sp"
-                            app:backgroundTint="#EAF0FB"
+                            app:backgroundTint="@color/backup_panel_bg"
                             app:cornerRadius="10dp"
                             app:icon="@drawable/ic_csv_import_action"
                             app:iconGravity="textStart"
                             app:iconPadding="8dp"
-                            app:iconTint="#6C7F9B" />
+                            app:iconTint="@color/text_muted" />
                     </LinearLayout>
 
                     <com.google.android.material.button.MaterialButton
@@ -1060,14 +1063,14 @@
                         android:layout_marginTop="10dp"
                         android:letterSpacing="0"
                         android:text="@string/fix_asset_binding"
-                        android:textColor="#4F5E74"
+                        android:textColor="@color/text_body"
                         android:textSize="14sp"
-                        app:backgroundTint="#EAF0FB"
+                        app:backgroundTint="@color/backup_panel_bg"
                         app:cornerRadius="10dp"
                         app:icon="@drawable/ic_refresh_outline"
                         app:iconGravity="textStart"
                         app:iconPadding="8dp"
-                        app:iconTint="#6C7F9B" />
+                        app:iconTint="@color/text_muted" />
 
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
@@ -1080,7 +1083,7 @@
                 app:cardBackgroundColor="@color/settings_card_bg"
                 app:cardCornerRadius="@dimen/settings_card_radius"
                 app:cardElevation="0dp"
-                app:strokeColor="#DEE6F2"
+                app:strokeColor="@color/divider_soft"
                 app:strokeWidth="0dp">
 
                 <LinearLayout
@@ -1104,7 +1107,7 @@
                         android:layout_marginBottom="14dp"
                         android:lineSpacingExtra="2dp"
                         android:text="@string/batch_delete_warning"
-                        android:textColor="#D46B6B"
+                        android:textColor="@color/settings_danger_text"
                         android:textSize="13sp" />
 
                     <com.google.android.material.button.MaterialButton
@@ -1114,14 +1117,14 @@
                         android:layout_height="48dp"
                         android:letterSpacing="0"
                         android:text="@string/cleanup_by_date"
-                        android:textColor="#4F5E74"
+                        android:textColor="@color/text_body"
                         android:textSize="14sp"
-                        app:backgroundTint="#EAF0FB"
+                        app:backgroundTint="@color/backup_panel_bg"
                         app:cornerRadius="10dp"
                         app:icon="@drawable/ic_home_calendar"
                         app:iconGravity="textStart"
                         app:iconPadding="8dp"
-                        app:iconTint="#6C7F9B" />
+                        app:iconTint="@color/text_muted" />
 
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/btn_cleanup_by_book"
@@ -1131,14 +1134,14 @@
                         android:layout_marginTop="8dp"
                         android:letterSpacing="0"
                         android:text="@string/cleanup_by_book"
-                        android:textColor="#4F5E74"
+                        android:textColor="@color/text_body"
                         android:textSize="14sp"
-                        app:backgroundTint="#EAF0FB"
+                        app:backgroundTint="@color/backup_panel_bg"
                         app:cornerRadius="10dp"
                         app:icon="@drawable/ic_restore_action"
                         app:iconGravity="textStart"
                         app:iconPadding="8dp"
-                        app:iconTint="#6C7F9B" />
+                        app:iconTint="@color/text_muted" />
 
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/btn_cleanup_all"
@@ -1148,14 +1151,14 @@
                         android:layout_marginTop="8dp"
                         android:letterSpacing="0"
                         android:text="@string/cleanup_all_bills"
-                        android:textColor="#D46B6B"
+                        android:textColor="@color/settings_danger_text"
                         android:textSize="14sp"
                         app:cornerRadius="10dp"
                         app:icon="@drawable/ic_delete"
                         app:iconGravity="textStart"
                         app:iconPadding="8dp"
-                        app:iconTint="#D46B6B"
-                        app:strokeColor="#F0C0C0"
+                        app:iconTint="@color/settings_danger_text"
+                        app:strokeColor="@color/backup_danger_stroke"
                         app:strokeWidth="1dp" />
 
                 </LinearLayout>

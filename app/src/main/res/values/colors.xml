@@ -171,8 +171,21 @@
          muted 原为 #9AA4B2，对白底仅 2.52:1，未达 WCAG AA；
          现为 #6B7684，4.62:1。 -->
     <color name="text_strong">#1A2744</color>
+    <color name="text_body">#3D4A5C</color>
     <color name="text_muted">#6B7684</color>
     <color name="text_disabled">#A7B1BD</color>
+
+    <!-- ==================== 备份页 ====================
+         此前备份/存储/云备份三个页面各自维护一套私有色板
+         （activity_backup_new.xml 单文件内即有 23 种色值、123 处硬编码），
+         与全局 token 无关。现全部收敛到全局 token，本组仅保留
+         「选中态」这一组——它表达 checked 语义，不等于主色。 -->
+    <color name="backup_accent">#5C80EA</color>
+    <color name="backup_accent_soft">#AFC1F4</color>
+    <color name="backup_accent_deep">#36507D</color>
+    <color name="backup_accent_alt">#4B73C8</color>
+    <color name="backup_panel_bg">#EAF0FB</color>
+    <color name="backup_danger_stroke">#F0C0C0</color>
 
     <!-- ==================== Settings Page ==================== -->
     <color name="settings_page_bg">#F7F8FA</color>

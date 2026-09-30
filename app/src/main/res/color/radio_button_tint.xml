@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  选择控件（RadioButton / CheckBox）选中态。
+
+  此前 RadioButton 未设 tint，落到主题的 colorSecondary = brand_secondary
+  #FF4081（玫红），与页面内主按钮 #5C80EA、CheckBox 选中态 #5C80EA 各不相同，
+  同一个页面出现三种「选中」颜色。
+
+  现统一到 backup_accent，与本页 CheckBox 选中态一致。
+-->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_checked="true" android:color="@color/backup_accent" />
+    <item android:color="#B9C3D0" />
+</selector>

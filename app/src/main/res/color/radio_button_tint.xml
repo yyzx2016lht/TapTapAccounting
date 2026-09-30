@@ -2,13 +2,15 @@
 <!--
   选择控件（RadioButton / CheckBox）选中态。
 
-  此前 RadioButton 未设 tint，落到主题的 colorSecondary = brand_secondary
-  #FF4081（玫红），与页面内主按钮 #5C80EA、CheckBox 选中态 #5C80EA 各不相同，
-  同一个页面出现三种「选中」颜色。
+  主题层已将 colorSecondary 统一为 brand_primary，绝大多数控件会自动继承。
+  本文件仅用于显式声明，保证在未套用 App 主题的 Dialog 容器里
+  （如部分 BottomSheetDialog）颜色也一致。
 
-  现统一到 backup_accent，与本页 CheckBox 选中态一致。
+  背景：此前未设 tint 的控件会落到 colorSecondary = brand_secondary
+  #FF4081（玫红），全项目有 54 处，备份页一屏内即出现 4 处玫红，
+  与蓝色主按钮、蓝色开关割裂。
 -->
 <selector xmlns:android="http://schemas.android.com/apk/res/android">
-    <item android:state_checked="true" android:color="@color/backup_accent" />
+    <item android:state_checked="true" android:color="@color/brand_primary" />
     <item android:color="#B9C3D0" />
 </selector>

@@ -7,9 +7,15 @@
         <!-- 全局字体恢复系统默认无衬线 -->
         <item name="fontFamily">sans-serif</item>
         <item name="android:fontFamily">sans-serif</item>
-        <!-- 次要颜色 -->
-        <item name="colorSecondary">@color/brand_secondary</item>
-        <item name="colorSecondaryVariant">#F50057</item>
+        <!-- 次要颜色
+             colorSecondary 是 Material 各选择控件（RadioButton / CheckBox /
+             SwitchCompat / Chip 等）的选中态默认色。此前为 brand_secondary
+             #FF4081（玫红），导致全项目 54 个未显式设置 tint 的选择控件
+             呈玫红色（备份间隔、备份模式、恢复模块勾选、分类排序、
+             账本收支切换、小组件周期等），与蓝的品牌主色割裂。
+             现改为 brand_primary，选中态与主色统一。 -->
+        <item name="colorSecondary">@color/brand_primary</item>
+        <item name="colorSecondaryVariant">@color/brand_primary_dark</item>
         <item name="colorOnSecondary">#FFFFFF</item>
 
         <!-- Surface & background -->
@@ -50,6 +56,11 @@
         <item name="android:fontFamily">sans-serif</item>
         <item name="android:statusBarColor">@color/surface_card</item>
         <item name="android:windowLightStatusBar">true</item>
+        <!-- 选择控件选中态。与 Theme.TapAccounting 保持一致，
+             否则这几个页面里的 RadioButton/CheckBox 会回落�� AppCompat 默认色。 -->
+        <item name="colorAccent">@color/brand_primary</item>
+        <item name="colorControlActivated">@color/brand_primary</item>
+        <item name="colorSecondary">@color/brand_primary</item>
     </style>
 
     <style name="Animation_TapAccounting_DialogSoft">

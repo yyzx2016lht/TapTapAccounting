@@ -177,7 +177,7 @@
                                 android:text="@string/asset_data"
                                 android:textColor="@color/text_strong"
                                 android:textSize="14sp"
-                                app:buttonTint="@color/backup_accent" />
+                                app:buttonTint="@color/brand_primary" />
 
                             <com.google.android.material.checkbox.MaterialCheckBox
                                 android:id="@+id/cb_categories"
@@ -188,7 +188,7 @@
                                 android:text="@string/category_settings"
                                 android:textColor="@color/text_strong"
                                 android:textSize="14sp"
-                                app:buttonTint="@color/backup_accent" />
+                                app:buttonTint="@color/brand_primary" />
 
                             <com.google.android.material.checkbox.MaterialCheckBox
                                 android:id="@+id/cb_bills"
@@ -199,7 +199,7 @@
                                 android:text="@string/bill_records"
                                 android:textColor="@color/text_strong"
                                 android:textSize="14sp"
-                                app:buttonTint="@color/backup_accent" />
+                                app:buttonTint="@color/brand_primary" />
 
                             <com.google.android.material.checkbox.MaterialCheckBox
                                 android:id="@+id/cb_rules"
@@ -210,7 +210,7 @@
                                 android:text="@string/accounting_habits"
                                 android:textColor="@color/text_strong"
                                 android:textSize="14sp"
-                                app:buttonTint="@color/backup_accent" />
+                                app:buttonTint="@color/brand_primary" />
                         </GridLayout>
                     </LinearLayout>
 
@@ -254,7 +254,7 @@
                                 android:text="@string/chat_records"
                                 android:textColor="@color/text_strong"
                                 android:textSize="14sp"
-                                app:buttonTint="@color/backup_accent" />
+                                app:buttonTint="@color/brand_primary" />
 
                             <com.google.android.material.checkbox.MaterialCheckBox
                                 android:id="@+id/cb_chat_media"
@@ -265,7 +265,7 @@
                                 android:text="@string/chat_resources"
                                 android:textColor="@color/text_strong"
                                 android:textSize="14sp"
-                                app:buttonTint="@color/backup_accent" />
+                                app:buttonTint="@color/brand_primary" />
                         </GridLayout>
 
                         <TextView
@@ -317,7 +317,7 @@
                                 android:text="@string/basic_settings"
                                 android:textColor="@color/text_strong"
                                 android:textSize="14sp"
-                                app:buttonTint="@color/backup_accent" />
+                                app:buttonTint="@color/brand_primary" />
 
                             <com.google.android.material.checkbox.MaterialCheckBox
                                 android:id="@+id/cb_settings_general_assets"
@@ -328,7 +328,7 @@
                                 android:text="@string/asset_and_rate"
                                 android:textColor="@color/text_strong"
                                 android:textSize="14sp"
-                                app:buttonTint="@color/backup_accent" />
+                                app:buttonTint="@color/brand_primary" />
 
                             <com.google.android.material.checkbox.MaterialCheckBox
                                 android:id="@+id/cb_settings_general_cloud"
@@ -339,7 +339,7 @@
                                 android:text="@string/cloud_config"
                                 android:textColor="@color/text_strong"
                                 android:textSize="14sp"
-                                app:buttonTint="@color/backup_accent" />
+                                app:buttonTint="@color/brand_primary" />
 
                             <com.google.android.material.checkbox.MaterialCheckBox
                                 android:id="@+id/cb_settings_display_entries"
@@ -350,7 +350,7 @@
                                 android:text="@string/entry_and_card"
                                 android:textColor="@color/text_strong"
                                 android:textSize="14sp"
-                                app:buttonTint="@color/backup_accent" />
+                                app:buttonTint="@color/brand_primary" />
 
                             <com.google.android.material.checkbox.MaterialCheckBox
                                 android:id="@+id/cb_settings_display_bills"
@@ -361,7 +361,7 @@
                                 android:text="@string/bill_display"
                                 android:textColor="@color/text_strong"
                                 android:textSize="14sp"
-                                app:buttonTint="@color/backup_accent" />
+                                app:buttonTint="@color/brand_primary" />
 
                             <com.google.android.material.checkbox.MaterialCheckBox
                                 android:id="@+id/cb_settings_display_multibill"
@@ -372,7 +372,7 @@
                                 android:text="@string/multi_book_ocr"
                                 android:textColor="@color/text_strong"
                                 android:textSize="14sp"
-                                app:buttonTint="@color/backup_accent" />
+                                app:buttonTint="@color/brand_primary" />
 
                             <com.google.android.material.checkbox.MaterialCheckBox
                                 android:id="@+id/cb_settings_ai_core"
@@ -383,7 +383,7 @@
                                 android:text="@string/ai_core_model"
                                 android:textColor="@color/text_strong"
                                 android:textSize="14sp"
-                                app:buttonTint="@color/backup_accent" />
+                                app:buttonTint="@color/brand_primary" />
 
                             <com.google.android.material.checkbox.MaterialCheckBox
                                 android:id="@+id/cb_settings_ai_chat"
@@ -394,7 +394,7 @@
                                 android:text="@string/ai_chat_settings"
                                 android:textColor="@color/text_strong"
                                 android:textSize="14sp"
-                                app:buttonTint="@color/backup_accent" />
+                                app:buttonTint="@color/brand_primary" />
 
                             <com.google.android.material.checkbox.MaterialCheckBox
                                 android:id="@+id/cb_settings_books"
@@ -405,7 +405,7 @@
                                 android:text="@string/book_preference"
                                 android:textColor="@color/text_strong"
                                 android:textSize="14sp"
-                                app:buttonTint="@color/backup_accent" />
+                                app:buttonTint="@color/brand_primary" />
 
                             <com.google.android.material.checkbox.MaterialCheckBox
                                 android:id="@+id/cb_settings_advanced_runtime"
@@ -416,7 +416,7 @@
                                 android:text="@string/system_and_debug"
                                 android:textColor="@color/text_strong"
                                 android:textSize="14sp"
-                                app:buttonTint="@color/backup_accent" />
+                                app:buttonTint="@color/brand_primary" />
 
 
                             <com.google.android.material.checkbox.MaterialCheckBox
@@ -428,7 +428,7 @@
                                 android:text="@string/book_cover"
                                 android:textColor="@color/text_strong"
                                 android:textSize="14sp"
-                                app:buttonTint="@color/backup_accent" />
+                                app:buttonTint="@color/brand_primary" />
                         </GridLayout>
 
                         <TextView
@@ -459,7 +459,7 @@
                         android:textAllCaps="false"
                         android:textStyle="bold"
                         android:textSize="15sp"
-                        app:backgroundTint="@color/backup_accent"
+                        app:backgroundTint="@color/brand_primary"
                         app:cornerRadius="14dp"
                         app:icon="@drawable/ic_backup_action"
                         app:iconGravity="textStart"
@@ -481,14 +481,14 @@
                             android:layout_weight="1"
                             android:text="@string/save_as"
                             android:textAllCaps="false"
-                            android:textColor="@color/backup_accent_deep"
+                            android:textColor="@color/brand_primary_dark"
                             android:textSize="14sp"
                             app:backgroundTint="@color/surface_card"
                             app:cornerRadius="14dp"
                             app:icon="@drawable/ic_backup_overwrite_action"
                             app:iconGravity="textStart"
                             app:iconPadding="8dp"
-                            app:iconTint="@color/backup_accent_alt"
+                            app:iconTint="@color/brand_primary"
                             app:strokeColor="@color/backup_panel_bg"
                             app:strokeWidth="1.2dp" />
 
@@ -537,14 +537,14 @@
                         android:layout_height="48dp"
                         android:letterSpacing="0"
                         android:text="@string/select_backup_file"
-                        android:textColor="@color/backup_accent"
+                        android:textColor="@color/brand_primary"
                         android:textSize="15sp"
                         app:cornerRadius="12dp"
                         app:icon="@drawable/ic_restore_action"
                         app:iconGravity="textStart"
                         app:iconPadding="10dp"
-                        app:iconTint="@color/backup_accent"
-                        app:strokeColor="@color/backup_accent_soft"
+                        app:iconTint="@color/brand_primary"
+                        app:strokeColor="@color/divider_soft"
                         app:strokeWidth="1dp" />
 
                 </LinearLayout>
@@ -955,7 +955,7 @@
                             app:iconGravity="textStart"
                             app:iconPadding="8dp"
                             app:iconTint="@color/brand_primary"
-                            app:strokeColor="@color/backup_accent_soft"
+                            app:strokeColor="@color/divider_soft"
                             app:strokeWidth="1dp" />
                     </LinearLayout>
 

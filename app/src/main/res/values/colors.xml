@@ -178,12 +178,9 @@
     <!-- ==================== 备份页 ====================
          此前备份/存储/云备份三个页面各自维护一套私有色板
          （activity_backup_new.xml 单文件内即有 23 种色值、123 处硬编码），
-         与全局 token 无关。现全部收敛到全局 token，本组仅保留
-         「选中态」这一组——它表达 checked 语义，不等于主色。 -->
-    <color name="backup_accent">#5C80EA</color>
-    <color name="backup_accent_soft">#AFC1F4</color>
-    <color name="backup_accent_deep">#36507D</color>
-    <color name="backup_accent_alt">#4B73C8</color>
+         现已全部收敛到全局 token。
+         原本保留的一组 backup_accent_* 私有强调色也已并入 brand_primary：
+         「选中」即「强调」，不必再引入第三个蓝。 -->
     <color name="backup_panel_bg">#EAF0FB</color>
     <color name="backup_danger_stroke">#F0C0C0</color>
 

@@ -2,8 +2,8 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:background="#F0F2F6"
+    android:layout_height="wrap_content"
+    android:background="@drawable/bg_stats_scope_sheet"
     android:orientation="vertical">
 
     <androidx.constraintlayout.widget.ConstraintLayout
@@ -51,8 +51,7 @@
     <ScrollView
         android:id="@+id/scroll_filter_content"
         android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1"
+        android:layout_height="wrap_content"
         android:clipToPadding="false"
         android:fillViewport="true"
         android:overScrollMode="never"
@@ -301,7 +300,7 @@
             android:id="@+id/btn_reset_filter_sheet"
             android:layout_width="0dp"
             android:layout_weight="1"
-            android:layout_height="42dp"
+            android:layout_height="@dimen/dialog_button_height"
             android:layout_marginEnd="6dp"
             android:background="@drawable/bg_stats_filter_reset"
             android:fontFamily="sans-serif-medium"
@@ -314,7 +313,7 @@
             android:id="@+id/btn_confirm_filter_sheet"
             android:layout_width="0dp"
             android:layout_weight="1"
-            android:layout_height="42dp"
+            android:layout_height="@dimen/dialog_button_height"
             android:layout_marginStart="6dp"
             android:background="@drawable/bg_stats_filter_confirm"
             android:fontFamily="sans-serif-medium"

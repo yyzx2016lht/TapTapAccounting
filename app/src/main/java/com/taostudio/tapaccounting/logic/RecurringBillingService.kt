@@ -21,6 +21,7 @@ class RecurringBillingService(
             patternSignature(
                 merchantKey = it.merchantKey,
                 bookName = it.bookName,
+                categoryId = it.categoryId,
                 categoryName = it.categoryName,
                 accountName = it.accountName,
                 toAccountName = "",
@@ -34,6 +35,7 @@ class RecurringBillingService(
                 merchantKey = candidate.merchantKey,
                 bookName = candidate.bookName,
                 categoryName = candidate.categoryName,
+                categoryId = candidate.categoryId,
                 accountName = candidate.accountName,
                 toAccountName = "",
                 billType = Bill.TYPE_EXPENSE,
@@ -57,7 +59,7 @@ class RecurringBillingService(
                         frequency = candidate.frequency,
                         dayOfMonthHint = candidate.dayOfMonthHint,
                         lastSeenAt = candidate.lastSeenAt,
-                        nextExpectedAt = calculateNextExpected(candidate.lastSeenAt, candidate.frequency),
+                        nextExpectedAt = calculateNextExpected(candidate.lastSeenAt, candidate.frequency, candidate.dayOfMonthHint),
                         updatedAt = System.currentTimeMillis()
                     )
                 )
@@ -70,6 +72,7 @@ class RecurringBillingService(
                 patternSignature(
                     merchantKey = pattern.merchantKey,
                     bookName = pattern.bookName,
+                    categoryId = pattern.categoryId,
                     categoryName = pattern.categoryName,
                     accountName = pattern.accountName,
                     toAccountName = pattern.toAccountName,
@@ -114,7 +117,7 @@ class RecurringBillingService(
             frequency = frequency,
             dayOfMonthHint = dayOfMonthHint,
             lastSeenAt = lastSeenAt,
-            nextExpectedAt = calculateNextExpected(lastSeenAt, frequency),
+            nextExpectedAt = calculateNextExpected(lastSeenAt, frequency, dayOfMonthHint),
             status = RecurringStatus.CONFIRMED,
             createdAt = now,
             updatedAt = now
@@ -123,6 +126,7 @@ class RecurringBillingService(
             merchantKey = pattern.merchantKey,
             bookName = pattern.bookName,
             categoryName = pattern.categoryName,
+            categoryId = pattern.categoryId,
             accountName = pattern.accountName,
             toAccountName = pattern.toAccountName,
             billType = pattern.billType,
@@ -158,7 +162,7 @@ class RecurringBillingService(
         val updated = matched.copy(
             amountApprox = (matched.amountApprox + bill.amount) / 2.0,
             lastSeenAt = bill.time,
-            nextExpectedAt = calculateNextExpected(bill.time, matched.frequency),
+            nextExpectedAt = calculateNextExpected(bill.time, matched.frequency, matched.dayOfMonthHint),
             updatedAt = System.currentTimeMillis()
         )
         db.recurringPatternDao().update(updated)
@@ -209,7 +213,7 @@ class RecurringBillingService(
             pattern.copy(
                 amountApprox = amount,
                 lastSeenAt = billTime,
-                nextExpectedAt = calculateNextExpected(billTime, pattern.frequency),
+                nextExpectedAt = calculateNextExpected(billTime, pattern.frequency, pattern.dayOfMonthHint),
                 updatedAt = System.currentTimeMillis()
             )
         )
@@ -254,6 +258,28 @@ class RecurringBillingService(
     companion object {
         fun normalizeMerchantKey(text: String): String =
             text.trim().lowercase().replace("\\s+".toRegex(), "")
+
+        /**
+         * 编辑周期模式时解析分类 id。
+         *
+         * [keptCategoryId] 是「沿用」的候选，来自该模式原有记录；只有用户重新选择分类
+         * （调用方会把它置空）或新建时它才为 null。
+         *
+         * 之所以必须优先沿用而不是按名字反查：`categoryName` 只是分类树里的展示路径快照，
+         * 分类一旦改名就过期了。按过期旧名去 `findCategoryByDisplayName` 会查不到，
+         * 于是把原本有效的分类关联静默清空——用户只是改个金额，分类就丢了。
+         */
+        internal suspend fun resolvePatternCategoryId(
+            keptCategoryId: Long?,
+            selectedCategoryName: String?,
+            billType: Int,
+            lookupByName: suspend (String) -> Long?
+        ): Long? = when {
+            billType == Bill.TYPE_TRANSFER -> null
+            keptCategoryId != null -> keptCategoryId
+            selectedCategoryName.isNullOrBlank() -> null
+            else -> lookupByName(selectedCategoryName)
+        }
 
         fun calculateNextExpected(
             lastSeen: Long,
@@ -309,9 +335,15 @@ class RecurringBillingService(
             return cal.timeInMillis
         }
 
-        private fun patternSignature(
+        /**
+         * 内存中的去重签名。分类部分**以 categoryId 优先**，与 `RecurringPatternDao.getBySignature`
+         * 保持一致——否则分类改名后，旧 pattern 的签名（旧名）与新候选（新名）对不上，
+         * 已 CONFIRMED 的旧 pattern 会被漏掉，同时新候选又被当成新周期插入，留下重复。
+         */
+        internal fun patternSignature(
             merchantKey: String,
             bookName: String,
+            categoryId: Long?,
             categoryName: String?,
             accountName: String?,
             toAccountName: String,
@@ -320,7 +352,7 @@ class RecurringBillingService(
         ): String = listOf(
             merchantKey,
             bookName,
-            categoryName.orEmpty(),
+            categoryId?.let { "id:$it" } ?: "name:${categoryName.orEmpty()}",
             accountName.orEmpty(),
             toAccountName,
             billType.toString(),

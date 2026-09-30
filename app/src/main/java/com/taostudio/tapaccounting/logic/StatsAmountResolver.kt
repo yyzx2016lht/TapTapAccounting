@@ -1,5 +1,6 @@
 package com.taostudio.tapaccounting.logic
 
+import com.taostudio.tapaccounting.Logger
 import com.taostudio.tapaccounting.data.local.entity.Bill
 
 /**
@@ -22,7 +23,10 @@ object StatsAmountResolver {
         if (selectedCurrency != null) return bill.amount
         if (bill.type == Bill.TYPE_TRANSFER) {
             return runCatching { convertToCny(bill.amount, bill.currency) }
-                .getOrElse { bill.amount }
+                .getOrElse {
+                    Logger.w("StatsAmountResolver", "汇率缺失，转账金额按原币计入统计: bill=${bill.id} currency=${bill.currency}")
+                    bill.amount
+                }
         }
         return bill.amount * bill.exchangeRate
     }

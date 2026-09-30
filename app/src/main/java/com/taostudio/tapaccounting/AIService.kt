@@ -25,10 +25,6 @@ import java.io.File
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 
-// OCR 模式常量
-const val OCR_MODE_LOCAL      = 0   // 本地 ML Kit OCR + 文本 AI
-const val OCR_MODE_MULTIMODAL = 1   // 直接多模态 AI（发送图片）
-
 /** 聊天入口的二分类结果。 */
 internal fun normalizeChatIntent(intent: String): String = when (intent.trim().uppercase(Locale.ROOT)) {
     "BOOKKEEPING", "ACCOUNTING_CREATE" -> "BOOKKEEPING"

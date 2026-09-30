@@ -34,6 +34,9 @@ class CategoryStatsAdapter(
 ) : RecyclerView.Adapter<CategoryStatsAdapter.ViewHolder>() {
     companion object {
         private const val TAG = "CategoryStatsAdapter"
+        /** 与普通账单列表一致：支出图标染红、收入图标染绿。 */
+        private const val ICON_TINT_EXPENSE = 0xFFFF5252.toInt()
+        private const val ICON_TINT_INCOME = 0xFF4CAF50.toInt()
     }
 
     private var colorMap: Map<String, Int> = emptyMap()
@@ -128,13 +131,21 @@ class CategoryStatsAdapter(
         val themeColor = colorMap[stat.categoryName]
             ?: if (chartColors.isNotEmpty()) chartColors[position % chartColors.size] else Color.GRAY
         holder.pbPercent.progressTintList = ColorStateList.valueOf(themeColor)
-        holder.ivIcon.backgroundTintList = ColorStateList.valueOf(themeColor)
+        // 图标与普通账单保持一致：支出红色、收入绿色；底色用对应的浅色圆。
+        // 这里不能用分类图表色给图标染色，否则每行颜色都不一样（历史 bug）。
+        holder.ivIcon.backgroundTintList = null
+        holder.ivIcon.setBackgroundResource(
+            if (isExpense) R.drawable.bg_circle_expense_soft else R.drawable.bg_circle_income_soft
+        )
+        // 注意：染色必须在 [bindCategoryIcon] 之后设置，因为它在加载前会 clearColorFilter()。
+        val typeTint = if (isExpense) ICON_TINT_EXPENSE else ICON_TINT_INCOME
 
         val type = if (isExpense) 0 else 1
         val ctx = holder.itemView.context
         val iconKey = iconCacheKey(stat.categoryName, type)
         holder.ivIcon.tag = iconKey
         bindCategoryIcon(holder.ivIcon, ctx, stat.categoryName, type, iconKey)
+        applyIconTint(holder.ivIcon, iconKey, typeTint)
 
         holder.divider.visibility = if (position == itemCount - 1) View.GONE else View.VISIBLE
         holder.itemView.setBackgroundColor(Color.TRANSPARENT)
@@ -216,8 +227,15 @@ class CategoryStatsAdapter(
                     .load(iconUrl)
                     .diskCacheStrategy(com.bumptech.glide.load.engine.DiskCacheStrategy.ALL)
                     .into(imageView)
+                // 图标加载是异步的，颜色可能被加载流程清掉，这里按当前类型补回来。
+                applyIconTint(imageView, iconKey, if (type == 0) ICON_TINT_EXPENSE else ICON_TINT_INCOME)
             }
         }
+    }
+
+    /** 按当前行绑定的图标键给图标染色；仅当该 ImageView 仍属于这一行时才生效。 */
+    private fun applyIconTint(imageView: ImageView, iconKey: String, tint: Int) {
+        if (imageView.tag == iconKey) imageView.setColorFilter(tint)
     }
 
     private fun preloadIconsAsync(newItems: List<CategoryStat>, seq: Long, isExpense: Boolean) {

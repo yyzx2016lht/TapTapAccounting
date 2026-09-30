@@ -4,7 +4,7 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:background="#F5F7FA">
+    android:background="@color/page_background">
 
     <com.taostudio.tapaccounting.ui.widget.SecondaryPageHeaderView
         android:id="@+id/secondary_header"
@@ -14,13 +14,12 @@
         app:headerActionVisible="true"
         app:headerSecondaryActionIcon="@drawable/ic_action_delete"
         app:headerSecondaryActionVisible="true"
-        app:headerTitle="日志查看器" />
+        app:headerTitle="@string/log_viewer_title" />
 
-    <!-- Tab 切换：运行日志 / 崩溃日志 -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="44dp"
-        android:background="#FFFFFF"
+        android:background="@color/surface_card"
         android:elevation="2dp"
         android:orientation="horizontal">
 
@@ -33,7 +32,7 @@
             android:text="@string/runtime_log"
             android:textSize="14sp"
             android:textStyle="bold"
-            android:textColor="#4080FF"
+            android:textColor="@color/brand_primary"
             android:background="?attr/selectableItemBackground"
             android:clickable="true"
             android:focusable="true" />
@@ -41,7 +40,7 @@
         <View
             android:layout_width="1dp"
             android:layout_height="match_parent"
-            android:background="#EEEEEE" />
+            android:background="@color/divider_soft" />
 
         <TextView
             android:id="@+id/tab_crash_log"
@@ -52,20 +51,19 @@
             android:text="@string/crash_log"
             android:textSize="14sp"
             android:textStyle="bold"
-            android:textColor="#888888"
+            android:textColor="@color/text_tertiary"
             android:background="?attr/selectableItemBackground"
             android:clickable="true"
             android:focusable="true" />
     </LinearLayout>
 
-    <!-- Tab 下划线指示器 -->
     <View
         android:id="@+id/tab_indicator"
         android:layout_width="match_parent"
         android:layout_height="3dp"
-        android:layout_marginBottom="4dp"
-        android:background="#4080FF" />
+        android:background="@color/brand_primary" />
 
+    <!-- 完整日志开关 -->
     <LinearLayout
         android:id="@+id/layout_dev_logging_toggle"
         android:layout_width="match_parent"
@@ -74,17 +72,30 @@
         android:gravity="center_vertical"
         android:paddingStart="16dp"
         android:paddingEnd="16dp"
-        android:paddingTop="8dp"
-        android:paddingBottom="8dp"
-        android:background="#FFFFFF">
+        android:paddingTop="6dp"
+        android:paddingBottom="6dp"
+        android:background="@color/surface_card">
 
-        <TextView
+        <LinearLayout
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:text="@string/developer_debug"
-            android:textSize="13sp"
-            android:textColor="#37474F" />
+            android:orientation="vertical">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/developer_debug"
+                android:textSize="13sp"
+                android:textColor="@color/text_primary" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/full_log_hint"
+                android:textSize="11sp"
+                android:textColor="@color/text_tertiary" />
+        </LinearLayout>
 
         <com.google.android.material.switchmaterial.SwitchMaterial
             android:id="@+id/switch_dev_full_logging"
@@ -92,19 +103,119 @@
             android:layout_height="wrap_content" />
     </LinearLayout>
 
-    <androidx.core.widget.NestedScrollView
+    <!-- 搜索 -->
+    <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:padding="16dp">
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingStart="12dp"
+        android:paddingEnd="12dp"
+        android:paddingTop="8dp"
+        android:paddingBottom="4dp"
+        android:background="@color/page_background">
+
+        <EditText
+            android:id="@+id/et_log_search"
+            android:layout_width="0dp"
+            android:layout_height="36dp"
+            android:layout_weight="1"
+            android:hint="@string/log_search_hint"
+            android:textSize="13sp"
+            android:textColor="@color/text_primary"
+            android:textColorHint="@color/text_tertiary"
+            android:background="@drawable/bg_dialog_rounded"
+            android:paddingStart="12dp"
+            android:paddingEnd="12dp"
+            android:inputType="text"
+            android:imeOptions="actionSearch"
+            android:maxLines="1" />
 
         <TextView
-            android:id="@+id/tv_log_content"
-            android:layout_width="match_parent"
+            android:id="@+id/tv_log_count"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:fontFamily="monospace"
-            android:text="@string/loading_log"
-            android:textColor="#444444"
-            android:textSize="@dimen/text_size_12" />
-    </androidx.core.widget.NestedScrollView>
-</LinearLayout>
+            android:layout_marginStart="8dp"
+            android:textSize="11sp"
+            android:textColor="@color/text_tertiary" />
+    </LinearLayout>
 
+    <!-- 级别筛选 -->
+    <HorizontalScrollView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:scrollbars="none"
+        android:paddingStart="12dp"
+        android:paddingEnd="12dp"
+        android:paddingBottom="8dp"
+        android:background="@color/page_background">
+
+        <LinearLayout
+            android:id="@+id/level_filter_row"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <TextView
+                android:id="@+id/chip_all"
+                style="@style/LogFilterChip"
+                android:layout_width="wrap_content"
+                android:layout_height="32dp"
+                android:text="@string/log_filter_all" />
+
+            <TextView
+                android:id="@+id/chip_error"
+                style="@style/LogFilterChip"
+                android:layout_width="wrap_content"
+                android:layout_height="32dp"
+                android:layout_marginStart="8dp"
+                android:text="@string/log_filter_error" />
+
+            <TextView
+                android:id="@+id/chip_warn"
+                style="@style/LogFilterChip"
+                android:layout_width="wrap_content"
+                android:layout_height="32dp"
+                android:layout_marginStart="8dp"
+                android:text="@string/log_filter_warn" />
+
+            <TextView
+                android:id="@+id/chip_info"
+                style="@style/LogFilterChip"
+                android:layout_width="wrap_content"
+                android:layout_height="32dp"
+                android:layout_marginStart="8dp"
+                android:text="@string/log_filter_info" />
+
+            <TextView
+                android:id="@+id/chip_debug"
+                style="@style/LogFilterChip"
+                android:layout_width="wrap_content"
+                android:layout_height="32dp"
+                android:layout_marginStart="8dp"
+                android:text="@string/log_filter_debug" />
+        </LinearLayout>
+    </HorizontalScrollView>
+
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/rv_log_entries"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:clipToPadding="false"
+        android:paddingStart="12dp"
+        android:paddingEnd="12dp"
+        android:paddingBottom="16dp"
+        android:background="@color/page_background" />
+
+    <TextView
+        android:id="@+id/tv_empty_hint"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:gravity="center"
+        android:text="@string/no_runtime_log_hint"
+        android:textSize="13sp"
+        android:textColor="@color/text_tertiary"
+        android:visibility="gone" />
+</LinearLayout>

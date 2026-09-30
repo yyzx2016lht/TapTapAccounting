@@ -29,6 +29,7 @@ import com.taostudio.tapaccounting.data.local.entity.SharedLedger
 import com.taostudio.tapaccounting.data.local.entity.SharedMember
 import com.taostudio.tapaccounting.data.sync.protocol.Operation
 import com.taostudio.tapaccounting.logic.CategoryNameNormalizer
+import com.taostudio.tapaccounting.logic.UncategorizedBillRelinker
 
 internal data class RestoredBudgetCategory(
     val categoryId: Long?,
@@ -108,6 +109,15 @@ class BackupRepository(private val db: AppDatabase) {
                 existing.type == incoming.type &&
                 existing.accountName == incoming.accountName &&
                 existing.bookName == incoming.bookName
+
+        /**
+         * Guard against a corrupt parentId cycle while ordering categories for restore. The UI only
+         * ever builds two levels, so anything deeper is already invalid data.
+         */
+        private const val MAX_CATEGORY_DEPTH = 8
+
+        /** Path separator used by archives written before [CategoryNameNormalizer] unified on " - ". */
+        private const val LEGACY_CHILD_SEPARATOR = ">"
     }
 
 
@@ -158,21 +168,13 @@ class BackupRepository(private val db: AppDatabase) {
     ) {
         db.withTransaction {
             requireOverwriteRestoreDependenciesAreComplete(
-                assets = assets,
                 bills = bills,
                 deletedBills = deletedBills,
                 investmentLots = investmentLots,
-                categories = categories,
-                chatMessages = chatMessages,
-                budgets = budgets,
-                recurringPatterns = recurringPatterns
+                chatMessages = chatMessages
             )
             requireInvestmentRestoreIsComplete(assets, investmentLots)
             validateRestoreBeforeMutation(
-                hasSelectedDatabaseModule = listOf(
-                    assets, bills, deletedBills, investmentLots, categories, rules, chatMessages,
-                    budgets, recurringPatterns, books, sharedRestoreData
-                ).any { it != null },
                 bills = bills,
                 budgets = budgets,
                 sharedRestoreData = sharedRestoreData,
@@ -189,32 +191,19 @@ class BackupRepository(private val db: AppDatabase) {
 
             if (categories != null) {
                 Log.d("BackupRepo", "开始恢复分类，共 ${categories.size} 条")
-                db.categoryDao().deleteAll()
-                val roots = categories.filter { it.parentId == null }
-                val children = categories.filter { it.parentId != null }
-                roots.forEach { cat ->
-                    val newId = db.categoryDao().insertCategory(cat.copy(id = 0))
-                    categoryIdMap[cat.id] = newId
-                }
-                children.forEach { cat ->
-                    val newParentId = cat.parentId?.let { categoryIdMap[it] }
-                    val newId = db.categoryDao().insertCategory(cat.copy(id = 0, parentId = newParentId))
-                    categoryIdMap[cat.id] = newId
-                }
+                alignCategoriesForOverwrite(categories, categoryIdMap)
             }
 
             if (assets != null) {
-                db.assetDao().deleteAll()
-                assets.forEach { asset ->
-                    val newId = db.assetDao().insertAsset(asset.copy(id = 0))
-                    assetIdMap[asset.id] = newId
-                }
+                alignAssetsForOverwrite(assets, assetIdMap)
             }
 
             if (bills != null) {
                 db.billDao().deleteAll()
                 db.deletedBillDao().deleteAll()
-                db.investmentLotDao().deleteAll()
+                // Lots survive a bill-only overwrite: sourceBillId is SET_NULL. Deleting them here
+                // used to be safe only because overwrite forced assets in the same transaction.
+                if (investmentLots != null) db.investmentLotDao().deleteAll()
                 val existingCategoriesByName = db.categoryDao().getAllCategoriesList().associateBy { it.name }
                 val existingAssetsByName = db.assetDao().getAllAssetsList().associateBy { it.name }
                 val pendingRelated = mutableListOf<Pair<Long, Long>>()
@@ -281,6 +270,10 @@ class BackupRepository(private val db: AppDatabase) {
                     )
                 }
             }
+
+            // Restoring categories without bills leaves every existing bill in place; reconnect the
+            // ones that were already carrying an empty category id.
+            if (categories != null && bills == null) relinkBillsWithoutCategory()
 
             if (rules != null) {
                 db.aiRuleDao().deleteAll()
@@ -362,10 +355,6 @@ class BackupRepository(private val db: AppDatabase) {
         db.withTransaction {
             requireInvestmentRestoreIsComplete(assets, investmentLots)
             validateRestoreBeforeMutation(
-                hasSelectedDatabaseModule = listOf(
-                    assets, bills, deletedBills, investmentLots, categories, rules, chatMessages, budgets,
-                    recurringPatterns, books, sharedRestoreData
-                ).any { it != null },
                 bills = bills,
                 budgets = budgets,
                 sharedRestoreData = sharedRestoreData,
@@ -497,6 +486,9 @@ class BackupRepository(private val db: AppDatabase) {
                 }
             }
 
+            // 合并恢复会跳过已存在的账单，它们的分类关联同样需要补齐（原因见覆盖路径的注释）。
+            relinkBillsWithoutCategory()
+
             if (investmentLots != null) {
                 investmentLots.forEach { lot ->
                     val newAssetId = assetIdMap[lot.assetId] ?: return@forEach
@@ -621,19 +613,33 @@ class BackupRepository(private val db: AppDatabase) {
         )
     }
 
+    /**
+     * Runs before any table is touched.
+     *
+     * The guard only cares about the two modules that can carry shared identity, which is exactly
+     * when [bills] or [budgets] were selected. Local-only modules are never blocked here.
+     */
     private suspend fun validateRestoreBeforeMutation(
-        hasSelectedDatabaseModule: Boolean,
         bills: List<Bill>?,
         budgets: List<Budget>?,
         sharedRestoreData: SharedRestoreData?,
         sharedRestoreMode: SharedRestoreMode,
         newDeviceId: String?
     ) {
+        val localLedgerUuids = db.sharedLedgerDao().getAll().mapTo(hashSetOf()) { it.uuid }
+        val backupLedgerUuids = sharedRestoreData?.ledgers?.mapTo(hashSetOf()) { it.uuid }.orEmpty()
+        // Same predicate as the dialog: every ledger in the backup is already connected here.
+        // An empty backup set must not count; `all` on an empty collection is true.
+        val reconnectsExistingLedgers = localLedgerUuids.isNotEmpty() &&
+            backupLedgerUuids.isNotEmpty() &&
+            backupLedgerUuids.all { it in localLedgerUuids }
         requireSharedRestoreGuard(
-            hasActiveSharedLedgers = db.sharedLedgerDao().getAll().isNotEmpty(),
-            hasSelectedDatabaseModule = hasSelectedDatabaseModule
+            hasActiveSharedLedgers = localLedgerUuids.isNotEmpty(),
+            writesSharedEntities = bills != null || budgets != null,
+            sharedRestoreMode = sharedRestoreMode,
+            reconnectsExistingLedgers = reconnectsExistingLedgers
         )
-        if (!hasSelectedDatabaseModule || sharedRestoreMode == SharedRestoreMode.LOCAL_COPY) return
+        if (sharedRestoreMode == SharedRestoreMode.LOCAL_COPY) return
 
         val reconnectData = requireNotNull(sharedRestoreData) {
             "重新连接共享账本需要完整的共享恢复数据"
@@ -695,22 +701,49 @@ class BackupRepository(private val db: AppDatabase) {
         }
     }
 
+    /**
+     * Rebuilds the shared runtime state the backup describes.
+     *
+     * Reconnecting on the *same* device is supported: a ledger that is already present is updated in
+     * place instead of inserted, so its local id — and every member, outbox row and sync-state row
+     * that references it — stays stable. The outbox is merged rather than replaced, so operations
+     * queued after the backup was taken survive the restore.
+     */
     private suspend fun restoreSharedSnapshot(data: SharedRestoreData, newDeviceId: String) {
         val ledgerIdByUuid = mutableMapOf<String, Long>()
         data.ledgers.forEach { restored ->
             val bookId = db.bookDao().resolveOrCreateId(restored.bookName)
-            val ledgerId = db.sharedLedgerDao().insert(
-                SharedLedger(
-                    uuid = restored.uuid,
-                    bookId = bookId,
-                    name = restored.name,
-                    webdavUrl = restored.webdavUrl,
-                    webdavUser = restored.webdavUser,
-                    remotePath = restored.remotePath,
-                    localMemberId = restored.localMemberId,
-                    createdAt = restored.createdAt
+            val existing = db.sharedLedgerDao().getByUuid(restored.uuid)
+            val ledgerId = if (existing == null) {
+                db.sharedLedgerDao().insert(
+                    SharedLedger(
+                        uuid = restored.uuid,
+                        bookId = bookId,
+                        name = restored.name,
+                        webdavUrl = restored.webdavUrl,
+                        webdavUser = restored.webdavUser,
+                        remotePath = restored.remotePath,
+                        localMemberId = restored.localMemberId,
+                        createdAt = restored.createdAt
+                    )
                 )
-            )
+            } else {
+                db.sharedLedgerDao().update(
+                    existing.copy(
+                        bookId = bookId,
+                        name = restored.name,
+                        webdavUrl = restored.webdavUrl,
+                        webdavUser = restored.webdavUser,
+                        remotePath = restored.remotePath,
+                        localMemberId = restored.localMemberId,
+                        createdAt = restored.createdAt
+                    )
+                )
+                // The preflight already fetched the live remote roster, so replacing the cached
+                // members of this ledger cannot drop a member who joined after the backup.
+                db.sharedMemberDao().deleteByLedgerId(existing.id)
+                existing.id
+            }
             ledgerIdByUuid[restored.uuid] = ledgerId
         }
 
@@ -736,13 +769,107 @@ class BackupRepository(private val db: AppDatabase) {
                 ledgerRemotePath = ledger.remotePath,
                 newDeviceId = newDeviceId
             )
-            require(db.syncOperationDao().insertIgnore(restoredOperation) != -1L) {
-                "待上传操作 ${queued.operationId} 已存在"
+            // Merge instead of asserting emptiness: on a same-device reconnect the outbox already
+            // holds these operations, and an operation id is a stable UUID so a duplicate is the
+            // same operation rather than a conflict.
+            db.syncOperationDao().insertIgnore(restoredOperation)
+            db.syncQueueDao().insertIgnore(restoredQueue)
+        }
+    }
+
+    /**
+     * Overwrite restore for categories is a *name-aligned* reconcile, not a table rebuild.
+     *
+     * Categories carry no portable identity in the archive, so regenerating their Room ids used to
+     * break every bill, budget and recurring pattern pointing at them — which is why an overwrite
+     * had to force the whole relational group back in. Matching by name keeps the id of every
+     * category the backup also has, so a category-only overwrite is safe and self-contained.
+     */
+    private suspend fun alignCategoriesForOverwrite(
+        incoming: List<Category>,
+        categoryIdMap: MutableMap<Long, Long>
+    ) {
+        val existing = db.categoryDao().getAllCategoriesList()
+        val existingByName = existing.groupBy(Category::name)
+        val matchedLocalIds = mutableSetOf<Long>()
+        val incomingById = incoming.associateBy(Category::id)
+
+        fun depthOf(category: Category): Int {
+            var depth = 0
+            var parentId = category.parentId
+            while (parentId != null && depth < MAX_CATEGORY_DEPTH) {
+                parentId = incomingById[parentId]?.parentId
+                depth++
             }
-            require(db.syncQueueDao().insertIgnore(restoredQueue) != -1L) {
-                "待上传队列 ${queued.operationId} 已存在"
+            return depth
+        }
+
+        fun takeLocalMatch(category: Category): Category? {
+            val candidates = existingByName[category.name].orEmpty()
+                .filter { it.id !in matchedLocalIds }
+            return candidates.firstOrNull { it.type == category.type } ?: candidates.firstOrNull()
+        }
+
+        // Parents must exist before their children so the parent id map is already populated.
+        incoming.sortedBy { depthOf(it) }.forEach { category ->
+            val local = takeLocalMatch(category)
+            val parentId = category.parentId?.let { categoryIdMap[it] }
+            if (local == null) {
+                categoryIdMap[category.id] =
+                    db.categoryDao().insertCategory(category.copy(id = 0, parentId = parentId))
+            } else {
+                matchedLocalIds += local.id
+                db.categoryDao().updateCategory(category.copy(id = local.id, parentId = parentId))
+                categoryIdMap[category.id] = local.id
             }
         }
+
+        // Overwrite semantics: categories the backup does not contain disappear. Bills that pointed
+        // at them keep their own categoryName snapshot and lose only the id, through SET_NULL.
+        existing.forEach { local ->
+            if (local.id !in matchedLocalIds) db.categoryDao().deleteById(local.id)
+        }
+    }
+
+    /**
+     * Overwrite restore for assets mirrors categories: match by name and keep the existing id, so
+     * bills, investment lots and drafts that reference the asset keep resolving.
+     */
+    private suspend fun alignAssetsForOverwrite(
+        incoming: List<Asset>,
+        assetIdMap: MutableMap<Long, Long>
+    ) {
+        val existing = db.assetDao().getAllAssetsList()
+        val existingByName = existing.groupBy(Asset::name)
+        val matchedLocalIds = mutableSetOf<Long>()
+
+        incoming.forEach { asset ->
+            val local = existingByName[asset.name].orEmpty().firstOrNull { it.id !in matchedLocalIds }
+            if (local == null) {
+                assetIdMap[asset.id] = db.assetDao().insertAsset(asset.copy(id = 0))
+            } else {
+                matchedLocalIds += local.id
+                db.assetDao().updateAsset(asset.copy(id = local.id))
+                assetIdMap[asset.id] = local.id
+            }
+        }
+
+        existing.forEach { local ->
+            if (local.id !in matchedLocalIds) db.assetDao().deleteAsset(local)
+        }
+    }
+
+    /**
+     * Reconnects bills whose category id is empty to the category their own name snapshot points at.
+     *
+     * A bill stores the display path (`吃的 - 三餐`) while the category stores the leaf, so the match
+     * goes through the leaf. Only a (leaf, type) pair that singles out exactly one category is used,
+     * which keeps the duplicate names this app allows (`其他` exists as both expense and income) from
+     * being resolved to the wrong side. Bills whose name no longer exists as a category are left
+     * alone: they keep their own snapshot for display and simply stay out of category budgets.
+     */
+    private suspend fun relinkBillsWithoutCategory() {
+        UncategorizedBillRelinker.relink(db)
     }
 
     private suspend fun prepareBudgetForRestore(
@@ -764,28 +891,28 @@ class BackupRepository(private val db: AppDatabase) {
         )
     }
 
+    /**
+     * Overwrite restore rebuilds the bill id space, so every table that stores a bill id must be
+     * rewritten in the same transaction.
+     *
+     * Categories and assets are deliberately *not* part of this group: they are matched by name and
+     * keep their existing ids ([alignCategoriesForOverwrite], [alignAssetsForOverwrite]), so a
+     * category-only or asset-only overwrite no longer drags bills in with it.
+     */
     private fun requireOverwriteRestoreDependenciesAreComplete(
-        assets: List<Asset>?,
         bills: List<Bill>?,
         deletedBills: List<DeletedBill>?,
         investmentLots: List<InvestmentLot>?,
-        categories: List<Category>?,
-        chatMessages: List<ChatMessage>?,
-        budgets: List<Budget>?,
-        recurringPatterns: List<RecurringPattern>?
+        chatMessages: List<ChatMessage>?
     ) {
-        val modules = listOf(
-            assets,
-            bills,
-            deletedBills,
-            investmentLots,
-            categories,
-            chatMessages,
-            budgets,
-            recurringPatterns
-        )
-        require(modules.none { it != null } || modules.all { it != null }) {
-            "覆盖恢复必须整组恢复资产、分类、账单及其关联数据"
+        if (bills == null) {
+            require(deletedBills == null && investmentLots == null && chatMessages == null) {
+                "未恢复账单时不能单独覆盖删除记录、投资批次或聊天记录"
+            }
+            return
+        }
+        require(deletedBills != null && chatMessages != null) {
+            "覆盖恢复账单时必须同时恢复删除记录与聊天记录，否则账单引用会断裂"
         }
     }
 
@@ -921,14 +1048,25 @@ class BackupRepository(private val db: AppDatabase) {
         return existingAssetsByName[key]?.id
     }
 
+    /**
+     * Names a stored bill category may be keyed by.
+     *
+     * Bills keep a display path such as `吃的 - 三餐` while `categories.name` holds the leaf `三餐`,
+     * so the leaf has to be a candidate. [CategoryNameNormalizer.UNIFIED_CHILD_SEPARATOR] is the
+     * separator this app writes; `>` only survives in archives produced by older versions. Refund
+     * bills add a `退款：` prefix that is never part of a category name.
+     */
     private fun categoryNameCandidates(raw: String): List<String> {
-        val s = CategoryNameNormalizer.normalizeForStorage(raw)
-        if (s.isBlank()) return emptyList()
-        val set = linkedSetOf<String>()
-        set.add(s)
-        val gt = s.substringAfterLast('>', "").trim()
-        if (gt.isNotBlank()) set.add(gt)
-        return set.toList()
+        val candidates = linkedSetOf<String>()
+        listOf(raw, CategoryNameNormalizer.stripRefundPrefix(raw)).forEach { source ->
+            val normalized = CategoryNameNormalizer.normalizeForStorage(source)
+            if (normalized.isBlank()) return@forEach
+            candidates += normalized
+            candidates += CategoryNameNormalizer.leafName(normalized)
+            val legacyLeaf = normalized.substringAfterLast(LEGACY_CHILD_SEPARATOR, "").trim()
+            if (legacyLeaf.isNotBlank()) candidates += legacyLeaf
+        }
+        return candidates.filter { it.isNotBlank() }
     }
 }
 

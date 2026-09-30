@@ -68,12 +68,12 @@ class OverlayWatchdogWorker(
                 ExistingPeriodicWorkPolicy.KEEP,
                 request
             )
-            Logger.d(ctx, TAG, "watchdog scheduled (every ${INTERVAL_MINUTES}min, keepExisting)")
+            Logger.i(ctx, TAG, "watchdog scheduled (every ${INTERVAL_MINUTES}min, keepExisting)")
         }
 
         fun cancel(ctx: Context) {
             WorkManager.getInstance(ctx).cancelUniqueWork(UNIQUE_NAME)
-            Logger.d(ctx, TAG, "watchdog cancelled")
+            Logger.i(ctx, TAG, "watchdog cancelled")
         }
     }
 
@@ -91,14 +91,14 @@ class OverlayWatchdogWorker(
             return Result.success()
         }
 
-        Logger.d(ctx, TAG, "service missing, attempting restart")
+        Logger.i(ctx, TAG, "service missing, attempting restart")
         return try {
             OverlayService.startCompat(ctx, Intent(ctx, OverlayService::class.java))
-            Logger.d(ctx, TAG, "restart requested")
+            Logger.i(ctx, TAG, "restart requested")
             Result.success()
         } catch (e: Exception) {
             // 最常见的是后台启动前台服务被拒（ForegroundServiceStartNotAllowedException）
-            Logger.d(
+            Logger.i(
                 ctx,
                 TAG,
                 "restart failed: ${e.javaClass.simpleName}: ${e.message}"

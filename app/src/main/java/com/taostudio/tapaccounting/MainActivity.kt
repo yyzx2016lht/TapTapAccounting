@@ -43,6 +43,7 @@ import com.taostudio.tapaccounting.ui.common.AddBillEntrySheetLauncher
 import com.taostudio.tapaccounting.ui.common.UiMotion
 import com.taostudio.tapaccounting.ui.dialog.OverlayDialogs
 import com.taostudio.tapaccounting.ui.main.home.HomeFragment
+import com.taostudio.tapaccounting.ui.onboarding.OnboardingActivity
 import com.taostudio.tapaccounting.ui.main.stats.StatsFragment
 import com.taostudio.tapaccounting.ui.main.assets.AssetsFragment
 import com.taostudio.tapaccounting.ui.main.profile.ProfileFragment
@@ -237,11 +238,22 @@ class MainActivity : AppCompatActivity() {
 
     // 防止快速连续切换 Tab 导致状态错乱
     private var isSwitching = false
-    private var homeOnboardingShownThisSession = false
     private var pendingInviteDialog = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // 首次启动直接进引导页。这里必须放在 setContentView 之前，
+        // 避免主界面先渲染一帧再被盖住（视觉上会闪一下）。
+        if (savedInstanceState == null && shouldShowOnboarding()) {
+            startActivity(
+                Intent(this, OnboardingActivity::class.java)
+                    .addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION)
+            )
+            finish()
+            return
+        }
+
         setContentView(R.layout.activity_main)
         RecentTasksHelper.ensureTaskVisible(this)
         KeepAliveDiagnostics.logSnapshot(this, "main-onCreate")
@@ -1125,35 +1137,31 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showHomeOnboardingIfNeeded() {
-        if (homeOnboardingShownThisSession) return
-        if (Prefs.hasSeenHomeOnboarding(this)) return
-        // 已经开启任一快捷手势时不再提示首次引导
-        if (Prefs.isFlipEnabled(this) || Prefs.isDoubleTapEnabled(this)) {
-            Prefs.setHomeOnboardingSeen(this)
-            return
+        // 独立的首启引导页已经接管了"第一次使用"的说明（OnboardingActivity）。
+        // 这里只保留一个兜底：老用户升级上来时补写完成标记，不再弹 Snackbar。
+        Prefs.ensureOnboardingCompletionMigrated(this)
+    }
+
+    /**
+     * 是否需要展示首启引导。
+     *
+     * 两种情况不进入引导：
+     * 1. 已标记完成（含老用户迁移推断，见 [Prefs.ensureOnboardingCompletionMigrated]）；
+     * 2. 本次启动是被外部意图调起的（分享文本 / 分享图片 / 记账快捷入口），
+     *    此时用户有明确的即时目的，插一屏引导会打断他。
+     */
+    private fun shouldShowOnboarding(): Boolean {
+        Prefs.ensureOnboardingCompletionMigrated(this)
+        if (Prefs.hasCompletedOnboarding(this)) return false
+        return !isLaunchedForImmediateAction(intent)
+    }
+
+    private fun isLaunchedForImmediateAction(source: Intent?): Boolean {
+        if (source == null) return false
+        return when (source.action) {
+            Intent.ACTION_SEND, Intent.ACTION_SEND_MULTIPLE -> true
+            else -> false
         }
-        // 仅在首页展示首次提示，避免跨页打断
-        if (currentTabIndex != 0) return
-        val root = findViewById<View>(android.R.id.content) ?: return
-        homeOnboardingShownThisSession = true
-        root.postDelayed({
-            if (isFinishing || isDestroyed) return@postDelayed
-            if (currentTabIndex != 0) return@postDelayed
-            Snackbar.make(
-                root,
-                getString(R.string.onboarding_welcome_snackbar_message),
-                Snackbar.LENGTH_LONG
-            )
-                .setAction(getString(R.string.onboarding_welcome_go_settings)) {
-                    startActivity(Intent(this, SensitivityActivity::class.java))
-                }
-                .addCallback(object : Snackbar.Callback() {
-                    override fun onDismissed(transientBottomBar: Snackbar?, event: Int) {
-                        Prefs.setHomeOnboardingSeen(this@MainActivity)
-                    }
-                })
-                .show()
-        }, 900L)
     }
 
     private fun showAddBillBottomSheet() {

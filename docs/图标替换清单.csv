@@ -1,0 +1,1129 @@
+﻿类别,文件名,中文名,来源,判定依据,URL
+A,cate_siwa.png,丝袜,category.json,分类库图标,http://res3.qianjiapp.com/cate_siwa.png
+A,cateic_zhongjie.png,中介,category.json,分类库图标,http://res3.qianjiapp.com/cateic_zhongjie.png
+A,cateic_pingpang.png,乒乓球,category.json,分类库图标,http://res3.qianjiapp.com/cateic_pingpang.png
+A,cate_shufa.png,书法,category.json,分类库图标,http://res3.qianjiapp.com/cate_shufa.png
+A,ic_cate2_shuji.png,书籍,category.json,分类库图标,http://res3.qianjiapp.com/ic_cate2_shuji.png
+A,cate_shucai.png,买菜 / 蔬菜,"category.json,default_category.json",分类库图标,http://res3.qianjiapp.com/cate_shucai.png
+A,cateic_ruye2.png,乳液,category.json,分类库图标,http://res3.qianjiapp.com/cateic_ruye2.png
+A,ic_cate3_zhuanrang.png,二手 / 转让,"category.json,default_category.json",分类库图标,http://res3.qianjiapp.com/ic_cate3_zhuanrang.png
+A,cate_erhu.png,二胡,category.json,分类库图标,http://res3.qianjiapp.com/cate_erhu.png
+A,cateic_jiaotong.png,交通,"category.json,default_category.json",分类库图标,http://res3.qianjiapp.com/cateic_jiaotong.png
+A,cate_chanjian.png,产检,category.json,分类库图标,http://res3.qianjiapp.com/cate_chanjian.png
+A,cateic_qinziyou.png,亲子游,category.json,分类库图标,http://res3.qianjiapp.com/cateic_qinziyou.png
+A,cate_rengongfei.png,人工费,category.json,分类库图标,http://res3.qianjiapp.com/cate_rengongfei.png
+A,cateic_renqing.png,人情,"category.json,default_category.json",分类库图标,http://res3.qianjiapp.com/cateic_renqing.png
+A,cateic_daijia.png,代驾,category.json,分类库图标,http://res3.qianjiapp.com/cateic_daijia.png
+A,ic_cate2_apphuiyuan.png,会员,"category.json,default_category.json",分类库图标,http://res3.qianjiapp.com/ic_cate2_apphuiyuan.png
+A,cateic_88vip2.png,会员服务,category.json,分类库图标,http://res3.qianjiapp.com/cateic_88vip2.png
+A,ic_cate2_zujin.png,住房 / 租金,"category.json,default_category.json",分类库图标,http://res3.qianjiapp.com/ic_cate2_zujin.png
+A,ic_cate2_zhuyuan.png,住院护理,category.json,分类库图标,http://res3.qianjiapp.com/ic_cate2_zhuyuan.png
+A,ic_cate2_baojian.png,保健,category.json,分类库图标,http://res3.qianjiapp.com/ic_cate2_baojian.png
+A,cate_baojianpin.png,保健品,category.json,分类库图标,http://res3.qianjiapp.com/cate_baojianpin.png
+A,ic_cate2_baoxian.png,保险,"category.json,default_category.json",分类库图标,http://res3.qianjiapp.com/ic_cate2_baoxian.png
+A,cateic_zhaiquan.png,债券,category.json,分类库图标,http://res3.qianjiapp.com/cateic_zhaiquan.png
+A,cateic_jianshenqicai.png,健身器材,category.json,分类库图标,http://res3.qianjiapp.com/cateic_jianshenqicai.png
+A,cateic_jianshenfang.png,健身房,category.json,分类库图标,http://res3.qianjiapp.com/cateic_jianshenfang.png
+A,cate_erke.png,儿童,category.json,分类库图标,http://res3.qianjiapp.com/cate_erke.png
+A,cateic_chongdianbao.png,充电宝,category.json,分类库图标,http://res3.qianjiapp.com/cateic_chongdianbao.png
+A,cateic_dangfei.png,党费,category.json,分类库图标,http://res3.qianjiapp.com/cateic_dangfei.png
+A,ic_cate2_gongjiao.png,公交,category.json,分类库图标,http://res3.qianjiapp.com/ic_cate2_gongjiao.png
+A,ic_cate2_gongjijin.png,公积金,category.json,分类库图标,http://res3.qianjiapp.com/ic_cate2_gongjijin.png
+A,cateic_gongxiangdc.png,共享单车,category.json,分类库图标,http://res3.qianjiapp.com/cateic_gongxiangdc.png
+A,cate_guanshui.png,关税 / 税费,"category.json,default_category.json",分类库图标,http://res3.qianjiapp.com/cate_guanshui.png
+A,cate_kw.png,关键词,category.json,分类库图标,http://res3.qianjiapp.com/cate_kw.png
+A,cateic_other.png,其他 / 其它 / 经营,"category.json,default_category.json",分类库图标,http://res3.qianjiapp.com/cateic_other.png
+A,ic_cate2_qichebaoxian.png,养车 / 汽车保险,"category.json,default_category.json",分类库图标,http://res3.qianjiapp.com/ic_cate2_qichebaoxian.png
+A,cateic_yangyu.png,养鱼,category.json,分类库图标,http://res3.qianjiapp.com/cateic_yangyu.png
+A,cateic_yangniao.png,养鸟,category.json,分类库图标,http://res3.qianjiapp.com/cateic_yangniao.png
+A,cateic_gongzuo.png,兼职 / 办公 / 工作,"category.json,default_category.json",分类库图标,http://res3.qianjiapp.com/cateic_gongzuo.png
+A,cateic_neiyi.png,内衣,category.json,分类库图标,http://res3.qianjiapp.com/cateic_neiyi.png
+A,cateic_chonglang.png,冲浪,category.json,分类库图标,http://res3.qianjiapp.com/cateic_chonglang.png
+A,cate_liangxie.png,凉鞋,category.json,分类库图标,http://res3.qianjiapp.com/cate_liangxie.png
+A,cateic_lixi.png,利息,"category.json,default_category.json",分类库图标,http://res3.qianjiapp.com/cateic_lixi.png
+A,cate_microsoft.png,办公软件,category.json,分类库图标,http://res3.qianjiapp.com/cate_microsoft.png
+A,cateic_cryptocurrency.png,加密货币,category.json,分类库图标,http://res3.qianjiapp.com/cateic_cryptocurrency.png
+A,cateic_baobao.png,包包,category.json,分类库图标,http://res3.qianjiapp.com/cateic_baobao.png
+A,cateic_huazhuangshua.png,化妆刷,category.json,分类库图标,http://res3.qianjiapp.com/cateic_huazhuangshua.png
+A,cateic_huazhuangmian2.png,化妆棉,category.json,分类库图标,http://res3.qianjiapp.com/cateic_huazhuangmian2.png
+A,cateic_huazhuangshui.png,化妆水,category.json,分类库图标,http://res3.qianjiapp.com/cateic_huazhuangshui.png
+A,ic_cate2_yibao.png,医保 / 报销,"category.json,default_category.json",分类库图标,http://res3.qianjiapp.com/ic_cate2_yibao.png
+A,cateic_yiliao.png,医疗,"category.json,default_category.json",分类库图标,http://res3.qianjiapp.com/cateic_yiliao.png
+A,cateic_yimei.png,医美,category.json,分类库图标,http://res3.qianjiapp.com/cateic_yimei.png
+A,ic_cate2_wucan.png,午餐,category.json,分类库图标,http://res3.qianjiapp.com/ic_cate2_wucan.png
+A,cate_valentino.png,华伦天奴,category.json,分类库图标,http://res3.qianjiapp.com/cate_valentino.png
+A,cate_ck.png,卡尔文克莱恩,category.json,分类库图标,http://res3.qianjiapp.com/cate_ck.png
+A,cate_wsj.png,卫生巾,category.json,分类库图标,http://res3.qianjiapp.com/cate_wsj.png
+A,cate_tampon.png,卫生棉条,category.json,分类库图标,http://res3.qianjiapp.com/cate_tampon.png
+A,cateic_xiezhuangyou2.png,卸妆油,category.json,分类库图标,http://res3.qianjiapp.com/cateic_xiezhuangyou2.png
+A,cateic_yasuiqian.png,压岁钱,category.json,分类库图标,http://res3.qianjiapp.com/cateic_yasuiqian.png
+A,cate_fapiao.png,发票,category.json,分类库图标,http://res3.qianjiapp.com/cate_fapiao.png
+A,cateic_qunuan.png,取暖,category.json,分类库图标,http://res3.qianjiapp.com/cateic_qunuan.png
+A,cate_harmonica.png,口琴,category.json,分类库图标,http://res3.qianjiapp.com/cate_harmonica.png
+A,cateic_kouhong.png,口红,category.json,分类库图标,http://res3.qianjiapp.com/cateic_kouhong.png
+A,ic_cate_kouzhao.png,口罩,category.json,分类库图标,http://res3.qianjiapp.com/ic_cate_kouzhao.png
+A,cate_guzheng.png,古筝,category.json,分类库图标,http://res3.qianjiapp.com/cate_guzheng.png
+A,cate_gucci.png,古驰,category.json,分类库图标,http://res3.qianjiapp.com/cate_gucci.png
+A,cate_taiqiu.png,台球,category.json,分类库图标,http://res3.qianjiapp.com/cate_taiqiu.png
+A,cate_guitar.png,吉他,category.json,分类库图标,http://res3.qianjiapp.com/cate_guitar.png
+A,cate_ruixing.png,咖啡,category.json,分类库图标,http://res3.qianjiapp.com/cate_ruixing.png
+A,cateic_coffee.png,咖啡,category.json,分类库图标,http://res3.qianjiapp.com/cateic_coffee.png
+A,cateic_chuncai.png,唇彩,category.json,分类库图标,http://res3.qianjiapp.com/cateic_chuncai.png
+A,cateic_chungao.png,唇膏,category.json,分类库图标,http://res3.qianjiapp.com/cateic_chungao.png
+A,cate_wph.png,唯品会,category.json,分类库图标,http://res3.qianjiapp.com/cate_wph.png
+A,cateic_tuanfei.png,团费,category.json,分类库图标,http://res3.qianjiapp.com/cateic_tuanfei.png
+A,ic_cate2_ditie2.png,地铁,category.json,分类库图标,http://res3.qianjiapp.com/ic_cate2_ditie2.png
+A,cateic_peixun.png,培训,category.json,分类库图标,http://res3.qianjiapp.com/cateic_peixun.png
+A,cateic_jijin.png,基金,category.json,分类库图标,http://res3.qianjiapp.com/cateic_jijin.png
+A,cate_fuyin.png,复印,category.json,分类库图标,http://res3.qianjiapp.com/cate_fuyin.png
+A,ic_cate2_waimai.png,外卖,category.json,分类库图标,http://res3.qianjiapp.com/ic_cate2_waimai.png
+A,cateic_eleme.png,外卖平台,category.json,分类库图标,http://res3.qianjiapp.com/cateic_eleme.png
+A,cateic_meituan.png,外卖平台,category.json,分类库图标,http://res3.qianjiapp.com/cateic_meituan.png
+A,cateic_waitao.png,外套,category.json,分类库图标,http://res3.qianjiapp.com/cateic_waitao.png
+A,cateic_waikuai.png,外币,category.json,分类库图标,http://res3.qianjiapp.com/cateic_waikuai.png
+A,cate_exchange.png,外汇,category.json,分类库图标,http://res3.qianjiapp.com/cate_exchange.png
+A,cateic_waihui.png,外汇,category.json,分类库图标,http://res3.qianjiapp.com/cateic_waihui.png
+A,ic_cate2_yexiao.png,夜宵,category.json,分类库图标,http://res3.qianjiapp.com/ic_cate2_yexiao.png
+A,cate_cello.png,大提琴,category.json,分类库图标,http://res3.qianjiapp.com/cate_cello.png
+A,cateic_tianmao.png,天猫,category.json,分类库图标,http://res3.qianjiapp.com/cateic_tianmao.png
+A,ic_cate2_jiangxuejin.png,奖学金,"category.json,default_category.json",分类库图标,http://res3.qianjiapp.com/ic_cate2_jiangxuejin.png
+A,ic_cate2_jiangjin.png,奖金,"category.json,default_category.json",分类库图标,http://res3.qianjiapp.com/ic_cate2_jiangjin.png
+A,cate_versace.png,奢侈品品牌,category.json,分类库图标,http://res3.qianjiapp.com/cate_versace.png
+A,cate_miumiu.png,女装,category.json,分类库图标,http://res3.qianjiapp.com/cate_miumiu.png
+A,cate_ochirly.png,女装,category.json,分类库图标,http://res3.qianjiapp.com/cate_ochirly.png
+A,cate_only.png,女装,category.json,分类库图标,http://res3.qianjiapp.com/cate_only.png
+A,cateic_naiping.png,奶瓶,category.json,分类库图标,http://res3.qianjiapp.com/cateic_naiping.png
+A,cateic_naifen.png,奶粉,category.json,分类库图标,http://res3.qianjiapp.com/cateic_naifen.png
+A,cateic_naicha.png,奶茶,category.json,分类库图标,http://res3.qianjiapp.com/cateic_naicha.png
+A,cateic_yule.png,娱乐,"category.json,default_category.json",分类库图标,http://res3.qianjiapp.com/cateic_yule.png
+A,cateic_xuexi.png,学习,"category.json,default_category.json",分类库图标,http://res3.qianjiapp.com/cateic_xuexi.png
+A,cateic_haizi.png,孩子,category.json,分类库图标,http://res3.qianjiapp.com/cateic_haizi.png
+A,cate_anta.png,安踏,category.json,分类库图标,http://res3.qianjiapp.com/cate_anta.png
+A,cateic_pet.png,宠物,"category.json,default_category.json",分类库图标,http://res3.qianjiapp.com/cateic_pet.png
+A,cate_pet_jiyang.png,宠物寄养,category.json,分类库图标,http://res3.qianjiapp.com/cate_pet_jiyang.png
+A,cate_petbed.png,宠物床,category.json,分类库图标,http://res3.qianjiapp.com/cate_petbed.png
+A,cate_petvaccine.png,宠物疫苗,category.json,分类库图标,http://res3.qianjiapp.com/cate_petvaccine.png
+A,cate_pet_guantou.png,宠物罐头,category.json,分类库图标,http://res3.qianjiapp.com/cate_pet_guantou.png
+A,cat_petpill.png,宠物药品,category.json,分类库图标,http://res3.qianjiapp.com/cat_petpill.png
+A,cate_petclinic.png,宠物诊所,category.json,分类库图标,http://res3.qianjiapp.com/cate_petclinic.png
+A,cate_petwater.png,宠物饮水,category.json,分类库图标,http://res3.qianjiapp.com/cate_petwater.png
+A,cateic_jiaren.png,家人,category.json,分类库图标,http://res3.qianjiapp.com/cateic_jiaren.png
+A,cateic3_jiaju.png,家具,category.json,分类库图标,http://res3.qianjiapp.com/cateic3_jiaju.png
+A,cate_ljd.png,家电,category.json,分类库图标,http://res3.qianjiapp.com/cate_ljd.png
+A,cate_shejian.png,射箭,category.json,分类库图标,http://res3.qianjiapp.com/cate_shejian.png
+A,cate_trumpet.png,小号,category.json,分类库图标,http://res3.qianjiapp.com/cate_trumpet.png
+A,cate_violin.png,小提琴,category.json,分类库图标,http://res3.qianjiapp.com/cate_violin.png
+A,cate_xcx.png,小程序,category.json,分类库图标,http://res3.qianjiapp.com/cate_xcx.png
+A,ic_cate2_jiuzhen.png,就诊,category.json,分类库图标,http://res3.qianjiapp.com/ic_cate2_jiuzhen.png
+A,cate_jiuzhen.png,就诊 / 就诊服务,category.json,分类库图标,http://res3.qianjiapp.com/cate_jiuzhen.png
+A,cateic_jiuzhenka.png,就诊卡,category.json,分类库图标,http://res3.qianjiapp.com/cateic_jiuzhenka.png
+A,ic_cate2_shuidianmei.png,居家 / 水电煤,"category.json,default_category.json",分类库图标,http://res3.qianjiapp.com/ic_cate2_shuidianmei.png
+A,cateic_zhanlan.png,展览,category.json,分类库图标,http://res3.qianjiapp.com/cateic_zhanlan.png
+A,cate_tool.png,工具 / 维修,"category.json,default_category.json",分类库图标,http://res3.qianjiapp.com/cate_tool.png
+A,cateic_gongzi.png,工资,"category.json,default_category.json",分类库图标,http://res3.qianjiapp.com/cateic_gongzi.png
+A,ic_cate2_gongzi.png,工资,category.json,分类库图标,http://res3.qianjiapp.com/ic_cate2_gongzi.png
+A,cate_chocolate.png,巧克力,category.json,分类库图标,http://res3.qianjiapp.com/cate_chocolate.png
+A,cate_burberry.png,巴宝莉,category.json,分类库图标,http://res3.qianjiapp.com/cate_burberry.png
+A,cateic_maozi.png,帽子,category.json,分类库图标,http://res3.qianjiapp.com/cateic_maozi.png
+A,cate_pingdixie.png,平底鞋,category.json,分类库图标,http://res3.qianjiapp.com/cate_pingdixie.png
+A,cate_nianfei.png,年费,category.json,分类库图标,http://res3.qianjiapp.com/cate_nianfei.png
+A,ic_cate3_yingshou.png,应收,category.json,分类库图标,http://res3.qianjiapp.com/ic_cate3_yingshou.png
+A,cateic_dangdang.png,当当,category.json,分类库图标,http://res3.qianjiapp.com/cateic_dangdang.png
+A,cateic_caipiao.png,彩票,category.json,分类库图标,http://res3.qianjiapp.com/cateic_caipiao.png
+A,cateic_disney.png,影视,category.json,分类库图标,http://res3.qianjiapp.com/cateic_disney.png
+A,cateic_hbo.png,影视平台,category.json,分类库图标,http://res3.qianjiapp.com/cateic_hbo.png
+A,cate_lvshifei1.png,律师费,category.json,分类库图标,http://res3.qianjiapp.com/cate_lvshifei1.png
+A,cate_lvshifei2.png,律师费,category.json,分类库图标,http://res3.qianjiapp.com/cate_lvshifei2.png
+A,cateic_tubu.png,徒步,category.json,分类库图标,http://res3.qianjiapp.com/cateic_tubu.png
+A,cateic_weibovip.png,微博会员,category.json,分类库图标,http://res3.qianjiapp.com/cateic_weibovip.png
+A,cate_kuakewp.png,快看漫画,category.json,分类库图标,http://res3.qianjiapp.com/cate_kuakewp.png
+A,cateic_kuaikan.png,快看漫画,category.json,分类库图标,http://res3.qianjiapp.com/cateic_kuaikan.png
+A,ic_cate2_kuaidi.png,快递,category.json,分类库图标,http://res3.qianjiapp.com/ic_cate2_kuaidi.png
+A,ic_cate2_lianai.png,恋爱,category.json,分类库图标,http://res3.qianjiapp.com/ic_cate2_lianai.png
+A,cate_qqny.png,情趣内衣,category.json,分类库图标,http://res3.qianjiapp.com/cate_qqny.png
+A,cate_lanren.png,懒人听书,category.json,分类库图标,http://res3.qianjiapp.com/cate_lanren.png
+A,cate_outdoor_jacket.png,户外夹克,category.json,分类库图标,http://res3.qianjiapp.com/cate_outdoor_jacket.png
+A,cate_arcteryx.png,户外装备,category.json,分类库图标,http://res3.qianjiapp.com/cate_arcteryx.png
+A,cate_northface.png,户外装备,category.json,分类库图标,http://res3.qianjiapp.com/cate_northface.png
+A,ic_cate2_fangzu.png,房租,category.json,分类库图标,http://res3.qianjiapp.com/ic_cate2_fangzu.png
+A,ic_cate2_fangdai.png,房贷,category.json,分类库图标,http://res3.qianjiapp.com/ic_cate2_fangdai.png
+A,cateic_shouban.png,手包,category.json,分类库图标,http://res3.qianjiapp.com/cateic_shouban.png
+A,cate_phone.png,手机,category.json,分类库图标,http://res3.qianjiapp.com/cate_phone.png
+A,ic_cate2_shouijpeijian.png,手机配件,category.json,分类库图标,http://res3.qianjiapp.com/ic_cate2_shouijpeijian.png
+A,ic_cate2_shouxufei.png,手续费,category.json,分类库图标,http://res3.qianjiapp.com/ic_cate2_shouxufei.png
+A,cate_awatch.png,手表,category.json,分类库图标,http://res3.qianjiapp.com/cate_awatch.png
+A,cate_watch.png,手表,category.json,分类库图标,http://res3.qianjiapp.com/cate_watch.png
+A,cate_accordion.png,手风琴,category.json,分类库图标,http://res3.qianjiapp.com/cate_accordion.png
+A,cateic_puke.png,扑克,category.json,分类库图标,http://res3.qianjiapp.com/cateic_puke.png
+A,ic_cate2_dashang.png,打赏,category.json,分类库图标,http://res3.qianjiapp.com/ic_cate2_dashang.png
+A,ic_cate2_dache.png,打车,category.json,分类库图标,http://res3.qianjiapp.com/ic_cate2_dache.png
+A,cateic_hushoushuang2.png,护手霜,category.json,分类库图标,http://res3.qianjiapp.com/cateic_hushoushuang2.png
+A,cateic_hufasu.png,护肤素,category.json,分类库图标,http://res3.qianjiapp.com/cateic_hufasu.png
+A,cateic_baomingfei.png,报名费,category.json,分类库图标,http://res3.qianjiapp.com/cateic_baomingfei.png
+A,cate_yajin.png,押金,category.json,分类库图标,http://res3.qianjiapp.com/cate_yajin.png
+A,cateic3_pinli.png,拼车,category.json,分类库图标,http://res3.qianjiapp.com/cateic3_pinli.png
+A,ic_cate2_guahao.png,挂号,category.json,分类库图标,http://res3.qianjiapp.com/ic_cate2_guahao.png
+A,cateic_zhijiayou.png,指甲油,category.json,分类库图标,http://res3.qianjiapp.com/cateic_zhijiayou.png
+A,ic_cate2_juanzeng.png,捐赠,"category.json,default_category.json",分类库图标,http://res3.qianjiapp.com/ic_cate2_juanzeng.png
+A,cate_zhangyue.png,掌阅,category.json,分类库图标,http://res3.qianjiapp.com/cate_zhangyue.png
+A,ic_cate2_ticheng.png,提成,category.json,分类库图标,http://res3.qianjiapp.com/ic_cate2_ticheng.png
+A,cateic_boji.png,搏击,category.json,分类库图标,http://res3.qianjiapp.com/cateic_boji.png
+A,cateic_motuo.png,摩托车,category.json,分类库图标,http://res3.qianjiapp.com/cateic_motuo.png
+A,cateic_panyan.png,攀岩,category.json,分类库图标,http://res3.qianjiapp.com/cateic_panyan.png
+A,cateic_sanda.png,散打,category.json,分类库图标,http://res3.qianjiapp.com/cateic_sanda.png
+A,cateic_shuma.png,数码,"category.json,default_category.json",分类库图标,http://res3.qianjiapp.com/cateic_shuma.png
+A,cateic_wenju.png,文具,category.json,分类库图标,http://res3.qianjiapp.com/cateic_wenju.png
+A,cate_wenxiong.png,文胸,category.json,分类库图标,http://res3.qianjiapp.com/cate_wenxiong.png
+A,cate_fila.png,斐乐,category.json,分类库图标,http://res3.qianjiapp.com/cate_fila.png
+A,cateic_lvxing.png,旅行,"category.json,default_category.json",分类库图标,http://res3.qianjiapp.com/cateic_lvxing.png
+A,cateic_richang2.png,日常,category.json,分类库图标,http://res3.qianjiapp.com/cateic_richang2.png
+A,cateic_riyongpin.png,日用 / 日用品,"category.json,default_category.json",分类库图标,http://res3.qianjiapp.com/cateic_riyongpin.png
+A,cateic_zaojiao.png,早教,category.json,分类库图标,http://res3.qianjiapp.com/cateic_zaojiao.png
+A,ic_cate2_zaocan.png,早餐,category.json,分类库图标,http://res3.qianjiapp.com/ic_cate2_zaocan.png
+A,cate_jjwx.png,晋江文学城,category.json,分类库图标,http://res3.qianjiapp.com/cate_jjwx.png
+A,cate_prada.png,普拉达,category.json,分类库图标,http://res3.qianjiapp.com/cate_prada.png
+A,cate_yuesao.png,月嫂 / 月嫂服务,category.json,分类库图标,http://res3.qianjiapp.com/cate_yuesao.png
+A,cateic_pengyou.png,朋友 / 育儿,"category.json,default_category.json",分类库图标,http://res3.qianjiapp.com/cateic_pengyou.png
+A,cate_fuwufei.png,服务费,category.json,分类库图标,http://res3.qianjiapp.com/cate_fuwufei.png
+A,cate_hm.png,服装,category.json,分类库图标,http://res3.qianjiapp.com/cate_hm.png
+A,cate_primark.png,服装,category.json,分类库图标,http://res3.qianjiapp.com/cate_primark.png
+A,cate_uniqlo.png,服装,category.json,分类库图标,http://res3.qianjiapp.com/cate_uniqlo.png
+A,cate_vm.png,服装,category.json,分类库图标,http://res3.qianjiapp.com/cate_vm.png
+A,cate_zara.png,服装,category.json,分类库图标,http://res3.qianjiapp.com/cate_zara.png
+A,cateic_yifu.png,服装 / 服饰鞋包,"category.json,default_category.json",分类库图标,http://res3.qianjiapp.com/cateic_yifu.png
+A,cateic_fushi.png,服饰,category.json,分类库图标,http://res3.qianjiapp.com/cateic_fushi.png
+A,cate_lining.png,李宁,category.json,分类库图标,http://res3.qianjiapp.com/cate_lining.png
+A,cateic_chaimiyouyan.png,柴米油盐,category.json,分类库图标,http://res3.qianjiapp.com/cateic_chaimiyouyan.png
+A,ic_cate_hesuan.png,核酸检测,category.json,分类库图标,http://res3.qianjiapp.com/ic_cate_hesuan.png
+A,cateic_sangna.png,桑拿,category.json,分类库图标,http://res3.qianjiapp.com/cateic_sangna.png
+A,cateic_shuzhuangtai.png,梳妆台,category.json,分类库图标,http://res3.qianjiapp.com/cateic_shuzhuangtai.png
+A,cateic_bangqiu.png,棒球,category.json,分类库图标,http://res3.qianjiapp.com/cateic_bangqiu.png
+A,cateic_bitcoin.png,比特币,category.json,分类库图标,http://res3.qianjiapp.com/cateic_bitcoin.png
+A,cate_water.png,水,category.json,分类库图标,http://res3.qianjiapp.com/cate_water.png
+A,cateic_shuiguangzhen.png,水光针,category.json,分类库图标,http://res3.qianjiapp.com/cateic_shuiguangzhen.png
+A,cate_shuiguo.png,水果,"category.json,default_category.json",分类库图标,http://res3.qianjiapp.com/cate_shuiguo.png
+A,cateic_shuifei.png.png,水电 / 水费,"category.json,default_category.json",分类库图标,http://res3.qianjiapp.com/cateic_shuifei.png.png
+A,cate_xbk.png,汉堡,category.json,分类库图标,http://res3.qianjiapp.com/cate_xbk.png
+A,cate_hanfu.png,汉服,category.json,分类库图标,http://res3.qianjiapp.com/cate_hanfu.png
+A,cate_tangyuan.png,汤圆,category.json,分类库图标,http://res3.qianjiapp.com/cate_tangyuan.png
+A,cateic_qiche.png,汽车,category.json,分类库图标,http://res3.qianjiapp.com/cateic_qiche.png
+A,ic_cate2_qichetingchefei.png,汽车停车费,category.json,分类库图标,http://res3.qianjiapp.com/ic_cate2_qichetingchefei.png
+A,ic_cate2_qichechongdian.png,汽车充电,category.json,分类库图标,http://res3.qianjiapp.com/ic_cate2_qichechongdian.png
+A,ic_cate2_qichejiayou.png,汽车加油,category.json,分类库图标,http://res3.qianjiapp.com/ic_cate2_qichejiayou.png
+A,ic_cate2_qichefakuan.png,汽车罚款,category.json,分类库图标,http://res3.qianjiapp.com/ic_cate2_qichefakuan.png
+A,cate_swimsuit1.png,泳衣,category.json,分类库图标,http://res3.qianjiapp.com/cate_swimsuit1.png
+A,cate_swimsuit3.png,泳衣,category.json,分类库图标,http://res3.qianjiapp.com/cate_swimsuit3.png
+A,cateic_xifalu.png,洗发露,category.json,分类库图标,http://res3.qianjiapp.com/cateic_xifalu.png
+A,cateic_xizao.png,洗浴用品,category.json,分类库图标,http://res3.qianjiapp.com/cateic_xizao.png
+A,cateic_xilianjin.png,洗脸巾,category.json,分类库图标,http://res3.qianjiapp.com/cateic_xilianjin.png
+A,cateic_xiyiye.png,洗衣液,category.json,分类库图标,http://res3.qianjiapp.com/cateic_xiyiye.png
+A,cateic_ximiannai.png,洗面奶,category.json,分类库图标,http://res3.qianjiapp.com/cateic_ximiannai.png
+A,cateic_hulu.png,流媒体平台,category.json,分类库图标,http://res3.qianjiapp.com/cateic_hulu.png
+A,cateic_netflix.png,流媒体平台,category.json,分类库图标,http://res3.qianjiapp.com/cateic_netflix.png
+A,cate_seafood.png,海鲜,category.json,分类库图标,http://res3.qianjiapp.com/cate_seafood.png
+A,ic_cate3_qingjie.png,清洁,category.json,分类库图标,http://res3.qianjiapp.com/ic_cate3_qingjie.png
+A,cate_xjj.png,清洁剂,category.json,分类库图标,http://res3.qianjiapp.com/cate_xjj.png
+A,cate_switch.png,游戏,category.json,分类库图标,http://res3.qianjiapp.com/cate_switch.png
+A,cate_xbox.png,游戏,category.json,分类库图标,http://res3.qianjiapp.com/cate_xbox.png
+A,cateic_steam.png,游戏,category.json,分类库图标,http://res3.qianjiapp.com/cateic_steam.png
+A,ic_cate2_youxi.png,游戏,category.json,分类库图标,http://res3.qianjiapp.com/ic_cate2_youxi.png
+A,cateic_playstation.png,游戏主机,category.json,分类库图标,http://res3.qianjiapp.com/cateic_playstation.png
+A,cate_mihoyo.png,游戏公司,category.json,分类库图标,http://res3.qianjiapp.com/cate_mihoyo.png
+A,cateic_twitch.png,游戏直播,category.json,分类库图标,http://res3.qianjiapp.com/cateic_twitch.png
+A,cateic_youyong.png,游泳,category.json,分类库图标,http://res3.qianjiapp.com/cateic_youyong.png
+A,cateic_huabing.png,滑冰,category.json,分类库图标,http://res3.qianjiapp.com/cateic_huabing.png
+A,cateic_huaban.png,滑板,category.json,分类库图标,http://res3.qianjiapp.com/cateic_huaban.png
+A,cateic_huaxue.png,滑雪,category.json,分类库图标,http://res3.qianjiapp.com/cateic_huaxue.png
+A,cateic_piaoliu.png,漂流,category.json,分类库图标,http://res3.qianjiapp.com/cateic_piaoliu.png
+A,cateic_yanchu.png,演出,category.json,分类库图标,http://res3.qianjiapp.com/cateic_yanchu.png
+A,cateic_qianshui.png,潜水,category.json,分类库图标,http://res3.qianjiapp.com/cateic_qianshui.png
+A,cateic_huoche.png,火车,category.json,分类库图标,http://res3.qianjiapp.com/cateic_huoche.png
+A,cateic_huoguo.png,火锅,category.json,分类库图标,http://res3.qianjiapp.com/cateic_huoguo.png
+A,cate_yanjiu.png,烟具,category.json,分类库图标,http://res3.qianjiapp.com/cate_yanjiu.png
+A,cate_yan.png,烟草,category.json,分类库图标,http://res3.qianjiapp.com/cate_yan.png
+A,cateic_shaokao.png,烧烤,category.json,分类库图标,http://res3.qianjiapp.com/cateic_shaokao.png
+A,cateic_ranqi.png,燃气,category.json,分类库图标,http://res3.qianjiapp.com/cateic_ranqi.png
+A,ic_cate2_fumu.png,父母,category.json,分类库图标,http://res3.qianjiapp.com/ic_cate2_fumu.png
+A,cate_yagao.png,牙膏,category.json,分类库图标,http://res3.qianjiapp.com/cate_yagao.png
+A,cateic_niunai.png,牛奶,category.json,分类库图标,http://res3.qianjiapp.com/cateic_niunai.png
+A,cate_wyf.png,物业费,category.json,分类库图标,http://res3.qianjiapp.com/cate_wyf.png
+A,cate_dogtoys.png,狗玩具,category.json,分类库图标,http://res3.qianjiapp.com/cate_dogtoys.png
+A,cate_dogfood.png,狗粮,category.json,分类库图标,http://res3.qianjiapp.com/cate_dogfood.png
+A,cate_cattoys.png,猫玩具,category.json,分类库图标,http://res3.qianjiapp.com/cate_cattoys.png
+A,cate_catlitter.png,猫砂,category.json,分类库图标,http://res3.qianjiapp.com/cate_catlitter.png
+A,cate_catfood.png,猫粮,category.json,分类库图标,http://res3.qianjiapp.com/cate_catfood.png
+A,cateic_wanju.png,玩具,category.json,分类库图标,http://res3.qianjiapp.com/cateic_wanju.png
+A,asset_icon_cash.png,现金,"assets.json,category.json",分类库图标,http://res3.qianjiapp.com/assetv2/asset_icon_cash.png
+A,cate_qiuyi.png,球衣,category.json,分类库图标,http://res3.qianjiapp.com/cate_qiuyi.png
+A,cateic_qiuxie.png,球鞋,category.json,分类库图标,http://res3.qianjiapp.com/cateic_qiuxie.png
+A,ic_cate2_lifa.png,理发,category.json,分类库图标,http://res3.qianjiapp.com/ic_cate2_lifa.png
+A,cate_biwa.png,琵琶,category.json,分类库图标,http://res3.qianjiapp.com/cate_biwa.png
+A,cateic_yujia2.png,瑜伽,category.json,分类库图标,http://res3.qianjiapp.com/cateic_yujia2.png
+A,cateic_tianpin.png,甜点,category.json,分类库图标,http://res3.qianjiapp.com/cateic_tianpin.png
+A,cateic_shenghuofei.png,生活费,category.json,分类库图标,http://res3.qianjiapp.com/cateic_shenghuofei.png
+A,cateic_jingdong.png,电商平台,category.json,分类库图标,http://res3.qianjiapp.com/cateic_jingdong.png
+A,ic_cate2_dianqi.png,电器,category.json,分类库图标,http://res3.qianjiapp.com/ic_cate2_dianqi.png
+A,ic_cate2_dianying.png,电影,category.json,分类库图标,http://res3.qianjiapp.com/ic_cate2_dianying.png
+A,cate_dianpc.png,电脑,category.json,分类库图标,http://res3.qianjiapp.com/cate_dianpc.png
+A,cateic_diannao.png,电脑,category.json,分类库图标,http://res3.qianjiapp.com/cateic_diannao.png
+A,cateic_dianhua.png,电话,category.json,分类库图标,http://res3.qianjiapp.com/cateic_dianhua.png
+A,cateic_dianfei.png,电费,category.json,分类库图标,http://res3.qianjiapp.com/cateic_dianfei.png
+A,cate_vaccine.png,疫苗,category.json,分类库图标,http://res3.qianjiapp.com/cate_vaccine.png
+A,cateic_yimiao.png,疫苗,category.json,分类库图标,http://res3.qianjiapp.com/cateic_yimiao.png
+A,cateic_baiduyun.png,百度网盘,category.json,分类库图标,http://res3.qianjiapp.com/cateic_baiduyun.png
+A,cate_hema.png,盒马鲜生,category.json,分类库图标,http://res3.qianjiapp.com/cate_hema.png
+A,cateic_manghe.png,盲盒,category.json,分类库图标,http://res3.qianjiapp.com/cateic_manghe.png
+A,cate_douyu.png,直播平台,category.json,分类库图标,http://res3.qianjiapp.com/cate_douyu.png
+A,cateic_huya.png,直播平台,category.json,分类库图标,http://res3.qianjiapp.com/cateic_huya.png
+A,ic_cate2_xiangji.png,相机,category.json,分类库图标,http://res3.qianjiapp.com/ic_cate2_xiangji.png
+A,cate_meibi.png,眉笔,category.json,分类库图标,http://res3.qianjiapp.com/cate_meibi.png
+A,cateic_yanying2.png,眼影,category.json,分类库图标,http://res3.qianjiapp.com/cateic_yanying2.png
+A,cate_yanxianbi.png,眼线笔,category.json,分类库图标,http://res3.qianjiapp.com/cate_yanxianbi.png
+A,cate_yanjing.png,眼镜,category.json,分类库图标,http://res3.qianjiapp.com/cate_yanjing.png
+A,cateic_toushi.png,眼镜,category.json,分类库图标,http://res3.qianjiapp.com/cateic_toushi.png
+A,cate_yanshuang.png,眼霜,category.json,分类库图标,http://res3.qianjiapp.com/cate_yanshuang.png
+A,cateic_jiemaogao.png,睫毛膏,category.json,分类库图标,http://res3.qianjiapp.com/cateic_jiemaogao.png
+A,cateic_zhihuvip.png,知乎会员,category.json,分类库图标,http://res3.qianjiapp.com/cateic_zhihuvip.png
+A,cateic_kuangquanshui.png,矿泉水,category.json,分类库图标,http://res3.qianjiapp.com/cateic_kuangquanshui.png
+A,cate_cixuanfu.png,磁悬浮,category.json,分类库图标,http://res3.qianjiapp.com/cate_cixuanfu.png
+A,cateic_fahongbao.png,礼金 / 红包,"category.json,default_category.json",分类库图标,http://res3.qianjiapp.com/cateic_fahongbao.png
+A,cate_qifu.png,祈福,category.json,分类库图标,http://res3.qianjiapp.com/cate_qifu.png
+A,cate_qiuku.png,秋裤,category.json,分类库图标,http://res3.qianjiapp.com/cate_qiuku.png
+A,cateic_jicun.png,积存,category.json,分类库图标,http://res3.qianjiapp.com/cateic_jicun.png
+A,cateic_kongshoudao.png,空手道,category.json,分类库图标,http://res3.qianjiapp.com/cateic_kongshoudao.png
+A,cate_harp.png,竖琴,category.json,分类库图标,http://res3.qianjiapp.com/cate_harp.png
+A,cate_qianzheng.png,签证,category.json,分类库图标,http://res3.qianjiapp.com/cate_qianzheng.png
+A,cate_yinxiang.png,箱包,category.json,分类库图标,http://res3.qianjiapp.com/cate_yinxiang.png
+A,cateic_lanqiu.png,篮球,category.json,分类库图标,http://res3.qianjiapp.com/cateic_lanqiu.png
+A,cate_fencizhen.png,粉刺针,category.json,分类库图标,http://res3.qianjiapp.com/cate_fencizhen.png
+A,cateic_lianfen.png,粉底,category.json,分类库图标,http://res3.qianjiapp.com/cateic_lianfen.png
+A,cateic_fendi.png,粉底液,category.json,分类库图标,http://res3.qianjiapp.com/cateic_fendi.png
+A,cateic_jinghua2.png,精华,category.json,分类库图标,http://res3.qianjiapp.com/cateic_jinghua2.png
+A,cate_candy.png,糖果,category.json,分类库图标,http://res3.qianjiapp.com/cate_candy.png
+A,cateic_jinianbi.png,纪念币,category.json,分类库图标,http://res3.qianjiapp.com/cateic_jinianbi.png
+A,cateic_jinianchao.png,纪念钞,category.json,分类库图标,http://res3.qianjiapp.com/cateic_jinianchao.png
+A,cage_givenchy.png,纪梵希,category.json,分类库图标,http://res3.qianjiapp.com/cage_givenchy.png
+A,cateic_zhiniaoku.png,纸尿裤,category.json,分类库图标,http://res3.qianjiapp.com/cateic_zhiniaoku.png
+A,cateic_zhijin.png,纸巾,category.json,分类库图标,http://res3.qianjiapp.com/cateic_zhijin.png
+A,cate_newb.png,纽巴伦,category.json,分类库图标,http://res3.qianjiapp.com/cate_newb.png
+A,cateic_lvzhi.png,绿植,category.json,分类库图标,http://res3.qianjiapp.com/cateic_lvzhi.png
+A,cateic_yanxuan.png,网易严选,category.json,分类库图标,http://res3.qianjiapp.com/cateic_yanxuan.png
+A,cateic_wangyikaola.png,网易考拉,category.json,分类库图标,http://res3.qianjiapp.com/cateic_wangyikaola.png
+A,cateic_wangqiu.png,网球,category.json,分类库图标,http://res3.qianjiapp.com/cateic_wangqiu.png
+A,cateic_wangluo.png,网络 / 网费,"category.json,default_category.json",分类库图标,http://res3.qianjiapp.com/cateic_wangluo.png
+A,cateic_tengxunjiasu.png,网络加速,category.json,分类库图标,http://res3.qianjiapp.com/cateic_tengxunjiasu.png
+A,cateic_uujiasuqi.png,网络加速,category.json,分类库图标,http://res3.qianjiapp.com/cateic_uujiasuqi.png
+A,cateic_bestv.png,网络电视,category.json,分类库图标,http://res3.qianjiapp.com/cateic_bestv.png
+A,cateic_cibn.png,网络电视,category.json,分类库图标,http://res3.qianjiapp.com/cateic_cibn.png
+A,cateic_zhihuan.png,置换,category.json,分类库图标,http://res3.qianjiapp.com/cateic_zhihuan.png
+A,cate_meifa.png,美发,category.json,分类库图标,http://res3.qianjiapp.com/cate_meifa.png
+A,cateic_meifa.png,美发,category.json,分类库图标,http://res3.qianjiapp.com/cateic_meifa.png
+A,cateic_meizhuang.png,美妆,"category.json,default_category.json",分类库图标,http://res3.qianjiapp.com/cateic_meizhuang.png
+A,cateic_meirong.png,美容,category.json,分类库图标,http://res3.qianjiapp.com/cateic_meirong.png
+A,cateic_meirongyi2.png,美容仪,category.json,分类库图标,http://res3.qianjiapp.com/cateic_meirongyi2.png
+A,cate_meishu.png,美术,category.json,分类库图标,http://res3.qianjiapp.com/cate_meishu.png
+A,cateic_meijia2.png,美甲,category.json,分类库图标,http://res3.qianjiapp.com/cateic_meijia2.png
+A,cateic_meijie.png,美睫,category.json,分类库图标,http://res3.qianjiapp.com/cateic_meijie.png
+A,cateic_yumaoqiu.png,羽毛球,category.json,分类库图标,http://res3.qianjiapp.com/cateic_yumaoqiu.png
+A,cate_yurongfu.png,羽绒服,category.json,分类库图标,http://res3.qianjiapp.com/cate_yurongfu.png
+A,ic_cate2_kaoshi.png,考试,category.json,分类库图标,http://res3.qianjiapp.com/ic_cate2_kaoshi.png
+A,cate_nike.png,耐克,category.json,分类库图标,http://res3.qianjiapp.com/cate_nike.png
+A,cateic_erji.png,耳机,category.json,分类库图标,http://res3.qianjiapp.com/cateic_erji.png
+A,ic_cate2_juhui.png,聚会,category.json,分类库图标,http://res3.qianjiapp.com/ic_cate2_juhui.png
+A,cateic_meat.png,肉类,category.json,分类库图标,http://res3.qianjiapp.com/cateic_meat.png
+A,cateic_gupiao.png,股票,category.json,分类库图标,http://res3.qianjiapp.com/cateic_gupiao.png
+A,cateic_saihong2.png,腮红,category.json,分类库图标,http://res3.qianjiapp.com/cateic_saihong2.png
+A,cateic_tencentcloud.png,腾讯云,category.json,分类库图标,http://res3.qianjiapp.com/cateic_tencentcloud.png
+A,cateic_tencentsport.png,腾讯体育,category.json,分类库图标,http://res3.qianjiapp.com/cateic_tencentsport.png
+A,ic_cate2_zixingche.png,自行车,category.json,分类库图标,http://res3.qianjiapp.com/ic_cate2_zixingche.png
+A,cate_dance.png,舞蹈,category.json,分类库图标,http://res3.qianjiapp.com/cate_dance.png
+A,cateic_wodao.png,舞蹈,category.json,分类库图标,http://res3.qianjiapp.com/cateic_wodao.png
+A,cate_hua.png,花卉,category.json,分类库图标,http://res3.qianjiapp.com/cate_hua.png
+A,cateic_cha.png,茶,category.json,分类库图标,http://res3.qianjiapp.com/cateic_cha.png
+A,ic_cate2_yaoping.png,药品,category.json,分类库图标,http://res3.qianjiapp.com/ic_cate2_yaoping.png
+A,cate_saxophone.png,萨克斯,category.json,分类库图标,http://res3.qianjiapp.com/cate_saxophone.png
+A,cate_coach.png,蔻驰,category.json,分类库图标,http://res3.qianjiapp.com/cate_coach.png
+A,cate_cake.png,蛋糕,category.json,分类库图标,http://res3.qianjiapp.com/cate_cake.png
+A,ic_cate3_butie.png,补贴,category.json,分类库图标,http://res3.qianjiapp.com/ic_cate3_butie.png
+A,cateic_wazi.png,袜子,category.json,分类库图标,http://res3.qianjiapp.com/cateic_wazi.png
+A,cateic_qunzi.png,裙子,category.json,分类库图标,http://res3.qianjiapp.com/cateic_qunzi.png
+A,cateic_kuzi.png,裤子,category.json,分类库图标,http://res3.qianjiapp.com/cateic_kuzi.png
+A,cate_acfun.png,视频平台,category.json,分类库图标,http://res3.qianjiapp.com/cate_acfun.png
+A,cateic_youtube.png,视频平台,category.json,分类库图标,http://res3.qianjiapp.com/cateic_youtube.png
+A,cate_kecheng.png,课程,category.json,分类库图标,http://res3.qianjiapp.com/cate_kecheng.png
+A,cate_douzhipin.png,豆制品,category.json,分类库图标,http://res3.qianjiapp.com/cate_douzhipin.png
+A,cate_huolala.png,货拉拉,category.json,分类库图标,http://res3.qianjiapp.com/cate_huolala.png
+A,cateic_gouwu2.png,购物,category.json,分类库图标,http://res3.qianjiapp.com/cateic_gouwu2.png
+A,ic_cate2_appgoumai.png,购物,category.json,分类库图标,http://res3.qianjiapp.com/ic_cate2_appgoumai.png
+A,cateic_qidian.png,起点读书,category.json,分类库图标,http://res3.qianjiapp.com/cateic_qidian.png
+A,cateic_zuqiu.png,足球,category.json,分类库图标,http://res3.qianjiapp.com/cateic_zuqiu.png
+A,cateic_taiquandao.png,跆拳道,category.json,分类库图标,http://res3.qianjiapp.com/cateic_taiquandao.png
+A,cate_lv.png,路易威登,category.json,分类库图标,http://res3.qianjiapp.com/cate_lv.png
+A,cateic_shentiru.png,身体乳,category.json,分类库图标,http://res3.qianjiapp.com/cateic_shentiru.png
+A,cateic_lunhua.png,轮滑,category.json,分类库图标,http://res3.qianjiapp.com/cateic_lunhua.png
+A,cateic_lunchuan.png,轮船,category.json,分类库图标,http://res3.qianjiapp.com/cateic_lunchuan.png
+A,cateic_qingke.png,轻客,category.json,分类库图标,http://res3.qianjiapp.com/cateic_qingke.png
+A,cateic_yundong.png,运动,"category.json,default_category.json",分类库图标,http://res3.qianjiapp.com/cateic_yundong.png
+A,cate_hoka.png,运动鞋,category.json,分类库图标,http://res3.qianjiapp.com/cate_hoka.png
+A,cate_puma.png,运动鞋,category.json,分类库图标,http://res3.qianjiapp.com/cate_puma.png
+A,ic_cate2_tuishui.png,退税,"category.json,default_category.json",分类库图标,http://res3.qianjiapp.com/ic_cate2_tuishui.png
+A,cate_condom.png,避孕套,category.json,分类库图标,http://res3.qianjiapp.com/cate_condom.png
+A,cateic3_jiudian.png,酒店,category.json,分类库图标,http://res3.qianjiapp.com/cateic3_jiudian.png
+A,cate_jiu.png,酒类,category.json,分类库图标,http://res3.qianjiapp.com/cate_jiu.png
+A,cateic_kuwo.png,酷我音乐,category.json,分类库图标,http://res3.qianjiapp.com/cateic_kuwo.png
+A,cateic_diaoyu.png,钓鱼,category.json,分类库图标,http://res3.qianjiapp.com/cateic_diaoyu.png
+A,cate_piano.png,钢琴,category.json,分类库图标,http://res3.qianjiapp.com/cate_piano.png
+A,cateic_jianpan.png,键盘,category.json,分类库图标,http://res3.qianjiapp.com/cateic_jianpan.png
+A,cateic_jingzi2.png,镜子,category.json,分类库图标,http://res3.qianjiapp.com/cateic_jingzi2.png
+A,cate_trombone.png,长号,category.json,分类库图标,http://res3.qianjiapp.com/cate_trombone.png
+A,cate_flute.png,长笛,category.json,分类库图标,http://res3.qianjiapp.com/cate_flute.png
+A,ic_cate2_menpiao.png,门票,category.json,分类库图标,http://res3.qianjiapp.com/ic_cate2_menpiao.png
+A,cate_wd.png,问答,category.json,分类库图标,http://res3.qianjiapp.com/cate_wd.png
+A,cate_ruan.png,阮,category.json,分类库图标,http://res3.qianjiapp.com/cate_ruan.png
+A,cateic_fangshai.png,防晒,category.json,分类库图标,http://res3.qianjiapp.com/cateic_fangshai.png
+A,cate_armani.png,阿玛尼,category.json,分类库图标,http://res3.qianjiapp.com/cate_armani.png
+A,cate_adidas.png,阿迪达斯,category.json,分类库图标,http://res3.qianjiapp.com/cate_adidas.png
+A,cate_adm.png,阿迪达斯,category.json,分类库图标,http://res3.qianjiapp.com/cate_adm.png
+A,cateic_aliyunpan.png,阿里云盘,category.json,分类库图标,http://res3.qianjiapp.com/cateic_aliyunpan.png
+A,cate_1688.png,阿里巴巴,category.json,分类库图标,http://res3.qianjiapp.com/cate_1688.png
+A,cate_xgao.png,雪糕,category.json,分类库图标,http://res3.qianjiapp.com/cate_xgao.png
+A,ic_cate2_linghuaqian.png,零花钱,category.json,分类库图标,http://res3.qianjiapp.com/ic_cate2_linghuaqian.png
+A,cateic_lingshi.png,零食,"category.json,default_category.json",分类库图标,http://res3.qianjiapp.com/cateic_lingshi.png
+A,cateic_luying.png,露营,category.json,分类库图标,http://res3.qianjiapp.com/cateic_luying.png
+A,cate_mxbc.png,面包,category.json,分类库图标,http://res3.qianjiapp.com/cate_mxbc.png
+A,cateic_mianbao.png,面包,category.json,分类库图标,http://res3.qianjiapp.com/cateic_mianbao.png
+A,ic_cate2_mianfen.png,面粉,category.json,分类库图标,http://res3.qianjiapp.com/ic_cate2_mianfen.png
+A,cateic_mianmo.png,面膜,category.json,分类库图标,http://res3.qianjiapp.com/cateic_mianmo.png
+A,cateic_mianshuang.png,面霜,category.json,分类库图标,http://res3.qianjiapp.com/cateic_mianshuang.png
+A,cate_mian.png,面食,category.json,分类库图标,http://res3.qianjiapp.com/cate_mian.png
+A,cate_boots.png,靴子,category.json,分类库图标,http://res3.qianjiapp.com/cate_boots.png
+A,cate_711.png,鞋类,category.json,分类库图标,http://res3.qianjiapp.com/cate_711.png
+A,cate_dkn.png,鞋类,category.json,分类库图标,http://res3.qianjiapp.com/cate_dkn.png
+A,cate_ecco.png,鞋类,category.json,分类库图标,http://res3.qianjiapp.com/cate_ecco.png
+A,cate_skq.png,鞋类,category.json,分类库图标,http://res3.qianjiapp.com/cate_skq.png
+A,cate_timber.png,鞋类,category.json,分类库图标,http://res3.qianjiapp.com/cate_timber.png
+A,cate_ugg.png,鞋类,category.json,分类库图标,http://res3.qianjiapp.com/cate_ugg.png
+A,cateic_kugou.png,音乐,category.json,分类库图标,http://res3.qianjiapp.com/cateic_kugou.png
+A,cateic_migu.png,音乐,category.json,分类库图标,http://res3.qianjiapp.com/cateic_migu.png
+A,cateic_qqmusic.png,音乐,category.json,分类库图标,http://res3.qianjiapp.com/cateic_qqmusic.png
+A,cateic_spotify.png,音乐,category.json,分类库图标,http://res3.qianjiapp.com/cateic_spotify.png
+A,cateic_wangyimusic.png,音乐,category.json,分类库图标,http://res3.qianjiapp.com/cateic_wangyimusic.png
+A,cateic_applemusic.png,音乐平台,category.json,分类库图标,http://res3.qianjiapp.com/cateic_applemusic.png
+A,ic_cate2_feiji.png,飞机,category.json,分类库图标,http://res3.qianjiapp.com/ic_cate2_feiji.png
+A,cate_feipan.png,飞盘,category.json,分类库图标,http://res3.qianjiapp.com/cate_feipan.png
+A,ic_cate2_shipin.png,食品,category.json,分类库图标,http://res3.qianjiapp.com/ic_cate2_shipin.png
+A,cateic_canju.png,餐具,category.json,分类库图标,http://res3.qianjiapp.com/cateic_canju.png
+A,cateic_yinshi.png,餐饮 / 饮食,"category.json,default_category.json",分类库图标,http://res3.qianjiapp.com/cateic_yinshi.png
+A,cateic_yinliao.png,饮料,category.json,分类库图标,http://res3.qianjiapp.com/cateic_yinliao.png
+A,cate_jiaozi.png,饺子,category.json,分类库图标,http://res3.qianjiapp.com/cate_jiaozi.png
+A,cateic_mantou.png,馒头,category.json,分类库图标,http://res3.qianjiapp.com/cateic_mantou.png
+A,cate_chanel.png,香奈儿,category.json,分类库图标,http://res3.qianjiapp.com/cate_chanel.png
+A,cateic_xiangshui2.png,香水,category.json,分类库图标,http://res3.qianjiapp.com/cateic_xiangshui2.png
+A,cateic_qixing.png,骑行,category.json,分类库图标,http://res3.qianjiapp.com/cateic_qixing.png
+A,cateic_gaoguang.png,高光,category.json,分类库图标,http://res3.qianjiapp.com/cateic_gaoguang.png
+A,cateic_gaoerfu.png,高尔夫,category.json,分类库图标,http://res3.qianjiapp.com/cateic_gaoerfu.png
+A,cate_hight_boots.png,高筒靴,category.json,分类库图标,http://res3.qianjiapp.com/cate_hight_boots.png
+A,cateic_gaogenxie.png,高跟鞋,category.json,分类库图标,http://res3.qianjiapp.com/cateic_gaogenxie.png
+A,cate_egg.png,鸡蛋,category.json,分类库图标,http://res3.qianjiapp.com/cate_egg.png
+A,cateic_majiang.png,麻将,category.json,分类库图标,http://res3.qianjiapp.com/cateic_majiang.png
+A,cateic_huangjin.png,黄金,category.json,分类库图标,http://res3.qianjiapp.com/cateic_huangjin.png
+B,asset_icon_vip.png,会员卡,assets.json,通用金融概念,http://res3.qianjiapp.com/assetv2/asset_icon_vip.png
+B,asset_icon_credit.png,信用卡,assets.json,通用金融概念「卡」,http://res3.qianjiapp.com/assetv2/asset_icon_credit.png
+B,asset_icon_jieru.png,借入,assets.json,通用金融概念（白名单）,http://res.qianjiapp.com/assetv2/asset_icon_jieru.png
+B,asset_icon_jiechu.png,借出,assets.json,通用金融概念（白名单）,http://res.qianjiapp.com/assetv2/asset_icon_jiechu.png
+B,asset_bond.png,债券,assets.json,通用金融概念,http://res3.qianjiapp.com/assetv2/asset_bond.png
+B,asset_icon_gongjiaoka.png,公交卡,assets.json,通用金融概念（白名单）,http://res3.qianjiapp.com/assetv2/asset_icon_gongjiaoka.png
+B,asset_icon_gongjijin2.png,公积金,assets.json,通用金融概念,http://res3.qianjiapp.com/assetv2/asset_icon_gongjijin2.png
+B,asset_icon_creditother.png,其它信用卡,assets.json,通用金融概念,http://res3.qianjiapp.com/assetv2/asset_icon_creditother.png
+B,asset_icon_licaiother.png,其它理财,assets.json,通用金融概念（白名单）,http://res3.qianjiapp.com/assetv2/asset_icon_licaiother.png
+B,ic_asset_jiayouka.png,加油卡,assets.json,通用金融概念（白名单）,http://res3.qianjiapp.com/ic_asset_jiayouka.png
+B,asset_icon_yibao.png,医保,assets.json,通用金融概念,http://res3.qianjiapp.com/assetv2/asset_icon_yibao.png
+B,asset_fixedincome.png,固定收益,assets.json,通用金融概念（白名单）,http://res3.qianjiapp.com/assetv2/asset_fixedincome.png
+B,asset_icon_jijin.png,基金,assets.json,通用金融概念,http://res3.qianjiapp.com/assetv2/asset_icon_jijin.png
+B,asset_icon_waihui.png,外汇,assets.json,通用金融概念,http://res3.qianjiapp.com/assetv2/asset_icon_waihui.png
+B,asset_icon_yajin.png,押金,assets.json,通用金融概念（白名单）,http://res3.qianjiapp.com/assetv2/asset_icon_yajin.png
+B,asset_icon_qihuo.png,期货,assets.json,通用金融概念（白名单）,http://res3.qianjiapp.com/assetv2/asset_icon_qihuo.png
+B,asset_shuidian.png,水电,assets.json,通用金融概念（白名单）,http://res3.qianjiapp.com/asset_shuidian.png
+B,ic_asset_shihua.png,石化钱包,assets.json,通用金融概念（白名单）,http://res3.qianjiapp.com/ic_asset_shihua.png
+B,asset_icon_gupiao.png,股票,assets.json,通用金融概念,http://res3.qianjiapp.com/assetv2/asset_icon_gupiao.png
+B,asset_huafei.png,话费,assets.json,通用金融概念,http://res3.qianjiapp.com/asset_huafei.png
+B,asset_icon_fanka2.png,饭卡,assets.json,通用金融概念（白名单）,http://res3.qianjiapp.com/assetv2/asset_icon_fanka2.png
+B,asset_icon_huangjin.png,黄金,assets.json,通用金融概念,http://res3.qianjiapp.com/assetv2/asset_icon_huangjin.png
+D,asset_icon_other2.png,其它,assets.json,源码硬编码默认值,http://res3.qianjiapp.com/assetv2/asset_icon_other2.png
+D,cateic_licai.png,投资 / 理财,"category.json,default_category.json",源码硬编码默认值,http://res3.qianjiapp.com/cateic_licai.png
+D,ic_cate2_wancan.png,晚餐,category.json,源码硬编码默认值,http://res3.qianjiapp.com/ic_cate2_wancan.png
+C?,ae.png,Æternity,assets.json,未命中规则，需人工确认,http://res3.qianjiapp.com/coinv2/ae.png
+C,zrx.png,0x Protocol,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/zrx.png
+C,cateic_115.png,115网盘,category.json,分类里的品牌产品条目,http://res3.qianjiapp.com/cateic_115.png
+C,1inch.png,1inch Network,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/1inch.png
+C,bank_anz.png,ANZ,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/bank_anz.png
+C,ic_bank_asb.png,ASB Bank,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_asb.png
+C,aave.png,Aave,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/aave.png
+C,act.png,Achain,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/act.png
+C,adx.png,AdEx,assets.json,加密货币 token 符号,http://res3.qianjiapp.com/coinv2/adx.png
+C,agrs.png,Agoras: Tau Net,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/agrs.png
+C,dlt.png,Agrello,assets.json,加密货币 token 符号,http://res3.qianjiapp.com/coinv2/dlt.png
+C,aion.png,Aion,assets.json,加密货币 token 符号,http://res3.qianjiapp.com/coinv2/aion.png
+C,ast.png,AirSwap,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/ast.png
+C,algo.png,Algorand,assets.json,加密货币 token 符号,http://res3.qianjiapp.com/coinv2/algo.png
+C,ic_bank_alliance.png,Alliance Bank Malaysia Berhad,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_alliance.png
+C,bank_ambank.png,AmBank,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/bank_ambank.png
+C,ic_bank_yuntong2.png,American Express,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_yuntong2.png
+C,amp.png,Amp,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/amp.png
+C,ampl.png,Ampleforth,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/ampl.png
+C,ankr.png,Ankr,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/ankr.png
+C,ape2.png,ApeCoin,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/ape2.png
+C,asset_icon_apple.png,Apple,assets.json,中文名含机构/品牌词「Apple」,http://res3.qianjiapp.com/assetv2/asset_icon_apple.png
+C,bank_apple.png,Apple,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/bank_apple.png
+C,apt.png,Aptos,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/apt.png
+C,ant.png,Aragon,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/ant.png
+C,arb.png,Arbitrum,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/arb.png
+C,abt.png,Arcblock,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/abt.png
+C,ardr.png,Ardor,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/ardr.png
+C,ark.png,Ark,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/ark.png
+C,rep.png,Augur,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/rep.png
+C,avax.png,Avalanche,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/avax.png
+C,bnb.png,BNB,assets.json,加密货币 token 符号,http://res3.qianjiapp.com/coinv2/bnb.png
+C,ic_bank_bnz.png,BNZ,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_bnz.png
+C,bank_bpmb.png,BPMB Bank,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/bank_bpmb.png
+C,bal.png,Balancer,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/bal.png
+C,bnt.png,Bancor,assets.json,英文机构名,http://res3.qianjiapp.com/coinv2/bnt.png
+C,band.png,Band Protocol,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/band.png
+C,ic_bank_bankislam.png,Bank Islam Malaysia,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_bankislam.png
+C,ic_bank_bsn.png,Bank Simpanan National,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_bsn.png
+C,ic_bank_boa.png,Bank of America,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_boa.png
+C,ic_bank_england.png,Bank of England,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_england.png
+C,ic_bank_montreal.png,Bank of Montreal,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_montreal.png
+C,ic_bank_scotia.png,Bank of Nova Scotia,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_scotia.png
+C,bank_scotland.png,Bank of Scotland,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/bank_scotland.png
+C,ic_bank_barclays.png,Barclays,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_barclays.png
+C,bat.png,Basic Attention Token,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/bat.png
+C,beam.png,Beam,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/beam.png
+C,bela.png,Bela,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/bela.png
+C,bix.png,Bibox Token,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/bix.png
+C,binance.png,Binance,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/binance.png
+C,btx.png,BitCore,assets.json,加密货币 token 符号,http://res3.qianjiapp.com/coinv2/btx.png
+C,bts.png,BitShares,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/bts.png
+C,btc.png,Bitcoin,assets.json,加密货币 token 符号,http://res3.qianjiapp.com/coinv2/btc.png
+C,bch.png,Bitcoin Cash,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/bch.png
+C,bcd.png,Bitcoin Diamond,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/bcd.png
+C,btg.png,Bitcoin Gold,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/btg.png
+C,xbc.png,Bitcoin Plus,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/xbc.png
+C,bsv.png,Bitcoin SV,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/bsv.png
+C,btcz.png,BitcoinZ,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/btcz.png
+C,blk.png,BlackCoin,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/blk.png
+C,block.png,Blocknet,assets.json,加密货币 token 符号,http://res3.qianjiapp.com/coinv2/block.png
+C,blz.png,Bluzelle,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/blz.png
+C,bnty.png,Bounty0x,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/bnty.png
+C,bank_bourso.png,Bourso Bank,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/bank_bourso.png
+C,brd.png,Bread,assets.json,加密货币 token 符号,http://res3.qianjiapp.com/coinv2/brd.png
+C,bank_bunq.png,Bunq,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/bank_bunq.png
+C,bcn.png,Bytecoin,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/bcn.png
+C,btm.png,BytomDAO,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/btm.png
+C,ic_bank_cimb.png,CIMB Bank,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_cimb.png
+C,ic_bank_cibc3.png,Canadian Imperial Bank of Commerce,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_cibc3.png
+C,ic_bank_capitalone.png,Capital One,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_capitalone.png
+C,ada.png,Cardano,assets.json,加密货币 token 符号,http://res3.qianjiapp.com/coinv2/ada.png
+C,ic_bank_malaysia.png,Central Bank Of Malaysia,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_malaysia.png
+C,link.png,Chainlink,assets.json,加密货币 token 符号,http://res3.qianjiapp.com/coinv2/link.png
+C,ic_bank_schwab.png,Charles Schwab Bank,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_schwab.png
+C,ic_bank_morganchase.png,Chase,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_morganchase.png
+C,bank_chime.png,Chime,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/bank_chime.png
+C,cnd.png,Cindicator,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/cnd.png
+C,bank_citi.png,Citibank,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/bank_citi.png
+C,cvc.png,Civic,assets.json,加密货币 token 符号,http://res3.qianjiapp.com/coinv2/cvc.png
+C,clam.png,Clams,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/clam.png
+C,cloak.png,CloakCoin,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/cloak.png
+C,cob.png,Cobinhood,assets.json,加密货币 token 符号,http://res3.qianjiapp.com/coinv2/cob.png
+C,coinbase.png,Coinbase,assets.json,中文名含机构/品牌词「Coinbase」,http://res3.qianjiapp.com/coinv2/coinbase.png
+C,colx.png,ColossusXT,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/colx.png
+C,ic_bank_comdirect.png,Comdirect Bank,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_comdirect.png
+C,ic_bank_commerzbank.png,Commerz bank,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_commerzbank.png
+C,ic_bank_cba.png,Commonwealth Bank of Australia,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_cba.png
+C,comp.png,Compound,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/comp.png
+C,ctxc.png,Cortex,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/ctxc.png
+C,atom.png,Cosmos,assets.json,加密货币 token 符号,http://res3.qianjiapp.com/coinv2/atom.png
+C,xcp.png,Counterparty,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/xcp.png
+C,cs.png,Credits,assets.json,英文机构名,http://res3.qianjiapp.com/coinv2/cs.png
+C,crw.png,Crown,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/crw.png
+C,crpt.png,Crypterium,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/crpt.png
+C,crv.png,Curve DAO Token,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/crv.png
+C,dai.png,Dai,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/dai.png
+C,dash.png,Dash,assets.json,加密货币 token 符号,http://res3.qianjiapp.com/coinv2/dash.png
+C,mana.png,Decentraland,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/mana.png
+C,dcr.png,Decred,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/dcr.png
+C,dbc.png,DeepBrain Chain,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/dbc.png
+C,dent.png,Dent,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/dent.png
+C,dcn.png,Dentacoin,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/dcn.png
+C,bank_deutsche.png,Deutsche Bank AG,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/bank_deutsche.png
+C,ic_bank_dglb.png,Deutsche Bundesbank,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_dglb.png
+C,dgb.png,DigiByte,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/dgb.png
+C,xdn.png,DigitalNote,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/xdn.png
+C,ic_bank_discover.png,Discover Card,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_discover.png
+C,dock.png,Dock,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/dock.png
+C,doge.png,Dogecoin,assets.json,加密货币 token 符号,http://res3.qianjiapp.com/coinv2/doge.png
+C,drgn.png,Dragonchain,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/drgn.png
+C,ic_bank_ebrd.png,EBRD,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_ebrd.png
+C,eos.png,EOS,assets.json,加密货币 token 符号,http://res3.qianjiapp.com/coinv2/eos.png
+C,eigen.png,EigenLayer,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/eigen.png
+C,ela.png,Elastos,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/ela.png
+C,etn.png,Electroneum,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/etn.png
+C,emc.png,Emercoin,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/emc.png
+C,eng.png,Enigma,assets.json,加密货币 token 符号,http://res3.qianjiapp.com/coinv2/eng.png
+C,enj.png,Enjin Coin,assets.json,加密货币 token 符号,http://res3.qianjiapp.com/coinv2/enj.png
+C,mln.png,Enzyme,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/mln.png
+C,eth.png,Ethereum,assets.json,加密货币 token 符号,http://res3.qianjiapp.com/coinv2/eth.png
+C,etc.png,Ethereum Classic,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/etc.png
+C,fuel.png,Etherparty,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/fuel.png
+C,evx.png,Everex,assets.json,加密货币 token 符号,http://res3.qianjiapp.com/coinv2/evx.png
+C,ftc.png,Feathercoin,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/ftc.png
+C,fil.png,Filecoin,assets.json,加密货币 token 符号,http://res3.qianjiapp.com/coinv2/fil.png
+C,flux.png,Flux,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/flux.png
+C,fsn.png,Fusion,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/fsn.png
+C,ic_bank_fusion.png,Fusion Bank,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_fusion.png
+C,game.png,GameCredits,assets.json,英文机构名,http://res3.qianjiapp.com/coinv2/game.png
+C,gas.png,Gas,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/gas.png
+C,gateio.png,Gate.io,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/gateio.png
+C,gbyte.png,Gbyte,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/gbyte.png
+C,gusd.png,Gemini Dollar,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/gusd.png
+C,gsc.png,Global Social Chain,assets.json,加密货币 token 符号,http://res3.qianjiapp.com/coinv2/gsc.png
+C,gno.png,Gnosis,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/gno.png
+C,goat2.png,Goatseus Maximus,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/goat2.png
+C,grin.png,Grin,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/grin.png
+C,grs.png,Groestlcoin,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/grs.png
+C,htx.png,HTX,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/htx.png
+C,husd.png,HUSD,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/husd.png
+C,ic_bank_halifax.png,Halifax,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_halifax.png
+C,hns.png,Handshake,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/hns.png
+C,one.png,Harmony,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/one.png
+C,bank_hello2.png,Hello Bank,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/bank_hello2.png
+C,hot.png,Holo,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/hot.png
+C,ic_bank_hongleong.png,Hong Leong Bank,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_hongleong.png
+C,ht.png,Huobi Token,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/ht.png
+C,hush.png,Hush,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/hush.png
+C,hpb.png,Hyperblox,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/hpb.png
+C,ic_bank_hypovereins.png,Hypovereins bank,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_hypovereins.png
+C,icx.png,ICON,assets.json,加密货币 token 符号,http://res3.qianjiapp.com/coinv2/icx.png
+C,ic_bank_ing.png,ING Group,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_ing.png
+C,ion.png,ION,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/ion.png
+C,iost.png,IOST,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/iost.png
+C,ignis.png,Ignis,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/ignis.png
+C,ink.png,Ink,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/ink.png
+C,icp.png,Internet Computer,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/icp.png
+C,bank_intesa_sanpaolo.png,Intesa Sanpaolo,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/bank_intesa_sanpaolo.png
+C,iotx.png,IoTeX,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/iotx.png
+C,bank_jcb2.png,JCB,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/bank_jcb2.png
+C,bank_kakao.png,Kakao Bank,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/bank_kakao.png
+C,kin.png,Kin,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/kin.png
+C,ic_bank_kiwi.png,Kiwibank,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_kiwi.png
+C,kmd.png,Komodo,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/kmd.png
+C,kraken.png,Kraken,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/kraken.png
+C,kcs.png,KuCoin Token,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/kcs.png
+C,ksm.png,Kusama,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/ksm.png
+C,knc.png,Kyber Network Crystal v2,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/knc.png
+C,ic_cate2_kge.png,K歌,category.json,分类里的品牌产品条目,http://res3.qianjiapp.com/ic_cate2_kge.png
+C,lbc.png,LBRY Credits,assets.json,英文机构名,http://res3.qianjiapp.com/coinv2/lbc.png
+C,lsk.png,Lisk,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/lsk.png
+C,ltc.png,Litecoin,assets.json,加密货币 token 符号,http://res3.qianjiapp.com/coinv2/ltc.png
+C,lpt.png,Livepeer,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/lpt.png
+C,ic_bank_livi.png,Livi Bank,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_livi.png
+C,ic_bank_lloyds2.png,Lloyds Bank,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_lloyds2.png
+C,loom.png,Loom Network,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/loom.png
+C,lrc.png,Loopring,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/lrc.png
+C,lun.png,Lunyr,assets.json,加密货币 token 符号,http://res3.qianjiapp.com/coinv2/lun.png
+C,maid.png,MaidSafeCoin,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/maid.png
+C,mkr.png,Maker,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/mkr.png
+C,ic_bank_malaiya.png,Maybank / 馬來亞銀行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_malaiya.png
+C,med.png,MediBloc,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/med.png
+C,mds.png,MediShares,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/mds.png
+C,mtl.png,Metal DAO,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/mtl.png
+C,etp.png,Metaverse ETP,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/etp.png
+C,mith.png,Mithril,assets.json,加密货币 token 符号,http://res3.qianjiapp.com/coinv2/mith.png
+C,xin.png,Mixin,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/xin.png
+C,mda.png,Moeda Loyalty Points,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/mda.png
+C,mona.png,MonaCoin,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/mona.png
+C,xmr.png,Monero,assets.json,加密货币 token 符号,http://res3.qianjiapp.com/coinv2/xmr.png
+C,mth.png,Monetha,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/mth.png
+C,tkn.png,Monolith,assets.json,加密货币 token 符号,http://res3.qianjiapp.com/coinv2/tkn.png
+C,ic_bank_monzo2.png,Monzo,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_monzo2.png
+C,ic_bank_mox.png,Mox Bank,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_mox.png
+C,ic_bank_n26_3.png,N26,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_n26_3.png
+C,ngc.png,NAGA,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/ngc.png
+C,near.png,NEAR Protocol,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/near.png
+C,xem.png,NEM,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/xem.png
+C,cateic_nft.png,NFT数字藏品,category.json,分类里的品牌产品条目,http://res3.qianjiapp.com/cateic_nft.png
+C,nkn.png,NKN,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/nkn.png
+C,nuls.png,NULS,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/nuls.png
+C,nmc.png,Namecoin,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/nmc.png
+C,ic_bank_nab.png,National Australia Bank,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_nab.png
+C,ic_bank_natwest.png,National Westminster Bank,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_natwest.png
+C,nav.png,Navcoin,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/nav.png
+C,bank_nfcu.png,Navy Federal Credit Union,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/bank_nfcu.png
+C,nebl.png,Neblio,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/nebl.png
+C,nas.png,Nebulas,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/nas.png
+C,neo.png,Neo,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/neo.png
+C,neu.png,Neumark,assets.json,加密货币 token 符号,http://res3.qianjiapp.com/coinv2/neu.png
+C,nexo.png,Nexo,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/nexo.png
+C,nxs.png,Nexus,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/nxs.png
+C,nmr.png,Numeraire,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/nmr.png
+C,nxt.png,Nxt,assets.json,加密货币 token 符号,http://res3.qianjiapp.com/coinv2/nxt.png
+C,oax.png,OAX,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/oax.png
+C,ic_bank_hqyh.png,OCBC Bank / 華僑永亨銀行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_hqyh.png
+C,okx.png,OKX,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/okx.png
+C,omg.png,OMG Network,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/omg.png
+C,ost.png,OST,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/ost.png
+C,ok.png,Okcash,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/ok.png
+C,omni.png,Omni,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/omni.png
+C,ont.png,Ontology,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/ont.png
+C,op.png,Optimism,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/op.png
+C,oxt.png,Orchid,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/oxt.png
+C,paxg.png,PAX Gold,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/paxg.png
+C,pivx.png,PIVX,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/pivx.png
+C,bank_posb.png,POSB Bank,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/bank_posb.png
+C,part.png,Particl,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/part.png
+C,pasc.png,Pascal,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/pasc.png
+C,bank_paypal.png,Paypal,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/bank_paypal.png
+C,ic_bank_paypal.png,Paypal,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_paypal.png
+C,payx.png,Paypex,assets.json,加密货币 token 符号,http://res3.qianjiapp.com/coinv2/payx.png
+C,ppc.png,Peercoin,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/ppc.png
+C,pepe.png,Pepe,assets.json,加密货币 token 符号,http://res3.qianjiapp.com/coinv2/pepe.png
+C,plr.png,Pillar,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/plr.png
+C,ic_bank_plaid2.png,Plaid,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_plaid2.png
+C,polis.png,Polis,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/polis.png
+C,dot.png,Polkadot,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/dot.png
+C,matic.png,Polygon,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/matic.png
+C,poly.png,Polymath,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/poly.png
+C,ppt.png,Populous,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/ppt.png
+C,pot.png,PotCoin,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/pot.png
+C,powr.png,Powerledger,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/powr.png
+C,pre.png,Presearch,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/pre.png
+C,xpm.png,Primecoin,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/xpm.png
+C,bank_dazhong.png,Public Bank Berhad / 大眾銀行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/bank_dazhong.png
+C,npxs.png,Pundi X (Old),assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/npxs.png
+C,qash.png,QASH,assets.json,加密货币 token 符号,http://res3.qianjiapp.com/coinv2/qash.png
+C,cateic_qqvip.png,QQ会员,category.json,分类里的品牌条目「QQ」,http://res3.qianjiapp.com/cateic_qqvip.png
+C,asset_icon_qq.png,QQ钱包,assets.json,中文名含机构/品牌词「QQ」,http://res3.qianjiapp.com/assetv2/asset_icon_qq.png
+C,cateic_qqyuedu.png,QQ阅读,category.json,分类里的品牌条目「QQ」,http://res3.qianjiapp.com/cateic_qqyuedu.png
+C,qtum.png,Qtum,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/qtum.png
+C,qnt.png,Quant,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/qnt.png
+C,qrl.png,Quantum Resistant Ledger,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/qrl.png
+C,bank_rhb.png,RHB Bank,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/bank_rhb.png
+C,rdn.png,Raiden Network Token,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/rdn.png
+C,rvn.png,Ravencoin,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/rvn.png
+C,ray.png,Raydium,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/ray.png
+C,rdd.png,ReddCoin,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/rdd.png
+C,ren.png,Ren,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/ren.png
+C,req.png,Request,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/req.png
+C,ic_bank_revolut2.png,Revolut,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_revolut2.png
+C,rcn.png,Ripio Credit Network,assets.json,英文机构名,http://res3.qianjiapp.com/coinv2/rcn.png
+C,ron.png,Ronin,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/ron.png
+C,ic_bank_rbc_canada.png,Royal Bank of Canada,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_rbc_canada.png
+C,ryo.png,Ryo Currency,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/ryo.png
+C,salt.png,SALT,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/salt.png
+C,sib.png,SIBCoin,assets.json,加密货币 token 符号,http://res3.qianjiapp.com/coinv2/sib.png
+C,srn.png,SIRIN LABS Token,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/srn.png
+C,snm.png,SONM (BEP-20),assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/snm.png
+C,cateic_spa.png,SPA,category.json,分类里的品牌产品条目,http://res3.qianjiapp.com/cateic_spa.png
+C,sls.png,SaluS,assets.json,加密货币 token 符号,http://res3.qianjiapp.com/coinv2/sls.png
+C,ic_bank_santander.png,Santander Bank,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_santander.png
+C,san.png,Santiment Network Token,assets.json,加密货币 token 符号,http://res3.qianjiapp.com/coinv2/san.png
+C,shib.png,Shiba Inu,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/shib.png
+C,sc.png,Siacoin,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/sc.png
+C,sky.png,Skycoin,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/sky.png
+C,smart.png,SmartCash,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/smart.png
+C,sol.png,Solana,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/sol.png
+C,ic_bank_sparkasse.png,Sparkasse,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_sparkasse.png
+C,stx.png,Stacks,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/stx.png
+C,ic_bank_starling.png,Starling Bank,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_starling.png
+C,start.png,Startcoin,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/start.png
+C,snt.png,Status,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/snt.png
+C,steem.png,Steem,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/steem.png
+C,sbd.png,Steem Dollars,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/sbd.png
+C,xlm.png,Stellar,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/xlm.png
+C,storj.png,Storj,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/storj.png
+C,data.png,Streamr,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/data.png
+C,sub.png,Substratum,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/sub.png
+C,sumo.png,Sumokoin,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/sumo.png
+C,sushi.png,SushiSwap,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/sushi.png
+C,snx.png,Synthetix,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/snx.png
+C,sys.png,Syscoin,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/sys.png
+C,ic_bank_tdbank.png,TD Bank / Toronto-Dominion Bank,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_tdbank.png
+C,trx.png,TRON,assets.json,加密货币 token 符号,http://res3.qianjiapp.com/coinv2/trx.png
+C,bank_tangerine.png,Tangerine Bank,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/bank_tangerine.png
+C,tel.png,Telcoin,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/tel.png
+C,pay.png,TenX,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/pay.png
+C,usdt.png,Tether USDt,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/usdt.png
+C,xtz.png,Tezos,assets.json,加密货币 token 符号,http://res3.qianjiapp.com/coinv2/xtz.png
+C,grt.png,The Graph,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/grt.png
+C,sand.png,The Sandbox,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/sand.png
+C,theta.png,Theta Network,assets.json,加密货币 token 符号,http://res3.qianjiapp.com/coinv2/theta.png
+C,tbx.png,Tokenbox,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/tbx.png
+C,ten.png,Tokenomy,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/ten.png
+C,tks.png,Tokes,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/tks.png
+C,bank_toss.png,Toss Bank,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/bank_toss.png
+C,bank_touchngo.png,Touch 'n Go eWallet,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/bank_touchngo.png
+C,tzc.png,TrezarCoin,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/tzc.png
+C,tnc.png,Trinity Network Credit,assets.json,英文机构名,http://res3.qianjiapp.com/coinv2/tnc.png
+C,tusd.png,TrueUSD,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/tusd.png
+C,ic_bank_truist.png,Truist Bank,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_truist.png
+C,ic_bank_trust.png,Trust Bank,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_trust.png
+C,trtl.png,TurtleCoin,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/trtl.png
+C,ic_bank_usbank.png,U.S. Bank,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_usbank.png
+C,uma.png,UMA,assets.json,加密货币 token 符号,http://res3.qianjiapp.com/coinv2/uma.png
+C,leo.png,UNUS SED LEO,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/leo.png
+C,usdc.png,USDC,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/usdc.png
+C,bank_unicredit.png,UniCredit Banca,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/bank_unicredit.png
+C,uni.png,Uniswap,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/uni.png
+C,ic_bank_uob.png,United Overseas Bank,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_uob.png
+C,vibe.png,VIBE,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/vibe.png
+C,vet.png,VeChain,assets.json,加密货币 token 符号,http://res3.qianjiapp.com/coinv2/vet.png
+C,vtho.png,VeThor Token,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/vtho.png
+C,xvg.png,Verge,assets.json,加密货币 token 符号,http://res3.qianjiapp.com/coinv2/xvg.png
+C,veri.png,Veritaseum,assets.json,加密货币 token 符号,http://res3.qianjiapp.com/coinv2/veri.png
+C,vtc.png,Vertcoin,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/vtc.png
+C,vrsc.png,VerusCoin,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/vrsc.png
+C,via.png,Viacoin,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/via.png
+C,bank_visa.png,Visa,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/bank_visa.png
+C,bank_vivid.png,Vivid,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/bank_vivid.png
+C,cate_wps.png,WPS,category.json,分类里的品牌产品条目,http://res3.qianjiapp.com/cate_wps.png
+C,wgr.png,Wagerr,assets.json,加密货币 token 符号,http://res3.qianjiapp.com/coinv2/wgr.png
+C,wtc.png,Waltonchain,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/wtc.png
+C,wan.png,Wanchain,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/wan.png
+C,waves.png,Waves,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/waves.png
+C,wicc.png,WaykiChain,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/wicc.png
+C,ic_bank_wellsfargo2.png,Wells Fargo,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_wellsfargo2.png
+C,ic_bank_westpac.png,Westpac,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_westpac.png
+C,wings.png,Wings,assets.json,加密货币 token 符号,http://res3.qianjiapp.com/coinv2/wings.png
+C,ic_bank_wise.png,Wise,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_wise.png
+C,bank_woori.png,Woori Bank,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/bank_woori.png
+C,xpr.png,XPR Network,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/xpr.png
+C,xrp.png,XRP,assets.json,加密货币 token 符号,http://res3.qianjiapp.com/coinv2/xrp.png
+C,xby.png,XTRABYTES,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/xby.png
+C,ic_bank_za.png,ZA Bank,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_za.png
+C,zcl.png,ZClassic,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/zcl.png
+C,zec.png,Zcash,assets.json,加密货币 token 符号,http://res3.qianjiapp.com/coinv2/zec.png
+C,zil.png,Zilliqa,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/zil.png
+C,elf.png,aelf,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/elf.png
+C,dnt.png,district0x,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/dnt.png
+C,cateic_icloud.png,iCloud,category.json,分类里的品牌产品条目,http://res3.qianjiapp.com/cateic_icloud.png
+C,rlc.png,iExec RLC,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/rlc.png
+C,utk.png,xMoney,assets.json,英文短名（疑似 token/平台）,http://res3.qianjiapp.com/coinv2/utk.png
+C,yfi.png,yearn.finance,assets.json,英文机构名,http://res3.qianjiapp.com/coinv2/yfi.png
+C,ic_bank_jppost.png,ゆうちょ銀行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_jppost.png
+C,bank_wsd.png,万事达,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/bank_wsd.png
+C,cate_vans.png,万斯,category.json,分类里的品牌产品条目,http://res3.qianjiapp.com/cate_vans.png
+C,bank_smbc.png,三井住友銀行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/bank_smbc.png
+C,bank_mufg2.png,三菱日联银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/bank_mufg2.png
+C,ic_bank_shnongshang.png,上海农商银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_shnongshang.png
+C,ic_bank_huarui.png,上海华瑞银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_huarui.png
+C,bank_scsb.png,上海商業儲蓄銀行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/bank_scsb.png
+C,ic_bank_shsy.png,上海商業銀行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_shsy.png
+C,ic_bank_shanghai.png,上海银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_shanghai.png
+C,ic_bank_shangrao.png,上饶银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_shangrao.png
+C,cate_kuaigou.png,下载工具,category.json,分类里的品牌产品条目,http://res3.qianjiapp.com/cate_kuaigou.png
+C,cate_xunlei.png,下载工具,category.json,分类里的品牌产品条目,http://res3.qianjiapp.com/cate_xunlei.png
+C,bank_dongya.png,东亚银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/bank_dongya.png
+C,ic_bank_dgns.png,东莞农村商业银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_dgns.png
+C,ic_bank_dongguan.png,东莞银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_dongguan.png
+C,ic_bank_dongying.png,东营银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_dongying.png
+C,bank_zhongxin.png,中信银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/bank_zhongxin.png
+C,ic_bank_zy.png,中原银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_zy.png
+C,ic_bank_zhongguo.png,中国银行 / 中國銀行(香港) / 澳门中国银行分行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_zhongguo.png
+C,bank_ctbc.png,中國信託商業銀行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/bank_ctbc.png
+C,bank_central_bank.png,中央銀行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/bank_central_bank.png
+C,bank_zhyz.png,中華郵政（台灣）,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/bank_zhyz.png
+C,ic_bank_linshang.png,临商银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_linshang.png
+C,ic_bank_ddong.png,丹东银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_ddong.png
+C,ic_bank_zhenong.png,义乌农商银行 / 吴兴农村商业银行 / 嘉善农商银行 / 浙江农信 / 浙江农商联合银行 / 海宁农商银行 / 萧山农商银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_zhenong.png
+C,ic_bank_wh.png,乌海银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_wh.png
+C,ic_bank_wlmqsy.png,乌鲁木齐商业银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_wlmqsy.png
+C,ic_bank_leshansy.png,乐山市商业银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_leshansy.png
+C,ic_bank_jiujiang.png,九江银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_jiujiang.png
+C,cateic_shuqi.png,书旗小说,category.json,分类里的品牌产品条目,http://res3.qianjiapp.com/cateic_shuqi.png
+C,bank_ynnx.png,云南农村信用社,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/bank_ynnx.png
+C,cateic_dropbox.png,云存储,category.json,分类里的品牌产品条目,http://res3.qianjiapp.com/cateic_dropbox.png
+C,cateic_googledrive.png,云存储,category.json,分类里的品牌产品条目,http://res3.qianjiapp.com/cateic_googledrive.png
+C,cateic_huaweiyun.png,云存储,category.json,分类里的品牌产品条目,http://res3.qianjiapp.com/cateic_huaweiyun.png
+C,cateic_xiaomiyun.png,云存储,category.json,分类里的品牌产品条目,http://res3.qianjiapp.com/cateic_xiaomiyun.png
+C,asset_icon_ysf2.png,云闪付,assets.json,中文名含机构/品牌词「云闪付」,http://res3.qianjiapp.com/asset_icon_ysf2.png
+C,cateic_amazon.png,亚马逊,category.json,分类里的品牌产品条目,http://res3.qianjiapp.com/cateic_amazon.png
+C,ic_bank_jiaotong.png,交通银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_jiaotong.png
+C,asset_icon_jd2.png,京东白条 / 京东金融,assets.json,中文名含机构/品牌词「京东」,http://res3.qianjiapp.com/assetv2/asset_icon_jd2.png
+C,ic_bank_yilian.png,亿联银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_yilian.png
+C,ic_bank_zb.png,众邦银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_zb.png
+C,cateic_youku.png,优酷,category.json,分类里的品牌产品条目,http://res3.qianjiapp.com/cateic_youku.png
+C,asset_icon_yeb.png,余额宝,assets.json,中文名含机构/品牌词「余额宝」,http://res3.qianjiapp.com/assetv2/asset_icon_yeb.png
+C,bank_sberbank.png,俄罗斯联邦储蓄银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/bank_sberbank.png
+C,ic_bank_baoding.png,保定银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_baoding.png
+C,platform_ic_jiebai.png,借呗,assets.json,中文名含机构/品牌词「借呗」,http://res3.qianjiapp.com/assetv2/platform_ic_jiebai.png
+C,bank_mega.png,兆豐國際商業銀行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/bank_mega.png
+C,ic_bank_guangda.png,光大银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_guangda.png
+C,bank_kwangju.png,光州银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/bank_kwangju.png
+C,ic_bank_lanzhou.png,兰州银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_lanzhou.png
+C,bank_xingye.png,兴业银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/bank_xingye.png
+C,asset_icon_card.png,其它充值卡 / 银行卡,assets.json,中文名含机构/品牌词「银行」,http://res3.qianjiapp.com/assetv2/asset_icon_card.png
+C,ic_bank_other.png,其它银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_other.png
+C,ic_bank_nmgnx.png,内蒙古农村信用社,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_nmgnx.png
+C,ic_bank_nmg.png,内蒙古银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_nmg.png
+C,ic_bank_nongye.png,农业银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_nongye.png
+C,ic_bank_ncxy.png,农村信用社 / 四川农信 / 广西农村信用社 / 江西农商银行 / 福建农村信用社 / 贵州农村信用社,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_ncxy.png
+C,bank_chonghing.png,創興銀行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/bank_chonghing.png
+C,btc.png,加密货币,assets.json,加密货币 token 符号,http://res3.qianjiapp.com/coin/btc.png
+C,ban_baoshang.png,包商银行,assets.json,中文名含机构/品牌词「银行」,http://res3.qianjiapp.com/ban_baoshang.png
+C,ic_bank_bjzgc.png,北京中关村银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_bjzgc.png
+C,ic_bank_bjns.png,北京农商银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_bjns.png
+C,bank_beijing.png,北京银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/bank_beijing.png
+C,asset_hw.png,华为钱包,assets.json,中文名含机构/品牌词「华为」,http://res3.qianjiapp.com/asset_hw.png
+C,ic_bank_huashang.png,华商银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_huashang.png
+C,bank_huaxia.png,华夏银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/bank_huaxia.png
+C,ic_bank_huamei.png,华美银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_huamei.png
+C,ic_bank_hrxj.png,华融湘江银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_hrxj.png
+C,ic_bank_nanjing.png,南京银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_nanjing.png
+C,ic_bank_nysy.png,南洋商業銀行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_nysy.png
+C,bank_nanyue.png,南粤银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/bank_nanyue.png
+C,ic_bank_xiamenguoji.png,厦门国际银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_xiamenguoji.png
+C,ic_bank_xiamen.png,厦门银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_xiamen.png
+C,ic_bank_youli.png,友利銀行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_youli.png
+C,bank_taizhou.png,台州银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/bank_taizhou.png
+C,bank_taishin.png,台新銀行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/bank_taishin.png
+C,bank_tcb.png,合作金庫銀行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/bank_tcb.png
+C,bank_hfkjns.png,合肥科技农村商业银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/bank_hfkjns.png
+C,ic_bank_jlnx.png,吉林农村信用社,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_jlnx.png
+C,ic_bank_jilin.png,吉林银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_jilin.png
+C,ic_bank_haerbin.png,哈尔滨银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_haerbin.png
+C,cateic_bilibili.png,哔哩哔哩,category.json,分类里的品牌产品条目,http://res3.qianjiapp.com/cateic_bilibili.png
+C,bank_tangshan.png,唐山银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/bank_tangshan.png
+C,cateic_ximalaya.png,喜马拉雅,category.json,分类里的品牌产品条目,http://res3.qianjiapp.com/cateic_ximalaya.png
+C,ic_bank_jiaxing.png,嘉兴银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_jiaxing.png
+C,ic_bank_sc.png,四川银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_sc.png
+C,bank_gmcz.png,国民村镇银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/bank_gmcz.png
+C,ic_bank_guojiakaifa.png,國家開發銀行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_guojiakaifa.png
+C,ic_bank_gtsh.png,國泰世華商業銀行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_gtsh.png
+C,ic_bank_guotai.png,國泰銀行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_guotai.png
+C,asset_pdd2.png,多多钱包,assets.json,中文名含品牌「多多钱包」,http://res3.qianjiapp.com/asset_pdd2.png
+C,bank_daxin.png,大新銀行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/bank_daxin.png
+C,ic_bank_dasheng.png,大生銀行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_dasheng.png
+C,ic_bank_dahua.png,大華銀行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_dahua.png
+C,ic_bank_bnu.png,大西洋銀行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_bnu.png
+C,ic_bank_dafeng.png,大豐銀行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_dafeng.png
+C,ic_bank_dalian.png,大连银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_dalian.png
+C,bank_dgb.png,大邱银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/bank_dgb.png
+C,ic_bank_tianfu.png,天府银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_tianfu.png
+C,bank_airstar2.png,天星銀行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/bank_airstar2.png
+C,ic_bank_tianjinns.png,天津农商银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_tianjinns.png
+C,bank_tjbhns.png,天津滨海农商银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/bank_tjbhns.png
+C,ic_bank_tianjinjc.png,天津金城银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_tianjinjc.png
+C,bank_tianjin.png,天津银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/bank_tianjin.png
+C,ic_bank_tcns.png,太仓农商银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_tcns.png
+C,ic_bank_weihai.png,威海商业银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_weihai.png
+C,bank_ningxia.png,宁夏银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/bank_ningxia.png
+C,ic_bank_ningbo.png,宁波银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_ningbo.png
+C,ic_bank_primecredit.png,安信信貸,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_primecredit.png
+C,ic_bank_ahnx.png,安徽农村信用社,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_ahnx.png
+C,ic_bank_ybsy.png,宜宾商业银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_ybsy.png
+C,bank_fuming.png,富民银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/bank_fuming.png
+C,ic_bank_fudian.png,富滇银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_fudian.png
+C,ic_bank_fubanghuanyi.png,富邦华一 / 富邦銀行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_fubanghuanyi.png
+C,cate_xiaomi.png,小米,category.json,分类里的品牌条目「小米」,http://res3.qianjiapp.com/cate_xiaomi.png
+C,cateic_xioamiyoupin.png,小米有品,category.json,分类里的品牌条目「小米」,http://res3.qianjiapp.com/cateic_xioamiyoupin.png
+C,cateic_xiaohongshu.png,小红书,category.json,分类里的品牌产品条目,http://res3.qianjiapp.com/cateic_xiaohongshu.png
+C,ic_bank_sdnx.png,山东农商银行 / 山东省农村信用社 / 济南农商银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_sdnx.png
+C,ic_bank_sxnx.png,山西农村信用社,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_sxnx.png
+C,bank_shanxi.png,山西银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/bank_shanxi.png
+C,ic_bank_gongshang.png,工商银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_gongshang.png
+C,ic_bank_changshuns.png,常熟农商银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_changshuns.png
+C,bank_pingan.png,平安银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/bank_pingan.png
+C,ic_bank_pds.png,平顶山银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_pds.png
+C,ic_bank_gdnongxin.png,广东农信银行 / 惠东农商银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_gdnongxin.png
+C,ic_bank_gdhx.png,广东华兴银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_gdhx.png
+C,ic_bank_guangfa.png,广发银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_guangfa.png
+C,bank_gznongshang.png,广州农商银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/bank_gznongshang.png
+C,bank_guangzhou.png,广州银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/bank_guangzhou.png
+C,ic_bank_beibuwan2.png,广西北部湾银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_beibuwan2.png
+C,ic_bank_kuerle.png,库尔勒银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_kuerle.png
+C,ic_bank_langfang.png,廊坊银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_langfang.png
+C,ic_bank_jianshe.png,建设银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_jianshe.png
+C,ic_bank_zjk.png,张家口银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_zjk.png
+C,ic_bank_zjgns.png,张家港农商银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_zjgns.png
+C,bank_chb.png,彰化商業銀行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/bank_chb.png
+C,bank_weizhong.png,微众银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/bank_weizhong.png
+C,asset_icon_weixin.png,微信,assets.json,中文名含机构/品牌词「微信」,http://res3.qianjiapp.com/assetv2/asset_icon_weixin.png
+C,asset_icon_fenfu.png,微信分付,assets.json,中文名含机构/品牌词「微信」,http://res3.qianjiapp.com/assetv2/asset_icon_fenfu.png
+C,cate_weread.png,微信读书,category.json,分类里的品牌条目「微信」,http://res3.qianjiapp.com/cate_weread.png
+C,asset_icon_lqt.png,微信零钱通,assets.json,中文名含机构/品牌词「微信」,http://res3.qianjiapp.com/assetv2/asset_icon_lqt.png
+C,ic_bank_dezhou.png,德州银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_dezhou.png
+C,bank_huishang.png,徽商银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/bank_huishang.png
+C,cate_kuaishou.png,快手,category.json,分类里的品牌产品条目,http://res3.qianjiapp.com/cate_kuaishou.png
+C,ic_bank_hengfeng2.png,恒丰银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_hengfeng2.png
+C,ic_bank_hengsheng.png,恒生银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_hengsheng.png
+C,ic_bank_huizhounongshang.png,惠州农商,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_huizhounongshang.png
+C,ic_bank_chengduns.png,成都农商银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_chengduns.png
+C,ic_bank_chengdu.png,成都银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_chengdu.png
+C,ic_bank_chengde.png,承德银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_chengde.png
+C,cateic_douying.png,抖音,category.json,分类里的品牌条目「抖音」,http://res3.qianjiapp.com/cateic_douying.png
+C,asset_dyyf.png,抖音月付,assets.json,中文名含机构/品牌词「抖音」,http://res3.qianjiapp.com/asset_dyyf.png
+C,ic_bank_fushun.png,抚顺银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_fushun.png
+C,ic_bank_zhaoshang.png,招商永隆銀行 / 招商银行,"assets.json,category.json",分类里的银行条目,http://res3.qianjiapp.com/ic_bank_zhaoshang.png
+C,cateic_pdd.png,拼多多,category.json,分类里的品牌条目「拼多多」,http://res3.qianjiapp.com/cateic_pdd.png
+C,ic_bank_morgan.png,摩根士丹利国际银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_morgan.png
+C,asset_icon_alipay2.png,支付宝,assets.json,中文名含机构/品牌词「支付宝」,http://res3.qianjiapp.com/assetv2/asset_icon_alipay2.png
+C,asset_icon_digital_rmb.png,数字人民币,assets.json,中文名含机构/品牌词「数字人民币」,http://res3.qianjiapp.com/assetv2/asset_icon_digital_rmb.png
+C,ic_bank_xinan.png,新安银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_xinan.png
+C,bank_xjnx.png,新疆农村信用社,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/bank_xjnx.png
+C,bank_huihe.png,新疆汇和银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/bank_huihe.png
+C,bank_xinjiang.png,新疆银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/bank_xinjiang.png
+C,ic_bank_xj.png,新疆银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_xj.png
+C,bank_xw.png,新网银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/bank_xw.png
+C,ic_bank_xinhan.png,新韩银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_xinhan.png
+C,ic_bank_wuxins.png,无锡农村商业银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_wuxins.png
+C,bank_mizuho.png,日本瑞穗银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/bank_mizuho.png
+C,bank_rizhao.png,日照银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/bank_rizhao.png
+C,bank_kunlun.png,昆仑银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/bank_kunlun.png
+C,ic_bank_ksns.png,昆山农商银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_ksns.png
+C,ic_bank_xingzhan.png,星展銀行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_xingzhan.png
+C,ic_bank_jinshang.png,晋商银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_jinshang.png
+C,ic_bank_chaoyang.png,朝阳银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_chaoyang.png
+C,ic_bank_benxi.png,本溪银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_benxi.png
+C,ic_bank_hzlh.png,杭州联合银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_hzlh.png
+C,ic_bank_hangzhou.png,杭州银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_hangzhou.png
+C,ic_bank_zaozhuang.png,枣庄银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_zaozhuang.png
+C,ic_bank_liuzhou.png,柳州银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_liuzhou.png
+C,ic_bank_guilin.png,桂林银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_guilin.png
+C,ic_bank_mzks.png,梅州客商银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_mzks.png
+C,ic_bank_wuhannongshang.png,武汉农商银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_wuhannongshang.png
+C,ic_bank_minsheng.png,民生银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_minsheng.png
+C,bank_sinopac.png,永豐銀行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/bank_sinopac.png
+C,bank_hsbc.png,汇丰银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/bank_hsbc.png
+C,ic_bank_hankou.png,汉口银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_hankou.png
+C,bank_jnns.png,江南农商行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/bank_jnns.png
+C,ic_bank_jiangsunongshang.png,江苏农商银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_jiangsunongshang.png
+C,ic_bank_jiangsu.png,江苏银行,"assets.json,category.json",分类里的银行条目,http://res3.qianjiapp.com/ic_bank_jiangsu.png
+C,ic_bank_changjiangshangye.png,江苏长江商业银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_changjiangshangye.png
+C,bank_jiangxi.png,江西银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/bank_jiangxi.png
+C,ic_bank_jyns.png,江阴农商银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_jyns.png
+C,ic_bank_cangzhou.png,沧州银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_cangzhou.png
+C,ic_bank_hebei.png,河北银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_hebei.png
+C,ic_bank_henannx.png,河南农村信用社,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_henannx.png
+C,bank_quanzhou.png,泉州银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/bank_quanzhou.png
+C,ic_bank_fgdfhl.png,法国东方汇理银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_fgdfhl.png
+C,ic_bank_fgxy.png,法国兴业银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_fgxy.png
+C,ic_bank_fgbl.png,法国巴黎银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_fgbl.png
+C,bank_ayudhya.png,泰国大城银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/bank_ayudhya.png
+C,bank_kasikorn.png,泰国开泰银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/bank_kasikorn.png
+C,bank_bangkok.png,泰国盘谷银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/bank_bangkok.png
+C,ic_bank_taian.png,泰安银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_taian.png
+C,ic_bank_luzhou.png,泸州银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_luzhou.png
+C,ic_bank_luoyang.png,洛阳银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_luoyang.png
+C,bank_jining.png,济宁银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/bank_jining.png
+C,bank_zheshang.png,浙商银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/bank_zheshang.png
+C,ic_bank_mtsy.png,浙江民泰商业银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_mtsy.png
+C,ic_bank_tl.png,浙江泰隆商业银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_tl.png
+C,ic_bank_zjczsy.png,浙江稠州商业银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_zjczsy.png
+C,ic_bank_pufaguigu.png,浦发硅谷银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_pufaguigu.png
+C,ic_bank_pufa.png,浦发银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_pufa.png
+C,ic_bank_hainnx.png,海南农村信用社,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_hainnx.png
+C,ic_bank_hainan.png,海南银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_hainan.png
+C,cateic_taobao.png,淘宝,category.json,分类里的品牌条目「淘宝」,http://res3.qianjiapp.com/cateic_taobao.png
+C,ic_bank_huaihains.png,淮海农商银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_huaihains.png
+C,ic_bank_szns.png,深圳农商银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_szns.png
+C,ic_bank_shenzhenfazhan.png,深圳发展银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_shenzhenfazhan.png
+C,bank_zhada.png,渣打银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/bank_zhada.png
+C,bank_bohai.png,渤海银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/bank_bohai.png
+C,ic_bank_wenzhoumingshang.png,温州民商银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_wenzhoumingshang.png
+C,ic_bank_wenzhou.png,温州银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_wenzhou.png
+C,ic_bank_hbnongxin.png,湖北农商银行 / 湖北农村信用社,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_hbnongxin.png
+C,ic_bank_hubei.png,湖北银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_hubei.png
+C,ic_bank_hnsx.png,湖南三湘银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_hnsx.png
+C,bank_hnns.png,湖南农商银行 / 长沙农商银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/bank_hnns.png
+C,ic_bank_hnnx.png,湖南省农村信用社,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_hnnx.png
+C,ic_bank_hunan.png,湖南银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_hunan.png
+C,ic_bank_hscz.png,湖商村镇银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_hscz.png
+C,ic_bank_huzhou.png,湖州银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_huzhou.png
+C,ic_bank_wf.png,潍坊银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_wf.png
+C,ic_bank_zmfz.png,澳門發展銀行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_zmfz.png
+C,ic_bank_amsy.png,澳门商业银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_amsy.png
+C,ic_bank_yantai.png,烟台银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_yantai.png
+C,cateic_iqiyi.png,爱奇艺,category.json,分类里的品牌产品条目,http://res3.qianjiapp.com/cateic_iqiyi.png
+C,ic_bank_yushan.png,玉山銀行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_yushan.png
+C,ic_bank_zhhr.png,珠海华润银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_zhhr.png
+C,ic_bank_ruishi.png,瑞士银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_ruishi.png
+C,ic_bank_gsxh.png,甘肃农村信用社,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_gsxh.png
+C,ic_bank_gansu.png,甘肃银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_gansu.png
+C,bank_baixin.png,百信银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/bank_baixin.png
+C,bank_shengjing.png,盛京银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/bank_shengjing.png
+C,bank_fjhuatong.png,福建华通银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/bank_fjhuatong.png
+C,bank_fujianhx.png,福建海峡银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/bank_fujianhx.png
+C,ic_bank_qinnong.png,秦农银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_qinnong.png
+C,ic_bank_qhd.png,秦皇岛银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_qhd.png
+C,bank_firstbank.png,第一商業銀行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/bank_firstbank.png
+C,ic_bank_zjns.png,紫金农商银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_zjns.png
+C,ic_bank_shaoxing.png,绍兴银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_shaoxing.png
+C,ic_bank_mysy.png,绵阳商业银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_mysy.png
+C,bank_wangshang.png,网商银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/bank_wangshang.png
+C,asset_icon_mt.png,美团月付,assets.json,中文名含机构/品牌词「美团」,http://res3.qianjiapp.com/assetv2/asset_icon_mt.png
+C,cateic_tencenttv.png,腾讯视频,category.json,分类里的品牌产品条目,http://res3.qianjiapp.com/cateic_tencenttv.png
+C,ic_bank_zigong.png,自贡银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_zigong.png
+C,ic_bank_twtd.png,臺灣土地銀行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_twtd.png
+C,ic_bank_tw.png,臺灣銀行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_tw.png
+C,cateic_mangguotv.png,芒果TV,category.json,分类里的品牌产品条目,http://res3.qianjiapp.com/cateic_mangguotv.png
+C,asset_icon_huabei.png,花呗,assets.json,中文名含机构/品牌词「花呗」,http://res3.qianjiapp.com/assetv2/asset_icon_huabei.png
+C,cateic_suning.png,苏宁,category.json,分类里的品牌条目「苏宁」,http://res3.qianjiapp.com/cateic_suning.png
+C,ic_bank_suning.png,苏宁银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_suning.png
+C,ic_bank_suzhouns.png,苏州农商银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_suzhouns.png
+C,bank_suzhou.png,苏州银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/bank_suzhou.png
+C,ic_bank_laishang.png,莱商银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_laishang.png
+C,bank_hncb.png,華南銀行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/bank_hncb.png
+C,ic_bank_flbshoudu.png,菲律宾首都银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_flbshoudu.png
+C,bank_yingkou.png,营口银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/bank_yingkou.png
+C,bank_hld.png,葫芦岛银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/bank_hld.png
+C,ic_bank_mengshang.png,蒙商银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_mengshang.png
+C,ic_bank_motelier.png,蒙特利尔银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_motelier.png
+C,ic_bank_lanhai.png,蓝海银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_lanhai.png
+C,bank_ant_hk.png,螞蟻銀行（香港）,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/bank_ant_hk.png
+C,ic_bank_hengshui.png,衡水银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_hengshui.png
+C,bank_xian.png,西安银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/bank_xian.png
+C,ic_bank_xizang.png,西藏银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_xizang.png
+C,ic_bank_guizhou.png,贵州银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_guizhou.png
+C,bank_gyns.png,贵阳农商银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/bank_gyns.png
+C,bank_guiyang.png,贵阳银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/bank_guiyang.png
+C,bank_ganzhou.png,赣州银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/bank_ganzhou.png
+C,ic_bank_lnnx.png,辽宁农村信用社,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_lnnx.png
+C,ic_bank_lnzx.png,辽宁振兴银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_lnzx.png
+C,ic_bank_liaos.png,辽沈银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_liaos.png
+C,bank_dazhou.png,达州银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/bank_dazhou.png
+C,ic_bank_suining.png,遂宁银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_suining.png
+C,ic_bank_xingtai.png,邢台银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_xingtai.png
+C,bank_yhwj.png,邮慧万家银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/bank_yhwj.png
+C,ic_bank_youzheng2.png,邮政储蓄银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_youzheng2.png
+C,ic_bank_handan.png,邯郸银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_handan.png
+C,bank_zhengzhou.png,郑州银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/bank_zhengzhou.png
+C,ic_bank_zycz.png,郑银村镇银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_zycz.png
+C,ic_bank_eeds.png,鄂尔多斯银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_eeds.png
+C,ic_bank_yinzhou.png,鄞州银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_yinzhou.png
+C,bank_cqsx.png,重庆三峡银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/bank_cqsx.png
+C,ic_bank_chongqingns.png,重庆农商银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_chongqingns.png
+C,ic_bank_chongqing.png,重庆银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_chongqing.png
+C,bank_jinhua.png,金华银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/bank_jinhua.png
+C,ic_bank_tieling.png,铁岭银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_tieling.png
+C,bank_xishang.png,锡商银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/bank_xishang.png
+C,ic_bank_jinzhou.png,锦州银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_jinzhou.png
+C,ic_bank_cchx.png,长城华西银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_cchx.png
+C,ic_bank_changan.png,长安银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_changan.png
+C,bank_cccyhr.png,长春朝阳和润村镇银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/bank_cccyhr.png
+C,ic_bank_changsha.png,长沙银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_changsha.png
+C,cateic_xianyu.png,闲鱼,category.json,分类里的品牌产品条目,http://res3.qianjiapp.com/cateic_xianyu.png
+C,ic_bank_fx.png,阜新银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_fx.png
+C,ic_bank_sxxinhe.png,陕西信合,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_sxxinhe.png
+C,ic_bank_jiyou.png,集友銀行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_jiyou.png
+C,ic_bank_qdns.png,青岛农商银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_qdns.png
+C,ic_bank_qingdao.png,青岛银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_qingdao.png
+C,ic_bank_qinghai.png,青海银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_qinghai.png
+C,bank_anshan.png,鞍山银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/bank_anshan.png
+C,ic_bank_hanya.png,韩亚银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_hanya.png
+C,ic_bank_hanguoqiye.png,韩国企业银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_hanguoqiye.png
+C,bank_kbbank.png,韩国国民银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/bank_kbbank.png
+C,ic_bank_dsns.png,顺德农商银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_dsns.png
+C,ic_bank_hhns.png,黄河农商银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_hhns.png
+C,ic_bank_qishang.png,齐商银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_qishang.png
+C,ic_bank_qilu.png,齐鲁银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/ic_bank_qilu.png
+C,bank_longjiang.png,龙江银行,assets.json,文件名前缀为银行/机构,http://res3.qianjiapp.com/bank_longjiang.png

@@ -119,8 +119,7 @@
     <string name="backup_pin_none_desc">不对 API Key 加密，请注意安全风险</string>
     <string name="backup_retain_policy_desc">每台设备保留最近 10 份轻量、3 份完整/自定义备份，并额外保留日、周、月历史版本</string>
     <string name="restore_merge_desc">只补充不存在的数据，不删除现有记录</string>
-    <string name="restore_overwrite_desc">资产、分类、账单、预算、周期和聊天将整组覆盖，避免关联关系断裂</string>
-    <string name="restore_overwrite_requires_complete_data">该备份缺少资产、分类或账单，不能安全覆盖；请改用合并恢复</string>
+    <string name="restore_overwrite_desc">只覆盖你勾选的模块，未勾选的数据保持不变</string>
     <string name="backup_pin_setup_prompt">检测到 AI 配置含 API Key，请设置 6 位 PIN</string>
     <string name="backup_pin_verify_prompt">这是旧版备份，其中的 AI 密钥曾用 PIN 单独保护。请输入当时的 PIN（旧备份为 4 位）。</string>
     <string name="backup_pin_match_prompt">当前备份已启用 PIN，请输入同一 PIN 验证</string>
@@ -230,14 +229,51 @@
     <string name="duplicate_rule_dialog_title">检测到同关键词规则</string>
     <string name="duplicate_rule_dialog_message">关键词"%1$s"已有 %2$s 条规则。\n\n继续保存将覆盖旧规则，是否继续？</string>
 
-    <!-- 新用户引导 -->
+    <!-- 新用户引导（首启引导页） -->
     <string name="onboarding_welcome_title">欢迎使用敲敲记账</string>
     <string name="onboarding_welcome_message">点击首页的 + 按钮即可快速记一笔。\n\n此外，本应用还支持翻转手机、敲击背板等快捷方式记账，前往设置中心即可开启。</string>
-    <string name="onboarding_welcome_snackbar_message">点击首页 + 可快速记账；也可开启翻转/敲击背板做快捷记账。</string>
-    <string name="onboarding_welcome_go_settings">了解快捷记账</string>
     <string name="onboarding_welcome_dismiss">知道了</string>
     <string name="onboarding_settings_gesture_title">快捷记账设置</string>
     <string name="onboarding_settings_gesture_desc">在这里开启翻转手机或敲击背板，随时唤出记账界面。</string>
+
+    <!-- 首启引导页 OnboardingActivity -->
+    <string name="ob_skip">跳过</string>
+    <string name="ob_next">下一步</string>
+    <string name="ob_enter_app">开始记账</string>
+    <string name="ob_finish_later">稍后再说</string>
+    <string name="ob_step_of">%1$d / %2$d</string>
+
+    <!-- 第 1 页：欢迎 -->
+    <string name="ob_page1_title">记账，只要一瞬间</string>
+    <string name="ob_page1_desc">不用解锁、不用找图标。翻转手机或敲击背板，记账面板立刻弹出。</string>
+    <string name="ob_page1_point1">翻转手机即记一笔</string>
+    <string name="ob_page1_point2">敲击背板快速唤起</string>
+    <string name="ob_page1_point3">数据只存在本机，无需联网</string>
+
+    <!-- 第 2 页：开启快捷记账 -->
+    <string name="ob_page2_title">开启快捷记账</string>
+    <string name="ob_page2_desc">选一个你顺手的手势，开启后即可在任意界面唤起记账面板。之后可随时在设置中心调节灵敏度或更换功能。</string>
+    <string name="ob_flip_title">翻转手机</string>
+    <string name="ob_flip_desc">翻转一下手机，唤出记账面板</string>
+    <string name="ob_tap_title">敲击背板</string>
+    <string name="ob_tap_desc">用指尖敲击手机背面</string>
+    <string name="ob_page2_no_selection">可以先不开启，之后在「设置中心 → 快捷记账」随时打开。</string>
+
+    <!-- 第 3 页：准备项 -->
+    <string name="ob_page3_title">完成最后准备</string>
+    <string name="ob_page3_desc">快捷记账需要在后台常驻，以下准备项能让它被系统清理的概率降到最低。</string>
+    <string name="ob_page3_ready_all">准备项已全部完成，快捷记账可以稳定运行了。</string>
+    <string name="ob_page3_ready_none">尚未完成准备项，快捷记账可能无法稳定唤起。</string>
+    <string name="ob_page3_ready_partial">已完成 %1$d / %2$d 项必要准备。</string>
+    <string name="ob_go_prepare">去完成准备项</string>
+    <string name="ob_check_again">重新检查</string>
+
+    <!-- 第 4 页：导入历史账单 -->
+    <string name="ob_page4_title">要迁移旧账本吗？</string>
+    <string name="ob_page4_desc">支持从随手记、钱迹等导出的 CSV，或本应用的历史备份文件导入，历史数据不用重新录。</string>
+    <string name="ob_import_start">去导入历史账单</string>
+    <string name="ob_page4_hint">跳过也没关系，随时可以在「设置中心 → 备份与恢复」里导入。</string>
+
     <string name="onboarding_gesture_tip_title">试试快捷记账</string>
     <string name="onboarding_gesture_tip_desc">开启下方的「翻转手机」或「敲击背板」开关，不用打开 App 也能快速记账。开启后还可以切换功能和调节灵敏度。</string>
     <string name="onboarding_gesture_tip_footer">开启后若无法弹出记账面板，请点击下方“查看快捷记账准备项”完成权限准备。</string>
@@ -365,6 +401,9 @@
     <string name="backup_saved_shared_recovery_incomplete">加密备份已保存，但共享连接资料不完整；换机前请检查共享账本连接并重新备份</string>
     <string name="shared_restore_title">共享账本恢复方式</string>
     <string name="shared_restore_message">如果这是换机，请选择推荐项：会保留原成员身份，不会占用新的成员名额。旧手机请停止继续记账，避免两台设备同时使用同一身份。</string>
+    <string name="shared_restore_message_same_device">本机仍在同步这个共享账本。继续会用备份覆盖本机的共享运行状态并重新连接，之后从云端补齐数据；备份之后才产生、尚未上传的本地操作会保留。旧手机如果还在用，请先停止记账。</string>
+    <string name="shared_restore_reconnect_same_device">用备份覆盖并重新连接（推荐）</string>
+    <string name="shared_restore_reconnect_same_device_desc">账本和成员名额不变，本机共享状态按备份重建后重新同步。如需恢复为不再同步的本地副本，请先在账本列表里退出共享账本。</string>
     <string name="shared_restore_local_copy">恢复为本地副本</string>
     <string name="shared_restore_local_copy_desc">保留账目，但移除共享标记，不再连接远端账本。</string>
     <string name="shared_restore_reconnect">保留原身份并重新连接（推荐·换机）</string>
@@ -372,6 +411,10 @@
     <string name="shared_restore_incomplete_title">无法恢复原共享身份</string>
     <string name="shared_restore_incomplete_message">此备份缺少完整的共享成员资料或坚果云应用密码，只能恢复为不再同步的本地副本。若旧设备仍可用，请先检查共享连接，再重新创建加密备份。</string>
     <string name="shared_restore_continue_local">恢复为本地副本</string>
+    <string name="shared_restore_blocked_title">共享账本正在同步</string>
+    <string name="shared_restore_blocked_message">本机还有正在同步的共享账本。账单和预算带有共享身份，直接覆盖或合并会变成无法回流的本地副本，所以本次不会恢复它们。\n\n可以只恢复分类、资产、规则等本地数据；如果确实要恢复账单和预算，请先在账本列表里退出共享账本。</string>
+    <string name="shared_restore_local_only">只恢复本地数据</string>
+    <string name="shared_restore_blocked_nothing_local">本次勾选的模块都涉及共享数据，请先退出共享账本再恢复</string>
     <string name="auto">自动</string>
     <string name="forced">强制</string>
     <string name="no_encryption">不加密</string>
@@ -474,14 +517,15 @@
     <string name="shizuku_mode_hint">开启后才显示白名单模式</string>
     <string name="shizuku_auto_restore">Shizuku 自动恢复</string>
     <string name="enable_multi_currency">启用多币种功能</string>
-    <string name="developer_log">开发者日志</string>
+    <string name="developer_log">运行日志</string>
+    <string name="developer_log_desc">默认只记关键事件；完整调试细节请在日志查看器内开启</string>
     <string name="view_log">查看日志内容 →</string>
     <string name="quick_accounting_one_step">快捷记账还差一步</string>
     <string name="enable_now">立即开启</string>
     <string name="show_floating_window">显示悬浮窗</string>
 
     <!-- 资产页面 -->
-    <string name="add_account">添加账户</string>
+    <string name="add_asset_title">添加资产</string>
     <string name="account_type">账户类型</string>
     <string name="please_select">请选择</string>
     <string name="account_name">账户名称</string>
@@ -747,6 +791,15 @@
     <string name="expense_only">仅支出</string>
     <string name="income_only">仅收入</string>
     <string name="income_expense_compare">收支对比</string>
+    <string name="restore_screen_title">恢复这份备份</string>
+    <string name="restore_screen_subtitle">勾选要恢复的内容。可以先全选，再去掉不需要的。共享账本在这一页选完。</string>
+    <string name="restore_select_all">全选</string>
+    <string name="restore_pick_one">请至少选择一项要恢复的内容</string>
+    <string name="restore_merge_title">补上缺少的</string>
+    <string name="restore_overwrite_title">用备份替换勾选的内容</string>
+    <string name="restore_adjust_content">调整要恢复的内容</string>
+    <string name="restore_adjust_content_hide">收起恢复内容</string>
+    <string name="restore_shared_section">共享账本</string>
     <string name="select_restore_modules">选择要恢复的模块</string>
     <string name="restore_hint">只恢复勾选的模块，其它内容不受影响。</string>
     <string name="restore_mode">恢复模式</string>
@@ -1201,8 +1254,18 @@
     <string name="screenshot_failed">截屏失败，请稍后重试</string>
 
     <!-- 硬编码中文抽取 - 日志查看 -->
-    <string name="dev_log_on">已开启完整日志记录（开发者模式）</string>
-    <string name="dev_log_off">已关闭完整日志记录</string>
+    <string name="log_viewer_title">日志查看器</string>
+    <string name="dev_log_on">已开启完整日志记录（含调试细节）</string>
+    <string name="dev_log_off">已关闭完整日志记录，仅保留关键事件</string>
+    <string name="full_log_hint">开启后额外记录调试细节</string>
+    <string name="log_search_hint">搜索日志内容…</string>
+    <string name="log_filter_all">全部</string>
+    <string name="log_filter_error">错误</string>
+    <string name="log_filter_warn">警告</string>
+    <string name="log_filter_info">信息</string>
+    <string name="log_filter_debug">调试</string>
+    <string name="log_count_fmt">%1$d 条</string>
+    <string name="log_filter_empty">没有符合筛选条件的日志</string>
     <string name="no_crash_log_hint">尚无崩溃记录 🎉</string>
     <string name="no_runtime_log_hint">尚无运行日志</string>
     <string name="log_omitted_hint">仅显示最新日志（文件较大，已省略前面的内容）</string>
@@ -1541,7 +1604,7 @@
     <string name="categories_add_failed">添加分类失败，请重试</string>
 
     <!-- AddAssetActivity 硬编码抽取 -->
-    <string name="edit_account_title">修改账户</string>
+    <string name="edit_asset_title">修改资产</string>
     <string name="input_account_name">请输入账户名称</string>
     <string name="name_already_used">该名称已被其他账户使用</string>
     <string name="confirm_change_currency_title">确认修改币种</string>
@@ -1787,7 +1850,7 @@
     <string name="notif_tap_standby">省电敲击 · 启发式检测中</string>
     <string name="notif_tap_he_test">省电敲击测试模式 · 只检测不记账</string>
     <string name="notif_tap_always_ml">全程 ML 识别中</string>
-    <string name="notif_tap_paused">敲击检测已暂停 · 亮屏解锁后恢复</string>
+    <string name="notif_tap_paused">敲击检测已暂停 · 亮屏后恢复</string>
     <string name="notif_tap_paused_temp">敲击检测已暂停 · 关闭当前面板后恢复</string>
     <string name="notif_recording">录音中…</string>
 

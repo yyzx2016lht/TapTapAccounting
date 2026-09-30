@@ -37,6 +37,11 @@ class TapApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         instance = this
+
+        // 图标优先从 APK 内置资源加载（远程 CDN 只有明文 HTTP，已被 cleartext 策略拦截）。
+        // 必须早于任何图片请求，故同步注册。
+        BundledIcons.install(this)
+
         BackupCacheCleaner.cleanupAtProcessStart(this)
         ProcessExitLogger.onAppCreate(this)
         SharedYearMonthSession.resetToCurrentMonth()
@@ -68,6 +73,7 @@ class TapApplication : Application() {
 
         // 后台预热分类图标缓存，确保断网时也能显示
         CoroutineScope(Dispatchers.IO).launch {
+            BundledIcons.warmUp(this@TapApplication)
             CategoryIconPreloader.preloadAll(this@TapApplication)
         }
 

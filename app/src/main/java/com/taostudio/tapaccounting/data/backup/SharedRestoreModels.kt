@@ -30,6 +30,54 @@ enum class SharedRecoveryReadiness {
     INCOMPLETE
 }
 
+/**
+ * What a restore attempt should do about shared ledgers.
+ *
+ * Every gate in the restore pipeline must agree on one of these, because the shared protocol can
+ * only carry bills and budgets ([SharedOperationCodec] rejects every other entity type). Categories,
+ * assets, rules, recurring patterns, chat and settings are device-local, so they can never conflict
+ * with a connected ledger and must stay restorable while one is active.
+ */
+enum class SharedRestoreDecision {
+    /** Nothing selected touches shared identity: run a plain local-copy restore, no prompt at all. */
+    LOCAL_COPY,
+
+    /** The backup can resume the original member seat: let the user pick reconnect or local copy. */
+    ASK_SHARED_MODE,
+
+    /** The backup carries shared identity but lacks members or credentials: local copy only. */
+    ASK_INCOMPLETE_IDENTITY,
+
+    /** This device still owns an active shared ledger that the selection would overwrite. */
+    BLOCKED_BY_ACTIVE_LEDGER
+}
+
+/**
+ * Single source of truth for the shared-ledger gates.
+ *
+ * [writesSharedEntities] is the only selection fact that matters: it is true when the restore will
+ * write bills or budgets, which are the only entity types the sync protocol can carry.
+ *
+ * [backupLedgersAlreadyOnDevice] is what makes a same-device reconnect legal. When every ledger in
+ * the backup is still connected here, reconnecting only refreshes this device's own runtime state
+ * ([BackupRepository.restoreSharedSnapshot] upserts by uuid), so the user does not have to leave the
+ * shared ledger just to restore. When the backup carries a ledger this device does not have, the
+ * restored bills would mix two ledgers and the restore is refused instead.
+ */
+internal fun decideSharedRestore(
+    writesSharedEntities: Boolean,
+    backupReadiness: SharedRecoveryReadiness,
+    deviceHasActiveLedger: Boolean,
+    backupLedgersAlreadyOnDevice: Boolean
+): SharedRestoreDecision = when {
+    !writesSharedEntities -> SharedRestoreDecision.LOCAL_COPY
+    backupReadiness == SharedRecoveryReadiness.READY &&
+        (!deviceHasActiveLedger || backupLedgersAlreadyOnDevice) -> SharedRestoreDecision.ASK_SHARED_MODE
+    deviceHasActiveLedger -> SharedRestoreDecision.BLOCKED_BY_ACTIVE_LEDGER
+    backupReadiness == SharedRecoveryReadiness.INCOMPLETE -> SharedRestoreDecision.ASK_INCOMPLETE_IDENTITY
+    else -> SharedRestoreDecision.LOCAL_COPY
+}
+
 /** Portable shared-ledger descriptor. Room-local book and ledger IDs are deliberately excluded. */
 data class SharedLedgerBackup(
     val uuid: String,
@@ -338,9 +386,26 @@ internal fun materializePendingOperation(
     )
 }
 
-internal fun requireSharedRestoreGuard(hasActiveSharedLedgers: Boolean, hasSelectedDatabaseModule: Boolean) {
-    require(!hasActiveSharedLedgers || !hasSelectedDatabaseModule) {
-        "检测到正在同步的共享账本。请先退出共享，再恢复任何数据库模块，避免部分覆盖共享数据"
+/**
+ * Rejects a restore that would overwrite shared entities while this device still syncs them.
+ *
+ * Only bills and budgets carry shared identity, so only those two can be blocked. Every other
+ * module stays restorable: blocking a category-only restore forced users to leave their shared
+ * ledger just to correct a local category list.
+ *
+ * Same-device reconnect is the exception. The backup ledgers are already connected here, and
+ * [BackupRepository] upserts them by uuid instead of inserting a second copy. Stripping that path
+ * made the restore dialog's only legal choice fail inside the transaction.
+ */
+internal fun requireSharedRestoreGuard(
+    hasActiveSharedLedgers: Boolean,
+    writesSharedEntities: Boolean,
+    sharedRestoreMode: SharedRestoreMode = SharedRestoreMode.LOCAL_COPY,
+    reconnectsExistingLedgers: Boolean = false
+) {
+    val sameDeviceReconnect = sharedRestoreMode == SharedRestoreMode.RECONNECT && reconnectsExistingLedgers
+    require(!hasActiveSharedLedgers || !writesSharedEntities || sameDeviceReconnect) {
+        "本机有正在同步的共享账本，账单和预算不能直接覆盖或合并；请先退出共享账本，或只恢复分类、资产、规则等本地数据"
     }
 }
 

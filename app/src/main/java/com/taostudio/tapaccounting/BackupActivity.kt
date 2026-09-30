@@ -14,6 +14,7 @@ import android.view.View
 import android.widget.EditText
 import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.RadioButton
 import android.widget.RadioGroup
 import android.widget.ScrollView
 import android.widget.TextView
@@ -66,8 +67,10 @@ import com.taostudio.tapaccounting.data.backup.SharedRecoverySecrets
 import com.taostudio.tapaccounting.data.backup.SharedReconnectPreflight
 import com.taostudio.tapaccounting.data.backup.SharedLedgerBackup
 import com.taostudio.tapaccounting.data.backup.SharedRestoreData
+import com.taostudio.tapaccounting.data.backup.SharedRestoreDecision
 import com.taostudio.tapaccounting.data.backup.SharedRestoreMode
 import com.taostudio.tapaccounting.data.backup.assessSharedRecoveryReadiness
+import com.taostudio.tapaccounting.data.backup.decideSharedRestore
 import com.taostudio.tapaccounting.data.backup.sharedRecoveryReadiness
 import com.taostudio.tapaccounting.data.backup.WebDavClient
 import com.google.android.material.switchmaterial.SwitchMaterial
@@ -473,55 +476,6 @@ class BackupActivity : AppCompatActivity() {
         }
     }
 
-    private fun promptSharedRestoreMode(
-        onCancelled: () -> Unit = {},
-        onSelected: (SharedRestoreMode) -> Unit
-    ) {
-        val labels = arrayOf(
-            "${getString(R.string.shared_restore_reconnect)}\n${getString(R.string.shared_restore_reconnect_desc)}",
-            "${getString(R.string.shared_restore_local_copy)}\n${getString(R.string.shared_restore_local_copy_desc)}"
-        )
-        val dialog = AlertDialog.Builder(this)
-            .setTitle(R.string.shared_restore_title)
-            .setMessage(R.string.shared_restore_message)
-            .setItems(labels) { _, which ->
-                onSelected(
-                    if (which == 0) SharedRestoreMode.RECONNECT else SharedRestoreMode.LOCAL_COPY
-                )
-            }
-            .setNegativeButton(R.string.cancel) { _, _ -> onCancelled() }
-            .create()
-        dialog.setOnCancelListener { onCancelled() }
-        OverlayDialogs.showPageCenterDialog(
-            dialog = dialog,
-            ctx = this,
-            widthRatio = 0.95f,
-            cancelOnTouchOutside = true,
-            useSolidPanelBackground = true
-        )
-    }
-
-    private fun promptIncompleteSharedRestore(
-        onCancelled: () -> Unit = {},
-        onContinueAsLocalCopy: () -> Unit
-    ) {
-        val dialog = AlertDialog.Builder(this)
-            .setTitle(R.string.shared_restore_incomplete_title)
-            .setMessage(R.string.shared_restore_incomplete_message)
-            .setPositiveButton(R.string.shared_restore_continue_local) { _, _ ->
-                onContinueAsLocalCopy()
-            }
-            .setNegativeButton(R.string.cancel) { _, _ -> onCancelled() }
-            .create()
-        dialog.setOnCancelListener { onCancelled() }
-        OverlayDialogs.showPageCenterDialog(
-            dialog = dialog,
-            ctx = this,
-            widthRatio = 0.92f,
-            cancelOnTouchOutside = true,
-            useSolidPanelBackground = true
-        )
-    }
 
     private fun setupAutoBackupUi() {
         val switchEnabled = findViewById<SwitchMaterial>(R.id.switch_auto_backup)
@@ -1593,6 +1547,9 @@ class BackupActivity : AppCompatActivity() {
         val settingsNeedsPin = dataMap["settings_ai_core"]
             ?.let { runCatching { BackupPinCrypto.hasEncryptedApi(parseSettingsRoot(it)) }.getOrDefault(false) }
             ?: false
+        // Read once on IO: the dialog itself only runs on the main thread.
+        val deviceSharedLedgerUuids = AppDatabase.getDatabase(this).sharedLedgerDao().getAll()
+            .mapTo(hashSetOf()) { it.uuid }
 
         withContext(Dispatchers.Main) {
             val view = LayoutInflater.from(this@BackupActivity).inflate(R.layout.dialog_restore_modules, null)
@@ -1622,14 +1579,17 @@ class BackupActivity : AppCompatActivity() {
             )
             val aiCoreHint = view.findViewById<TextView>(R.id.tv_restore_settings_ai_core_hint)
             val rgRestoreMode = view.findViewById<RadioGroup>(R.id.rg_restore_mode)
-            val tvModeHint = view.findViewById<TextView>(R.id.tv_restore_mode_hint)
-
-            rgRestoreMode.setOnCheckedChangeListener { _, checkedId ->
-                tvModeHint.text = if (checkedId == R.id.rb_restore_merge) {
-                    getString(R.string.restore_merge_desc)
-                } else {
-                    getString(R.string.restore_overwrite_desc)
-                }
+            val sharedGroup = view.findViewById<LinearLayout>(R.id.group_restore_shared)
+            val sharedMessage = view.findViewById<TextView>(R.id.tv_restore_shared_message)
+            val sharedRadios = view.findViewById<RadioGroup>(R.id.rg_restore_shared)
+            val rbSharedReconnect = view.findViewById<RadioButton>(R.id.rb_shared_reconnect)
+            val rbSharedLocal = view.findViewById<RadioButton>(R.id.rb_shared_local)
+            val details = view.findViewById<LinearLayout>(R.id.group_restore_details)
+            val adjust = view.findViewById<TextView>(R.id.btn_restore_adjust)
+            adjust.setOnClickListener {
+                val open = details.visibility != View.VISIBLE
+                details.visibility = if (open) View.VISIBLE else View.GONE
+                adjust.setText(if (open) R.string.restore_adjust_content_hide else R.string.restore_adjust_content)
             }
 
             var hasModules = false
@@ -1640,9 +1600,124 @@ class BackupActivity : AppCompatActivity() {
                     else -> dataMap.containsKey(key)
                 }
                 checkBox.visibility = if (present) View.VISIBLE else View.GONE
-                checkBox.isChecked = present
+                checkBox.isChecked = false
                 hasModules = hasModules || present
             }
+            val selectAll = view.findViewById<MaterialCheckBox>(R.id.cb_restore_select_all)
+            var syncingSelectAll = false
+            fun visibleModules() = moduleViews.values.filter { it.visibility == View.VISIBLE }
+            fun syncSelectAllCheck() {
+                if (syncingSelectAll) return
+                val visible = visibleModules()
+                val allOn = visible.isNotEmpty() && visible.all { it.isChecked }
+                if (selectAll.isChecked == allOn) return
+                syncingSelectAll = true
+                selectAll.isChecked = allOn
+                syncingSelectAll = false
+            }
+            class RestorePlan(
+                val isMerge: Boolean,
+                val options: RestoreOptions,
+                val requested: RestoreOptions,
+                val decision: SharedRestoreDecision,
+                val reconnectsOnThisDevice: Boolean
+            )
+
+            fun currentPlan(): RestorePlan {
+                val isMerge = rgRestoreMode.checkedRadioButtonId == R.id.rb_restore_merge
+                var options = RestoreOptions(
+                    restoreAssets = moduleViews.getValue("assets").isChecked,
+                    restoreCategories = moduleViews.getValue("categories").isChecked,
+                    restoreBills = moduleViews.getValue("bills").isChecked,
+                    restoreRules = moduleViews.getValue("rules").isChecked,
+                    restoreBudgets = moduleViews.getValue("budgets").isChecked,
+                    restoreRecurringPatterns = moduleViews.getValue("recurring_patterns").isChecked,
+                    restoreChatMessages = moduleViews.getValue("chat_messages").isChecked,
+                    restoreChatMedia = moduleViews.getValue("chat_media").isChecked,
+                    restoreSettingsGeneralBasic = moduleViews.getValue("settings_general_basic").isChecked,
+                    restoreSettingsGeneralAssets = moduleViews.getValue("settings_general_assets").isChecked,
+                    restoreSettingsGeneralCloud = moduleViews.getValue("settings_general_cloud").isChecked,
+                    restoreSettingsDisplayEntries = moduleViews.getValue("settings_display_entries").isChecked,
+                    restoreSettingsDisplayBills = moduleViews.getValue("settings_display_bills").isChecked,
+                    restoreSettingsDisplayMultiBill = moduleViews.getValue("settings_display_multibill").isChecked,
+                    restoreSettingsAiCore = moduleViews.getValue("settings_ai_core").isChecked,
+                    restoreSettingsAiChat = moduleViews.getValue("settings_ai_chat").isChecked,
+                    restoreSettingsBooks = moduleViews.getValue("settings_books").isChecked,
+                    restoreSettingsAdvancedRuntime = moduleViews.getValue("settings_advanced_runtime").isChecked,
+                    restoreSettingsGeneralLegacy = moduleViews.getValue("settings_general").isChecked,
+                    restoreSettingsDisplayLegacy = moduleViews.getValue("settings_display").isChecked,
+                    restoreSettingsAdvancedLegacy = moduleViews.getValue("settings_advanced").isChecked,
+                    restoreBanners = moduleViews.getValue("banners").isChecked
+                )
+                val requested = options
+                if (!isMerge && (options.restoreBills || options.restoreChatMessages)) {
+                    options = options.copy(restoreBills = true, restoreChatMessages = true)
+                }
+                val writesSharedEntities = options.restoreBills || options.restoreBudgets
+                val backupReadiness = if (writesSharedEntities && allowSharedReconnect) {
+                    inspectSharedRecoveryReadiness(dataMap)
+                } else {
+                    SharedRecoveryReadiness.NOT_PRESENT
+                }
+                val backupUuids = backupLedgerUuids(dataMap)
+                val reconnectsOnThisDevice = backupReadiness == SharedRecoveryReadiness.READY &&
+                    deviceSharedLedgerUuids.isNotEmpty() &&
+                    backupUuids.isNotEmpty() &&
+                    backupUuids.all { it in deviceSharedLedgerUuids }
+                return RestorePlan(
+                    isMerge = isMerge,
+                    options = options,
+                    requested = requested,
+                    decision = decideSharedRestore(
+                        writesSharedEntities = writesSharedEntities,
+                        backupReadiness = backupReadiness,
+                        deviceHasActiveLedger = deviceSharedLedgerUuids.isNotEmpty(),
+                        backupLedgersAlreadyOnDevice = reconnectsOnThisDevice
+                    ),
+                    reconnectsOnThisDevice = reconnectsOnThisDevice
+                )
+            }
+
+            var sharedChoiceReady = false
+            fun refreshSharedSection() {
+                val plan = currentPlan()
+                when (plan.decision) {
+                        SharedRestoreDecision.LOCAL_COPY -> sharedGroup.visibility = View.GONE
+                        SharedRestoreDecision.ASK_SHARED_MODE -> {
+                            sharedGroup.visibility = View.VISIBLE
+                            sharedRadios.visibility = View.VISIBLE
+                            if (plan.reconnectsOnThisDevice) {
+                                sharedMessage.setText(R.string.shared_restore_message_same_device)
+                                rbSharedReconnect.setText(R.string.shared_restore_reconnect_same_device)
+                                rbSharedLocal.visibility = View.GONE
+                                sharedRadios.check(R.id.rb_shared_reconnect)
+                            } else {
+                                sharedMessage.setText(R.string.shared_restore_message)
+                                rbSharedReconnect.setText(R.string.shared_restore_reconnect)
+                                rbSharedLocal.visibility = View.VISIBLE
+                                if (!sharedChoiceReady) {
+                                    sharedRadios.check(R.id.rb_shared_reconnect)
+                                    sharedChoiceReady = true
+                                }
+                            }
+                        }
+                        SharedRestoreDecision.ASK_INCOMPLETE_IDENTITY -> {
+                            sharedGroup.visibility = View.VISIBLE
+                            sharedRadios.visibility = View.GONE
+                            sharedMessage.setText(R.string.shared_restore_incomplete_message)
+                        }
+                        SharedRestoreDecision.BLOCKED_BY_ACTIVE_LEDGER -> {
+                            sharedGroup.visibility = View.VISIBLE
+                            sharedRadios.visibility = View.GONE
+                            sharedMessage.setText(R.string.shared_restore_blocked_message)
+                        }
+                }
+            }
+            fun onModuleChanged() {
+                syncSelectAllCheck()
+                refreshSharedSection()
+            }
+
             if (dataMap.containsKey(BackupModuleId.INVESTMENT_LOTS) &&
                 moduleViews.getValue("assets").visibility == View.VISIBLE
             ) {
@@ -1650,11 +1725,43 @@ class BackupActivity : AppCompatActivity() {
                 val bills = moduleViews.getValue("bills")
                 bills.setOnCheckedChangeListener { _, checked ->
                     if (checked) assets.isChecked = true
+                    onModuleChanged()
                 }
                 assets.setOnCheckedChangeListener { _, checked ->
                     if (!checked && bills.isChecked) bills.isChecked = false
+                    onModuleChanged()
+                }
+            } else {
+                moduleViews.getValue("bills").setOnCheckedChangeListener { _, _ -> onModuleChanged() }
+            }
+            moduleViews.getValue("budgets").setOnCheckedChangeListener { _, _ -> onModuleChanged() }
+            moduleViews.getValue("chat_messages").setOnCheckedChangeListener { _, _ -> onModuleChanged() }
+            val watched = mutableSetOf(
+                moduleViews.getValue("bills"),
+                moduleViews.getValue("budgets"),
+                moduleViews.getValue("chat_messages")
+            )
+            if (dataMap.containsKey(BackupModuleId.INVESTMENT_LOTS) &&
+                moduleViews.getValue("assets").visibility == View.VISIBLE
+            ) {
+                watched += moduleViews.getValue("assets")
+            }
+            moduleViews.values.forEach { box ->
+                if (box.visibility == View.VISIBLE && box !in watched) {
+                    box.setOnCheckedChangeListener { _, _ -> onModuleChanged() }
                 }
             }
+            selectAll.setOnCheckedChangeListener { _, checked ->
+                if (syncingSelectAll) return@setOnCheckedChangeListener
+                syncingSelectAll = true
+                visibleModules().forEach { box ->
+                    if (box.isChecked != checked) box.isChecked = checked
+                }
+                syncingSelectAll = false
+                refreshSharedSection()
+            }
+            rgRestoreMode.setOnCheckedChangeListener { _, _ -> refreshSharedSection() }
+            refreshSharedSection()
             aiCoreHint.visibility = moduleViews.getValue("settings_ai_core").visibility
 
             val groupCore = view.findViewById<LinearLayout>(R.id.group_restore_core)
@@ -1697,115 +1804,97 @@ class BackupActivity : AppCompatActivity() {
 
             val dialog = AlertDialog.Builder(this@BackupActivity)
                 .setView(view)
-                .setPositiveButton(R.string.start_restore) { _, _ ->
-                    val isMerge = rgRestoreMode.checkedRadioButtonId == R.id.rb_restore_merge
-
-                    var options = RestoreOptions(
-                        restoreAssets = moduleViews.getValue("assets").isChecked,
-                        restoreCategories = moduleViews.getValue("categories").isChecked,
-                        restoreBills = moduleViews.getValue("bills").isChecked,
-                        restoreRules = moduleViews.getValue("rules").isChecked,
-                        restoreBudgets = moduleViews.getValue("budgets").isChecked,
-                        restoreRecurringPatterns = moduleViews.getValue("recurring_patterns").isChecked,
-                        restoreChatMessages = moduleViews.getValue("chat_messages").isChecked,
-                        restoreChatMedia = moduleViews.getValue("chat_media").isChecked,
-                        restoreSettingsGeneralBasic = moduleViews.getValue("settings_general_basic").isChecked,
-                        restoreSettingsGeneralAssets = moduleViews.getValue("settings_general_assets").isChecked,
-                        restoreSettingsGeneralCloud = moduleViews.getValue("settings_general_cloud").isChecked,
-                        restoreSettingsDisplayEntries = moduleViews.getValue("settings_display_entries").isChecked,
-                        restoreSettingsDisplayBills = moduleViews.getValue("settings_display_bills").isChecked,
-                        restoreSettingsDisplayMultiBill = moduleViews.getValue("settings_display_multibill").isChecked,
-                        restoreSettingsAiCore = moduleViews.getValue("settings_ai_core").isChecked,
-                        restoreSettingsAiChat = moduleViews.getValue("settings_ai_chat").isChecked,
-                        restoreSettingsBooks = moduleViews.getValue("settings_books").isChecked,
-                        restoreSettingsAdvancedRuntime = moduleViews.getValue("settings_advanced_runtime").isChecked,
-                        restoreSettingsGeneralLegacy = moduleViews.getValue("settings_general").isChecked,
-                        restoreSettingsDisplayLegacy = moduleViews.getValue("settings_display").isChecked,
-                        restoreSettingsAdvancedLegacy = moduleViews.getValue("settings_advanced").isChecked,
-                        restoreBanners = moduleViews.getValue("banners").isChecked
-                    )
-
-                    val restoresRelationalData = options.restoreAssets || options.restoreCategories ||
-                        options.restoreBills || options.restoreBudgets ||
-                        options.restoreRecurringPatterns || options.restoreChatMessages
-                    if (!isMerge && restoresRelationalData) {
-                        val requiredRoots = listOf(
-                            BackupModuleId.ASSETS,
-                            BackupModuleId.CATEGORIES,
-                            BackupModuleId.BILLS
-                        )
-                        if (requiredRoots.any { it !in dataMap }) {
-                            tempFile.delete()
-                            Utils.toast(
-                                this@BackupActivity,
-                                getString(R.string.restore_overwrite_requires_complete_data)
-                            )
-                            return@setPositiveButton
-                        }
-                        // Room regenerates IDs for these roots. Restore every ID consumer in the
-                        // same transaction; absent modules from older archives become empty.
-                        options = options.copy(
-                            restoreAssets = true,
-                            restoreCategories = true,
-                            restoreBills = true,
-                            restoreBudgets = true,
-                            restoreRecurringPatterns = true,
-                            restoreChatMessages = true
-                        )
+                .setPositiveButton(R.string.start_restore, null)
+                .setNegativeButton(R.string.cancel) { _, _ -> tempFile.delete() }
+                .create()
+            dialog.setOnShowListener {
+                dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                    val plan = currentPlan()
+                    if (!plan.requested.hasAnySelection()) {
+                        Utils.toast(this@BackupActivity, getString(R.string.restore_pick_one))
+                        return@setOnClickListener
                     }
-
-                    val execute: (SharedRestoreMode) -> Unit = { sharedMode ->
+                    fun execute(
+                        restoreOptions: RestoreOptions,
+                        sharedMode: SharedRestoreMode,
+                        reconnectsOnThisDevice: Boolean
+                    ) {
                         val action: (String?) -> Unit = { legacyPin ->
-                            if (isMerge) {
+                            if (plan.isMerge) {
                                 mergeRestoreData(
-                                    dataMap, options, tempFile, legacyPin, sharedMode
+                                    dataMap, restoreOptions, tempFile, legacyPin, sharedMode,
+                                    reconnectsOnThisDevice
                                 )
                             } else {
                                 restoreData(
-                                    dataMap, options, tempFile, legacyPin, sharedMode
+                                    dataMap, restoreOptions, tempFile, legacyPin, sharedMode,
+                                    reconnectsOnThisDevice
                                 )
                             }
                         }
-                        // PIN is retained only for importing old V1 archives that encrypted AI keys.
-                        if (options.restoreSettingsAiCore && settingsNeedsPin) {
+                        if (restoreOptions.restoreSettingsAiCore && settingsNeedsPin) {
                             promptPinForRestore(onCancelled = { tempFile.delete() }, onPinConfirmed = action)
+                        } else {
+                            action(null)
                         }
-                        else action(null)
                     }
-                    val sharedReadiness = if (options.restoresDatabaseModules()) {
-                        inspectSharedRecoveryReadiness(dataMap)
-                    } else {
-                        SharedRecoveryReadiness.NOT_PRESENT
-                    }
-                    when {
-                        allowSharedReconnect && sharedReadiness == SharedRecoveryReadiness.READY -> {
-                            promptSharedRestoreMode(
-                                onCancelled = { tempFile.delete() },
-                                onSelected = execute
+                    when (plan.decision) {
+                        SharedRestoreDecision.LOCAL_COPY,
+                        SharedRestoreDecision.ASK_INCOMPLETE_IDENTITY -> {
+                            dialog.dismiss()
+                            execute(plan.options, SharedRestoreMode.LOCAL_COPY, reconnectsOnThisDevice = false)
+                        }
+                        SharedRestoreDecision.ASK_SHARED_MODE -> {
+                            val reconnect = plan.reconnectsOnThisDevice ||
+                                sharedRadios.checkedRadioButtonId != R.id.rb_shared_local
+                            dialog.dismiss()
+                            execute(
+                                plan.options,
+                                if (reconnect) SharedRestoreMode.RECONNECT else SharedRestoreMode.LOCAL_COPY,
+                                reconnectsOnThisDevice = plan.reconnectsOnThisDevice && reconnect
                             )
                         }
-                        allowSharedReconnect && sharedReadiness == SharedRecoveryReadiness.INCOMPLETE -> {
-                            promptIncompleteSharedRestore(
-                                onCancelled = { tempFile.delete() },
-                                onContinueAsLocalCopy = { execute(SharedRestoreMode.LOCAL_COPY) }
-                            )
+                        SharedRestoreDecision.BLOCKED_BY_ACTIVE_LEDGER -> {
+                            val localOnly = plan.requested.localModulesOnly()
+                            if (!localOnly.hasAnySelection()) {
+                                Utils.toast(
+                                    this@BackupActivity,
+                                    getString(R.string.shared_restore_blocked_nothing_local)
+                                )
+                                return@setOnClickListener
+                            }
+                            dialog.dismiss()
+                            execute(localOnly, SharedRestoreMode.LOCAL_COPY, reconnectsOnThisDevice = false)
                         }
-                        else -> execute(SharedRestoreMode.LOCAL_COPY)
                     }
                 }
-                .setNegativeButton(R.string.cancel) { _, _ -> tempFile.delete() }
-                .create()
+            }
             dialog.setOnCancelListener { tempFile.delete() }
             OverlayDialogs.showPageCenterDialog(dialog = dialog, ctx = this@BackupActivity, widthRatio = 0.92f, cancelOnTouchOutside = true, useSolidPanelBackground = true)
         }
     }
+
+    /**
+     * Identity a reconnect writes into the restored outbox.
+     *
+     * A same-device reconnect keeps the current id: the operations already queued here carry it, and
+     * rotating would split one device across two ids in the operation log and sync state. Only a
+     * real device change rotates, because an old device id must never be cloned onto another phone.
+     */
+    private fun reconnectDeviceId(reconnectsOnThisDevice: Boolean): String =
+        if (reconnectsOnThisDevice) {
+            DeviceIdManager.getDeviceId(this)
+        } else {
+            UUID.randomUUID().toString()
+        }
 
     private fun restoreData(
         dataMap: Map<String, String>,
         options: RestoreOptions,
         tempFile: File?,
         settingsPin: String?,
-        sharedRestoreMode: SharedRestoreMode
+        sharedRestoreMode: SharedRestoreMode,
+        reconnectsOnThisDevice: Boolean
     ) {
         lifecycleScope.launch(Dispatchers.IO) {
             var restoreLockAcquired = false
@@ -1844,7 +1933,7 @@ class BackupActivity : AppCompatActivity() {
                     parsedSharedData
                 }
                 val newDeviceId = if (effectiveSharedMode == SharedRestoreMode.RECONNECT) {
-                    UUID.randomUUID().toString()
+                    reconnectDeviceId(reconnectsOnThisDevice)
                 } else {
                     null
                 }
@@ -1932,7 +2021,8 @@ class BackupActivity : AppCompatActivity() {
         options: RestoreOptions,
         tempFile: File?,
         settingsPin: String?,
-        sharedRestoreMode: SharedRestoreMode
+        sharedRestoreMode: SharedRestoreMode,
+        reconnectsOnThisDevice: Boolean
     ) {
         lifecycleScope.launch(Dispatchers.IO) {
             var restoreLockAcquired = false
@@ -1971,7 +2061,7 @@ class BackupActivity : AppCompatActivity() {
                     parsedSharedData
                 }
                 val newDeviceId = if (effectiveSharedMode == SharedRestoreMode.RECONNECT) {
-                    UUID.randomUUID().toString()
+                    reconnectDeviceId(reconnectsOnThisDevice)
                 } else {
                     null
                 }
@@ -2310,6 +2400,14 @@ class BackupActivity : AppCompatActivity() {
         )
     }
 
+    /**
+     * Ledgers this backup would reconnect. Empty when the archive carries no shared descriptor,
+     * which is exactly what makes a same-device reconnect impossible.
+     */
+    private fun backupLedgerUuids(dataMap: Map<String, String>): Set<String> = runCatching {
+        parseSharedRestoreData(dataMap)?.ledgers.orEmpty().mapTo(hashSetOf()) { it.uuid }
+    }.getOrDefault(emptySet())
+
     private fun inspectSharedRecoveryReadiness(
         dataMap: Map<String, String>
     ): SharedRecoveryReadiness = runCatching {
@@ -2332,6 +2430,29 @@ class BackupActivity : AppCompatActivity() {
     private fun RestoreOptions.restoresDatabaseModules(): Boolean =
         restoreAssets || restoreCategories || restoreBills || restoreRules || restoreBudgets ||
             restoreRecurringPatterns || restoreChatMessages
+
+    /**
+     * Drops every module that carries or depends on shared identity.
+     *
+     * Used when an active shared ledger blocks the requested restore: the user keeps whatever
+     * local modules they actually ticked instead of being sent away to leave their shared ledger.
+     */
+    private fun RestoreOptions.localModulesOnly(): RestoreOptions = copy(
+        restoreBills = false,
+        restoreBudgets = false,
+        restoreChatMessages = false,
+        restoreChatMedia = false
+    )
+
+    private fun RestoreOptions.hasAnySelection(): Boolean = listOf(
+        restoreAssets, restoreCategories, restoreBills, restoreRules, restoreBudgets,
+        restoreRecurringPatterns, restoreChatMessages, restoreChatMedia,
+        restoreSettingsGeneralBasic, restoreSettingsGeneralAssets, restoreSettingsGeneralCloud,
+        restoreSettingsDisplayEntries, restoreSettingsDisplayBills, restoreSettingsDisplayMultiBill,
+        restoreSettingsAiCore, restoreSettingsAiChat, restoreSettingsBooks,
+        restoreSettingsAdvancedRuntime, restoreSettingsGeneralLegacy, restoreSettingsDisplayLegacy,
+        restoreSettingsAdvancedLegacy, restoreBanners
+    ).any { it }
 
     private fun visibleIfAny(vararg views: View): Int =
         if (views.any { it.visibility == View.VISIBLE }) View.VISIBLE else View.GONE
@@ -2458,7 +2579,10 @@ class BackupActivity : AppCompatActivity() {
             for (bill in bills) {
                 val accountAsset = assetByName[normalizeAssetImportName(bill.accountName)]
                 val toAccountAsset = assetByName[normalizeAssetImportName(bill.toAccountName)]
-                val newId = db.billDao().insertBill(
+                // CSV 只带分类名、不带 id，导入时按名字对齐到本机分类。
+                // 漏了这一步，导入进来的账单会全部是 categoryId IS NULL，对分类预算完全隐形。
+                val prepared = com.taostudio.tapaccounting.logic.BillMutationService.alignCategoryLinkForDirectWrite(
+                    db,
                     bill.copy(
                         id = 0L,
                         accountId = accountAsset?.id,
@@ -2467,6 +2591,7 @@ class BackupActivity : AppCompatActivity() {
                         relatedBillId = null
                     )
                 )
+                val newId = db.billDao().insertBill(prepared)
                 if (bill.id > 0L) {
                     importedIdMap[bill.id] = newId
                 }

@@ -54,18 +54,18 @@ class CreditCardCycleService {
         val billedBills = relatedBills.filter { it.time in statementStart..statementEnd }
         val billedSpend = billedBills
             .filter { it.type == Bill.TYPE_EXPENSE && it.subType != Bill.SUBTYPE_REFUND }
-            .sumOf { AssetBillBalanceHistory.amountAtTransactionTime(it) }
+            .sumOf { toCardCurrency(AssetBillBalanceHistory.amountAtTransactionTime(it), it, asset.currency) }
         val billedRefund = billedBills
             .filter { it.subType == Bill.SUBTYPE_REFUND }
-            .sumOf { it.amount }
+            .sumOf { toCardCurrency(it.amount, it, asset.currency) }
 
         // 未出账消费（本次账单日之后到今天）
         val unbilledSpend = relatedBills
             .filter { it.time > statementEnd }
             .sumOf { bill ->
                 when {
-                    bill.subType == Bill.SUBTYPE_REFUND -> -bill.amount
-                    bill.type == Bill.TYPE_EXPENSE -> AssetBillBalanceHistory.amountAtTransactionTime(bill)
+                    bill.subType == Bill.SUBTYPE_REFUND -> -toCardCurrency(bill.amount, bill, asset.currency)
+                    bill.type == Bill.TYPE_EXPENSE -> toCardCurrency(AssetBillBalanceHistory.amountAtTransactionTime(bill), bill, asset.currency)
                     else -> 0.0
                 }
             }
@@ -75,9 +75,9 @@ class CreditCardCycleService {
         val paymentsInCycle = relatedBills
             .filter { it.time > statementEnd && it.time <= now }
             .filter { it.type == Bill.TYPE_REPAYMENT || (it.type == Bill.TYPE_TRANSFER && it.subType == Bill.SUBTYPE_REPAYMENT) }
-            .sumOf { it.amount }
+            .sumOf { toCardCurrency(it.amount, it, asset.currency) }
 
-        val amountDue = calculateBilledOutstanding(relatedBills, statementEnd, now)
+        val amountDue = calculateBilledOutstanding(relatedBills, statementEnd, now, asset.currency)
 
         val availableLimit = if (asset.creditLimit > 0) {
             val currentDebt = (-asset.balance).coerceAtLeast(0.0)
@@ -85,7 +85,7 @@ class CreditCardCycleService {
         } else null
 
         val daysToDue = if (dueDay > 0) {
-            calculateDaysToDue(dueDay, statementDay, statementEnd, amountDue, relatedBills, now)
+            calculateDaysToDue(dueDay, statementDay, statementEnd, amountDue, relatedBills, now, asset.currency)
         } else null
 
         return CreditCardCycleSnapshot(
@@ -165,13 +165,14 @@ class CreditCardCycleService {
         statementEnd: Long,
         amountDue: Double,
         relatedBills: List<Bill>,
-        now: Long
+        now: Long,
+        cardCurrency: String
     ): Int {
         if (amountDue <= 0.0) return 0
 
         val statementEndCal = Calendar.getInstance().apply { timeInMillis = statementEnd }
         val previousStatementEnd = statementDateRelativeTo(statementEndCal, -1, statementDay, endOfDay = true).timeInMillis
-        val previousOutstanding = calculateBilledOutstanding(relatedBills, previousStatementEnd, now)
+        val previousOutstanding = calculateBilledOutstanding(relatedBills, previousStatementEnd, now, cardCurrency)
         if (previousOutstanding > 0.0) {
             val previousDue = calculateDueDate(dueDay, previousStatementEnd)
             if (previousDue.timeInMillis <= now) return 0
@@ -184,18 +185,24 @@ class CreditCardCycleService {
         return (diffMs / (24 * 3600_000)).toInt().coerceAtLeast(0)
     }
 
-    private fun calculateBilledOutstanding(relatedBills: List<Bill>, statementEnd: Long, now: Long): Double {
+    private fun calculateBilledOutstanding(relatedBills: List<Bill>, statementEnd: Long, now: Long, cardCurrency: String): Double {
         val billedSpend = relatedBills
             .filter { it.time <= statementEnd && it.type == Bill.TYPE_EXPENSE && it.subType != Bill.SUBTYPE_REFUND }
-            .sumOf { AssetBillBalanceHistory.amountAtTransactionTime(it) }
+            .sumOf { toCardCurrency(AssetBillBalanceHistory.amountAtTransactionTime(it), it, cardCurrency) }
         val billedRefund = relatedBills
             .filter { it.time <= statementEnd && it.subType == Bill.SUBTYPE_REFUND }
-            .sumOf { it.amount }
+            .sumOf { toCardCurrency(it.amount, it, cardCurrency) }
         val payments = relatedBills
             .filter { it.time <= now }
             .filter { it.type == Bill.TYPE_REPAYMENT || (it.type == Bill.TYPE_TRANSFER && it.subType == Bill.SUBTYPE_REPAYMENT) }
-            .sumOf { it.amount }
+            .sumOf { toCardCurrency(it.amount, it, cardCurrency) }
         return (billedSpend - billedRefund - payments).coerceAtLeast(0.0)
+    }
+
+    /** 将账单金额折算到卡币种，消除混币求和。 */
+    private fun toCardCurrency(amount: Double, bill: Bill, cardCurrency: String): Double {
+        if (bill.currency.equals(cardCurrency, ignoreCase = true)) return amount
+        return BillAssetImpactService.convertAmountBetweenCurrencies(amount, bill.currency, cardCurrency)
     }
 
     private fun calculateDueDate(dueDay: Int, statementEnd: Long): Calendar {

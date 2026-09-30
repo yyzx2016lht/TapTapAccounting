@@ -131,7 +131,7 @@ object RecurringBillDetector {
      */
     fun toPattern(candidate: RecurringCandidate): RecurringPattern {
         val now = System.currentTimeMillis()
-        val nextExpected = RecurringBillingService.calculateNextExpected(candidate.lastSeenAt, candidate.frequency)
+        val nextExpected = RecurringBillingService.calculateNextExpected(candidate.lastSeenAt, candidate.frequency, candidate.dayOfMonthHint)
 
         return RecurringPattern(
             merchantKey = candidate.merchantKey,

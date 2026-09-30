@@ -78,7 +78,7 @@ class CategorySortActivity : AppCompatActivity() {
         override fun onBindViewHolder(holder: SortCardVH, position: Int) {
             val item = items[position]
             holder.title.text = item.name
-            loadSafeCategoryIcon(item.iconId, holder.icon)
+            loadSafeCategoryIcon(CategoryIcons.fallback(item.iconId, item.name), holder.icon)
 
             if (isParentMode()) {
                 val childCount = childCountByParentId[item.id] ?: 0

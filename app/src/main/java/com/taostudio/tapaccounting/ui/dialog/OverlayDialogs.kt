@@ -35,6 +35,7 @@ import com.taostudio.tapaccounting.R
 import com.taostudio.tapaccounting.data.local.AppDatabase
 import com.taostudio.tapaccounting.data.local.entity.Category
 import com.taostudio.tapaccounting.data.repository.CategoryRepository
+import com.taostudio.tapaccounting.logic.CategoryNameNormalizer
 import java.io.File
 import java.util.*
 
@@ -422,7 +423,9 @@ object OverlayDialogs {
                 if (parent != null && row.any { it.name == parent.name } && parent.subs.isNotEmpty()) {
                     val anchorIndex = row.indexOfFirst { it.name == parent.name }.coerceAtLeast(0)
                     container.addView(createSubPanel(ctx, parent, anchorIndex, parts.getOrNull(1), dbType, {
-                        onConfirm("${parent.name} > ${it.name}")
+                        // 统一输出存储格式（" - "），与 bills.categoryName 保持一致；
+                        // 早前输出 " > " 需要每个调用方各自转换，漏转的会把 " > " 写进规则/周期账单。
+                        onConfirm("${parent.name}${CategoryNameNormalizer.UNIFIED_CHILD_SEPARATOR}${it.name}")
                         dialog.dismiss()
                     }))
                 }
@@ -584,7 +587,9 @@ object OverlayDialogs {
 
     fun showCategorySortDialog(ctx: Context, type: Int, onSaved: (() -> Unit)? = null) {
         val themeContext = ContextThemeWrapper(ctx, R.style.Theme_TapAccounting)
-        val repo = CategoryRepository(AppDatabase.getDatabase(ctx).categoryDao())
+        val sortDb = AppDatabase.getDatabase(ctx)
+        // 必须带 billDao：拖动排序会改变父级归属，换父级后要把账单里的展示路径快照一起重算
+        val repo = CategoryRepository(sortDb.categoryDao(), sortDb.billDao(), sortDb.recurringPatternDao())
         val dbType = if (type == Prefs.TYPE_INCOME) 1 else 0
 
         val container = LinearLayout(themeContext).apply {
@@ -1681,7 +1686,7 @@ object OverlayDialogs {
                     filtered.forEachIndexed { index, bill ->
                         val isSelected = (selectedBill?.id == bill.id)
 
-                        // 閫変腑楂樹寒鑳屾櫙
+                        // 选中高亮背景
                         val itemBg = if (isSelected)
                             android.graphics.drawable.ColorDrawable(android.graphics.Color.parseColor("#FFF3F3"))
                         else
@@ -1815,7 +1820,7 @@ object OverlayDialogs {
                         .setView(container)
                         .create()
 
-                    // 鍏叡鎸夐挳鑳屾櫙锛氬～鍏呰壊鍦嗚锛屾棤鎻忚竟
+                    // 公共按钮背景：填充色圆角，无描边
                     fun makeBtnBg(fillColor: Int) = android.graphics.drawable.GradientDrawable().apply {
                         setColor(fillColor)
                         cornerRadius = (24 * dp)

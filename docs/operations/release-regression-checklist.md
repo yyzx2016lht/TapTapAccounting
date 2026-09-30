@@ -241,7 +241,64 @@ Before starting:
   - PIN-protected settings can be decrypted with correct PIN.
   - Restored assets, bills, categories, chat, settings all appear correctly.
 
-### 19. CSV Export / Import
+### 19. Shared Ledger vs Restore Gating
+
+- Steps:
+  - Join a shared ledger, then open restore with any encrypted backup that contains shared identity.
+  - Overwrite restore with only `categories` checked.
+  - Overwrite restore with `bills` checked.
+  - Merge restore with only `categories` checked.
+  - Same-device reconnect: keep the ledger connected, queue a few unsynced bills, then overwrite
+    restore with `bills` checked and choose "用备份覆盖并重新连接".
+  - Cross-device reconnect: restore the same backup on a clean install.
+- Expected:
+  - The category-only restore completes without any shared-ledger prompt and without asking the
+    user to leave the shared ledger; bills keep their category links.
+  - The bill restore on a device whose ledger is *not* in the backup shows the "共享账本正在同步"
+    dialog instead of failing inside the transaction; choosing "只恢复本地数据" restores the ticked
+    local modules only.
+  - Same-device reconnect succeeds without a unique-index failure, keeps the ledger and member
+    count unchanged, does not drop the unsynced bills, and uploads them on the next sync.
+  - Cross-device reconnect keeps the original member seat and pulls the other member's bills.
+  - Merge restore of categories is never blocked by an active shared ledger.
+  - No shared-related dialog appears when bills and budgets are not part of the selection.
+
+### 20. Category Budget Usage After Upgrade / Restore
+
+- Steps:
+  - On a database where bills carry a `categoryName` but no `categoryId` (legacy data), launch the
+    app once and let the startup backfill finish.
+  - Open the budget page and compare a category budget's "used" amount with the same category's
+    amount on the stats page.
+  - Set a fresh category budget, record a bill in that category, then reopen the budget page.
+  - Overwrite restore with only `categories` checked, then again with only `bills` checked.
+  - Import a CSV whose rows carry category names but no ids (any export from this app), then check a
+    category budget for one of the imported categories.
+  - Delete a bill, delete the category it belonged to, then restore that bill from the trash.
+- Expected:
+  - Bills whose leaf category name matches exactly one existing category get `categoryId` back-filled,
+    and the category budget's used amount is no longer 0.
+  - Bills with a blank category name (user picked "未分类") and bills whose category was deleted stay
+    untouched.
+  - Two same-name categories within the same income/expense type are never guessed.
+  - Both restore paths leave bills linked without needing an extra app restart.
+  - CSV-imported bills land with a `categoryId` whenever the category name matches exactly one
+    existing category, so the budget's used amount is non-zero right after the import.
+  - A bill restored from the trash after its category was deleted comes back with `categoryId`
+    cleared instead of a dangling id, and shows up in the startup backfill's reach.
+  - A bill written by a path that does not pick a category from the picker (multi-bill AI recognition
+    saved without review, chat rewrite, recurring generation, refund) also lands with a `categoryId`,
+    so it shows up in the category budget right away instead of only after a restart.
+  - A **refund** bill whose original category is a **root category** (name like `退款：付费会员`, no
+    `" - "` separator) also gets its `categoryId` back. This is the case the v1 backfill silently
+    missed: `normalizeForStorage` keeps the `退款：` prefix on purpose, so the leaf lookup must strip
+    it first — otherwise the leaf name is `退款：付费会员` and never matches `categories.name`.
+- Why this is manual: the project has no Room/Robolectric tests, so the SQL backfill cannot be
+  asserted in unit tests. `UncategorizedBillRelinkerTest` covers the pure matching rules and
+  `BillMutationServiceRelinkTest` covers the write-funnel guard, but the DB wiring itself is not
+  reachable from JVM tests.
+
+### 21. CSV Export / Import
 
 - Steps:
   - Export bills to CSV.
@@ -253,7 +310,7 @@ Before starting:
 
 ## Media and File Checks
 
-### 20. Chat Media / Avatar / Background Paths
+### 22. Chat Media / Avatar / Background Paths
 
 - Steps:
   - Set chat background or avatar if the feature is used.
@@ -262,7 +319,7 @@ Before starting:
   - Restored file paths are still valid.
   - Images render after restore.
 
-### 21. uCrop / Image Editing Path
+### 23. uCrop / Image Editing Path
 
 - Steps:
   - Trigger any path that opens `UCropActivity`.
@@ -271,7 +328,7 @@ Before starting:
 
 ## Dynamic Resource Checks
 
-### 22. Dynamic IDs and System Resource Lookup
+### 24. Dynamic IDs and System Resource Lookup
 
 - Risk: release resource shrinking with `getIdentifier`.
 - Steps:
@@ -282,6 +339,80 @@ Before starting:
   - Header summary text appears when expected.
   - Transaction icon container is visible.
   - No null-view crash caused by missing shrunk resources.
+
+### 25. Category Rename / Promote / Demote vs Stats Grouping
+
+- Risk: `bills.categoryName` is a display-path snapshot while the stats page and insights group by
+  that snapshot (they never look up `categoryId`). Any category-tree shape change can leave the
+  snapshot stale and split one category into two rows on the stats page.
+- Steps:
+  - Record a few bills under a sub-category (e.g. `餐饮 - 早餐`), then rename the **top-level**
+    parent (e.g. `餐饮` → `吃饭`).
+  - Open stats for the current month and look at the category list.
+  - Repeat with: promote the sub-category to top level; demote a top-level category under another;
+    drag-reorder to move a sub-category under a different parent.
+  - Also cover a refund bill in that category (its name carries a `退款：` prefix).
+  - Also try a parent whose name is a **substring** of its children's names (e.g. parent `餐`
+    with a child `三餐`) and rename the parent.
+- Expected:
+  - After every one of those operations the stats page shows a single row per real category, named
+    with the **current** tree path — no leftover row under the old name.
+  - Refund bills keep their `退款：` / `退款·` prefix after the rename.
+  - Bills that only ever had a category name (no `categoryId`) also follow the rename when the
+    renamed category is their ancestor.
+  - The substring case renames **only the segment that changed**: `餐 - 三餐` under a parent rename
+    to `新餐` becomes `新餐 - 三餐`, never `新餐 - 三新餐`.
+- Why this is manual: no Room/Robolectric tests, so the `UPDATE bills SET categoryName …` statements
+  cannot be asserted in JVM tests. `CategoryRepositoryTest` covers the pure path resolution that the
+  resync feeds on, and `BillMutationServiceRelinkTest` covers the write-funnel alignment rules.
+  The SQL itself is pinned by `tools/verify-category-sync-sql.py`, which runs the exact statements
+  against an in-memory sqlite3 database — run it after touching any of those `CASE` expressions.
+
+### 26. Recurring Pattern Category Link vs Rename
+
+- Risk: `recurring_patterns` used to link to categories by name in two places — (a) the dedup
+  signature (`getBySignature` / `patternSignature`) and (b) the edit dialog, which resolved the
+  category id from the stored `categoryName`. Once the category is renamed that snapshot goes stale,
+  so (a) can register the same recurring expense twice, and (b) silently wipes a valid `categoryId`.
+- Steps:
+  - Let the app detect (or manually create) a recurring pattern for a merchant, filed under a
+    sub-category such as `餐饮 - 早餐`, and **confirm** it (status CONFIRMED).
+  - Rename that category — or its parent — in category management.
+  - Record a new bill matching the merchant, then let the recurring scan run again.
+  - Open the recurring list and count the entries for that merchant.
+  - Edit the pattern, change **only the amount**, save, then inspect its category.
+- Expected:
+  - The recurring list shows **one** entry for that merchant, labelled with the **current** tree path.
+  - A due-prompt for that pattern shows the current category name.
+  - Saving the edit keeps the original `categoryId` (the category must not become unset), and the
+    stored name refreshes to the current tree path.
+  - Transfer / repayment patterns never acquire a category.
+- Why this is manual: no Room/Robolectric tests, so the `UPDATE recurring_patterns …` statements and
+  `getBySignature` cannot be asserted in JVM tests. `RecurringPatternCategoryLinkTest` covers the
+  pure signature and the id-resolution rule the dialog feeds on.
+
+### 27. Duplicate Category Merge (其他 / 其它)
+
+- Risk: `category.json` ships 「其他」 and 「其它」 as two entries for the **same icon**, while
+  `default_category.json` only seeds 「其它」. A ledger that ends up with both has two categories
+  meaning exactly the same thing, each holding its own bills — they show as two rows in stats and
+  two lines in the category budget.
+- Steps:
+  - Create both 「其他」 and 「其它」 as top-level categories of the **same type** (expense), file a
+    few bills under each, and leave at least one bill that has only the name (no `categoryId`).
+  - Delete a bill filed under 「其它」 so it lands in the recycle bin; also create a recurring
+    pattern pointing at 「其它」.
+  - Relaunch the app so the one-time merge runs.
+  - Open category management, stats, and the category budget.
+- Expected:
+  - Only 「其他」 remains; 「其它」 is gone from category management.
+  - Every bill that was under 「其它」 now shows under 「其他」 — stats shows a single row.
+  - The recycled bill and the recurring pattern follow the same move; neither is left dangling.
+  - Nothing happens when only one of the two exists (the common case).
+  - If 「其它」 had sub-categories, it is **left alone** and a line is written to the log instead.
+- Why this is manual: no Room/Robolectric tests, so the `UPDATE … SET categoryId = …` statements and
+  the delete cannot be asserted in JVM tests. `DuplicateCategoryMergerTest` covers the decision rules
+  (which pair, which direction, when to give up).
 
 ## Release Sign-off
 

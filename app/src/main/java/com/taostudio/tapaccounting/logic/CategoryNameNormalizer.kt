@@ -4,7 +4,10 @@ object CategoryNameNormalizer {
 
     private const val REFUND_PREFIX = "\u9000\u6b3e\uff1a"
     private const val REFUND_PREFIX_ALT = "\u9000\u6b3e\u00b7"
-    private const val UNIFIED_CHILD_SEPARATOR = " - "
+
+    /** Separator [normalizeForStorage] joins path segments with, e.g. `吃的 - 三餐`. */
+    const val UNIFIED_CHILD_SEPARATOR = " - "
+
     private val childSeparators = Regex("\\s*(/:::/|/::/|>|/|\\\\|\\||::|:|·)\\s*")
 
     fun normalizeForStorage(raw: String): String {
@@ -35,5 +38,14 @@ object CategoryNameNormalizer {
         }
         return normalized
     }
+
+    /**
+     * Last segment of a stored display path: `吃的 - 三餐` -> `三餐`.
+     *
+     * Bills keep the display path while `categories.name` holds the leaf, so this is what lets a
+     * bill be matched back to its category. Returns the input unchanged when there is no separator.
+     */
+    fun leafName(storedName: String): String =
+        storedName.substringAfterLast(UNIFIED_CHILD_SEPARATOR, storedName).trim()
 }
 

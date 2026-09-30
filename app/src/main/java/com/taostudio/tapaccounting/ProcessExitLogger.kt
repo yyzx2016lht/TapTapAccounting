@@ -60,7 +60,7 @@ object ProcessExitLogger {
         }
         val gapText = if (gapSeconds >= 0) "${gapSeconds}s" else "n/a"
         appendHeartbeat(app, "START gap=${gapText} deaths=${deathCount(app)}")
-        Logger.d(app, TAG, "process start: heartbeat gap=$gapText deaths=${deathCount(app)}")
+        Logger.i(app, TAG, "process start: heartbeat gap=$gapText deaths=${deathCount(app)}")
 
         detectNativeCrash(app, prefs)
     }
@@ -116,7 +116,7 @@ object ProcessExitLogger {
         if (prefs.getString(PREFS_KEY_NATIVE_SIG, null) == key) return
         prefs.edit().putString(PREFS_KEY_NATIVE_SIG, key).apply()
         appendHeartbeat(app, "NATIVE-CRASH $signature")
-        Logger.d(app, TAG, "NATIVE CRASH detected (bypassed Java handler): $signature")
+        Logger.e(app, TAG, "NATIVE CRASH detected (bypassed Java handler): $signature")
     }
 
     /** 只比对崩溃时间戳与信号，避免同一次崩溃因内存地址变化被重复上报 */

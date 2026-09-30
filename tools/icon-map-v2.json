@@ -1,0 +1,2330 @@
+{
+ "cate_siwa.png": {
+  "type": "tabler",
+  "icon": "sock",
+  "char": "丝",
+  "name": "丝袜"
+ },
+ "cateic_zhongjie.png": {
+  "type": "msymbols",
+  "icon": "real-estate-agent",
+  "char": "中",
+  "name": "中介"
+ },
+ "cateic_pingpang.png": {
+  "type": "msymbols",
+  "icon": "sports-tennis",
+  "char": "乒",
+  "name": "乒乓球"
+ },
+ "cate_shufa.png": {
+  "type": "msymbols",
+  "icon": "ink-pen",
+  "char": "书",
+  "name": "书法"
+ },
+ "ic_cate2_shuji.png": {
+  "type": "msymbols",
+  "icon": "book",
+  "char": "书",
+  "name": "书籍"
+ },
+ "cate_shucai.png": {
+  "type": "msymbols",
+  "icon": "shopping-basket",
+  "char": "买",
+  "name": "买菜"
+ },
+ "cateic_ruye2.png": {
+  "type": "tabler",
+  "icon": "bottle",
+  "char": "乳",
+  "name": "乳液"
+ },
+ "ic_cate3_zhuanrang.png": {
+  "type": "msymbols",
+  "icon": "recycling",
+  "char": "二",
+  "name": "二手"
+ },
+ "cate_erhu.png": {
+  "type": "text",
+  "icon": null,
+  "char": "二",
+  "name": "二胡"
+ },
+ "cateic_jiaotong.png": {
+  "type": "msymbols",
+  "icon": "commute",
+  "char": "交",
+  "name": "交通"
+ },
+ "cate_chanjian.png": {
+  "type": "msymbols",
+  "icon": "pregnant-woman",
+  "char": "产",
+  "name": "产检"
+ },
+ "cateic_qinziyou.png": {
+  "type": "msymbols",
+  "icon": "family-restroom",
+  "char": "亲",
+  "name": "亲子游"
+ },
+ "cate_rengongfei.png": {
+  "type": "msymbols",
+  "icon": "engineering",
+  "char": "人",
+  "name": "人工费"
+ },
+ "cateic_renqing.png": {
+  "type": "msymbols",
+  "icon": "handshake",
+  "char": "人",
+  "name": "人情"
+ },
+ "cateic_daijia.png": {
+  "type": "tabler",
+  "icon": "steering-wheel",
+  "char": "代",
+  "name": "代驾"
+ },
+ "ic_cate2_apphuiyuan.png": {
+  "type": "msymbols",
+  "icon": "card-membership",
+  "char": "会",
+  "name": "会员"
+ },
+ "ic_cate2_zujin.png": {
+  "type": "msymbols",
+  "icon": "home",
+  "char": "住",
+  "name": "住房"
+ },
+ "ic_cate2_zhuyuan.png": {
+  "type": "msymbols",
+  "icon": "king-bed",
+  "char": "住",
+  "name": "住院护理"
+ },
+ "ic_cate2_baojian.png": {
+  "type": "msymbols",
+  "icon": "monitor-heart",
+  "char": "保",
+  "name": "保健"
+ },
+ "cate_baojianpin.png": {
+  "type": "tabler",
+  "icon": "pill",
+  "char": "保",
+  "name": "保健品"
+ },
+ "ic_cate2_baoxian.png": {
+  "type": "msymbols",
+  "icon": "verified-user",
+  "char": "保",
+  "name": "保险"
+ },
+ "cateic_zhaiquan.png": {
+  "type": "tabler",
+  "icon": "certificate",
+  "char": "债",
+  "name": "债券"
+ },
+ "cateic_jianshenqicai.png": {
+  "type": "msymbols",
+  "icon": "fitness-center",
+  "char": "健",
+  "name": "健身器材"
+ },
+ "cateic_jianshenfang.png": {
+  "type": "msymbols",
+  "icon": "fitness-center",
+  "char": "健",
+  "name": "健身房"
+ },
+ "cate_erke.png": {
+  "type": "msymbols",
+  "icon": "child-care",
+  "char": "儿",
+  "name": "儿童"
+ },
+ "cateic_chongdianbao.png": {
+  "type": "msymbols",
+  "icon": "battery-charging-full",
+  "char": "充",
+  "name": "充电宝"
+ },
+ "cateic_dangfei.png": {
+  "type": "msymbols",
+  "icon": "flag",
+  "char": "党",
+  "name": "党费"
+ },
+ "ic_cate2_gongjiao.png": {
+  "type": "msymbols",
+  "icon": "directions-bus",
+  "char": "公",
+  "name": "公交"
+ },
+ "ic_cate2_gongjijin.png": {
+  "type": "msymbols",
+  "icon": "savings",
+  "char": "公",
+  "name": "公积金"
+ },
+ "cateic_gongxiangdc.png": {
+  "type": "msymbols",
+  "icon": "pedal-bike",
+  "char": "共",
+  "name": "共享单车"
+ },
+ "cate_guanshui.png": {
+  "type": "msymbols",
+  "icon": "public",
+  "char": "关",
+  "name": "关税"
+ },
+ "cate_kw.png": {
+  "type": "msymbols",
+  "icon": "sell",
+  "char": "关",
+  "name": "关键词"
+ },
+ "cateic_other.png": {
+  "type": "msymbols",
+  "icon": "more-horiz",
+  "char": "其",
+  "name": "其他"
+ },
+ "ic_cate2_qichebaoxian.png": {
+  "type": "msymbols",
+  "icon": "car-repair",
+  "char": "养",
+  "name": "养车"
+ },
+ "cateic_yangyu.png": {
+  "type": "tabler",
+  "icon": "fish",
+  "char": "养",
+  "name": "养鱼"
+ },
+ "cateic_yangniao.png": {
+  "type": "tabler",
+  "icon": "feather",
+  "char": "养",
+  "name": "养鸟"
+ },
+ "cateic_gongzuo.png": {
+  "type": "msymbols",
+  "icon": "work",
+  "char": "兼",
+  "name": "兼职"
+ },
+ "cateic_neiyi.png": {
+  "type": "msymbols",
+  "icon": "checkroom",
+  "char": "内",
+  "name": "内衣"
+ },
+ "cateic_chonglang.png": {
+  "type": "msymbols",
+  "icon": "surfing",
+  "char": "冲",
+  "name": "冲浪"
+ },
+ "cate_liangxie.png": {
+  "type": "tabler",
+  "icon": "shoe",
+  "char": "凉",
+  "name": "凉鞋"
+ },
+ "cateic_lixi.png": {
+  "type": "msymbols",
+  "icon": "trending-up",
+  "char": "利",
+  "name": "利息"
+ },
+ "cate_microsoft.png": {
+  "type": "msymbols",
+  "icon": "apps",
+  "char": "办",
+  "name": "办公软件"
+ },
+ "cateic_cryptocurrency.png": {
+  "type": "msymbols",
+  "icon": "currency-bitcoin",
+  "char": "加",
+  "name": "加密货币"
+ },
+ "cateic_baobao.png": {
+  "type": "msymbols",
+  "icon": "business-center",
+  "char": "包",
+  "name": "包包"
+ },
+ "cateic_huazhuangshua.png": {
+  "type": "tabler",
+  "icon": "brush",
+  "char": "化",
+  "name": "化妆刷"
+ },
+ "cateic_huazhuangmian2.png": {
+  "type": "tabler",
+  "icon": "brush",
+  "char": "化",
+  "name": "化妆棉"
+ },
+ "cateic_huazhuangshui.png": {
+  "type": "tabler",
+  "icon": "bottle",
+  "char": "化",
+  "name": "化妆水"
+ },
+ "ic_cate2_yibao.png": {
+  "type": "msymbols",
+  "icon": "health-and-safety",
+  "char": "医",
+  "name": "医保"
+ },
+ "cateic_yiliao.png": {
+  "type": "msymbols",
+  "icon": "medical-services",
+  "char": "医",
+  "name": "医疗"
+ },
+ "cateic_yimei.png": {
+  "type": "msymbols",
+  "icon": "syringe",
+  "char": "医",
+  "name": "医美"
+ },
+ "ic_cate2_wucan.png": {
+  "type": "msymbols",
+  "icon": "lunch-dining",
+  "char": "午",
+  "name": "午餐"
+ },
+ "cate_wsj.png": {
+  "type": "msymbols",
+  "icon": "female",
+  "char": "卫",
+  "name": "卫生巾"
+ },
+ "cate_tampon.png": {
+  "type": "msymbols",
+  "icon": "female",
+  "char": "卫",
+  "name": "卫生棉条"
+ },
+ "cateic_xiezhuangyou2.png": {
+  "type": "tabler",
+  "icon": "bottle",
+  "char": "卸",
+  "name": "卸妆油"
+ },
+ "cateic_yasuiqian.png": {
+  "type": "msymbols",
+  "icon": "redeem",
+  "char": "压",
+  "name": "压岁钱"
+ },
+ "cate_fapiao.png": {
+  "type": "msymbols",
+  "icon": "receipt",
+  "char": "发",
+  "name": "发票"
+ },
+ "cateic_qunuan.png": {
+  "type": "msymbols",
+  "icon": "fireplace",
+  "char": "取",
+  "name": "取暖"
+ },
+ "cate_harmonica.png": {
+  "type": "text",
+  "icon": null,
+  "char": "口",
+  "name": "口琴"
+ },
+ "cateic_kouhong.png": {
+  "type": "tabler",
+  "icon": "color-swatch",
+  "char": "口",
+  "name": "口红"
+ },
+ "ic_cate_kouzhao.png": {
+  "type": "msymbols",
+  "icon": "medical-mask",
+  "char": "口",
+  "name": "口罩"
+ },
+ "cate_guzheng.png": {
+  "type": "text",
+  "icon": null,
+  "char": "古",
+  "name": "古筝"
+ },
+ "cate_taiqiu.png": {
+  "type": "tabler",
+  "icon": "ball-bowling",
+  "char": "台",
+  "name": "台球"
+ },
+ "cate_guitar.png": {
+  "type": "tabler",
+  "icon": "guitar-pick",
+  "char": "吉",
+  "name": "吉他"
+ },
+ "cate_ruixing.png": {
+  "type": "msymbols",
+  "icon": "local-cafe",
+  "char": "咖",
+  "name": "咖啡"
+ },
+ "cateic_coffee.png": {
+  "type": "msymbols",
+  "icon": "local-cafe",
+  "char": "咖",
+  "name": "咖啡"
+ },
+ "cateic_chuncai.png": {
+  "type": "tabler",
+  "icon": "color-swatch",
+  "char": "唇",
+  "name": "唇彩"
+ },
+ "cateic_chungao.png": {
+  "type": "tabler",
+  "icon": "color-swatch",
+  "char": "唇",
+  "name": "唇膏"
+ },
+ "cateic_tuanfei.png": {
+  "type": "msymbols",
+  "icon": "flag",
+  "char": "团",
+  "name": "团费"
+ },
+ "ic_cate2_ditie2.png": {
+  "type": "msymbols",
+  "icon": "subway",
+  "char": "地",
+  "name": "地铁"
+ },
+ "cateic_peixun.png": {
+  "type": "msymbols",
+  "icon": "school",
+  "char": "培",
+  "name": "培训"
+ },
+ "cateic_jijin.png": {
+  "type": "msymbols",
+  "icon": "show-chart",
+  "char": "基",
+  "name": "基金"
+ },
+ "cate_fuyin.png": {
+  "type": "msymbols",
+  "icon": "print",
+  "char": "复",
+  "name": "复印"
+ },
+ "ic_cate2_waimai.png": {
+  "type": "msymbols",
+  "icon": "takeout-dining",
+  "char": "外",
+  "name": "外卖"
+ },
+ "cateic_eleme.png": {
+  "type": "msymbols",
+  "icon": "takeout-dining",
+  "char": "外",
+  "name": "外卖平台"
+ },
+ "cateic_meituan.png": {
+  "type": "msymbols",
+  "icon": "takeout-dining",
+  "char": "外",
+  "name": "外卖平台"
+ },
+ "cateic_waitao.png": {
+  "type": "tabler",
+  "icon": "jacket",
+  "char": "外",
+  "name": "外套"
+ },
+ "cateic_waikuai.png": {
+  "type": "msymbols",
+  "icon": "currency-exchange",
+  "char": "外",
+  "name": "外币"
+ },
+ "cate_exchange.png": {
+  "type": "msymbols",
+  "icon": "currency-exchange",
+  "char": "外",
+  "name": "外汇"
+ },
+ "cateic_waihui.png": {
+  "type": "msymbols",
+  "icon": "currency-exchange",
+  "char": "外",
+  "name": "外汇"
+ },
+ "ic_cate2_yexiao.png": {
+  "type": "msymbols",
+  "icon": "ramen-dining",
+  "char": "夜",
+  "name": "夜宵"
+ },
+ "cate_cello.png": {
+  "type": "text",
+  "icon": null,
+  "char": "大",
+  "name": "大提琴"
+ },
+ "ic_cate2_jiangxuejin.png": {
+  "type": "msymbols",
+  "icon": "workspace-premium",
+  "char": "奖",
+  "name": "奖学金"
+ },
+ "ic_cate2_jiangjin.png": {
+  "type": "msymbols",
+  "icon": "trophy",
+  "char": "奖",
+  "name": "奖金"
+ },
+ "cate_miumiu.png": {
+  "type": "msymbols",
+  "icon": "checkroom",
+  "char": "女",
+  "name": "女装"
+ },
+ "cate_ochirly.png": {
+  "type": "msymbols",
+  "icon": "checkroom",
+  "char": "女",
+  "name": "女装"
+ },
+ "cate_only.png": {
+  "type": "msymbols",
+  "icon": "checkroom",
+  "char": "女",
+  "name": "女装"
+ },
+ "cateic_naiping.png": {
+  "type": "tabler",
+  "icon": "baby-bottle",
+  "char": "奶",
+  "name": "奶瓶"
+ },
+ "cateic_naifen.png": {
+  "type": "tabler",
+  "icon": "baby-bottle",
+  "char": "奶",
+  "name": "奶粉"
+ },
+ "cateic_naicha.png": {
+  "type": "msymbols",
+  "icon": "local-drink",
+  "char": "奶",
+  "name": "奶茶"
+ },
+ "cateic_yule.png": {
+  "type": "msymbols",
+  "icon": "nightlife",
+  "char": "娱",
+  "name": "娱乐"
+ },
+ "cateic_xuexi.png": {
+  "type": "msymbols",
+  "icon": "menu-book",
+  "char": "学",
+  "name": "学习"
+ },
+ "cateic_haizi.png": {
+  "type": "msymbols",
+  "icon": "child-care",
+  "char": "孩",
+  "name": "孩子"
+ },
+ "cateic_pet.png": {
+  "type": "msymbols",
+  "icon": "pets",
+  "char": "宠",
+  "name": "宠物"
+ },
+ "cate_pet_jiyang.png": {
+  "type": "msymbols",
+  "icon": "pets",
+  "char": "宠",
+  "name": "宠物寄养"
+ },
+ "cate_petbed.png": {
+  "type": "msymbols",
+  "icon": "pets",
+  "char": "宠",
+  "name": "宠物床"
+ },
+ "cate_petvaccine.png": {
+  "type": "tabler",
+  "icon": "vaccine",
+  "char": "宠",
+  "name": "宠物疫苗"
+ },
+ "cate_pet_guantou.png": {
+  "type": "tabler",
+  "icon": "bone",
+  "char": "宠",
+  "name": "宠物罐头"
+ },
+ "cat_petpill.png": {
+  "type": "msymbols",
+  "icon": "pets",
+  "char": "宠",
+  "name": "宠物药品"
+ },
+ "cate_petclinic.png": {
+  "type": "tabler",
+  "icon": "stethoscope",
+  "char": "宠",
+  "name": "宠物诊所"
+ },
+ "cate_petwater.png": {
+  "type": "msymbols",
+  "icon": "pets",
+  "char": "宠",
+  "name": "宠物饮水"
+ },
+ "cateic_jiaren.png": {
+  "type": "msymbols",
+  "icon": "family-restroom",
+  "char": "家",
+  "name": "家人"
+ },
+ "cateic3_jiaju.png": {
+  "type": "msymbols",
+  "icon": "chair",
+  "char": "家",
+  "name": "家具"
+ },
+ "cate_ljd.png": {
+  "type": "msymbols",
+  "icon": "electrical-services",
+  "char": "家",
+  "name": "家电"
+ },
+ "cate_shejian.png": {
+  "type": "tabler",
+  "icon": "archery-arrow",
+  "char": "射",
+  "name": "射箭"
+ },
+ "cate_trumpet.png": {
+  "type": "text",
+  "icon": null,
+  "char": "小",
+  "name": "小号"
+ },
+ "cate_violin.png": {
+  "type": "text",
+  "icon": null,
+  "char": "小",
+  "name": "小提琴"
+ },
+ "ic_cate2_jiuzhen.png": {
+  "type": "msymbols",
+  "icon": "local-hospital",
+  "char": "就",
+  "name": "就诊"
+ },
+ "cate_jiuzhen.png": {
+  "type": "msymbols",
+  "icon": "local-hospital",
+  "char": "就",
+  "name": "就诊"
+ },
+ "cateic_jiuzhenka.png": {
+  "type": "msymbols",
+  "icon": "badge",
+  "char": "就",
+  "name": "就诊卡"
+ },
+ "ic_cate2_shuidianmei.png": {
+  "type": "msymbols",
+  "icon": "weekend",
+  "char": "居",
+  "name": "居家"
+ },
+ "cateic_zhanlan.png": {
+  "type": "msymbols",
+  "icon": "museum",
+  "char": "展",
+  "name": "展览"
+ },
+ "cate_tool.png": {
+  "type": "msymbols",
+  "icon": "build",
+  "char": "工",
+  "name": "工具"
+ },
+ "cateic_gongzi.png": {
+  "type": "msymbols",
+  "icon": "payments",
+  "char": "工",
+  "name": "工资"
+ },
+ "ic_cate2_gongzi.png": {
+  "type": "msymbols",
+  "icon": "payments",
+  "char": "工",
+  "name": "工资"
+ },
+ "cate_chocolate.png": {
+  "type": "tabler",
+  "icon": "candy",
+  "char": "巧",
+  "name": "巧克力"
+ },
+ "cateic_maozi.png": {
+  "type": "tabler",
+  "icon": "cap-rounded",
+  "char": "帽",
+  "name": "帽子"
+ },
+ "cate_pingdixie.png": {
+  "type": "tabler",
+  "icon": "shoe",
+  "char": "平",
+  "name": "平底鞋"
+ },
+ "cate_nianfei.png": {
+  "type": "msymbols",
+  "icon": "event-repeat",
+  "char": "年",
+  "name": "年费"
+ },
+ "ic_cate3_yingshou.png": {
+  "type": "msymbols",
+  "icon": "download",
+  "char": "应",
+  "name": "应收"
+ },
+ "cateic_caipiao.png": {
+  "type": "msymbols",
+  "icon": "local-activity",
+  "char": "彩",
+  "name": "彩票"
+ },
+ "cateic_disney.png": {
+  "type": "msymbols",
+  "icon": "movie",
+  "char": "影",
+  "name": "影视"
+ },
+ "cateic_hbo.png": {
+  "type": "msymbols",
+  "icon": "video-library",
+  "char": "影",
+  "name": "影视平台"
+ },
+ "cate_lvshifei1.png": {
+  "type": "msymbols",
+  "icon": "gavel",
+  "char": "律",
+  "name": "律师费"
+ },
+ "cate_lvshifei2.png": {
+  "type": "msymbols",
+  "icon": "gavel",
+  "char": "律",
+  "name": "律师费"
+ },
+ "cateic_tubu.png": {
+  "type": "msymbols",
+  "icon": "hiking",
+  "char": "徒",
+  "name": "徒步"
+ },
+ "ic_cate2_kuaidi.png": {
+  "type": "msymbols",
+  "icon": "local-shipping",
+  "char": "快",
+  "name": "快递"
+ },
+ "ic_cate2_lianai.png": {
+  "type": "msymbols",
+  "icon": "favorite",
+  "char": "恋",
+  "name": "恋爱"
+ },
+ "cate_qqny.png": {
+  "type": "msymbols",
+  "icon": "checkroom",
+  "char": "情",
+  "name": "情趣内衣"
+ },
+ "cate_outdoor_jacket.png": {
+  "type": "tabler",
+  "icon": "jacket",
+  "char": "户",
+  "name": "户外夹克"
+ },
+ "cate_arcteryx.png": {
+  "type": "msymbols",
+  "icon": "backpack",
+  "char": "户",
+  "name": "户外装备"
+ },
+ "cate_northface.png": {
+  "type": "msymbols",
+  "icon": "backpack",
+  "char": "户",
+  "name": "户外装备"
+ },
+ "ic_cate2_fangzu.png": {
+  "type": "msymbols",
+  "icon": "real-estate-agent",
+  "char": "房",
+  "name": "房租"
+ },
+ "ic_cate2_fangdai.png": {
+  "type": "msymbols",
+  "icon": "house",
+  "char": "房",
+  "name": "房贷"
+ },
+ "cateic_shouban.png": {
+  "type": "tabler",
+  "icon": "briefcase",
+  "char": "手",
+  "name": "手包"
+ },
+ "cate_phone.png": {
+  "type": "msymbols",
+  "icon": "smartphone",
+  "char": "手",
+  "name": "手机"
+ },
+ "ic_cate2_shouijpeijian.png": {
+  "type": "msymbols",
+  "icon": "cable",
+  "char": "手",
+  "name": "手机配件"
+ },
+ "ic_cate2_shouxufei.png": {
+  "type": "msymbols",
+  "icon": "receipt-long",
+  "char": "手",
+  "name": "手续费"
+ },
+ "cate_awatch.png": {
+  "type": "msymbols",
+  "icon": "watch",
+  "char": "手",
+  "name": "手表"
+ },
+ "cate_watch.png": {
+  "type": "msymbols",
+  "icon": "watch",
+  "char": "手",
+  "name": "手表"
+ },
+ "cate_accordion.png": {
+  "type": "text",
+  "icon": null,
+  "char": "手",
+  "name": "手风琴"
+ },
+ "cateic_puke.png": {
+  "type": "tabler",
+  "icon": "cards",
+  "char": "扑",
+  "name": "扑克"
+ },
+ "ic_cate2_dashang.png": {
+  "type": "msymbols",
+  "icon": "thumb-up",
+  "char": "打",
+  "name": "打赏"
+ },
+ "ic_cate2_dache.png": {
+  "type": "msymbols",
+  "icon": "local-taxi",
+  "char": "打",
+  "name": "打车"
+ },
+ "cateic_hushoushuang2.png": {
+  "type": "msymbols",
+  "icon": "sanitizer",
+  "char": "护",
+  "name": "护手霜"
+ },
+ "cateic_hufasu.png": {
+  "type": "msymbols",
+  "icon": "sanitizer",
+  "char": "护",
+  "name": "护肤素"
+ },
+ "cateic_baomingfei.png": {
+  "type": "msymbols",
+  "icon": "how-to-reg",
+  "char": "报",
+  "name": "报名费"
+ },
+ "cate_yajin.png": {
+  "type": "msymbols",
+  "icon": "lock",
+  "char": "押",
+  "name": "押金"
+ },
+ "cateic3_pinli.png": {
+  "type": "msymbols",
+  "icon": "airport-shuttle",
+  "char": "拼",
+  "name": "拼车"
+ },
+ "ic_cate2_guahao.png": {
+  "type": "msymbols",
+  "icon": "local-hospital",
+  "char": "挂",
+  "name": "挂号"
+ },
+ "cateic_zhijiayou.png": {
+  "type": "msymbols",
+  "icon": "front-hand",
+  "char": "指",
+  "name": "指甲油"
+ },
+ "ic_cate2_juanzeng.png": {
+  "type": "msymbols",
+  "icon": "volunteer-activism",
+  "char": "捐",
+  "name": "捐赠"
+ },
+ "ic_cate2_ticheng.png": {
+  "type": "msymbols",
+  "icon": "percent",
+  "char": "提",
+  "name": "提成"
+ },
+ "cateic_boji.png": {
+  "type": "msymbols",
+  "icon": "sports-mma",
+  "char": "搏",
+  "name": "搏击"
+ },
+ "cateic_motuo.png": {
+  "type": "msymbols",
+  "icon": "two-wheeler",
+  "char": "摩",
+  "name": "摩托车"
+ },
+ "cateic_panyan.png": {
+  "type": "tabler",
+  "icon": "mountain",
+  "char": "攀",
+  "name": "攀岩"
+ },
+ "cateic_sanda.png": {
+  "type": "tabler",
+  "icon": "karate",
+  "char": "散",
+  "name": "散打"
+ },
+ "cateic_shuma.png": {
+  "type": "msymbols",
+  "icon": "devices",
+  "char": "数",
+  "name": "数码"
+ },
+ "cateic_wenju.png": {
+  "type": "msymbols",
+  "icon": "edit",
+  "char": "文",
+  "name": "文具"
+ },
+ "cate_wenxiong.png": {
+  "type": "msymbols",
+  "icon": "checkroom",
+  "char": "文",
+  "name": "文胸"
+ },
+ "cateic_lvxing.png": {
+  "type": "msymbols",
+  "icon": "luggage",
+  "char": "旅",
+  "name": "旅行"
+ },
+ "cateic_richang2.png": {
+  "type": "msymbols",
+  "icon": "more-horiz",
+  "char": "日",
+  "name": "日常"
+ },
+ "cateic_riyongpin.png": {
+  "type": "msymbols",
+  "icon": "shopping-bag",
+  "char": "日",
+  "name": "日用"
+ },
+ "cateic_zaojiao.png": {
+  "type": "msymbols",
+  "icon": "child-friendly",
+  "char": "早",
+  "name": "早教"
+ },
+ "ic_cate2_zaocan.png": {
+  "type": "msymbols",
+  "icon": "breakfast-dining",
+  "char": "早",
+  "name": "早餐"
+ },
+ "cate_yuesao.png": {
+  "type": "tabler",
+  "icon": "baby-carriage",
+  "char": "月",
+  "name": "月嫂"
+ },
+ "cateic_pengyou.png": {
+  "type": "msymbols",
+  "icon": "group",
+  "char": "朋",
+  "name": "朋友"
+ },
+ "cate_fuwufei.png": {
+  "type": "msymbols",
+  "icon": "room-service",
+  "char": "服",
+  "name": "服务费"
+ },
+ "cate_hm.png": {
+  "type": "msymbols",
+  "icon": "checkroom",
+  "char": "服",
+  "name": "服装"
+ },
+ "cate_primark.png": {
+  "type": "msymbols",
+  "icon": "checkroom",
+  "char": "服",
+  "name": "服装"
+ },
+ "cate_uniqlo.png": {
+  "type": "msymbols",
+  "icon": "checkroom",
+  "char": "服",
+  "name": "服装"
+ },
+ "cate_vm.png": {
+  "type": "msymbols",
+  "icon": "checkroom",
+  "char": "服",
+  "name": "服装"
+ },
+ "cate_zara.png": {
+  "type": "msymbols",
+  "icon": "checkroom",
+  "char": "服",
+  "name": "服装"
+ },
+ "cateic_yifu.png": {
+  "type": "msymbols",
+  "icon": "checkroom",
+  "char": "服",
+  "name": "服装"
+ },
+ "cateic_fushi.png": {
+  "type": "msymbols",
+  "icon": "checkroom",
+  "char": "服",
+  "name": "服饰"
+ },
+ "cateic_chaimiyouyan.png": {
+  "type": "msymbols",
+  "icon": "kitchen",
+  "char": "柴",
+  "name": "柴米油盐"
+ },
+ "ic_cate_hesuan.png": {
+  "type": "msymbols",
+  "icon": "coronavirus",
+  "char": "核",
+  "name": "核酸检测"
+ },
+ "cateic_sangna.png": {
+  "type": "msymbols",
+  "icon": "hot-tub",
+  "char": "桑",
+  "name": "桑拿"
+ },
+ "cateic_shuzhuangtai.png": {
+  "type": "tabler",
+  "icon": "glass",
+  "char": "梳",
+  "name": "梳妆台"
+ },
+ "cateic_bangqiu.png": {
+  "type": "msymbols",
+  "icon": "sports-baseball",
+  "char": "棒",
+  "name": "棒球"
+ },
+ "cateic_bitcoin.png": {
+  "type": "msymbols",
+  "icon": "currency-bitcoin",
+  "char": "比",
+  "name": "比特币"
+ },
+ "cate_water.png": {
+  "type": "msymbols",
+  "icon": "water-drop",
+  "char": "水",
+  "name": "水"
+ },
+ "cateic_shuiguangzhen.png": {
+  "type": "msymbols",
+  "icon": "syringe",
+  "char": "水",
+  "name": "水光针"
+ },
+ "cate_shuiguo.png": {
+  "type": "msymbols",
+  "icon": "nutrition",
+  "char": "水",
+  "name": "水果"
+ },
+ "cateic_shuifei.png.png": {
+  "type": "msymbols",
+  "icon": "electric-bolt",
+  "char": "水",
+  "name": "水电"
+ },
+ "cate_xbk.png": {
+  "type": "msymbols",
+  "icon": "lunch-dining",
+  "char": "汉",
+  "name": "汉堡"
+ },
+ "cate_hanfu.png": {
+  "type": "msymbols",
+  "icon": "checkroom",
+  "char": "汉",
+  "name": "汉服"
+ },
+ "cate_tangyuan.png": {
+  "type": "msymbols",
+  "icon": "rice-bowl",
+  "char": "汤",
+  "name": "汤圆"
+ },
+ "cateic_qiche.png": {
+  "type": "msymbols",
+  "icon": "directions-car",
+  "char": "汽",
+  "name": "汽车"
+ },
+ "ic_cate2_qichetingchefei.png": {
+  "type": "msymbols",
+  "icon": "local-parking",
+  "char": "汽",
+  "name": "汽车停车费"
+ },
+ "ic_cate2_qichechongdian.png": {
+  "type": "msymbols",
+  "icon": "ev-station",
+  "char": "汽",
+  "name": "汽车充电"
+ },
+ "ic_cate2_qichejiayou.png": {
+  "type": "msymbols",
+  "icon": "local-gas-station",
+  "char": "汽",
+  "name": "汽车加油"
+ },
+ "ic_cate2_qichefakuan.png": {
+  "type": "msymbols",
+  "icon": "receipt-long",
+  "char": "汽",
+  "name": "汽车罚款"
+ },
+ "cate_swimsuit1.png": {
+  "type": "msymbols",
+  "icon": "pool",
+  "char": "泳",
+  "name": "泳衣"
+ },
+ "cate_swimsuit3.png": {
+  "type": "msymbols",
+  "icon": "pool",
+  "char": "泳",
+  "name": "泳衣"
+ },
+ "cateic_xifalu.png": {
+  "type": "tabler",
+  "icon": "bottle",
+  "char": "洗",
+  "name": "洗发露"
+ },
+ "cateic_xizao.png": {
+  "type": "msymbols",
+  "icon": "shower",
+  "char": "洗",
+  "name": "洗浴用品"
+ },
+ "cateic_xilianjin.png": {
+  "type": "tabler",
+  "icon": "wash",
+  "char": "洗",
+  "name": "洗脸巾"
+ },
+ "cateic_xiyiye.png": {
+  "type": "msymbols",
+  "icon": "local-laundry-service",
+  "char": "洗",
+  "name": "洗衣液"
+ },
+ "cateic_ximiannai.png": {
+  "type": "tabler",
+  "icon": "wash",
+  "char": "洗",
+  "name": "洗面奶"
+ },
+ "cateic_hulu.png": {
+  "type": "msymbols",
+  "icon": "video-library",
+  "char": "流",
+  "name": "流媒体平台"
+ },
+ "cateic_netflix.png": {
+  "type": "msymbols",
+  "icon": "video-library",
+  "char": "流",
+  "name": "流媒体平台"
+ },
+ "cate_seafood.png": {
+  "type": "msymbols",
+  "icon": "set-meal",
+  "char": "海",
+  "name": "海鲜"
+ },
+ "ic_cate3_qingjie.png": {
+  "type": "msymbols",
+  "icon": "cleaning-services",
+  "char": "清",
+  "name": "清洁"
+ },
+ "cate_xjj.png": {
+  "type": "msymbols",
+  "icon": "soap",
+  "char": "清",
+  "name": "清洁剂"
+ },
+ "cate_switch.png": {
+  "type": "msymbols",
+  "icon": "sports-esports",
+  "char": "游",
+  "name": "游戏"
+ },
+ "cate_xbox.png": {
+  "type": "msymbols",
+  "icon": "sports-esports",
+  "char": "游",
+  "name": "游戏"
+ },
+ "cateic_steam.png": {
+  "type": "msymbols",
+  "icon": "sports-esports",
+  "char": "游",
+  "name": "游戏"
+ },
+ "ic_cate2_youxi.png": {
+  "type": "msymbols",
+  "icon": "sports-esports",
+  "char": "游",
+  "name": "游戏"
+ },
+ "cateic_playstation.png": {
+  "type": "msymbols",
+  "icon": "gamepad",
+  "char": "游",
+  "name": "游戏主机"
+ },
+ "cate_mihoyo.png": {
+  "type": "msymbols",
+  "icon": "sports-esports",
+  "char": "游",
+  "name": "游戏公司"
+ },
+ "cateic_twitch.png": {
+  "type": "msymbols",
+  "icon": "sports-esports",
+  "char": "游",
+  "name": "游戏直播"
+ },
+ "cateic_youyong.png": {
+  "type": "msymbols",
+  "icon": "pool",
+  "char": "游",
+  "name": "游泳"
+ },
+ "cateic_huabing.png": {
+  "type": "msymbols",
+  "icon": "ice-skating",
+  "char": "滑",
+  "name": "滑冰"
+ },
+ "cateic_huaban.png": {
+  "type": "msymbols",
+  "icon": "skateboarding",
+  "char": "滑",
+  "name": "滑板"
+ },
+ "cateic_huaxue.png": {
+  "type": "msymbols",
+  "icon": "downhill-skiing",
+  "char": "滑",
+  "name": "滑雪"
+ },
+ "cateic_piaoliu.png": {
+  "type": "msymbols",
+  "icon": "kayaking",
+  "char": "漂",
+  "name": "漂流"
+ },
+ "cateic_yanchu.png": {
+  "type": "msymbols",
+  "icon": "theater-comedy",
+  "char": "演",
+  "name": "演出"
+ },
+ "cateic_qianshui.png": {
+  "type": "msymbols",
+  "icon": "scuba-diving",
+  "char": "潜",
+  "name": "潜水"
+ },
+ "cateic_huoche.png": {
+  "type": "msymbols",
+  "icon": "train",
+  "char": "火",
+  "name": "火车"
+ },
+ "cateic_huoguo.png": {
+  "type": "msymbols",
+  "icon": "soup-kitchen",
+  "char": "火",
+  "name": "火锅"
+ },
+ "cate_yanjiu.png": {
+  "type": "msymbols",
+  "icon": "smoking-rooms",
+  "char": "烟",
+  "name": "烟具"
+ },
+ "cate_yan.png": {
+  "type": "msymbols",
+  "icon": "smoking-rooms",
+  "char": "烟",
+  "name": "烟草"
+ },
+ "cateic_shaokao.png": {
+  "type": "msymbols",
+  "icon": "outdoor-grill",
+  "char": "烧",
+  "name": "烧烤"
+ },
+ "cateic_ranqi.png": {
+  "type": "msymbols",
+  "icon": "gas-meter",
+  "char": "燃",
+  "name": "燃气"
+ },
+ "ic_cate2_fumu.png": {
+  "type": "msymbols",
+  "icon": "elderly",
+  "char": "父",
+  "name": "父母"
+ },
+ "cate_yagao.png": {
+  "type": "tabler",
+  "icon": "dental",
+  "char": "牙",
+  "name": "牙膏"
+ },
+ "cateic_niunai.png": {
+  "type": "msymbols",
+  "icon": "local-drink",
+  "char": "牛",
+  "name": "牛奶"
+ },
+ "cate_wyf.png": {
+  "type": "msymbols",
+  "icon": "apartment",
+  "char": "物",
+  "name": "物业费"
+ },
+ "cate_dogtoys.png": {
+  "type": "tabler",
+  "icon": "bone",
+  "char": "狗",
+  "name": "狗玩具"
+ },
+ "cate_dogfood.png": {
+  "type": "tabler",
+  "icon": "bone",
+  "char": "狗",
+  "name": "狗粮"
+ },
+ "cate_cattoys.png": {
+  "type": "tabler",
+  "icon": "fish",
+  "char": "猫",
+  "name": "猫玩具"
+ },
+ "cate_catlitter.png": {
+  "type": "tabler",
+  "icon": "cat",
+  "char": "猫",
+  "name": "猫砂"
+ },
+ "cate_catfood.png": {
+  "type": "tabler",
+  "icon": "fish",
+  "char": "猫",
+  "name": "猫粮"
+ },
+ "cateic_wanju.png": {
+  "type": "msymbols",
+  "icon": "toys",
+  "char": "玩",
+  "name": "玩具"
+ },
+ "asset_icon_cash.png": {
+  "type": "tabler",
+  "icon": "cash",
+  "char": "现",
+  "name": "现金"
+ },
+ "cate_qiuyi.png": {
+  "type": "tabler",
+  "icon": "shirt",
+  "char": "球",
+  "name": "球衣"
+ },
+ "cateic_qiuxie.png": {
+  "type": "tabler",
+  "icon": "shoe",
+  "char": "球",
+  "name": "球鞋"
+ },
+ "ic_cate2_lifa.png": {
+  "type": "msymbols",
+  "icon": "content-cut",
+  "char": "理",
+  "name": "理发"
+ },
+ "cate_biwa.png": {
+  "type": "text",
+  "icon": null,
+  "char": "琵",
+  "name": "琵琶"
+ },
+ "cateic_yujia2.png": {
+  "type": "msymbols",
+  "icon": "self-improvement",
+  "char": "瑜",
+  "name": "瑜伽"
+ },
+ "cateic_tianpin.png": {
+  "type": "msymbols",
+  "icon": "cake",
+  "char": "甜",
+  "name": "甜点"
+ },
+ "cateic_shenghuofei.png": {
+  "type": "msymbols",
+  "icon": "currency-yuan",
+  "char": "生",
+  "name": "生活费"
+ },
+ "cateic_jingdong.png": {
+  "type": "msymbols",
+  "icon": "storefront",
+  "char": "电",
+  "name": "电商平台"
+ },
+ "ic_cate2_dianqi.png": {
+  "type": "tabler",
+  "icon": "plug",
+  "char": "电",
+  "name": "电器"
+ },
+ "ic_cate2_dianying.png": {
+  "type": "msymbols",
+  "icon": "movie",
+  "char": "电",
+  "name": "电影"
+ },
+ "cate_dianpc.png": {
+  "type": "msymbols",
+  "icon": "computer",
+  "char": "电",
+  "name": "电脑"
+ },
+ "cateic_diannao.png": {
+  "type": "msymbols",
+  "icon": "computer",
+  "char": "电",
+  "name": "电脑"
+ },
+ "cateic_dianhua.png": {
+  "type": "msymbols",
+  "icon": "call",
+  "char": "电",
+  "name": "电话"
+ },
+ "cateic_dianfei.png": {
+  "type": "msymbols",
+  "icon": "electric-bolt",
+  "char": "电",
+  "name": "电费"
+ },
+ "cate_vaccine.png": {
+  "type": "msymbols",
+  "icon": "vaccines",
+  "char": "疫",
+  "name": "疫苗"
+ },
+ "cateic_yimiao.png": {
+  "type": "msymbols",
+  "icon": "vaccines",
+  "char": "疫",
+  "name": "疫苗"
+ },
+ "cateic_manghe.png": {
+  "type": "msymbols",
+  "icon": "inventory-2",
+  "char": "盲",
+  "name": "盲盒"
+ },
+ "cate_douyu.png": {
+  "type": "msymbols",
+  "icon": "podcasts",
+  "char": "直",
+  "name": "直播平台"
+ },
+ "cateic_huya.png": {
+  "type": "msymbols",
+  "icon": "podcasts",
+  "char": "直",
+  "name": "直播平台"
+ },
+ "ic_cate2_xiangji.png": {
+  "type": "msymbols",
+  "icon": "photo-camera",
+  "char": "相",
+  "name": "相机"
+ },
+ "cate_meibi.png": {
+  "type": "tabler",
+  "icon": "pencil",
+  "char": "眉",
+  "name": "眉笔"
+ },
+ "cateic_yanying2.png": {
+  "type": "msymbols",
+  "icon": "palette",
+  "char": "眼",
+  "name": "眼影"
+ },
+ "cate_yanxianbi.png": {
+  "type": "tabler",
+  "icon": "pencil",
+  "char": "眼",
+  "name": "眼线笔"
+ },
+ "cate_yanjing.png": {
+  "type": "msymbols",
+  "icon": "eyeglasses",
+  "char": "眼",
+  "name": "眼镜"
+ },
+ "cateic_toushi.png": {
+  "type": "msymbols",
+  "icon": "eyeglasses",
+  "char": "眼",
+  "name": "眼镜"
+ },
+ "cate_yanshuang.png": {
+  "type": "tabler",
+  "icon": "bottle",
+  "char": "眼",
+  "name": "眼霜"
+ },
+ "cateic_jiemaogao.png": {
+  "type": "msymbols",
+  "icon": "visibility",
+  "char": "睫",
+  "name": "睫毛膏"
+ },
+ "cateic_kuangquanshui.png": {
+  "type": "tabler",
+  "icon": "bottle",
+  "char": "矿",
+  "name": "矿泉水"
+ },
+ "cate_cixuanfu.png": {
+  "type": "msymbols",
+  "icon": "tram",
+  "char": "磁",
+  "name": "磁悬浮"
+ },
+ "cateic_fahongbao.png": {
+  "type": "msymbols",
+  "icon": "featured-seasonal-and-gifts",
+  "char": "礼",
+  "name": "礼金"
+ },
+ "cate_qifu.png": {
+  "type": "msymbols",
+  "icon": "temple-buddhist",
+  "char": "祈",
+  "name": "祈福"
+ },
+ "cate_qiuku.png": {
+  "type": "msymbols",
+  "icon": "checkroom",
+  "char": "秋",
+  "name": "秋裤"
+ },
+ "cateic_jicun.png": {
+  "type": "msymbols",
+  "icon": "savings",
+  "char": "积",
+  "name": "积存"
+ },
+ "cateic_kongshoudao.png": {
+  "type": "tabler",
+  "icon": "karate",
+  "char": "空",
+  "name": "空手道"
+ },
+ "cate_harp.png": {
+  "type": "text",
+  "icon": null,
+  "char": "竖",
+  "name": "竖琴"
+ },
+ "cate_qianzheng.png": {
+  "type": "msymbols",
+  "icon": "badge",
+  "char": "签",
+  "name": "签证"
+ },
+ "cate_yinxiang.png": {
+  "type": "msymbols",
+  "icon": "luggage",
+  "char": "箱",
+  "name": "箱包"
+ },
+ "cateic_lanqiu.png": {
+  "type": "msymbols",
+  "icon": "sports-basketball",
+  "char": "篮",
+  "name": "篮球"
+ },
+ "cate_fencizhen.png": {
+  "type": "tabler",
+  "icon": "needle",
+  "char": "粉",
+  "name": "粉刺针"
+ },
+ "cateic_lianfen.png": {
+  "type": "msymbols",
+  "icon": "sanitizer",
+  "char": "粉",
+  "name": "粉底"
+ },
+ "cateic_fendi.png": {
+  "type": "msymbols",
+  "icon": "sanitizer",
+  "char": "粉",
+  "name": "粉底液"
+ },
+ "cateic_jinghua2.png": {
+  "type": "tabler",
+  "icon": "bottle",
+  "char": "精",
+  "name": "精华"
+ },
+ "cate_candy.png": {
+  "type": "tabler",
+  "icon": "candy",
+  "char": "糖",
+  "name": "糖果"
+ },
+ "cateic_jinianbi.png": {
+  "type": "tabler",
+  "icon": "coin",
+  "char": "纪",
+  "name": "纪念币"
+ },
+ "cateic_jinianchao.png": {
+  "type": "tabler",
+  "icon": "coin",
+  "char": "纪",
+  "name": "纪念钞"
+ },
+ "cateic_zhiniaoku.png": {
+  "type": "msymbols",
+  "icon": "baby-changing-station",
+  "char": "纸",
+  "name": "纸尿裤"
+ },
+ "cateic_zhijin.png": {
+  "type": "tabler",
+  "icon": "toilet-paper",
+  "char": "纸",
+  "name": "纸巾"
+ },
+ "cateic_lvzhi.png": {
+  "type": "msymbols",
+  "icon": "eco",
+  "char": "绿",
+  "name": "绿植"
+ },
+ "cateic_wangqiu.png": {
+  "type": "msymbols",
+  "icon": "sports-tennis",
+  "char": "网",
+  "name": "网球"
+ },
+ "cateic_wangluo.png": {
+  "type": "msymbols",
+  "icon": "router",
+  "char": "网",
+  "name": "网络"
+ },
+ "cateic_tengxunjiasu.png": {
+  "type": "msymbols",
+  "icon": "speed",
+  "char": "网",
+  "name": "网络加速"
+ },
+ "cateic_uujiasuqi.png": {
+  "type": "msymbols",
+  "icon": "speed",
+  "char": "网",
+  "name": "网络加速"
+ },
+ "cateic_bestv.png": {
+  "type": "msymbols",
+  "icon": "live-tv",
+  "char": "网",
+  "name": "网络电视"
+ },
+ "cateic_cibn.png": {
+  "type": "msymbols",
+  "icon": "live-tv",
+  "char": "网",
+  "name": "网络电视"
+ },
+ "cateic_zhihuan.png": {
+  "type": "msymbols",
+  "icon": "swap-horiz",
+  "char": "置",
+  "name": "置换"
+ },
+ "cate_meifa.png": {
+  "type": "msymbols",
+  "icon": "content-cut",
+  "char": "美",
+  "name": "美发"
+ },
+ "cateic_meifa.png": {
+  "type": "msymbols",
+  "icon": "content-cut",
+  "char": "美",
+  "name": "美发"
+ },
+ "cateic_meizhuang.png": {
+  "type": "msymbols",
+  "icon": "self-care",
+  "char": "美",
+  "name": "美妆"
+ },
+ "cateic_meirong.png": {
+  "type": "msymbols",
+  "icon": "face-retouching-natural",
+  "char": "美",
+  "name": "美容"
+ },
+ "cateic_meirongyi2.png": {
+  "type": "msymbols",
+  "icon": "face-retouching-natural",
+  "char": "美",
+  "name": "美容仪"
+ },
+ "cate_meishu.png": {
+  "type": "msymbols",
+  "icon": "palette",
+  "char": "美",
+  "name": "美术"
+ },
+ "cateic_meijia2.png": {
+  "type": "msymbols",
+  "icon": "front-hand",
+  "char": "美",
+  "name": "美甲"
+ },
+ "cateic_meijie.png": {
+  "type": "msymbols",
+  "icon": "visibility",
+  "char": "美",
+  "name": "美睫"
+ },
+ "cateic_yumaoqiu.png": {
+  "type": "msymbols",
+  "icon": "sports-tennis",
+  "char": "羽",
+  "name": "羽毛球"
+ },
+ "cate_yurongfu.png": {
+  "type": "tabler",
+  "icon": "jacket",
+  "char": "羽",
+  "name": "羽绒服"
+ },
+ "ic_cate2_kaoshi.png": {
+  "type": "msymbols",
+  "icon": "quiz",
+  "char": "考",
+  "name": "考试"
+ },
+ "cateic_erji.png": {
+  "type": "msymbols",
+  "icon": "headphones",
+  "char": "耳",
+  "name": "耳机"
+ },
+ "ic_cate2_juhui.png": {
+  "type": "msymbols",
+  "icon": "celebration",
+  "char": "聚",
+  "name": "聚会"
+ },
+ "cateic_meat.png": {
+  "type": "msymbols",
+  "icon": "kebab-dining",
+  "char": "肉",
+  "name": "肉类"
+ },
+ "cateic_gupiao.png": {
+  "type": "msymbols",
+  "icon": "insert-chart",
+  "char": "股",
+  "name": "股票"
+ },
+ "cateic_saihong2.png": {
+  "type": "msymbols",
+  "icon": "palette",
+  "char": "腮",
+  "name": "腮红"
+ },
+ "ic_cate2_zixingche.png": {
+  "type": "msymbols",
+  "icon": "pedal-bike",
+  "char": "自",
+  "name": "自行车"
+ },
+ "cate_dance.png": {
+  "type": "msymbols",
+  "icon": "accessibility-new",
+  "char": "舞",
+  "name": "舞蹈"
+ },
+ "cateic_wodao.png": {
+  "type": "msymbols",
+  "icon": "accessibility-new",
+  "char": "舞",
+  "name": "舞蹈"
+ },
+ "cate_hua.png": {
+  "type": "msymbols",
+  "icon": "local-florist",
+  "char": "花",
+  "name": "花卉"
+ },
+ "cateic_cha.png": {
+  "type": "msymbols",
+  "icon": "emoji-food-beverage",
+  "char": "茶",
+  "name": "茶"
+ },
+ "ic_cate2_yaoping.png": {
+  "type": "msymbols",
+  "icon": "medication",
+  "char": "药",
+  "name": "药品"
+ },
+ "cate_saxophone.png": {
+  "type": "text",
+  "icon": null,
+  "char": "萨",
+  "name": "萨克斯"
+ },
+ "cate_cake.png": {
+  "type": "msymbols",
+  "icon": "cake",
+  "char": "蛋",
+  "name": "蛋糕"
+ },
+ "ic_cate3_butie.png": {
+  "type": "msymbols",
+  "icon": "request-quote",
+  "char": "补",
+  "name": "补贴"
+ },
+ "cateic_wazi.png": {
+  "type": "tabler",
+  "icon": "sock",
+  "char": "袜",
+  "name": "袜子"
+ },
+ "cateic_qunzi.png": {
+  "type": "msymbols",
+  "icon": "checkroom",
+  "char": "裙",
+  "name": "裙子"
+ },
+ "cateic_kuzi.png": {
+  "type": "msymbols",
+  "icon": "checkroom",
+  "char": "裤",
+  "name": "裤子"
+ },
+ "cate_acfun.png": {
+  "type": "msymbols",
+  "icon": "play-circle",
+  "char": "视",
+  "name": "视频平台"
+ },
+ "cateic_youtube.png": {
+  "type": "msymbols",
+  "icon": "play-circle",
+  "char": "视",
+  "name": "视频平台"
+ },
+ "cate_kecheng.png": {
+  "type": "msymbols",
+  "icon": "play-lesson",
+  "char": "课",
+  "name": "课程"
+ },
+ "cate_douzhipin.png": {
+  "type": "tabler",
+  "icon": "seedling",
+  "char": "豆",
+  "name": "豆制品"
+ },
+ "cate_huolala.png": {
+  "type": "msymbols",
+  "icon": "moving",
+  "char": "货",
+  "name": "货拉拉"
+ },
+ "cateic_gouwu2.png": {
+  "type": "msymbols",
+  "icon": "shopping-cart",
+  "char": "购",
+  "name": "购物"
+ },
+ "ic_cate2_appgoumai.png": {
+  "type": "msymbols",
+  "icon": "shopping-cart",
+  "char": "购",
+  "name": "购物"
+ },
+ "cateic_zuqiu.png": {
+  "type": "msymbols",
+  "icon": "sports-soccer",
+  "char": "足",
+  "name": "足球"
+ },
+ "cateic_taiquandao.png": {
+  "type": "tabler",
+  "icon": "karate",
+  "char": "跆",
+  "name": "跆拳道"
+ },
+ "cateic_shentiru.png": {
+  "type": "tabler",
+  "icon": "bottle",
+  "char": "身",
+  "name": "身体乳"
+ },
+ "cateic_lunhua.png": {
+  "type": "msymbols",
+  "icon": "roller-skating",
+  "char": "轮",
+  "name": "轮滑"
+ },
+ "cateic_lunchuan.png": {
+  "type": "msymbols",
+  "icon": "directions-boat",
+  "char": "轮",
+  "name": "轮船"
+ },
+ "cateic_qingke.png": {
+  "type": "msymbols",
+  "icon": "airport-shuttle",
+  "char": "轻",
+  "name": "轻客"
+ },
+ "cateic_yundong.png": {
+  "type": "msymbols",
+  "icon": "directions-run",
+  "char": "运",
+  "name": "运动"
+ },
+ "cate_hoka.png": {
+  "type": "tabler",
+  "icon": "shoe",
+  "char": "运",
+  "name": "运动鞋"
+ },
+ "cate_puma.png": {
+  "type": "tabler",
+  "icon": "shoe",
+  "char": "运",
+  "name": "运动鞋"
+ },
+ "ic_cate2_tuishui.png": {
+  "type": "tabler",
+  "icon": "receipt-refund",
+  "char": "退",
+  "name": "退税"
+ },
+ "cate_condom.png": {
+  "type": "msymbols",
+  "icon": "shield",
+  "char": "避",
+  "name": "避孕套"
+ },
+ "cateic3_jiudian.png": {
+  "type": "msymbols",
+  "icon": "hotel",
+  "char": "酒",
+  "name": "酒店"
+ },
+ "cate_jiu.png": {
+  "type": "msymbols",
+  "icon": "liquor",
+  "char": "酒",
+  "name": "酒类"
+ },
+ "cateic_diaoyu.png": {
+  "type": "tabler",
+  "icon": "fish-hook",
+  "char": "钓",
+  "name": "钓鱼"
+ },
+ "cate_piano.png": {
+  "type": "msymbols",
+  "icon": "piano",
+  "char": "钢",
+  "name": "钢琴"
+ },
+ "cateic_jianpan.png": {
+  "type": "msymbols",
+  "icon": "keyboard",
+  "char": "键",
+  "name": "键盘"
+ },
+ "cateic_jingzi2.png": {
+  "type": "tabler",
+  "icon": "glass",
+  "char": "镜",
+  "name": "镜子"
+ },
+ "cate_trombone.png": {
+  "type": "text",
+  "icon": null,
+  "char": "长",
+  "name": "长号"
+ },
+ "cate_flute.png": {
+  "type": "text",
+  "icon": null,
+  "char": "长",
+  "name": "长笛"
+ },
+ "ic_cate2_menpiao.png": {
+  "type": "msymbols",
+  "icon": "confirmation-number",
+  "char": "门",
+  "name": "门票"
+ },
+ "cate_wd.png": {
+  "type": "msymbols",
+  "icon": "quiz",
+  "char": "问",
+  "name": "问答"
+ },
+ "cate_ruan.png": {
+  "type": "text",
+  "icon": null,
+  "char": "阮",
+  "name": "阮"
+ },
+ "cateic_fangshai.png": {
+  "type": "msymbols",
+  "icon": "wb-sunny",
+  "char": "防",
+  "name": "防晒"
+ },
+ "cate_xgao.png": {
+  "type": "msymbols",
+  "icon": "icecream",
+  "char": "雪",
+  "name": "雪糕"
+ },
+ "ic_cate2_linghuaqian.png": {
+  "type": "msymbols",
+  "icon": "savings",
+  "char": "零",
+  "name": "零花钱"
+ },
+ "cateic_lingshi.png": {
+  "type": "msymbols",
+  "icon": "cookie",
+  "char": "零",
+  "name": "零食"
+ },
+ "cateic_luying.png": {
+  "type": "tabler",
+  "icon": "tent",
+  "char": "露",
+  "name": "露营"
+ },
+ "cate_mxbc.png": {
+  "type": "msymbols",
+  "icon": "bakery-dining",
+  "char": "面",
+  "name": "面包"
+ },
+ "cateic_mianbao.png": {
+  "type": "msymbols",
+  "icon": "bakery-dining",
+  "char": "面",
+  "name": "面包"
+ },
+ "ic_cate2_mianfen.png": {
+  "type": "msymbols",
+  "icon": "bakery-dining",
+  "char": "面",
+  "name": "面粉"
+ },
+ "cateic_mianmo.png": {
+  "type": "tabler",
+  "icon": "face-mask",
+  "char": "面",
+  "name": "面膜"
+ },
+ "cateic_mianshuang.png": {
+  "type": "tabler",
+  "icon": "bottle",
+  "char": "面",
+  "name": "面霜"
+ },
+ "cate_mian.png": {
+  "type": "msymbols",
+  "icon": "ramen-dining",
+  "char": "面",
+  "name": "面食"
+ },
+ "cate_boots.png": {
+  "type": "tabler",
+  "icon": "shoe",
+  "char": "靴",
+  "name": "靴子"
+ },
+ "cate_711.png": {
+  "type": "tabler",
+  "icon": "shoe",
+  "char": "鞋",
+  "name": "鞋类"
+ },
+ "cate_dkn.png": {
+  "type": "tabler",
+  "icon": "shoe",
+  "char": "鞋",
+  "name": "鞋类"
+ },
+ "cate_ecco.png": {
+  "type": "tabler",
+  "icon": "shoe",
+  "char": "鞋",
+  "name": "鞋类"
+ },
+ "cate_skq.png": {
+  "type": "tabler",
+  "icon": "shoe",
+  "char": "鞋",
+  "name": "鞋类"
+ },
+ "cate_timber.png": {
+  "type": "tabler",
+  "icon": "shoe",
+  "char": "鞋",
+  "name": "鞋类"
+ },
+ "cate_ugg.png": {
+  "type": "tabler",
+  "icon": "shoe",
+  "char": "鞋",
+  "name": "鞋类"
+ },
+ "cateic_kugou.png": {
+  "type": "msymbols",
+  "icon": "music-note",
+  "char": "音",
+  "name": "音乐"
+ },
+ "cateic_migu.png": {
+  "type": "msymbols",
+  "icon": "music-note",
+  "char": "音",
+  "name": "音乐"
+ },
+ "cateic_qqmusic.png": {
+  "type": "msymbols",
+  "icon": "music-note",
+  "char": "音",
+  "name": "音乐"
+ },
+ "cateic_spotify.png": {
+  "type": "msymbols",
+  "icon": "music-note",
+  "char": "音",
+  "name": "音乐"
+ },
+ "cateic_wangyimusic.png": {
+  "type": "msymbols",
+  "icon": "music-note",
+  "char": "音",
+  "name": "音乐"
+ },
+ "cateic_applemusic.png": {
+  "type": "msymbols",
+  "icon": "library-music",
+  "char": "音",
+  "name": "音乐平台"
+ },
+ "ic_cate2_feiji.png": {
+  "type": "msymbols",
+  "icon": "flight",
+  "char": "飞",
+  "name": "飞机"
+ },
+ "cate_feipan.png": {
+  "type": "tabler",
+  "icon": "disc",
+  "char": "飞",
+  "name": "飞盘"
+ },
+ "ic_cate2_shipin.png": {
+  "type": "msymbols",
+  "icon": "fastfood",
+  "char": "食",
+  "name": "食品"
+ },
+ "cateic_canju.png": {
+  "type": "msymbols",
+  "icon": "dinner-dining",
+  "char": "餐",
+  "name": "餐具"
+ },
+ "cateic_yinshi.png": {
+  "type": "msymbols",
+  "icon": "dinner-dining",
+  "char": "餐",
+  "name": "餐饮"
+ },
+ "cateic_yinliao.png": {
+  "type": "msymbols",
+  "icon": "local-drink",
+  "char": "饮",
+  "name": "饮料"
+ },
+ "cate_jiaozi.png": {
+  "type": "msymbols",
+  "icon": "rice-bowl",
+  "char": "饺",
+  "name": "饺子"
+ },
+ "cateic_mantou.png": {
+  "type": "msymbols",
+  "icon": "bakery-dining",
+  "char": "馒",
+  "name": "馒头"
+ },
+ "cateic_xiangshui2.png": {
+  "type": "tabler",
+  "icon": "spray",
+  "char": "香",
+  "name": "香水"
+ },
+ "cateic_qixing.png": {
+  "type": "msymbols",
+  "icon": "pedal-bike",
+  "char": "骑",
+  "name": "骑行"
+ },
+ "cateic_gaoguang.png": {
+  "type": "tabler",
+  "icon": "sparkles",
+  "char": "高",
+  "name": "高光"
+ },
+ "cateic_gaoerfu.png": {
+  "type": "msymbols",
+  "icon": "golf-course",
+  "char": "高",
+  "name": "高尔夫"
+ },
+ "cate_hight_boots.png": {
+  "type": "tabler",
+  "icon": "shoe",
+  "char": "高",
+  "name": "高筒靴"
+ },
+ "cateic_gaogenxie.png": {
+  "type": "tabler",
+  "icon": "shoe",
+  "char": "高",
+  "name": "高跟鞋"
+ },
+ "cate_egg.png": {
+  "type": "msymbols",
+  "icon": "egg",
+  "char": "鸡",
+  "name": "鸡蛋"
+ },
+ "cateic_majiang.png": {
+  "type": "msymbols",
+  "icon": "casino",
+  "char": "麻",
+  "name": "麻将"
+ },
+ "cateic_huangjin.png": {
+  "type": "msymbols",
+  "icon": "toll",
+  "char": "黄",
+  "name": "黄金"
+ }
+}

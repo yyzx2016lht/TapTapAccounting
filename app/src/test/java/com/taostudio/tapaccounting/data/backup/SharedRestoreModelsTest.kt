@@ -206,15 +206,134 @@ class SharedRestoreModelsTest {
     }
 
     @Test
-    fun guard_blocksEverySelectedDatabaseModuleWhenSharedLedgerIsActive() {
+    fun guard_onlyBlocksRestoresThatWriteSharedEntities() {
         assertThrows(IllegalArgumentException::class.java) {
             requireSharedRestoreGuard(
                 hasActiveSharedLedgers = true,
-                hasSelectedDatabaseModule = true
+                writesSharedEntities = true
             )
         }
-        requireSharedRestoreGuard(hasActiveSharedLedgers = true, hasSelectedDatabaseModule = false)
-        requireSharedRestoreGuard(hasActiveSharedLedgers = false, hasSelectedDatabaseModule = true)
+        requireSharedRestoreGuard(hasActiveSharedLedgers = true, writesSharedEntities = false)
+        requireSharedRestoreGuard(hasActiveSharedLedgers = false, writesSharedEntities = true)
+        requireSharedRestoreGuard(
+            hasActiveSharedLedgers = true,
+            writesSharedEntities = true,
+            sharedRestoreMode = SharedRestoreMode.RECONNECT,
+            reconnectsExistingLedgers = true
+        )
+        assertThrows(IllegalArgumentException::class.java) {
+            requireSharedRestoreGuard(
+                hasActiveSharedLedgers = true,
+                writesSharedEntities = true,
+                sharedRestoreMode = SharedRestoreMode.RECONNECT,
+                reconnectsExistingLedgers = false
+            )
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            requireSharedRestoreGuard(
+                hasActiveSharedLedgers = true,
+                writesSharedEntities = true,
+                sharedRestoreMode = SharedRestoreMode.LOCAL_COPY,
+                reconnectsExistingLedgers = true
+            )
+        }
+    }
+
+    @Test
+    fun decision_ignoresSharedStateWhenSelectionIsLocalOnly() {
+        assertEquals(
+            SharedRestoreDecision.LOCAL_COPY,
+            decideSharedRestore(
+                writesSharedEntities = false,
+                backupReadiness = SharedRecoveryReadiness.READY,
+                deviceHasActiveLedger = true,
+                backupLedgersAlreadyOnDevice = true
+            )
+        )
+        assertEquals(
+            SharedRestoreDecision.LOCAL_COPY,
+            decideSharedRestore(
+                writesSharedEntities = false,
+                backupReadiness = SharedRecoveryReadiness.INCOMPLETE,
+                deviceHasActiveLedger = false,
+                backupLedgersAlreadyOnDevice = false
+            )
+        )
+    }
+
+    @Test
+    fun decision_blocksSharedWritesWhileLedgerIsStillConnected() {
+        assertEquals(
+            SharedRestoreDecision.BLOCKED_BY_ACTIVE_LEDGER,
+            decideSharedRestore(
+                writesSharedEntities = true,
+                backupReadiness = SharedRecoveryReadiness.READY,
+                deviceHasActiveLedger = true,
+                backupLedgersAlreadyOnDevice = false
+            )
+        )
+        assertEquals(
+            SharedRestoreDecision.BLOCKED_BY_ACTIVE_LEDGER,
+            decideSharedRestore(
+                writesSharedEntities = true,
+                backupReadiness = SharedRecoveryReadiness.NOT_PRESENT,
+                deviceHasActiveLedger = true,
+                backupLedgersAlreadyOnDevice = false
+            )
+        )
+        assertEquals(
+            SharedRestoreDecision.BLOCKED_BY_ACTIVE_LEDGER,
+            decideSharedRestore(
+                writesSharedEntities = true,
+                backupReadiness = SharedRecoveryReadiness.INCOMPLETE,
+                deviceHasActiveLedger = true,
+                backupLedgersAlreadyOnDevice = true
+            )
+        )
+    }
+
+    @Test
+    fun decision_allowsReconnectWhenEveryBackupLedgerIsStillOnThisDevice() {
+        assertEquals(
+            SharedRestoreDecision.ASK_SHARED_MODE,
+            decideSharedRestore(
+                writesSharedEntities = true,
+                backupReadiness = SharedRecoveryReadiness.READY,
+                deviceHasActiveLedger = true,
+                backupLedgersAlreadyOnDevice = true
+            )
+        )
+    }
+
+    @Test
+    fun decision_asksAboutSharedModeOnlyForResumableIdentity() {
+        assertEquals(
+            SharedRestoreDecision.ASK_SHARED_MODE,
+            decideSharedRestore(
+                writesSharedEntities = true,
+                backupReadiness = SharedRecoveryReadiness.READY,
+                deviceHasActiveLedger = false,
+                backupLedgersAlreadyOnDevice = false
+            )
+        )
+        assertEquals(
+            SharedRestoreDecision.ASK_INCOMPLETE_IDENTITY,
+            decideSharedRestore(
+                writesSharedEntities = true,
+                backupReadiness = SharedRecoveryReadiness.INCOMPLETE,
+                deviceHasActiveLedger = false,
+                backupLedgersAlreadyOnDevice = false
+            )
+        )
+        assertEquals(
+            SharedRestoreDecision.LOCAL_COPY,
+            decideSharedRestore(
+                writesSharedEntities = true,
+                backupReadiness = SharedRecoveryReadiness.NOT_PRESENT,
+                deviceHasActiveLedger = false,
+                backupLedgersAlreadyOnDevice = false
+            )
+        )
     }
 
     private fun fixture(): Fixture {

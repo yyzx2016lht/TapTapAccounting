@@ -22,6 +22,7 @@ class AppListActivity : AppCompatActivity() {
     private lateinit var adapter: ArrayAdapter<String>
     private val displayNames = mutableListOf<String>()
     private var currentDisplayingApps: List<ApplicationInfo> = emptyList()
+    private val uiScope = kotlinx.coroutines.MainScope()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -47,7 +48,6 @@ class AppListActivity : AppCompatActivity() {
         listView.visibility = View.GONE
 
         // P1-29: 可取消的 UI 作用域
-        val uiScope = kotlinx.coroutines.MainScope()
         uiScope.launch {
             val allApps = withContext(Dispatchers.IO) {
                 pm.getInstalledApplications(PackageManager.GET_META_DATA).filter { app ->
@@ -101,6 +101,11 @@ class AppListActivity : AppCompatActivity() {
             Utils.toast(this, getString(R.string.whitelist_saved_fmt, selectedPackageNames.size))
             finish()
         }
+    }
+
+    override fun onDestroy() {
+        uiScope.cancel()
+        super.onDestroy()
     }
 
     private fun updateListView(list: List<ApplicationInfo>) {

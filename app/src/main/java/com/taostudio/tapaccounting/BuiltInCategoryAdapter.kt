@@ -59,7 +59,9 @@ class BuiltInCategoryAdapter(
     override fun onBindViewHolder(holder: VH, position: Int) {
         val item = items[position]
         holder.tv.text = item.name
-        Glide.with(holder.itemView).load(item.icon).into(holder.iv)
+        Glide.with(holder.itemView)
+            .load(CategoryIcons.fallback(item.icon, item.name))
+            .into(holder.iv)
 
         val isSelected = if (isMultiSelect) {
             multiSelection.isSelected(item)

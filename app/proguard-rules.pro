@@ -89,3 +89,9 @@
 -keepclassmembers class org.tensorflow.lite.** { *; }
 -keep class com.taostudio.tapaccounting.tap.** { *; }
 
+# tflite-support 的 TensorAudio 用 AutoValue 生成 Builder，但 auto-value 只是
+# 编译期注解处理器、不在运行时类路径上，R8 因此报 "Missing class AutoValue"。
+# 仅存在于未调用的辅助类中，属编译期噪音，用 -dontwarn 抑制即可（官方推荐做法）。
+-dontwarn com.google.auto.value.AutoValue
+-dontwarn com.google.auto.value.AutoValue$Builder
+

@@ -8,8 +8,16 @@ object CategoryIconHelper {
 
     /**
      * 从 Room 数据库中查找分类图标（suspend，需在协程 IO 上下文中调用）。
+     *
+     * 返回前统一过一遍 [withPlaceholderFallback]：任何走到「占位图 / 空图标」的分类，
+     * 都会改用分类名首字生成的文字图标，保证界面上不再出现千篇一律的「···」。
      */
     suspend fun findCategoryIcon(ctx: Context, name: String, type: Int): String {
+        val resolved = resolveCategoryIcon(ctx, name, type)
+        return withPlaceholderFallback(ctx, name, resolved)
+    }
+
+    private suspend fun resolveCategoryIcon(ctx: Context, name: String, type: Int): String {
         if (type == 2 || name.contains("转账")) {
             return "android.resource://${ctx.packageName}/${R.drawable.ic_transfer}"
         }
@@ -29,12 +37,10 @@ object CategoryIconHelper {
         val repo = CategoryRepository(AppDatabase.getDatabase(ctx).categoryDao())
         val resolvedCategory = repo.findCategoryByDisplayName(dbType, name)
         if (resolvedCategory != null) {
-            if (resolvedCategory.iconId.isNotBlank()) return resolvedCategory.iconId
-            resolvedCategory.parentId?.let { parentId ->
-                repo.getCategoriesListByType(dbType).firstOrNull { it.id == parentId && it.iconId.isNotBlank() }?.let {
-                    return it.iconId
-                }
-            }
+            // 返回分类自己的图标（含空值和三个点占位图）。
+            // 外层 withPlaceholderFallback 会换成首字；这里若改返回父分类图标，
+            // 子分类没有图标时会把父级的「···」原样显示出来。
+            return resolvedCategory.iconId
         }
 
         fun searchRecursive(list: List<CategoryNode>, target: String): String? {
@@ -89,5 +95,9 @@ object CategoryIconHelper {
         }
         return ""
     }
+
+    /** 兜底：结果是占位图或空值时，用分类名的首字生成文字图标（规则见 [CategoryIcons]）。 */
+    private fun withPlaceholderFallback(ctx: Context, name: String, resolved: String): String =
+        CategoryIcons.fallback(resolved, name)
 }
 

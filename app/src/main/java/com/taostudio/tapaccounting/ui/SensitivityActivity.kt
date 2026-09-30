@@ -221,9 +221,10 @@ class SensitivityActivity : AppCompatActivity() {
                     Prefs.setTapModel(this, recommended.path)
                 }
                 if (Prefs.getTapActionDouble(this).isEmpty()) {
-                    Prefs.setTapActionDouble(this, "show_overlay")
+                    Prefs.ensureTapActionsConfigured(this)
                     if (::tvTapActionDoubleName.isInitialized) {
-                        tvTapActionDoubleName.text = getVisibleTapActionName("show_overlay")
+                        tvTapActionDoubleName.text =
+                            getVisibleTapActionName(Prefs.DEFAULT_TAP_ACTION_ID)
                     }
                 }
                 handleGestureEnabled(getString(R.string.tap_back))

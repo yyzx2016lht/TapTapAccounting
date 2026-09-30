@@ -160,6 +160,51 @@ class InvestmentInterestServiceTest {
     }
 
     @Test
+    fun projectDueSettlement_afterScheduleUpdate_doesNotRewalkHistory() {
+        // 模拟 updateLotSchedule 后的状态：startEarningAt 挪到修改日，firstPayoutAt = 修改日+1
+        val modifyDay = dayMillis(2026, 6, 15)
+        val settleDay = dayMillis(2026, 6, 16)
+        val lot = lot(
+            id = 1L,
+            startEarningAt = modifyDay,
+            remainingPrincipal = 10_000.0,
+            annualInterestRate = 3.65
+        ).copy(
+            firstPayoutAt = InvestmentInterestService.plusDays(modifyDay, 1),
+            lastSettledAt = modifyDay,
+            settlementCycle = InvestmentLot.CYCLE_DAILY
+        )
+
+        val projection = InvestmentInterestService.projectDueSettlement(lot, settleDay)
+
+        assertEquals(1, projection.settledPeriods)
+        assertEquals(1.00, projection.postedInterest, 0.01)
+    }
+
+    @Test
+    fun projectDueSettlement_inconsistentFirstPayout_defendsAgainstBackwardJump() {
+        // 即使 startEarningAt 未同步（历史遗留数据），回跳防御也应阻止重走历史
+        val originalStart = dayMillis(2026, 1, 1)
+        val modifyDay = dayMillis(2026, 6, 15)
+        val settleDay = dayMillis(2026, 6, 16)
+        val lot = lot(
+            id = 1L,
+            startEarningAt = originalStart,
+            remainingPrincipal = 10_000.0,
+            annualInterestRate = 3.65
+        ).copy(
+            firstPayoutAt = InvestmentInterestService.plusDays(modifyDay, 1),
+            lastSettledAt = modifyDay,
+            settlementCycle = InvestmentLot.CYCLE_DAILY
+        )
+
+        val projection = InvestmentInterestService.projectDueSettlement(lot, settleDay)
+
+        assertEquals(1, projection.settledPeriods)
+        assertEquals(1.00, projection.postedInterest, 0.01)
+    }
+
+    @Test
     fun applyFifoPrincipalReduction_reducesEarlierLotFirst() {
         val earlyLot = lot(id = 1L, startEarningAt = dayMillis(2024, 1, 1), remainingPrincipal = 80.0)
         val lateLot = lot(id = 2L, startEarningAt = dayMillis(2024, 2, 1), remainingPrincipal = 80.0)

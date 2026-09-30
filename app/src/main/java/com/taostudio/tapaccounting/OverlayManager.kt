@@ -162,7 +162,7 @@ class OverlayManager(private val ctx: Context) {
             Utils.toast(ctx, ctx.getString(R.string.toast_overlay_closing))
             return false
         }
-        Logger.d(ctx, "OverlayManager", "Showing Overlay")
+        Logger.i(ctx, "OverlayManager", "Showing Overlay")
 
         val themeContext = android.view.ContextThemeWrapper(ctx, R.style.Theme_TapAccounting)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !android.provider.Settings.canDrawOverlays(ctx)) {
@@ -178,7 +178,7 @@ class OverlayManager(private val ctx: Context) {
 
         windowManager = ctx.getSystemService(Context.WINDOW_SERVICE) as? WindowManager
         if (windowManager == null) {
-            Logger.d(ctx, "OverlayManager", "showOverlay failed: WindowManager unavailable")
+            Logger.e(ctx, "OverlayManager", "showOverlay failed: WindowManager unavailable")
             Utils.toast(ctx, ctx.getString(R.string.toast_overlay_wm_unavailable))
             return false
         }
@@ -222,7 +222,7 @@ class OverlayManager(private val ctx: Context) {
         try {
             windowManager?.addView(view, overlayParams)
         } catch (e: Exception) {
-            Logger.d(ctx, "OverlayManager", "showOverlay addView failed: ${e.message}")
+            Logger.e(ctx, "OverlayManager", "showOverlay addView failed: ${e.message}")
             overlayView = null
             overlayParams = null
             Utils.toast(ctx, ctx.getString(R.string.toast_overlay_show_failed))
@@ -348,14 +348,14 @@ class OverlayManager(private val ctx: Context) {
         val screenModel = Prefs.getAiReceiptVisionModel(ctx).trim()
         Logger.d(ctx, "OverlayManager", "Screen capture recognition clicked. model=$screenModel, isMulti=true")
         if (screenModel.isEmpty()) {
-            Logger.d(ctx, "OverlayManager", "Screen capture aborted: no vision model configured")
+            Logger.e(ctx, "OverlayManager", "Screen capture aborted: no vision model configured")
             Utils.toast(ctx, ctx.getString(R.string.toast_select_vision_model))
             finishScreenCaptureFlow(restoreOverlay = true)
             return
         }
         val availableModels = Prefs.getAiModelsCache(ctx)
         if (availableModels.isNotEmpty() && screenModel !in availableModels) {
-            Logger.d(ctx, "OverlayManager", "Screen capture aborted: model=$screenModel missing from current cache")
+            Logger.e(ctx, "OverlayManager", "Screen capture aborted: model=$screenModel missing from current cache")
             Prefs.setScreenModelVisionSupported(ctx, screenModel, false)
             Utils.toast(ctx, ctx.getString(R.string.toast_vision_model_invalid))
             finishScreenCaptureFlow(restoreOverlay = true)
@@ -421,12 +421,12 @@ class OverlayManager(private val ctx: Context) {
         val intent = android.content.Intent(ctx, ScreenCaptureActivity::class.java).apply {
             addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
         }
-        Logger.d(ctx, "OverlayManager", "Launching ScreenCaptureActivity")
+        Logger.i(ctx, "OverlayManager", "Launching ScreenCaptureActivity")
         updateScreenCaptureLoadingStatus(ctx.getString(R.string.requesting_capture_permission))
         updateScreenCaptureLoadingHint(ctx.getString(R.string.confirm_in_system_dialog))
         runCatching { ctx.startActivity(intent) }
             .onFailure {
-                Logger.d(ctx, "OverlayManager", "Launching ScreenCaptureActivity failed: ${it.message}")
+                Logger.e(ctx, "OverlayManager", "Launching ScreenCaptureActivity failed: ${it.message}")
                 hideScreenCaptureLoadingOverlay()
                 setOverlayVisible(true)
                 Utils.toast(ctx, ctx.getString(R.string.toast_capture_start_failed))
@@ -442,7 +442,7 @@ class OverlayManager(private val ctx: Context) {
             try {
                 val bytes = ShizukuShell.execBytes("screencap -p")
                 if (bytes == null || bytes.isEmpty()) {
-                    Logger.d(ctx, "OverlayManager", "Shizuku screencap returned empty bytes")
+                    Logger.e(ctx, "OverlayManager", "Shizuku screencap returned empty bytes")
                     withContext(Dispatchers.Main) {
                         Logger.d(ctx, "OverlayManager", "Falling back to MediaProjection capture")
                         launchSystemScreenCaptureActivity()
@@ -471,7 +471,7 @@ class OverlayManager(private val ctx: Context) {
                     }
                 }
             } catch (e: Exception) {
-                Logger.d(ctx, "OverlayManager", "Shizuku in-place screen recognition failed: ${e.message}")
+                Logger.e(ctx, "OverlayManager", "Shizuku in-place screen recognition failed: ${e.message}")
                 withContext(Dispatchers.Main) {
                     Logger.d(ctx, "OverlayManager", "Falling back to MediaProjection capture after exception")
                     launchSystemScreenCaptureActivity()
@@ -513,7 +513,7 @@ class OverlayManager(private val ctx: Context) {
                     }
                 }
             } catch (e: Exception) {
-                Logger.d(ctx, "OverlayManager", "Accessibility screencap failed: ${e.message}")
+                Logger.e(ctx, "OverlayManager", "Accessibility screencap failed: ${e.message}")
                 withContext(Dispatchers.Main) {
                     Logger.d(ctx, "OverlayManager", "Falling back to Shizuku or MediaProjection capture after exception")
                     if (Prefs.isShizukuModeEnabled(ctx) && ShizukuSafe.isReady(ctx)) {
@@ -643,7 +643,7 @@ class OverlayManager(private val ctx: Context) {
         try {
             wm.addView(loadingView, captureLoadingParams)
         } catch (e: Exception) {
-            Logger.d(ctx, "OverlayManager", "showScreenCaptureLoadingOverlay addView failed: ${e.message}")
+            Logger.e(ctx, "OverlayManager", "showScreenCaptureLoadingOverlay addView failed: ${e.message}")
             captureLoadingView = null
             captureLoadingParams = null
             return
@@ -793,7 +793,7 @@ class OverlayManager(private val ctx: Context) {
             file.outputStream().use { scaled.compress(Bitmap.CompressFormat.JPEG, 88, it) }
             android.net.Uri.fromFile(file)
         } catch (e: Exception) {
-            Logger.d(ctx, "OverlayManager", "bitmapToTempUri failed: ${e.message}")
+            Logger.e(ctx, "OverlayManager", "bitmapToTempUri failed: ${e.message}")
             null
         }
     }

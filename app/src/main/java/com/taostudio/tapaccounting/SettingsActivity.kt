@@ -50,12 +50,12 @@ class SettingsActivity : AppCompatActivity() {
     private val sortCategories = mutableListOf<Category>()
     private lateinit var sortAdapter: RecyclerView.Adapter<*>
 
-    // 榛樿涓烘敮鍑?(0)
+    // 默认为支出 (0)
     private var currentType = Prefs.TYPE_EXPENSE
 
     private val categoryRepository by lazy {
         val db = AppDatabase.getDatabase(this)
-        CategoryRepository(db.categoryDao(), db.billDao())
+        CategoryRepository(db.categoryDao(), db.billDao(), db.recurringPatternDao())
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -134,7 +134,7 @@ class SettingsActivity : AppCompatActivity() {
                 holder.iconContainer.scaleX = 0.88f
                 holder.iconContainer.scaleY = 0.88f
                 holder.itemView.alpha = 0.96f
-                loadSafeCategoryIcon(item.iconId, holder.icon)
+                loadSafeCategoryIcon(CategoryIcons.fallback(item.iconId, item.name), holder.icon)
                 holder.icon.setColorFilter(Color.parseColor("#4F5D75"))
             }
         }

@@ -272,12 +272,12 @@ class ProfileFragment : Fragment(R.layout.fragment_profile) {
         // --- 高级留存设置 ---
 
         val btnShareLogs = view.findViewById<View>(R.id.btn_share_logs)
+        // 崩溃日志始终可查看；运行日志开关只控制 I/W/E 是否落盘
+        btnShareLogs.visibility = View.VISIBLE
         view.findViewById<CompoundButton>(R.id.switch_logging).apply {
             isChecked = Prefs.isLoggingEnabled(requireContext())
-            btnShareLogs.visibility = if (isChecked) View.VISIBLE else View.GONE
             setOnCheckedChangeListener { _, isChecked ->
                 Prefs.setLoggingEnabled(requireContext(), isChecked)
-                btnShareLogs.visibility = if (isChecked) View.VISIBLE else View.GONE
                 handleEasterEgg()
             }
         }

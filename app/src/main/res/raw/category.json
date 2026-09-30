@@ -12,10 +12,6 @@
     "name": "律师费"
   },
   {
-    "icon": "http://res3.qianjiapp.com/cate_lvshifei2.png",
-    "name": "律师费"
-  },
-  {
     "name": "其他",
     "icon": "http://res3.qianjiapp.com/cateic_other.png"
   },
@@ -324,10 +320,6 @@
     "name": "就诊服务"
   },
   {
-    "icon": "http://res3.qianjiapp.com/cateic_yimiao.png",
-    "name": "疫苗"
-  },
-  {
     "icon": "http://res3.qianjiapp.com/cateic_qinziyou.png",
     "name": "亲子游"
   },
@@ -564,10 +556,6 @@
     "name": "游泳"
   },
   {
-    "icon": "http://res3.qianjiapp.com/cateic_wodao.png",
-    "name": "舞蹈"
-  },
-  {
     "icon": "http://res3.qianjiapp.com/cateic_yujia2.png",
     "name": "瑜伽"
   },
@@ -740,10 +728,6 @@
     "name": "直播平台"
   },
   {
-    "icon": "http://res3.qianjiapp.com/cateic_huya.png",
-    "name": "直播平台"
-  },
-  {
     "icon": "http://res3.qianjiapp.com/cate_microsoft.png",
     "name": "办公软件"
   },
@@ -848,40 +832,12 @@
     "name": "音乐"
   },
   {
-    "icon": "http://res3.qianjiapp.com/cateic_spotify.png",
-    "name": "音乐"
-  },
-  {
-    "icon": "http://res3.qianjiapp.com/cateic_wangyimusic.png",
-    "name": "音乐"
-  },
-  {
-    "icon": "http://res3.qianjiapp.com/cateic_qqmusic.png",
-    "name": "音乐"
-  },
-  {
     "icon": "http://res3.qianjiapp.com/cateic_tengxunjiasu.png",
-    "name": "网络加速"
-  },
-  {
-    "icon": "http://res3.qianjiapp.com/cateic_uujiasuqi.png",
     "name": "网络加速"
   },
   {
     "icon": "http://res3.qianjiapp.com/cateic_disney.png",
     "name": "影视"
-  },
-  {
-    "icon": "http://res3.qianjiapp.com/cate_xbox.png",
-    "name": "游戏"
-  },
-  {
-    "icon": "http://res3.qianjiapp.com/cate_switch.png",
-    "name": "游戏"
-  },
-  {
-    "icon": "http://res3.qianjiapp.com/cateic_steam.png",
-    "name": "游戏"
   },
   {
     "icon": "http://res3.qianjiapp.com/cateic_playstation.png",
@@ -908,24 +864,8 @@
     "name": "影视平台"
   },
   {
-    "icon": "http://res3.qianjiapp.com/cateic_netflix.png",
-    "name": "流媒体平台"
-  },
-  {
-    "icon": "http://res3.qianjiapp.com/cateic_youtube.png",
-    "name": "视频平台"
-  },
-  {
     "icon": "http://res3.qianjiapp.com/cateic_cibn.png",
     "name": "网络电视"
-  },
-  {
-    "icon": "http://res3.qianjiapp.com/cateic_bestv.png",
-    "name": "网络电视"
-  },
-  {
-    "icon": "http://res3.qianjiapp.com/cateic_migu.png",
-    "name": "音乐"
   },
   {
     "icon": "http://res3.qianjiapp.com/cateic_mangguotv.png",
@@ -973,10 +913,6 @@
   },
   {
     "icon": "http://res3.qianjiapp.com/cateic_meituan.png",
-    "name": "外卖平台"
-  },
-  {
-    "icon": "http://res3.qianjiapp.com/cateic_eleme.png",
     "name": "外卖平台"
   },
   {
@@ -1048,39 +984,11 @@
     "name": "鞋类"
   },
   {
-    "icon": "http://res3.qianjiapp.com/cate_ecco.png",
-    "name": "鞋类"
-  },
-  {
-    "icon": "http://res3.qianjiapp.com/cate_timber.png",
-    "name": "鞋类"
-  },
-  {
-    "icon": "http://res3.qianjiapp.com/cate_skq.png",
-    "name": "鞋类"
-  },
-  {
-    "icon": "http://res3.qianjiapp.com/cate_ugg.png",
-    "name": "鞋类"
-  },
-  {
-    "icon": "http://res3.qianjiapp.com/cate_dkn.png",
-    "name": "鞋类"
-  },
-  {
     "icon": "http://res3.qianjiapp.com/cate_arcteryx.png",
     "name": "户外装备"
   },
   {
-    "icon": "http://res3.qianjiapp.com/cate_northface.png",
-    "name": "户外装备"
-  },
-  {
     "icon": "http://res3.qianjiapp.com/cate_puma.png",
-    "name": "运动鞋"
-  },
-  {
-    "icon": "http://res3.qianjiapp.com/cate_hoka.png",
     "name": "运动鞋"
   },
   {
@@ -1132,39 +1040,11 @@
     "name": "女装"
   },
   {
-    "icon": "http://res3.qianjiapp.com/cate_miumiu.png",
-    "name": "女装"
-  },
-  {
-    "icon": "http://res3.qianjiapp.com/cate_vm.png",
-    "name": "服装"
-  },
-  {
-    "icon": "http://res3.qianjiapp.com/cate_only.png",
-    "name": "女装"
-  },
-  {
-    "icon": "http://res3.qianjiapp.com/cate_primark.png",
-    "name": "服装"
-  },
-  {
-    "icon": "http://res3.qianjiapp.com/cate_zara.png",
-    "name": "服装"
-  },
-  {
-    "icon": "http://res3.qianjiapp.com/cate_uniqlo.png",
-    "name": "服装"
-  },
-  {
     "icon": "http://res3.qianjiapp.com/cate_yinxiang.png",
     "name": "箱包"
   },
   {
     "icon": "http://res3.qianjiapp.com/cate_watch.png",
-    "name": "手表"
-  },
-  {
-    "icon": "http://res3.qianjiapp.com/cate_awatch.png",
     "name": "手表"
   },
   {
@@ -1174,10 +1054,6 @@
   {
     "icon": "http://res3.qianjiapp.com/ic_cate2_appgoumai.png",
     "name": "购物"
-  },
-  {
-    "icon": "http://res3.qianjiapp.com/cateic_diannao.png",
-    "name": "电脑"
   },
   {
     "icon": "http://res3.qianjiapp.com/cateic_jianpan.png",
@@ -1360,14 +1236,6 @@
     "name": "卸妆油"
   },
   {
-    "icon": "http://res3.qianjiapp.com/cateic_meifa.png",
-    "name": "美发"
-  },
-  {
-    "icon": "http://res3.qianjiapp.com/cateic_toushi.png",
-    "name": "眼镜"
-  },
-  {
     "icon": "http://res3.qianjiapp.com/cateic_meirong.png",
     "name": "美容"
   },
@@ -1377,10 +1245,6 @@
   },
   {
     "icon": "http://res3.qianjiapp.com/cate_swimsuit3.png",
-    "name": "泳衣"
-  },
-  {
-    "icon": "http://res3.qianjiapp.com/cate_swimsuit1.png",
     "name": "泳衣"
   },
   {
@@ -1496,14 +1360,6 @@
     "name": "数码"
   },
   {
-    "icon": "http://res3.qianjiapp.com/cateic_yifu.png",
-    "name": "服装"
-  },
-  {
-    "icon": "http://res3.qianjiapp.com/cateic_gouwu2.png",
-    "name": "购物"
-  },
-  {
     "icon": "http://res3.qianjiapp.com/cate_mxbc.png",
     "name": "面包"
   },
@@ -1534,10 +1390,6 @@
   {
     "icon": "http://res3.qianjiapp.com/cate_cake.png",
     "name": "蛋糕"
-  },
-  {
-    "icon": "http://res3.qianjiapp.com/cateic_mianbao.png",
-    "name": "面包"
   },
   {
     "icon": "http://res3.qianjiapp.com/cateic_niunai.png",
@@ -1688,10 +1540,6 @@
     "name": "茶"
   },
   {
-    "icon": "http://res3.qianjiapp.com/cateic_coffee.png",
-    "name": "咖啡"
-  },
-  {
     "icon": "http://res3.qianjiapp.com/cate_water.png",
     "name": "水"
   },
@@ -1768,10 +1616,6 @@
     "name": "外汇"
   },
   {
-    "icon": "http://res3.qianjiapp.com/cateic_waihui.png",
-    "name": "外汇"
-  },
-  {
     "icon": "http://res3.qianjiapp.com/cateic_zhaiquan.png",
     "name": "债券"
   },
@@ -1780,7 +1624,7 @@
     "name": "黄金"
   },
   {
-      "icon": "http://res3.qianjiapp.com/cateic_licai.png",
+    "icon": "http://res3.qianjiapp.com/cateic_licai.png",
     "name": "理财"
   },
   {
@@ -1790,10 +1634,6 @@
   {
     "icon": "http://res3.qianjiapp.com/cateic_gupiao.png",
     "name": "股票"
-  },
-  {
-    "icon": "http://res3.qianjiapp.com/cateic_other.png",
-    "name": "其它"
   },
   {
     "icon": "http://res3.qianjiapp.com/cateic_zhihuan.png",
@@ -1840,10 +1680,6 @@
     "name": "公积金"
   },
   {
-    "icon": "http://res3.qianjiapp.com/cateic_gongzi.png",
-    "name": "工资"
-  },
-  {
     "icon": "http://res3.qianjiapp.com/ic_cate2_ticheng.png",
     "name": "提成"
   },
@@ -1866,45 +1702,5 @@
   {
     "icon": "http://res3.qianjiapp.com/cate_yuesao.png",
     "name": "月嫂"
-  },
-  {
-    "icon": "http://res3.qianjiapp.com/cate_jiuzhen.png",
-    "name": "就诊"
-  },
-  {
-    "icon": "http://res3.qianjiapp.com/cateic_yimiao.png",
-    "name": "疫苗"
-  },
-  {
-    "icon": "http://res3.qianjiapp.com/cateic_qinziyou.png",
-    "name": "亲子游"
-  },
-  {
-    "icon": "http://res3.qianjiapp.com/cateic_zaojiao.png",
-    "name": "早教"
-  },
-  {
-    "icon": "http://res3.qianjiapp.com/cateic_zhiniaoku.png",
-    "name": "纸尿裤"
-  },
-  {
-    "icon": "http://res3.qianjiapp.com/cateic_wanju.png",
-    "name": "玩具"
-  },
-  {
-    "icon": "http://res3.qianjiapp.com/cateic_naiping.png",
-    "name": "奶瓶"
-  },
-  {
-    "icon": "http://res3.qianjiapp.com/cate_chanjian.png",
-    "name": "产检"
-  },
-  {
-    "icon": "http://res3.qianjiapp.com/cateic_naifen.png",
-    "name": "奶粉"
-  },
-  {
-    "icon": "http://res3.qianjiapp.com/cateic_fushi.png",
-    "name": "服饰"
   }
 ]

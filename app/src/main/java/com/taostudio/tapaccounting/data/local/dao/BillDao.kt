@@ -12,6 +12,28 @@ interface BillDao {
         val total: Double
     )
 
+    /** Distinct category name snapshots of bills that currently hold no category id. */
+    data class UncategorizedBillName(
+        val categoryName: String,
+        val type: Int
+    )
+
+    @Query(
+        "SELECT DISTINCT categoryName, type FROM bills " +
+            "WHERE categoryId IS NULL AND categoryName <> ''"
+    )
+    suspend fun getUncategorizedNameSnapshots(): List<UncategorizedBillName>
+
+    /**
+     * Reconnects bills that lost their category id to the category their own name snapshot names.
+     * Guarded by the caller to unambiguous (leaf name, type) matches only.
+     */
+    @Query(
+        "UPDATE bills SET categoryId=:categoryId " +
+            "WHERE categoryId IS NULL AND categoryName=:categoryName AND type=:type"
+    )
+    suspend fun relinkCategoryId(categoryName: String, type: Int, categoryId: Long): Int
+
     @Delete
     suspend fun delete(bill: Bill)
 
@@ -102,8 +124,11 @@ interface BillDao {
                   AND (relatedSharedId IS NULL OR TRIM(relatedSharedId) = ''))
           )
           AND (categoryName = :categoryName
+               OR categoryName LIKE '% - ' || :categoryName
                OR categoryName = '退款：' || :categoryName
-               OR categoryName = '退款·' || :categoryName)
+               OR categoryName LIKE '退款：% - ' || :categoryName
+               OR categoryName = '退款·' || :categoryName
+               OR categoryName LIKE '退款·% - ' || :categoryName)
     """)
     suspend fun sumBudgetExpenseByCategoryName(
         startTime: Long, endTime: Long, bookName: String, categoryName: String,
@@ -249,23 +274,113 @@ interface BillDao {
     @Query("UPDATE bills SET toAccountName = :newName WHERE toAccountId = :assetId")
     suspend fun syncToAccountNameByAssetId(assetId: Long, newName: String)
 
-    /** 同步展示名称：绑定到该分类的账单分类名统一更新为新名称 */
-    @Query("UPDATE bills SET categoryName = :newName WHERE categoryId = :categoryId")
-    suspend fun syncCategoryNameByCategoryId(categoryId: Long, newName: String)
+    /**
+     * 同步展示名称：把绑定到该分类的账单分类名统一刷成分类树里的当前路径。
+     *
+     * 退款账单的 categoryName 是「退款：<路径>」，直接整体覆盖会把前缀吃掉（退款在统计里
+     * 要靠前缀单独识别），所以这里按前缀还原而不是无脑替换。
+     * 回收站里的同分类账单一起刷——它们从回收站还原时是直接写库的，不经过写入漏斗，
+     * 只刷 bills 的话，还原出来的账单会带着旧名字复活成统计页上的「幽灵分类」。
+     */
+    @Transaction
+    suspend fun syncCategoryNameByCategoryId(categoryId: Long, newName: String) {
+        updateBillCategoryNameByCategoryId(categoryId, newName)
+        updateDeletedBillCategoryNameByCategoryId(categoryId, newName)
+    }
 
-    /** 同步展示名称：无外键但分类名匹配旧叶子名的账单也一并更新 */
     @Query("""
         UPDATE bills
-        SET categoryName = REPLACE(categoryName, :oldLeaf, :newLeaf)
+        SET categoryName = CASE
+            WHEN categoryName LIKE '退款：%' THEN '退款：' || :newName
+            WHEN categoryName LIKE '退款·%' THEN '退款·' || :newName
+            ELSE :newName
+        END
+        WHERE categoryId = :categoryId
+    """)
+    suspend fun updateBillCategoryNameByCategoryId(categoryId: Long, newName: String)
+
+    @Query("""
+        UPDATE deleted_bills
+        SET categoryName = CASE
+            WHEN categoryName LIKE '退款：%' THEN '退款：' || :newName
+            WHEN categoryName LIKE '退款·%' THEN '退款·' || :newName
+            ELSE :newName
+        END
+        WHERE categoryId = :categoryId
+    """)
+    suspend fun updateDeletedBillCategoryNameByCategoryId(categoryId: Long, newName: String)
+
+    /**
+     * 同步展示名称：无外键但分类名匹配旧叶子名的账单也一并更新。
+     *
+     * 除了「自己改名」（旧叶子在路径末尾），还要覆盖「祖先改名」——一级分类改名后，
+     * 其子分类下那些没有 categoryId 的历史账单存的是 "OldParent - Child"，旧叶子出现在
+     * 路径开头。所以要按位置精确替换：整串相等、开头、末尾三种形态各处理一次。
+     *
+     * 这里**不能**用 REPLACE(categoryName, :oldLeaf, :newLeaf)：它是全局替换，分类名互为子串时
+     * 会误伤——「餐 - 三餐」在「餐」改名后会变成「新餐 - 三新餐」。
+     *
+     * 同时刷 `deleted_bills`：回收站里的账单名字也是同一份快照，不跟着改就会在还原后显示旧名。
+     */
+    @Transaction
+    suspend fun syncCategoryNameByOldName(oldLeaf: String, newLeaf: String) {
+        updateBillCategoryNameByOldName(oldLeaf, newLeaf)
+        updateDeletedBillCategoryNameByOldName(oldLeaf, newLeaf)
+    }
+
+    @Query("""
+        UPDATE bills
+        SET categoryName = CASE
+            WHEN categoryName = '退款：' || :oldLeaf
+                THEN '退款：' || :newLeaf
+            WHEN categoryName LIKE '退款：' || :oldLeaf || ' - %'
+                THEN '退款：' || :newLeaf || SUBSTR(categoryName, LENGTH('退款：' || :oldLeaf) + 1)
+            WHEN categoryName LIKE '退款：% - ' || :oldLeaf
+                THEN SUBSTR(categoryName, 1, LENGTH(categoryName) - LENGTH(:oldLeaf)) || :newLeaf
+            WHEN categoryName = :oldLeaf
+                THEN :newLeaf
+            WHEN categoryName LIKE :oldLeaf || ' - %'
+                THEN :newLeaf || SUBSTR(categoryName, LENGTH(:oldLeaf) + 1)
+            ELSE SUBSTR(categoryName, 1, LENGTH(categoryName) - LENGTH(:oldLeaf)) || :newLeaf
+        END
         WHERE categoryId IS NULL
           AND (
               categoryName = :oldLeaf
               OR categoryName LIKE '% - ' || :oldLeaf
+              OR categoryName LIKE :oldLeaf || ' - %'
               OR categoryName = '退款：' || :oldLeaf
               OR categoryName LIKE '退款：% - ' || :oldLeaf
+              OR categoryName LIKE '退款：' || :oldLeaf || ' - %'
           )
     """)
-    suspend fun syncCategoryNameByOldName(oldLeaf: String, newLeaf: String)
+    suspend fun updateBillCategoryNameByOldName(oldLeaf: String, newLeaf: String)
+
+    @Query("""
+        UPDATE deleted_bills
+        SET categoryName = CASE
+            WHEN categoryName = '退款：' || :oldLeaf
+                THEN '退款：' || :newLeaf
+            WHEN categoryName LIKE '退款：' || :oldLeaf || ' - %'
+                THEN '退款：' || :newLeaf || SUBSTR(categoryName, LENGTH('退款：' || :oldLeaf) + 1)
+            WHEN categoryName LIKE '退款：% - ' || :oldLeaf
+                THEN SUBSTR(categoryName, 1, LENGTH(categoryName) - LENGTH(:oldLeaf)) || :newLeaf
+            WHEN categoryName = :oldLeaf
+                THEN :newLeaf
+            WHEN categoryName LIKE :oldLeaf || ' - %'
+                THEN :newLeaf || SUBSTR(categoryName, LENGTH(:oldLeaf) + 1)
+            ELSE SUBSTR(categoryName, 1, LENGTH(categoryName) - LENGTH(:oldLeaf)) || :newLeaf
+        END
+        WHERE categoryId IS NULL
+          AND (
+              categoryName = :oldLeaf
+              OR categoryName LIKE '% - ' || :oldLeaf
+              OR categoryName LIKE :oldLeaf || ' - %'
+              OR categoryName = '退款：' || :oldLeaf
+              OR categoryName LIKE '退款：% - ' || :oldLeaf
+              OR categoryName LIKE '退款：' || :oldLeaf || ' - %'
+          )
+    """)
+    suspend fun updateDeletedBillCategoryNameByOldName(oldLeaf: String, newLeaf: String)
 
     @Transaction
     suspend fun backfillAssetLinksByName() {

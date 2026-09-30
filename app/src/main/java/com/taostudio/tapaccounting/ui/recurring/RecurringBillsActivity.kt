@@ -289,6 +289,9 @@ class RecurringBillsActivity : AppCompatActivity() {
             val btnCancel = view.findViewById<TextView>(R.id.btn_recurring_cancel)
             val btnSave = view.findViewById<View>(R.id.btn_recurring_save)
             var selectedCategoryName = existing?.categoryName
+            // 已有的 categoryId 要优先沿用：分类改名会让 categoryName 这份展示路径快照过期，
+            // 保存时按旧名反查会失败，从而把原本有效的分类关联静默清空。
+            var selectedCategoryId = existing?.categoryId
             var selectedAccountName = existing?.accountName
             var selectedTargetAccountName = existing?.toAccountName?.takeIf { it.isNotBlank() }
             val assetFeatureEnabled = Prefs.isAssetFeatureEnabled(this@RecurringBillsActivity)
@@ -325,6 +328,7 @@ class RecurringBillsActivity : AppCompatActivity() {
                     } else {
                         getString(R.string.transfer)
                     }
+                    selectedCategoryId = null
                 }
                 tvCategory.text = selectedCategoryName?.takeIf { it.isNotBlank() } ?: getString(R.string.budget_not_set)
                 tvCategory.isEnabled = !isTransferFamily
@@ -359,6 +363,8 @@ class RecurringBillsActivity : AppCompatActivity() {
                             3 -> getString(R.string.repayment)
                             else -> null
                         }
+                        // 换了账单类型，原分类可能不再适用（收入/支出分类互不相通），交给保存时按名字重新解析
+                        selectedCategoryId = null
                     }
                     applyTypeUi()
                 }
@@ -381,6 +387,8 @@ class RecurringBillsActivity : AppCompatActivity() {
                     }
                 ) { selected ->
                     selectedCategoryName = selected.ifBlank { null }
+                    // 用户重新选了分类，旧 id 作废，保存时按新名字解析
+                    selectedCategoryId = null
                     applyTypeUi()
                 }
             }
@@ -439,6 +447,7 @@ class RecurringBillsActivity : AppCompatActivity() {
                         etDay = etDay,
                         spFrequency = spFrequency,
                         selectedCategoryName = selectedCategoryName,
+                        selectedCategoryId = selectedCategoryId,
                         selectedAccountName = selectedAccountName.takeIf { assetFeatureEnabled },
                         selectedTargetAccountName = selectedTargetAccountName.takeIf { assetFeatureEnabled },
                         billType = selectedBillType,
@@ -458,6 +467,7 @@ class RecurringBillsActivity : AppCompatActivity() {
         etDay: EditText,
         spFrequency: Spinner,
         selectedCategoryName: String?,
+        selectedCategoryId: Long?,
         selectedAccountName: String?,
         selectedTargetAccountName: String?,
         billType: Int,
@@ -492,11 +502,27 @@ class RecurringBillsActivity : AppCompatActivity() {
         lifecycleScope.launch {
             val savedPattern = withContext(Dispatchers.IO) {
                 val service = RecurringBillingService(db)
-                val selectedCategory = selectedCategoryName?.let {
-                    CategoryRepository(db.categoryDao()).findCategoryByDisplayName(
-                        if (billType == Bill.TYPE_INCOME) 1 else 0,
-                        it
-                    )
+                val categoryType = if (billType == Bill.TYPE_INCOME) 1 else 0
+                // 分类解析：能沿用已有 categoryId 就沿用。分类改名后 categoryName 这份快照会过期，
+                // 按旧名反查会失败，从而把原本有效的关联静默清空——用户只是改个金额，分类就丢了。
+                // 只有用户重新选了分类（id 已置空）或新建模式时，才按名字反查。
+                val resolvedCategoryId = RecurringBillingService.resolvePatternCategoryId(
+                    keptCategoryId = selectedCategoryId,
+                    selectedCategoryName = selectedCategoryName,
+                    billType = billType
+                ) { name ->
+                    CategoryRepository(db.categoryDao())
+                        .findCategoryByDisplayName(categoryType, name)?.id
+                }
+                // 展示名以分类树当前路径为准，顺手把过期的旧名快照修正回来
+                val resolvedCategoryName = if (billType == Bill.TYPE_TRANSFER) {
+                    selectedCategoryName
+                } else {
+                    resolvedCategoryId?.let { id ->
+                        CategoryRepository.displayNamesById(
+                            db.categoryDao().getCategoriesListByType(categoryType)
+                        )[id]
+                    } ?: selectedCategoryName
                 }
                 if (existing == null) {
                     service.createManualPattern(
@@ -506,8 +532,8 @@ class RecurringBillsActivity : AppCompatActivity() {
                         frequency = frequency,
                         dayOfMonthHint = day,
                         bookName = BookAccountManager.getSelectedBook(this@RecurringBillsActivity),
-                        categoryId = selectedCategory?.id,
-                        categoryName = selectedCategoryName,
+                        categoryId = resolvedCategoryId,
+                        categoryName = resolvedCategoryName,
                         accountName = selectedAccountName,
                         toAccountName = selectedTargetAccountName,
                         billType = billType,
@@ -522,14 +548,14 @@ class RecurringBillsActivity : AppCompatActivity() {
                         amountTolerance = tolerance.coerceAtLeast(0.0),
                         frequency = frequency,
                         dayOfMonthHint = day,
-                        categoryId = selectedCategory?.id,
-                        categoryName = selectedCategoryName,
+                        categoryId = resolvedCategoryId,
+                        categoryName = resolvedCategoryName,
                         accountName = selectedAccountName,
                         toAccountName = selectedTargetAccountName.orEmpty(),
                         billType = billType,
                         billSubType = billSubType,
                         status = RecurringStatus.CONFIRMED,
-                        nextExpectedAt = RecurringBillingService.calculateNextExpected(lastSeenAt, frequency),
+                        nextExpectedAt = RecurringBillingService.calculateNextExpected(lastSeenAt, frequency, day),
                         updatedAt = System.currentTimeMillis()
                     )
                     db.recurringPatternDao().update(updated)

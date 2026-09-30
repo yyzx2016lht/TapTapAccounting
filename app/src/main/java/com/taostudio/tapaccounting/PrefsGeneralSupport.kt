@@ -29,6 +29,8 @@ object PrefsGeneralSupport {
     private const val KEY_DOUBLE_TAP_GUIDE_SEEN = "double_tap_guide_seen"
     private const val KEY_FLIP_GUIDE_SEEN = "flip_guide_seen_v1"
     private const val KEY_HOME_ONBOARDING_SEEN = "home_onboarding_seen_v1"
+    private const val KEY_ONBOARDING_COMPLETED = "onboarding_completed_v1"
+    private const val KEY_ONBOARDING_IMPORT_OFFERED = "onboarding_import_offered_v1"
     private const val KEY_SETTINGS_GUIDE_DISMISSED = "settings_guide_dismissed_v1"
     private const val KEY_QUICK_GESTURE_SETUP_GUIDE_SEEN = "quick_gesture_setup_guide_seen_v1"
     private const val KEY_SENSITIVITY_ONBOARDING_SEEN = "sensitivity_onboarding_seen_v2"
@@ -253,6 +255,43 @@ object PrefsGeneralSupport {
     fun setHomeOnboardingSeen(ctx: Context) =
         prefs(ctx).edit().putBoolean(KEY_HOME_ONBOARDING_SEEN, true).apply()
 
+    /**
+     * 首启引导（[com.taostudio.tapaccounting.ui.onboarding.OnboardingActivity]）是否已完成。
+     *
+     * 判定为「未完成」时，冷启动会直接进入引导页。完成/跳过都会写入 true，
+     * 因此对老用户（升级上来的）需要做一次迁移推断，见 [ensureOnboardingCompletionMigrated]。
+     */
+    fun hasCompletedOnboarding(ctx: Context): Boolean =
+        prefs(ctx).getBoolean(KEY_ONBOARDING_COMPLETED, false)
+
+    fun setOnboardingCompleted(ctx: Context, completed: Boolean) =
+        prefs(ctx).edit().putBoolean(KEY_ONBOARDING_COMPLETED, completed).apply()
+
+    /**
+     * 老用户迁移：升级安装时 `onboarding_completed_v1` 不存在，
+     * 若直接按「未完成」处理会把已上手的老用户重新丢进引导页。
+     *
+     * 这里用「已经开过任一快捷手势，或已经看过首页引导」作为旁证，
+     * 判定其非首次使用，直接补写完成标记。仅在 key 缺失时执行一次。
+     */
+    fun ensureOnboardingCompletionMigrated(ctx: Context) {
+        val p = prefs(ctx)
+        if (p.contains(KEY_ONBOARDING_COMPLETED)) return
+        val returningUser = isFlipEnabled(ctx) ||
+            isDoubleTapEnabled(ctx) ||
+            hasSeenHomeOnboarding(ctx) ||
+            isBackupInitialized(ctx)
+        if (returningUser) {
+            p.edit().putBoolean(KEY_ONBOARDING_COMPLETED, true).apply()
+        }
+    }
+
+    /** 引导最后一页「从其他 App 迁移」是否已展示过，避免重复打扰。 */
+    fun wasOnboardingImportOffered(ctx: Context): Boolean =
+        prefs(ctx).getBoolean(KEY_ONBOARDING_IMPORT_OFFERED, false)
+    fun setOnboardingImportOffered(ctx: Context) =
+        prefs(ctx).edit().putBoolean(KEY_ONBOARDING_IMPORT_OFFERED, true).apply()
+
     fun isSettingsGuideDismissed(ctx: Context): Boolean =
         prefs(ctx).getBoolean(KEY_SETTINGS_GUIDE_DISMISSED, false)
     fun setSettingsGuideDismissed(ctx: Context, dismissed: Boolean) =
@@ -350,6 +389,41 @@ object PrefsGeneralSupport {
         prefs(ctx).getString(KEY_TAP_ACTION_TRIPLE, "") ?: ""
     fun setTapActionTriple(ctx: Context, actionId: String) =
         prefs(ctx).edit().putString(KEY_TAP_ACTION_TRIPLE, actionId).apply()
+
+    /**
+     * 敲击手势的默认动作：弹出记账悬浮窗。
+     *
+     * 之前「敲击已开启但动作未配置」是可能的——开关在引导页/设置页被打开，
+     * 但动作字段是空的，于是敲击只弹一句"未配置动作"提示，用户以为功能坏了。
+     *
+     * 这里把「开了手势就该有个默认动作」这条规则收敛到一处：
+     * [ensureTapActionsConfigured] 会在任何打开敲击的路径上补齐默认值。
+     */
+    const val DEFAULT_TAP_ACTION_ID = "show_overlay"
+
+    /**
+     * 补齐敲击动作默认值。幂等，可以安全地在启动、开开关、执行动作前调用。
+     *
+     * @return 是否发生了写入
+     */
+    fun ensureTapActionsConfigured(ctx: Context): Boolean {
+        val p = prefs(ctx)
+        val editor = p.edit()
+        var changed = false
+        if ((p.getString(KEY_TAP_ACTION_DOUBLE, "") ?: "").isEmpty()) {
+            editor.putString(KEY_TAP_ACTION_DOUBLE, DEFAULT_TAP_ACTION_ID)
+            changed = true
+        }
+        // 三击是可选功能，只有用户显式启用时才补默认值，避免凭空"外送"一个动作
+        if (p.getBoolean(KEY_TAP_TRIPLE_ENABLED, false) &&
+            (p.getString(KEY_TAP_ACTION_TRIPLE, "") ?: "").isEmpty()
+        ) {
+            editor.putString(KEY_TAP_ACTION_TRIPLE, DEFAULT_TAP_ACTION_ID)
+            changed = true
+        }
+        if (changed) editor.apply()
+        return changed
+    }
 
     fun serializeWhiteList(set: Set<String>): String = JSONArray(set).toString()
 

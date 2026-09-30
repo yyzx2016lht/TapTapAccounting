@@ -29,6 +29,7 @@ import com.taostudio.tapaccounting.ui.common.StatusBarStyle
 class AddCategoryActivity : AppCompatActivity() {
 
     private var selectedIconUrl: String = ""
+    private var userPickedIcon = false
     private var parentName: String? = null
     private var type: Int = Prefs.TYPE_EXPENSE
 
@@ -48,7 +49,7 @@ class AddCategoryActivity : AppCompatActivity() {
     }
 
     private val categoryRepository by lazy {
-        CategoryRepository(database.categoryDao(), database.billDao())
+        CategoryRepository(database.categoryDao(), database.billDao(), database.recurringPatternDao())
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -83,8 +84,12 @@ class AddCategoryActivity : AppCompatActivity() {
             etName.setText(oldName)
             etName.setSelection(oldName.length)
             selectedIconUrl = oldIcon
-            if (oldIcon.isNotEmpty()) {
+            // 首字、三个点、四格都是系统自动给的，改名后要跟着新名称变化
+            userPickedIcon = !CategoryIcons.isAutoAssigned(oldIcon)
+            if (userPickedIcon) {
                 Glide.with(this).load(oldIcon).into(ivPreview)
+            } else {
+                syncAutoIcon(oldName, ivPreview)
             }
             btnMultiSelect.visibility = View.GONE
         } else {
@@ -97,14 +102,21 @@ class AddCategoryActivity : AppCompatActivity() {
         adapter = BuiltInCategoryAdapter(
             items = allIcons,
             onSelect = { selected ->
-                selectedIconUrl = selected.icon
                 val currentText = etName.text.toString()
                 if (!isEdit && (currentText.isEmpty() || currentText == lastAutoFilledName)) {
                     etName.setText(selected.name)
                     etName.setSelection(selected.name.length)
                     lastAutoFilledName = selected.name
                 }
-                Glide.with(this).load(selected.icon).into(ivPreview)
+                if (CategoryIcons.isPlaceholder(selected.icon)) {
+                    // 三个点不是可选的真实图标，继续用当前名称的首字
+                    userPickedIcon = false
+                    syncAutoIcon(etName.text?.toString().orEmpty(), ivPreview)
+                } else {
+                    selectedIconUrl = selected.icon
+                    userPickedIcon = true
+                    Glide.with(this).load(selected.icon).into(ivPreview)
+                }
             },
             onMultiSelectionChanged = { selected ->
                 selectedCategories = selected
@@ -152,6 +164,19 @@ class AddCategoryActivity : AppCompatActivity() {
             override fun afterTextChanged(s: Editable?) = Unit
         })
 
+        // 名称即图标：没有挑选图标时，跟随输入实时生成「首字图标」预览
+        etName.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = Unit
+
+            override fun afterTextChanged(s: Editable?) {
+                if (userPickedIcon) return
+                if (isMultiSelect) return
+                syncAutoIcon(s?.toString().orEmpty(), ivPreview)
+            }
+        })
+
         btn.setOnClickListener {
             if (isMultiSelect) {
                 saveMultipleCategories(btn, btnMultiSelect)
@@ -159,9 +184,16 @@ class AddCategoryActivity : AppCompatActivity() {
             }
 
             val newName = etName.text.toString().trim()
-            if (newName.isEmpty() || selectedIconUrl.isEmpty()) {
+            if (newName.isEmpty()) {
                 Utils.toast(this, getString(R.string.input_name_icon))
                 return@setOnClickListener
+            }
+            // 未手动选图标时： 「其他」用四格，其余用名称首字
+            if (selectedIconUrl.isEmpty()) {
+                selectedIconUrl = CategoryIcons.fallback("", newName).ifEmpty {
+                    Utils.toast(this, getString(R.string.input_name_icon))
+                    return@setOnClickListener
+                }
             }
 
             lifecycleScope.launch(Dispatchers.IO) {
@@ -197,6 +229,24 @@ class AddCategoryActivity : AppCompatActivity() {
                 }
             }
         }
+    }
+
+    /**
+     * 用户没有手动挑选图标时，按当前输入的名称生成「首字图标」并预览。
+     * 名称清空则退回原来的占位图。
+     */
+    private fun syncAutoIcon(name: String, preview: ImageView) {
+        val icon = CategoryIcons.fallback("", name)
+        if (icon.isEmpty()) {
+            selectedIconUrl = ""
+            preview.setImageResource(R.drawable.ic_profile_category)
+            return
+        }
+        selectedIconUrl = icon
+        Glide.with(this)
+            .load(icon)
+            .diskCacheStrategy(com.bumptech.glide.load.engine.DiskCacheStrategy.NONE)
+            .into(preview)
     }
 
     private fun saveMultipleCategories(button: Button, multiSelectButton: TextView) {
@@ -243,7 +293,7 @@ class AddCategoryActivity : AppCompatActivity() {
                                 name = selected.name.trim(),
                                 type = dbType,
                                 parentId = parentId,
-                                iconId = selected.icon
+                                iconId = CategoryIcons.fallback(selected.icon, selected.name.trim())
                             )
                         )
                     }

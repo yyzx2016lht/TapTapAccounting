@@ -34,5 +34,14 @@ interface DeletedBillDao {
 
     @Query("SELECT COUNT(*) FROM deleted_bills")
     suspend fun getCount(): Int
+
+    /**
+     * 合并重复分类时，把回收站里挂在被并入分类下的账单改挂到保留的那个。
+     *
+     * `deleted_bills.categoryId` **没有外键**，所以不跟着改的话会留下悬空 id：
+     * 还原时既进不了分类预算，又永远挂在已经不存在的分类名下。
+     */
+    @Query("UPDATE deleted_bills SET categoryId = :newCategoryId WHERE categoryId = :oldCategoryId")
+    suspend fun migrateCategoryId(oldCategoryId: Long, newCategoryId: Long)
 }
 

@@ -18,6 +18,10 @@ import com.taostudio.tapaccounting.data.repository.CategoryRepository
  * 利用 Glide 的磁盘缓存（DiskCacheStrategy.DATA），在联网时把所有分类图标
  * 提前下载到本地，断网后也能正常显示，刷新时会自动补全遗漏的图标。
  *
+ * **自 2026-09-24 起**：内置图标已随 APK 打包（见 [BundledIcons]），
+ * 不再需要联网预热，这里只对「未内置的 URL」（例如用户以后新增的自定义图标）
+ * 做网络预热。内置 URL 会被直接跳过。
+ *
  * 调用时机：[TapApplication.onCreate] 中后台执行，不阻塞主线程。
  */
 object CategoryIconPreloader {
@@ -49,7 +53,8 @@ object CategoryIconPreloader {
                 }
             }
 
-            val allUrls = dbUrls + builtinUrls
+            // 内置图标已打包进 APK，无需联网预热；只预热未内置的 URL
+            val allUrls = (dbUrls + builtinUrls).filter { BundledIcons.bundledAssetPath(ctx, it) == null }
             if (allUrls.isEmpty()) return@withContext
 
             // Glide preload：下载到缓存，后续 bind 时立刻返回（无延迟）

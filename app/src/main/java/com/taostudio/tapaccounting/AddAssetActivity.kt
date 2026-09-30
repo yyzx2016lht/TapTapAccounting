@@ -22,6 +22,8 @@ import androidx.room.withTransaction
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.view.ContextThemeWrapper
+import androidx.core.content.ContextCompat
+import androidx.core.graphics.ColorUtils
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -84,6 +86,10 @@ class AddAssetActivity : AppCompatActivity() {
     private var pendingAssetSave: PendingAssetSave? = null
     private var forceInvestmentLotSplitHandled = false
     private val assetUiPrefs by lazy { getSharedPreferences(PREFS_ASSET_UI, MODE_PRIVATE) }
+
+    /** 本页统一取色：值/可点选值/选中态用品牌色，标签用主文本色，占位与说明用次文本色。 */
+    private val brandColor by lazy { ContextCompat.getColor(this, R.color.brand_primary) }
+    private val textPrimaryColor by lazy { ContextCompat.getColor(this, R.color.text_primary) }
 
     private val db by lazy { AppDatabase.getDatabase(this) }
     private val balanceAdjustmentLauncher = registerForActivityResult(
@@ -239,10 +245,6 @@ class AddAssetActivity : AppCompatActivity() {
                 if (!suppressBalanceWatcher) {
                     balanceEditedByUser = true
                 }
-                etBalance.setTextColor(
-                    if (s.isNullOrEmpty()) Color.parseColor("#999999")
-                    else Color.parseColor("#2196F3")
-                )
             }
 
             override fun afterTextChanged(s: Editable?) = Unit
@@ -285,7 +287,7 @@ class AddAssetActivity : AppCompatActivity() {
                 else -> selectedAssetCategory
             }
             tvTypeName.text = item.name
-            tvTypeName.setTextColor(Color.parseColor("#2196F3"))
+            tvTypeName.setTextColor(brandColor)
             Glide.with(this)
                 .load(AssetIconDefaults.withDefault(item.icon))
                 .transform(CircleCrop())
@@ -313,7 +315,7 @@ class AddAssetActivity : AppCompatActivity() {
     }
 
     private fun loadAssetData() {
-        findViewById<TextView>(R.id.tv_title).text = getString(R.string.edit_account_title)
+        findViewById<TextView>(R.id.tv_title).text = getString(R.string.edit_asset_title)
         lifecycleScope.launch {
             val asset = db.assetDao().getAssetById(assetId)
             asset?.let {
@@ -328,7 +330,6 @@ class AddAssetActivity : AppCompatActivity() {
                 etBalance.setText(balanceFormatted)
                 suppressBalanceWatcher = false
                 balanceEditedByUser = false
-                etBalance.setTextColor(Color.parseColor("#333333"))
 
                 etBalance.post {
                     etBalance.selectAll()
@@ -340,7 +341,7 @@ class AddAssetActivity : AppCompatActivity() {
                     if (it.annualInterestRate == 0.0) "" else formatCompactDecimal(it.annualInterestRate)
                 )
                 tvTypeName.text = it.type
-                tvTypeName.setTextColor(Color.parseColor("#2196F3"))
+                tvTypeName.setTextColor(brandColor)
                 selectedType = it.type
                 selectedIcon = AssetIconDefaults.withDefault(it.icon)
                 selectedCurrency = it.currency
@@ -833,14 +834,7 @@ class AddAssetActivity : AppCompatActivity() {
         val isCreditCard = selectedAssetCategory == Asset.CATEGORY_CREDIT_CARD
         layoutCreditLimit.visibility = if (isCreditCard) View.VISIBLE else View.GONE
         layoutCreditCycle.visibility = if (isCreditCard) View.VISIBLE else View.GONE
-        tvAssetCategory.setTextColor(
-            when (selectedAssetCategory) {
-                Asset.CATEGORY_CREDIT_CARD -> Color.parseColor("#F44336")
-                Asset.CATEGORY_INVESTMENT -> Color.parseColor("#FF9800")
-                Asset.CATEGORY_RECHARGE -> Color.parseColor("#9C27B0")
-                else -> Color.parseColor("#2196F3")
-            }
-        )
+        tvAssetCategory.setTextColor(brandColor)
     }
 
     private fun loadAssetsJson(): List<BuiltInCategory> {
@@ -993,13 +987,15 @@ class AddAssetActivity : AppCompatActivity() {
             val isSelected = position == selectedIndex
 
             titleView.text = option.title
-            titleView.setTextColor(if (isSelected) Color.parseColor("#1762C5") else Color.parseColor("#1F2A38"))
+            titleView.setTextColor(if (isSelected) brandColor else textPrimaryColor)
             subtitleView.text = option.subtitle
             subtitleView.visibility = if (option.subtitle.isBlank()) View.GONE else View.VISIBLE
             checkView.visibility = if (isSelected) View.VISIBLE else View.INVISIBLE
             riskView.visibility = View.GONE
             arrowView.visibility = View.GONE
-            view.setBackgroundColor(if (isSelected) Color.parseColor("#0F2F80ED") else Color.TRANSPARENT)
+            view.setBackgroundColor(
+                if (isSelected) ColorUtils.setAlphaComponent(brandColor, 15) else Color.TRANSPARENT
+            )
             return view
         }
     }

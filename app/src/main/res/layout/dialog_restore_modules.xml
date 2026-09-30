@@ -12,7 +12,7 @@
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="@string/select_restore_modules"
+            android:text="@string/restore_screen_title"
             android:textColor="#1A2744"
             android:textSize="20sp"
             android:textStyle="bold" />
@@ -21,7 +21,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
-                android:text="@string/restore_hint"
+            android:text="@string/restore_screen_subtitle"
             android:textColor="#7C8798"
             android:textSize="13sp" />
 
@@ -45,40 +45,123 @@
                 android:id="@+id/rg_restore_mode"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="6dp"
-                android:orientation="horizontal">
+                android:layout_marginTop="8dp"
+                android:orientation="vertical">
 
                 <RadioButton
                     android:id="@+id/rb_restore_merge"
-                    android:layout_width="0dp"
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_weight="1"
                     android:checked="true"
-                    android:singleLine="true"
-                    android:text="@string/merge_recommended"
+                    android:text="@string/restore_merge_title"
                     android:textColor="#2D3C57"
-                    android:textSize="13sp" />
+                    android:textSize="15sp" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="32dp"
+                    android:layout_marginBottom="8dp"
+                    android:text="@string/restore_merge_desc"
+                    android:textColor="#6E7D95"
+                    android:textSize="12sp" />
 
                 <RadioButton
                     android:id="@+id/rb_restore_overwrite"
-                    android:layout_width="0dp"
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:singleLine="true"
-                    android:text="@string/overwrite"
+                    android:text="@string/restore_overwrite_title"
                     android:textColor="#2D3C57"
-                    android:textSize="13sp" />
+                    android:textSize="15sp" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="32dp"
+                    android:text="@string/restore_overwrite_desc"
+                    android:textColor="#6E7D95"
+                    android:textSize="12sp" />
             </RadioGroup>
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/group_restore_shared"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:background="@drawable/bg_backup_warning"
+            android:orientation="vertical"
+            android:padding="14dp"
+            android:visibility="gone">
 
             <TextView
-                android:id="@+id/tv_restore_mode_hint"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/restore_shared_section"
+                android:textColor="#8A3B2A"
+                android:textSize="14sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/tv_restore_shared_message"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:textColor="#6E534C"
+                android:textSize="13sp" />
+
+            <RadioGroup
+                android:id="@+id/rg_restore_shared"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:orientation="vertical"
+                android:visibility="gone">
+
+                <RadioButton
+                    android:id="@+id/rb_shared_reconnect"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:textColor="#2D3C57"
+                    android:textSize="14sp" />
+
+                <RadioButton
+                    android:id="@+id/rb_shared_local"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/shared_restore_local_copy"
+                    android:textColor="#2D3C57"
+                    android:textSize="14sp" />
+            </RadioGroup>
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/btn_restore_adjust"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:background="?attr/selectableItemBackground"
+            android:paddingTop="8dp"
+            android:paddingBottom="8dp"
+            android:text="@string/restore_adjust_content_hide"
+            android:textColor="#5C80EA"
+            android:textSize="14sp" />
+
+        <LinearLayout
+            android:id="@+id/group_restore_details"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <com.google.android.material.checkbox.MaterialCheckBox
+                android:id="@+id/cb_restore_select_all"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="4dp"
-                android:text="@string/merge_mode_hint"
-                android:textColor="#6E7D95"
-                android:textSize="12sp" />
-        </LinearLayout>
+                android:text="@string/restore_select_all"
+                android:textColor="#1A2744"
+                android:textSize="15sp"
+                android:textStyle="bold" />
 
         <LinearLayout
             android:id="@+id/group_restore_core"
@@ -342,6 +425,8 @@
                 android:textColor="#23324A"
                 android:textSize="14sp"
                 android:visibility="gone" />
+        </LinearLayout>
+
         </LinearLayout>
 
     </LinearLayout>

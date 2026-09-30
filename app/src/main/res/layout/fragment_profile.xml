@@ -41,7 +41,7 @@
                 android:layout_height="wrap_content"
                 android:layout_centerInParent="true"
                 android:text="@string/settings_center"
-                android:textColor="@color/settings_item_title"
+                android:textColor="#1A2744"
                 android:textSize="@dimen/text_size_18"
                 android:textStyle="bold" />
         </RelativeLayout>
@@ -802,7 +802,7 @@
                             <TextView
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:text="‹"
+                                android:text="›"
                                 android:textColor="#C0C8D4"
                                 android:textSize="22sp" />
                         </LinearLayout>
@@ -1324,11 +1324,11 @@
                     </LinearLayout>
 
                     <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="›"
-                        android:textColor="#C0C8D4"
-                        android:textSize="22sp" />
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="‹"
+                                android:textColor="#C0C8D4"
+                                android:textSize="22sp" />
                 </LinearLayout>
             </androidx.cardview.widget.CardView>
 
@@ -1617,6 +1617,12 @@
                                     android:textColor="#1A2744"
                                     android:textSize="@dimen/text_size_15"
                                     android:textStyle="bold" />
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="@string/developer_log_desc"
+                                    android:textColor="#8A000000"
+                                    android:textSize="@dimen/text_size_11" />
                                 <com.google.android.material.button.MaterialButton
                                     android:id="@+id/btn_share_logs"
                                     style="@style/Widget.MaterialComponents.Button.TextButton"

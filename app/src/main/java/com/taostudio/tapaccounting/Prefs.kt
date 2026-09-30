@@ -437,6 +437,19 @@ object Prefs {
         PrefsGeneralSupport.hasSeenHomeOnboarding(ctx)
     fun setHomeOnboardingSeen(ctx: Context) =
         PrefsGeneralSupport.setHomeOnboardingSeen(ctx)
+
+    // --- 首启引导 OnboardingActivity ---
+    fun hasCompletedOnboarding(ctx: Context): Boolean =
+        PrefsGeneralSupport.hasCompletedOnboarding(ctx)
+    fun setOnboardingCompleted(ctx: Context, completed: Boolean) =
+        PrefsGeneralSupport.setOnboardingCompleted(ctx, completed)
+    fun ensureOnboardingCompletionMigrated(ctx: Context) =
+        PrefsGeneralSupport.ensureOnboardingCompletionMigrated(ctx)
+    fun wasOnboardingImportOffered(ctx: Context): Boolean =
+        PrefsGeneralSupport.wasOnboardingImportOffered(ctx)
+    fun setOnboardingImportOffered(ctx: Context) =
+        PrefsGeneralSupport.setOnboardingImportOffered(ctx)
+
     fun isSettingsGuideDismissed(ctx: Context): Boolean =
         PrefsGeneralSupport.isSettingsGuideDismissed(ctx)
     fun setSettingsGuideDismissed(ctx: Context, dismissed: Boolean) =
@@ -468,6 +481,9 @@ object Prefs {
     fun setTapTripleEnabled(ctx: Context, enabled: Boolean) = PrefsGeneralSupport.setTapTripleEnabled(ctx, enabled)
     fun getTapActionDouble(ctx: Context): String = PrefsGeneralSupport.getTapActionDouble(ctx)
     fun setTapActionDouble(ctx: Context, actionId: String) = PrefsGeneralSupport.setTapActionDouble(ctx, actionId)
+    fun ensureTapActionsConfigured(ctx: Context): Boolean =
+        PrefsGeneralSupport.ensureTapActionsConfigured(ctx)
+    val DEFAULT_TAP_ACTION_ID: String get() = PrefsGeneralSupport.DEFAULT_TAP_ACTION_ID
     fun getTapActionTriple(ctx: Context): String = PrefsGeneralSupport.getTapActionTriple(ctx)
     fun setTapActionTriple(ctx: Context, actionId: String) = PrefsGeneralSupport.setTapActionTriple(ctx, actionId)
 

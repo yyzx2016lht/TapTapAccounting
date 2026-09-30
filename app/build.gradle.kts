@@ -111,11 +111,14 @@ dependencies {
 
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
     implementation("com.github.bumptech.glide:glide:4.16.0")
-    implementation("com.google.mlkit:text-recognition-chinese:16.0.0")
+    // 图片记账走多模态 AI（ReceiptOcrHelper），不再需要本地 ML Kit OCR，
+    // 故移除 com.google.mlkit:text-recognition-chinese 依赖（省 ~4.3MB .so + 2MB 模型 assets）。
 
     implementation("dev.rikka.shizuku:api:13.1.5")
     implementation("dev.rikka.shizuku:provider:13.1.5")
     implementation("androidx.swiperefreshlayout:swiperefreshlayout:1.1.0")
+    // 首启引导页的分页容器
+    implementation("androidx.viewpager2:viewpager2:1.1.0")
     implementation("com.github.PhilJay:MPAndroidChart:v3.1.0")
     implementation("com.github.yalantis:ucrop:2.2.8")
     implementation("com.kizitonwose.calendar:view:2.4.0")

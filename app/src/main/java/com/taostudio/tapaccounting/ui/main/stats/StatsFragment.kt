@@ -1806,12 +1806,12 @@ class StatsFragment : Fragment() {
             )
             if (bottomSheetId == 0) return@setOnShowListener
             val bottomSheet = dialog.findViewById<View>(bottomSheetId) ?: return@setOnShowListener
-            bottomSheet.layoutParams = bottomSheet.layoutParams.apply {
-                height = ViewGroup.LayoutParams.MATCH_PARENT
-            }
+            bottomSheet.setBackgroundColor(android.graphics.Color.TRANSPARENT)
+            val maxHeight = (resources.displayMetrics.heightPixels * 0.72f).toInt()
             BottomSheetBehavior.from(bottomSheet).apply {
-                skipCollapsed = true
                 isFitToContents = true
+                skipCollapsed = true
+                this.maxHeight = maxHeight
                 this.state = BottomSheetBehavior.STATE_EXPANDED
             }
         }

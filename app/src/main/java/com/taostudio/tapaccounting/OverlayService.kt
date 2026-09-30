@@ -93,12 +93,14 @@ class OverlayService : Service() {
                         stopWatchdog()
                     }
                     Intent.ACTION_SCREEN_ON -> {
-                        if (canRunTapDetectorNow()) {
-                            Logger.d(this@OverlayService, "OverlayService", "Screen ON: detector allowed, scheduling detector start")
-                            scheduleStartAfterUnlock("screen-on-unlocked")
-                        } else {
-                            Logger.d(this@OverlayService, "OverlayService", "Screen ON: detector not allowed, waiting")
-                        }
+                        // 亮屏瞬间锁屏往往还在，不能用当时的锁屏状态决定要不要恢复。
+                        // 延迟任务里会再看屏幕是否仍然亮着。
+                        Logger.d(this@OverlayService, "OverlayService", "Screen ON: scheduling detector start")
+                        if (!isFlipEnabled && !isDoubleTapEnabled) return
+                        watchdogCooldownUntilMs = 0L
+                        consecutiveDeadChecks = 0
+                        consecutiveWatchdogRestarts = 0
+                        scheduleStartAfterUnlock("screen-on")
                     }
                     Intent.ACTION_USER_PRESENT -> {
                         Logger.d(this@OverlayService, "OverlayService", "User present: scheduling detector start")
@@ -120,19 +122,16 @@ class OverlayService : Service() {
                 addAction(Intent.ACTION_USER_PRESENT)
             }
             try {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                    // P2-11: 优先 NOT_EXPORTED；旧 API 无 flag 时回退
-                    try {
-                        registerReceiver(screenReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
-                    } catch (_: Throwable) {
-                        registerReceiver(screenReceiver, filter)
-                    }
-                } else {
-                    registerReceiver(screenReceiver, filter)
-                }
+                // SCREEN_ON / SCREEN_OFF / USER_PRESENT 由系统发出。
+                // NOT_EXPORTED 收不到这些系统广播，息屏停掉之后亮屏也不会恢复。
+                ContextCompat.registerReceiver(
+                    this@OverlayService,
+                    screenReceiver,
+                    filter,
+                    ContextCompat.RECEIVER_EXPORTED
+                )
             } catch (e: Exception) {
-                Logger.d(this@OverlayService, "OverlayService", "registerReceiver failed: ${e.message}")
-                try { registerReceiver(screenReceiver, filter) } catch (_: Exception) {}
+                Logger.e(this@OverlayService, "OverlayService", "registerReceiver failed: ${e.message}")
             }
 
             if (Prefs.isShizukuPersistenceEnabled(this@OverlayService)) {
@@ -164,7 +163,7 @@ class OverlayService : Service() {
                 if (wakeLock?.isHeld == true) wakeLock?.release()
                 wakeLock?.acquire(durationMs)
             } catch (e: Exception) {
-                Logger.d(this@OverlayService, "OverlayService", "acquireWakeLockBriefly failed: ${e.message}")
+                Logger.e(this@OverlayService, "OverlayService", "acquireWakeLockBriefly failed: ${e.message}")
             }
         }
 
@@ -177,7 +176,7 @@ class OverlayService : Service() {
             if (isWatchdogCoolingDown(SystemClock.elapsedRealtime())) return
             if (watchdogJob?.isActive == true) return
             watchdogJob = serviceScope.launch {
-                Logger.d(this@OverlayService, "OverlayService", "Watchdog started (interval=${WATCHDOG_INTERVAL_MS}ms)")
+                Logger.i(this@OverlayService, "OverlayService", "Watchdog started (interval=${WATCHDOG_INTERVAL_MS}ms)")
                 while (isActive) {
                     delay(WATCHDOG_INTERVAL_MS)
                     if (!isDoubleTapEnabled) break
@@ -191,7 +190,7 @@ class OverlayService : Service() {
             if (watchdogJob == null) return
             watchdogJob?.cancel()
             watchdogJob = null
-            Logger.d(this@OverlayService, "OverlayService", "Watchdog stopped")
+            Logger.i(this@OverlayService, "OverlayService", "Watchdog stopped")
         }
 
         fun syncWatchdogState() {
@@ -376,12 +375,17 @@ class OverlayService : Service() {
     override fun onCreate() {
         super.onCreate()
         isServiceRunning = true
-        Logger.d(this, "OverlayService", "Service Created")
+        Logger.i(this, "OverlayService", "Service Created")
         KeepAliveDiagnostics.logSnapshot(this, "overlay-onCreate")
         try {
             overlayManager = OverlayManager(this)
             isFlipEnabled = Prefs.isFlipEnabled(this)
             isDoubleTapEnabled = Prefs.isDoubleTapEnabled(this)
+            // 老版本可能留下"敲击开着但动作是空的"状态，服务起来时顺手补齐，
+            // 用户不需要再进设置页手动点一次下拉框。
+            if (isDoubleTapEnabled) {
+                Prefs.ensureTapActionsConfigured(this)
+            }
             promoteToForeground(currentNotificationText())
             keepAliveManager.attach()
 
@@ -395,15 +399,15 @@ class OverlayService : Service() {
 
             keepAliveManager.reconcileDetectorState("service-create")
             keepAliveManager.syncWatchdogState()
-            Logger.d(this, "OverlayService", "Service onCreate completed.")
+            Logger.i(this, "OverlayService", "Service onCreate completed.")
         } catch (e: Exception) {
-            Logger.d(this, "OverlayService", "🚨 Fatal Error in onCreate: ${e.message}")
+            Logger.e(this, "OverlayService", "🚨 Fatal Error in onCreate: ${e.message}")
         }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val action = intent?.action
-        Logger.d(this, "OverlayService", "onStartCommand: $action")
+        Logger.i(this, "OverlayService", "onStartCommand: $action")
 
         when (action) {
             null -> {
@@ -486,7 +490,7 @@ class OverlayService : Service() {
     }
 
     override fun onDestroy() {
-        Logger.d(this, "OverlayService", "Service onDestroy")
+        Logger.i(this, "OverlayService", "Service onDestroy")
         isDestroying = true
         keepAliveManager.detach()
         stopFlipDetection()
@@ -504,7 +508,7 @@ class OverlayService : Service() {
 
     override fun onLowMemory() {
         super.onLowMemory()
-        Logger.d(this, "OverlayService", "onLowMemory")
+        Logger.w(this, "OverlayService", "onLowMemory")
     }
 
     override fun onConfigurationChanged(newConfig: Configuration) {
@@ -533,9 +537,9 @@ class OverlayService : Service() {
         }
         if (flipDetector?.start() != true) {
             flipDetector = null
-            Logger.d(this, "OverlayService", "FlipDetector start failed")
+            Logger.e(this, "OverlayService", "FlipDetector start failed")
         } else {
-            Logger.d(this, "OverlayService", "FlipDetector started")
+            Logger.i(this, "OverlayService", "FlipDetector started")
         }
     }
 
@@ -571,9 +575,9 @@ class OverlayService : Service() {
         }
         if (tapDetector?.start() != true) {
             tapDetector = null
-            Logger.d(this, "OverlayService", "TapDetector start failed")
+            Logger.e(this, "OverlayService", "TapDetector start failed")
         } else {
-            Logger.d(this, "OverlayService", "TapDetector started")
+            Logger.i(this, "OverlayService", "TapDetector started")
         }
     }
 
@@ -586,15 +590,14 @@ class OverlayService : Service() {
         startTapDetection()
     }
 
-    private fun isUserUnlockedAndInteractive(): Boolean {
+    /** 屏幕是否亮着。息屏（含息屏显示）为 false，亮屏为 true，与是否解锁无关。 */
+    private fun isScreenInteractive(): Boolean {
         val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
-        val km = getSystemService(Context.KEYGUARD_SERVICE) as KeyguardManager
-        val interactive = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) pm.isInteractive else pm.isScreenOn
-        return interactive && !km.isKeyguardLocked
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) pm.isInteractive else pm.isScreenOn
     }
 
     private fun canRunTapDetectorNow(): Boolean {
-        return isUserUnlockedAndInteractive() && !isLandscapeDetectionBlocked()
+        return isScreenInteractive() && !isLandscapeDetectionBlocked()
     }
 
     private fun isLandscapeDetectionBlocked(): Boolean {
@@ -617,15 +620,36 @@ class OverlayService : Service() {
             else -> ""
         }
         if (actionId.isEmpty()) {
-            triggerTapFeedback("tap-$tapCount-detected-no-action")
-            Logger.d(this, "OverlayService", "Tap $tapCount detected but no action configured")
-            Utils.toast(this, getString(R.string.toast_tap_no_action))
+            // 兜底：手势已经开着却没有动作，说明是历史数据或某条开启路径漏了初始化。
+            // 就地补默认动作（弹出记账悬浮窗）再继续，而不是弹一句"未配置"就结束——
+            // 对用户来说"敲了没反应"等同于功能坏了。
+            Prefs.ensureTapActionsConfigured(this)
+            val repairedId = when (tapCount) {
+                2 -> Prefs.getTapActionDouble(this)
+                3 -> Prefs.getTapActionTriple(this)
+                else -> ""
+            }
+            if (repairedId.isEmpty()) {
+                triggerTapFeedback("tap-$tapCount-detected-no-action")
+                Logger.d(this, "OverlayService", "Tap $tapCount detected but no action configured")
+                Utils.toast(this, getString(R.string.toast_tap_no_action))
+                return
+            }
+            Logger.i(
+                this, "OverlayService",
+                "Tap $tapCount had empty action, fell back to default: $repairedId"
+            )
+            executeTapAction(tapCount, repairedId)
             return
         }
+        executeTapAction(tapCount, actionId)
+    }
+
+    private fun executeTapAction(tapCount: Int, actionId: String) {
         val action = com.taostudio.tapaccounting.tap.TapActionRegistry.findById(actionId)
         if (action != null) {
             triggerTapFeedback("tap-$tapCount-detected")
-            Logger.d(this, "OverlayService", "Tap $tapCount detected, executing: ${action.displayName}")
+            Logger.i(this, "OverlayService", "Tap $tapCount detected, executing: ${action.displayName}")
             keepAliveManager.acquireWakeLockBriefly(3_000L)
             action.execute(this)
         } else {
@@ -656,7 +680,7 @@ class OverlayService : Service() {
             Utils.toast(this, getString(R.string.toast_flip_action_expired))
             return
         }
-        Logger.d(this, "OverlayService", "Flip detected, executing: ${action.displayName}")
+        Logger.i(this, "OverlayService", "Flip detected, executing: ${action.displayName}")
         keepAliveManager.acquireWakeLockBriefly(3_000L)
         action.execute(this)
     }
@@ -702,7 +726,7 @@ class OverlayService : Service() {
             }
         }
         if (isDoubleTapEnabled) {
-            // 开关开着但检测器没跑（息屏/锁屏/横屏屏蔽）
+            // 开关开着但检测器没跑（息屏或横屏屏蔽）
             return getString(R.string.notif_tap_paused)
         }
         if (Prefs.isDoubleTapEnabled(this)) {
@@ -722,7 +746,7 @@ class OverlayService : Service() {
         try {
             promoteToForeground(currentNotificationText())
         } catch (e: Exception) {
-            Logger.d(this, "OverlayService", "refreshDetectionNotification failed: ${e.message}")
+            Logger.e(this, "OverlayService", "refreshDetectionNotification failed: ${e.message}")
         }
     }
 
@@ -750,13 +774,13 @@ class OverlayService : Service() {
                     )
                 }
             }
-            Logger.d(this, "OverlayService", "🚨 all foreground types rejected; service stays non-foreground")
+            Logger.e(this, "OverlayService", "🚨 all foreground types rejected; service stays non-foreground")
         } else {
             try {
                 startForeground(NOTIF_ID, notification)
                 Logger.d(this, "OverlayService", "Foreground service active: $content (legacy)")
             } catch (e: Exception) {
-                Logger.d(this, "OverlayService", "startForeground failed: ${e.message}")
+                Logger.e(this, "OverlayService", "startForeground failed: ${e.message}")
             }
         }
     }
@@ -792,7 +816,7 @@ class OverlayService : Service() {
             Logger.d(this, "OverlayService", "enterMicrophoneMode: switched to MICROPHONE|SPECIAL_USE")
             true
         } catch (e: Exception) {
-            Logger.d(this, "OverlayService", "enterMicrophoneMode failed: ${e.message}")
+            Logger.e(this, "OverlayService", "enterMicrophoneMode failed: ${e.message}")
             // 回退：至少保证服务仍在前台
             runCatching { promoteToForeground(currentNotificationText()) }
             false
@@ -810,13 +834,13 @@ class OverlayService : Service() {
                 Logger.d(this, "OverlayService", "exitMicrophoneMode: foreground notification removed")
             }
         } catch (e: Exception) {
-            Logger.d(this, "OverlayService", "exitMicrophoneMode failed: ${e.message}")
+            Logger.e(this, "OverlayService", "exitMicrophoneMode failed: ${e.message}")
         }
     }
 
     private fun stopSelfIfIdle(reason: String) {
         if (isFlipEnabled || isDoubleTapEnabled || overlayManager.isShowing()) return
-        Logger.d(this, "OverlayService", "Service idle ($reason), stopping")
+        Logger.i(this, "OverlayService", "Service idle ($reason), stopping")
         cancelRestart()
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) stopForeground(STOP_FOREGROUND_REMOVE)

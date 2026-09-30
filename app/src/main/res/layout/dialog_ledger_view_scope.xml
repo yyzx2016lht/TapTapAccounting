@@ -3,229 +3,207 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#F0F2F6"
+    android:background="@drawable/bg_stats_scope_sheet"
     android:orientation="vertical">
-
-    <androidx.constraintlayout.widget.ConstraintLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:paddingStart="16dp"
-        android:paddingTop="12dp"
-        android:paddingEnd="16dp"
-        android:paddingBottom="8dp">
-
-        <View
-            android:id="@+id/drag_handle"
-            android:layout_width="34dp"
-            android:layout_height="4dp"
-            android:background="@drawable/bg_stats_sheet_handle"
-            app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toTopOf="parent" />
-
-        <TextView
-            android:id="@+id/tv_scope_title"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="14dp"
-            android:fontFamily="sans-serif-medium"
-            android:text="查看范围"
-            android:textColor="@color/text_primary"
-            android:textSize="18sp"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toBottomOf="@id/drag_handle" />
-
-        <ImageView
-            android:id="@+id/btn_scope_close"
-            android:layout_width="36dp"
-            android:layout_height="36dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="关闭"
-            android:padding="6dp"
-            android:src="@drawable/ic_close"
-            app:layout_constraintBottom_toBottomOf="@id/tv_scope_title"
-            app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintTop_toTopOf="@id/tv_scope_title"
-            app:tint="@color/text_secondary" />
-    </androidx.constraintlayout.widget.ConstraintLayout>
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginStart="14dp"
-        android:layout_marginTop="4dp"
-        android:layout_marginEnd="14dp"
-        android:background="@drawable/bg_stats_filter_section"
         android:orientation="vertical"
-        android:padding="14dp">
+        android:paddingStart="20dp"
+        android:paddingTop="10dp"
+        android:paddingEnd="12dp"
+        android:paddingBottom="4dp">
 
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:fontFamily="sans-serif-medium"
-            android:text="快捷范围"
-            android:textColor="@color/text_primary"
-            android:textSize="15sp" />
+        <View
+            android:layout_width="34dp"
+            android:layout_height="4dp"
+            android:layout_gravity="center_horizontal"
+            android:background="@drawable/bg_stats_sheet_handle" />
 
-        <GridLayout
+        <FrameLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:alignmentMode="alignMargins"
-            android:columnCount="3"
+            android:layout_marginTop="12dp">
+
+            <TextView
+                android:id="@+id/tv_scope_title"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="start|center_vertical"
+                android:fontFamily="sans-serif-medium"
+                android:text="查看范围"
+                android:textColor="@color/text_primary"
+                android:textSize="18sp" />
+
+            <ImageView
+                android:id="@+id/btn_scope_close"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:layout_gravity="end|center_vertical"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="关闭"
+                android:padding="6dp"
+                android:src="@drawable/ic_close"
+                app:tint="@color/text_secondary" />
+        </FrameLayout>
+    </LinearLayout>
+
+    <HorizontalScrollView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:clipToPadding="false"
+        android:overScrollMode="never"
+        android:paddingStart="16dp"
+        android:paddingEnd="16dp"
+        android:scrollbars="none">
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
             android:orientation="horizontal"
-            android:rowCount="1"
-            android:useDefaultMargins="false">
+            android:paddingTop="8dp"
+            android:paddingBottom="4dp">
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btn_scope_mine"
                 style="@style/StatsFilterQuickButton"
+                android:layout_width="wrap_content"
+                android:layout_height="36dp"
+                android:layout_marginEnd="8dp"
                 android:checkable="true"
+                android:minWidth="88dp"
+                android:paddingStart="14dp"
+                android:paddingEnd="14dp"
                 android:text="我的账单" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btn_scope_personal"
                 style="@style/StatsFilterQuickButton"
+                android:layout_width="wrap_content"
+                android:layout_height="36dp"
+                android:layout_marginEnd="8dp"
                 android:checkable="true"
+                android:minWidth="88dp"
+                android:paddingStart="14dp"
+                android:paddingEnd="14dp"
                 android:text="仅个人" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btn_scope_all"
                 style="@style/StatsFilterQuickButton"
+                android:layout_width="wrap_content"
+                android:layout_height="36dp"
                 android:checkable="true"
+                android:minWidth="88dp"
+                android:paddingStart="14dp"
+                android:paddingEnd="14dp"
                 android:text="全部账本" />
-        </GridLayout>
+        </LinearLayout>
+    </HorizontalScrollView>
+
+    <LinearLayout
+        android:id="@+id/layout_member_scope_segmented"
+        android:layout_width="match_parent"
+        android:layout_height="40dp"
+        android:layout_marginStart="16dp"
+        android:layout_marginTop="10dp"
+        android:layout_marginEnd="16dp"
+        android:background="@drawable/bg_stats_segmented_control"
+        android:orientation="horizontal"
+        android:padding="3dp">
+
+        <TextView
+            android:id="@+id/btn_scope_everyone"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:gravity="center"
+            android:text="全部成员"
+            android:textColor="@color/stats_segmented_text_active"
+            android:textSize="14sp" />
+
+        <TextView
+            android:id="@+id/btn_scope_only_mine"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:gravity="center"
+            android:text="仅我"
+            android:textColor="@color/stats_segmented_text_inactive"
+            android:textSize="14sp" />
     </LinearLayout>
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginStart="14dp"
-        android:layout_marginTop="12dp"
-        android:layout_marginEnd="14dp"
-        android:background="@drawable/bg_stats_filter_section"
-        android:orientation="vertical"
-        android:padding="14dp">
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="20dp"
+        android:paddingTop="14dp"
+        android:paddingEnd="20dp"
+        android:paddingBottom="8dp">
 
         <TextView
-            android:layout_width="wrap_content"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
+            android:layout_weight="1"
             android:fontFamily="sans-serif-medium"
-            android:text="共享账单"
+            android:text="账本"
             android:textColor="@color/text_primary"
             android:textSize="15sp" />
 
-        <LinearLayout
-            android:id="@+id/layout_member_scope_segmented"
-            android:layout_width="match_parent"
-            android:layout_height="40dp"
-            android:layout_marginTop="10dp"
-            android:background="@drawable/bg_stats_segmented_control"
-            android:orientation="horizontal"
-            android:padding="3dp">
-
-            <TextView
-                android:id="@+id/btn_scope_everyone"
-                android:layout_width="0dp"
-                android:layout_height="match_parent"
-                android:layout_weight="1"
-                android:gravity="center"
-                android:text="全部成员"
-                android:textColor="@color/stats_segmented_text_active"
-                android:textSize="14sp" />
-
-            <TextView
-                android:id="@+id/btn_scope_only_mine"
-                android:layout_width="0dp"
-                android:layout_height="match_parent"
-                android:layout_weight="1"
-                android:gravity="center"
-                android:text="仅我"
-                android:textColor="@color/stats_segmented_text_inactive"
-                android:textSize="14sp" />
-        </LinearLayout>
+        <TextView
+            android:id="@+id/tv_scope_selection_summary"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="已选 0 个"
+            android:textColor="@color/text_tertiary"
+            android:textSize="12sp" />
     </LinearLayout>
 
-    <LinearLayout
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/rv_scope_books"
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_marginStart="14dp"
-        android:layout_marginTop="12dp"
-        android:layout_marginEnd="14dp"
-        android:layout_marginBottom="12dp"
         android:layout_weight="1"
-        android:background="@drawable/bg_stats_filter_section"
-        android:orientation="vertical"
-        android:paddingStart="14dp"
-        android:paddingTop="14dp"
-        android:paddingEnd="14dp"
-        android:paddingBottom="6dp">
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:gravity="center_vertical"
-            android:orientation="horizontal">
-
-            <TextView
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:fontFamily="sans-serif-medium"
-                android:text="账本（可多选）"
-                android:textColor="@color/text_primary"
-                android:textSize="15sp" />
-
-            <TextView
-                android:id="@+id/tv_scope_selection_summary"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="已选 0 个"
-                android:textColor="@color/text_tertiary"
-                android:textSize="12sp" />
-        </LinearLayout>
-
-        <androidx.recyclerview.widget.RecyclerView
-            android:id="@+id/rv_scope_books"
-            android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:layout_marginTop="10dp"
-            android:layout_weight="1"
-            android:clipToPadding="false"
-            android:overScrollMode="ifContentScrolls"
-            android:paddingBottom="4dp" />
-    </LinearLayout>
+        android:clipToPadding="false"
+        android:overScrollMode="ifContentScrolls"
+        android:paddingStart="16dp"
+        android:paddingEnd="16dp"
+        android:paddingBottom="8dp"
+        android:scrollbars="vertical" />
 
     <LinearLayout
+        android:id="@+id/layout_scope_actions"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:background="@android:color/white"
-        android:elevation="8dp"
-        android:gravity="center_vertical"
+        android:elevation="6dp"
         android:orientation="horizontal"
         android:paddingStart="16dp"
-        android:paddingTop="8dp"
+        android:paddingTop="10dp"
         android:paddingEnd="16dp"
-        android:paddingBottom="12dp">
+        android:paddingBottom="16dp">
 
         <TextView
             android:id="@+id/btn_scope_reset"
             android:layout_width="0dp"
-            android:layout_height="42dp"
-            android:layout_marginEnd="6dp"
+            android:layout_height="@dimen/dialog_button_height"
+            android:layout_marginEnd="8dp"
             android:layout_weight="1"
             android:background="@drawable/bg_stats_filter_reset"
             android:fontFamily="sans-serif-medium"
             android:gravity="center"
             android:text="重置"
             android:textColor="@color/text_secondary"
-            android:textSize="14sp" />
+            android:textSize="15sp" />
 
         <TextView
             android:id="@+id/btn_scope_confirm"
             android:layout_width="0dp"
-            android:layout_height="42dp"
-            android:layout_marginStart="6dp"
+            android:layout_height="@dimen/dialog_button_height"
+            android:layout_marginStart="8dp"
             android:layout_weight="1"
             android:background="@drawable/bg_stats_filter_confirm"
             android:fontFamily="sans-serif-medium"

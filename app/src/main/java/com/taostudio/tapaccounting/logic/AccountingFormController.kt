@@ -246,11 +246,17 @@ class AccountingFormController(
                     else -> categories.firstOrNull { it.parentId == null && it.name == leafName }
                         ?: categories.firstOrNull { it.name == leafName }
                 }
-                val icon = when {
+                // 分类选择器走 CategoryRepository 的树，占位图会换成首字图标；
+                // 这里如果直接用库里的 iconId，cateic_other.png 仍会显示成三个点。
+                val rawIcon = when {
                     category == null -> ""
                     category.iconId.isNotBlank() -> category.iconId
-                    parent?.iconId?.isNotBlank() == true -> parent.iconId
-                    else -> ""
+                    else -> parent?.iconId.orEmpty()
+                }
+                val icon = if (category == null) {
+                    ""
+                } else {
+                    CategoryIcons.fallback(rawIcon, category.name, parent?.iconId.orEmpty())
                 }
                 category to icon
             }

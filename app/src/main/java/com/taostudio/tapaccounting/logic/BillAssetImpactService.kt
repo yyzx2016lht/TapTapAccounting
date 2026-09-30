@@ -23,6 +23,12 @@ object BillAssetImpactService {
         Logger.d(ctx, tag, message)
     }
 
+    /** 数据一致性告警：普通日志模式也会保留 */
+    private fun logWarn(tag: String, message: String) {
+        val ctx = runCatching { TapApplication.app() }.getOrNull() ?: return
+        Logger.w(ctx, tag, message)
+    }
+
     private fun logAssetDelta(asset: Asset, delta: Double, action: String, billId: Long) {
         val before = asset.balance
         val after = before + delta
@@ -46,7 +52,7 @@ object BillAssetImpactService {
             bill.subType == Bill.SUBTYPE_BALANCE_ADJUSTMENT_EXCLUDED -> return 0
             bill.type == Bill.TYPE_EXPENSE -> {
                 val asset = resolveSourceAsset(db, bill) ?: run {
-                    logFull("BILL_GUARD", "（警告）apply_expense 未找到资产，billId=${bill.id}, asset=${bill.accountName}")
+                    logWarn("BILL_GUARD", "（警告）apply_expense 未找到资产，billId=${bill.id}, asset=${bill.accountName}")
                     return 0
                 }
                 ensureRatesForImpact(bill, sourceAsset = asset, targetAsset = null)
@@ -58,7 +64,7 @@ object BillAssetImpactService {
             }
             bill.type == Bill.TYPE_INCOME -> {
                 val asset = resolveSourceAsset(db, bill) ?: run {
-                    logFull("BILL_GUARD", "（警告）apply_income 未找到资产，billId=${bill.id}, asset=${bill.accountName}")
+                    logWarn("BILL_GUARD", "（警告）apply_income 未找到资产，billId=${bill.id}, asset=${bill.accountName}")
                     return 0
                 }
                 ensureRatesForImpact(bill, sourceAsset = asset, targetAsset = null)
@@ -113,7 +119,7 @@ object BillAssetImpactService {
             bill.subType == Bill.SUBTYPE_BALANCE_ADJUSTMENT ||
             bill.subType == Bill.SUBTYPE_BALANCE_ADJUSTMENT_EXCLUDED -> {
                 val asset = resolveSourceAsset(db, bill) ?: run {
-                    logFull("BILL_GUARD", "（警告）revert_adjust 未找到资产，billId=${bill.id}, asset=${bill.accountName}")
+                    logWarn("BILL_GUARD", "（警告）revert_adjust 未找到资产，billId=${bill.id}, asset=${bill.accountName}")
                     return 0
                 }
                 ensureRatesForImpact(bill, sourceAsset = asset, targetAsset = null)
@@ -129,7 +135,7 @@ object BillAssetImpactService {
             }
             bill.type == Bill.TYPE_EXPENSE -> {
                 val asset = resolveSourceAsset(db, bill) ?: run {
-                    logFull("BILL_GUARD", "（警告）revert_expense 未找到资产，billId=${bill.id}, asset=${bill.accountName}")
+                    logWarn("BILL_GUARD", "（警告）revert_expense 未找到资产，billId=${bill.id}, asset=${bill.accountName}")
                     return 0
                 }
                 ensureRatesForImpact(bill, sourceAsset = asset, targetAsset = null)
@@ -141,7 +147,7 @@ object BillAssetImpactService {
             }
             bill.type == Bill.TYPE_INCOME -> {
                 val asset = resolveSourceAsset(db, bill) ?: run {
-                    logFull("BILL_GUARD", "（警告）revert_income 未找到资产，billId=${bill.id}, asset=${bill.accountName}")
+                    logWarn("BILL_GUARD", "（警告）revert_income 未找到资产，billId=${bill.id}, asset=${bill.accountName}")
                     return 0
                 }
                 ensureRatesForImpact(bill, sourceAsset = asset, targetAsset = null)
@@ -225,11 +231,23 @@ object BillAssetImpactService {
         targetAsset: Asset?
     ) {
         val requiredCurrencies = linkedSetOf<String>()
-        requiredCurrencies.add(bill.currency)
-        sourceAsset?.currency?.takeIf { it.isNotBlank() }?.let { requiredCurrencies.add(it) }
+        val billCur = bill.currency
+        // 同币种无需换算，不应强制要求汇率（否则汇率拉取失败会中止同币种记账）
+        sourceAsset?.currency?.takeIf { it.isNotBlank() }?.let { sourceCur ->
+            if (!billCur.equals(sourceCur, ignoreCase = true)) {
+                requiredCurrencies.add(billCur)
+                requiredCurrencies.add(sourceCur)
+            }
+        } ?: requiredCurrencies.add(billCur)
         if (bill.type == Bill.TYPE_TRANSFER) {
-            targetAsset?.currency?.takeIf { it.isNotBlank() }?.let { requiredCurrencies.add(it) }
+            targetAsset?.currency?.takeIf { it.isNotBlank() }?.let { targetCur ->
+                if (!billCur.equals(targetCur, ignoreCase = true)) {
+                    requiredCurrencies.add(billCur)
+                    requiredCurrencies.add(targetCur)
+                }
+            } ?: requiredCurrencies.add(billCur)
         }
+        if (requiredCurrencies.isEmpty()) return
         MoneyConversionService.requireCurrenciesAvailable(
             currencies = requiredCurrencies,
             rateProvider = { code -> CurrencyManager.getRate(code) }

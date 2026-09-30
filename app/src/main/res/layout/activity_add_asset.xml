@@ -27,7 +27,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_centerInParent="true"
-            android:text="@string/add_account"
+            android:text="@string/add_asset_title"
             android:textSize="@dimen/text_size_18"
             android:textStyle="bold"
             android:textColor="@color/text_primary"/>
@@ -132,6 +132,7 @@
                             android:background="@null"
                             android:hint="@string/hint_input_name"
                             android:textColor="@color/brand_primary"
+                            android:textColorHint="@color/text_secondary"
                             android:gravity="end|center_vertical"
                             android:textSize="@dimen/text_size_16"
                             android:singleLine="true"/>
@@ -157,7 +158,8 @@
                             android:background="@null"
                             android:hint="0.00"
                             android:inputType="numberDecimal|numberSigned"
-                            android:textColor="@color/text_secondary"
+                            android:textColor="@color/brand_primary"
+                            android:textColorHint="@color/text_secondary"
                             android:gravity="end|center_vertical"
                             android:textSize="@dimen/text_size_16"/>
                     </LinearLayout>
@@ -488,6 +490,8 @@
                     android:minHeight="56dp"
                     android:background="@null"
                     android:hint="@string/remark"
+                    android:textColor="@color/brand_primary"
+                    android:textColorHint="@color/text_secondary"
                     android:paddingHorizontal="16dp"
                     android:paddingVertical="12dp"
                     android:textSize="@dimen/text_size_16"
@@ -520,6 +524,8 @@
                 android:layout_height="40dp"
                 android:layout_centerVertical="true"
                 android:hint="@string/hint_search_account_type"
+                android:textColor="@color/brand_primary"
+                android:textColorHint="@color/text_secondary"
                 android:paddingHorizontal="16dp"
                 android:background="@android:drawable/edit_text"
                 android:textSize="@dimen/text_size_14"/>

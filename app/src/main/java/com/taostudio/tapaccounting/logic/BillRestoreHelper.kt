@@ -35,10 +35,13 @@ object BillRestoreHelper {
                 val origId = deletedBill.originalBillId
                 val existingBill = if (origId > 0L) billDao.getBillById(origId) else null
 
-                val billToRestore = SharedMutationHooks.prepareLocalBill(
+                val billToRestore = BillMutationService.alignCategoryLinkForDirectWrite(
                     db,
-                    deletedBill.toBill().copy(
-                        relatedBillId = deletedBill.relatedBillId?.let { idRemapping[it] ?: it }
+                    SharedMutationHooks.prepareLocalBill(
+                        db,
+                        deletedBill.toBill().copy(
+                            relatedBillId = deletedBill.relatedBillId?.let { idRemapping[it] ?: it }
+                        )
                     )
                 )
                 val finalBill = if (existingBill == null && origId > 0L) {

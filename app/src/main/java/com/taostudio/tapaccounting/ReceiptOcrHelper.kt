@@ -5,39 +5,21 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
 import android.util.Base64
-import com.google.mlkit.vision.common.InputImage
-import com.google.mlkit.vision.text.TextRecognition
-import com.google.mlkit.vision.text.chinese.ChineseTextRecognizerOptions
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
-import org.json.JSONObject
 import java.io.ByteArrayOutputStream
-import kotlin.coroutines.resume
-import kotlin.coroutines.resumeWithException
 
 /**
- * 小票 OCR 识别帮助类
- * 支持两种模式：
- *   - OCR_MODE_LOCAL: 本地 ML Kit 提取文字 → 发给 AI 文本分析
- *   - OCR_MODE_MULTIMODAL: 直接将图片 Base64 发给多模态 AI
+ * 小票识别帮助类
+ *
+ * 图片记账统一走多模态 AI：把图片压缩成 Base64 直接发给支持视觉的模型，
+ * 由模型一次性完成「读图 + 结构化」两步，省掉本地 OCR 的中间环节。
+ *
+ * 历史背景：早期还有一条「本地 ML Kit OCR → 文本 AI」的链路（OCR_MODE_LOCAL），
+ * 但多模态模型成熟后该分支已无人使用，ML Kit 依赖与代码均已移除，
+ * 因此不再需要 `text-recognition-chinese` 依赖与 mlkit OCR 模型 assets。
  */
 object ReceiptOcrHelper {
-
-    /**
-     * 主入口：根据配置的 OCR 模式，分析一张图片并返回自然语言摘要（String）
-     *
-     * @param ctx        Context
-     * @param imageUri   用户选择的图片 URI
-     * @param onProgress 进度回调，用于更新 UI 提示
-     */
-    suspend fun analyzeImage(
-        ctx: Context,
-        imageUri: Uri,
-        onProgress: (String) -> Unit = {}
-    ): String {
-        return analyzeByMultimodal(ctx, imageUri, "", onProgress)
-    }
 
     suspend fun analyzeImageByMultimodal(
         ctx: Context,
@@ -75,26 +57,7 @@ object ReceiptOcrHelper {
     }
 
     /**
-     * 仅执行本地 OCR，返回原始文字，不调用 AI。
-     * 供「预览模式」使用：OCR 完展示给用户确认，用户点发送后再调 AI。
-     */
-    suspend fun runOcrOnly(
-        ctx: Context,
-        imageUri: Uri,
-        onProgress: (String) -> Unit = {}
-    ): String {
-        onProgress("正在本地识别图片文字...")
-        val bitmap = loadBitmapFromUri(ctx, imageUri)
-        val ocrText = recognizeTextFromBitmap(bitmap)
-        if (ocrText.isBlank()) {
-            throw IllegalArgumentException("未能从图片中识别到任何文字，请确保图片清晰且光线充足")
-        }
-        Logger.d(ctx, "ReceiptOcrHelper", "OCR-only done: textLen=${ocrText.length}")
-        return ocrText
-    }
-
-    /**
-     * 模式二：多模态 AI（图片 Base64 直发）（返回自然语言摘要）
+     * 多模态 AI（图片 Base64 直发）（返回自然语言摘要）
      */
     private suspend fun analyzeByMultimodal(
         ctx: Context,
@@ -111,37 +74,6 @@ object ReceiptOcrHelper {
 
         return AIService.analyzeReceiptByImage(ctx, base64, "image/jpeg", supplementText)
     }
-
-    /**
-     * 使用 ML Kit Chinese 识别器提取文字
-     * ChineseTextRecognizerOptions 同时支持中文 + 拉丁字符，完美覆盖中英波兰语小票
-     */
-    private suspend fun recognizeTextFromBitmap(bitmap: Bitmap): String =
-        suspendCancellableCoroutine { cont ->
-            val image = InputImage.fromBitmap(bitmap, 0)
-            // 中文识别器同时支持拉丁字符（波兰语/英文/数字），一个识别器搞定所有小票
-            val recognizer = TextRecognition.getClient(ChineseTextRecognizerOptions.Builder().build())
-
-            recognizer.process(image)
-                .addOnSuccessListener { visionText ->
-                    // 将识别到的文字按行整理
-                    val sb = StringBuilder()
-                    for (block in visionText.textBlocks) {
-                        for (line in block.lines) {
-                            sb.appendLine(line.text)
-                        }
-                        sb.appendLine() // 块之间加空行，便于 AI 理解分段
-                    }
-                    recognizer.close()
-                    cont.resume(sb.toString().trim())
-                }
-                .addOnFailureListener { e ->
-                    recognizer.close()
-                    cont.resumeWithException(e)
-                }
-
-            cont.invokeOnCancellation { recognizer.close() }
-        }
 
     /**
      * 从 URI 加载 Bitmap，并自动缩放到合理大小（避免内存爆炸）

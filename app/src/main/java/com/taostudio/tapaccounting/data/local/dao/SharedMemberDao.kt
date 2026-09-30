@@ -18,4 +18,8 @@ interface SharedMemberDao {
     suspend fun updateDisplayName(ledgerId: Long, memberId: String, displayName: String)
     @Query("DELETE FROM shared_member WHERE ledgerId=:ledgerId AND memberId=:memberId")
     suspend fun delete(ledgerId: Long, memberId: String)
+
+    /** Used when a restore replaces the roster with the live remote member list. */
+    @Query("DELETE FROM shared_member WHERE ledgerId=:ledgerId")
+    suspend fun deleteByLedgerId(ledgerId: Long)
 }

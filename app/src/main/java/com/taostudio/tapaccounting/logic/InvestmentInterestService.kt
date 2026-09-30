@@ -184,6 +184,7 @@ object InvestmentInterestService {
                     annualInterestRate = annualInterestRate,
                     settlementCycle = cycle,
                     settlementInterval = lot.settlementInterval.coerceAtLeast(1),
+                    startEarningAt = today,
                     firstPayoutAt = firstPayoutFor(today, cycle),
                     lastSettledAt = today,
                     interestCarry = if (annualInterestRate == 0.0) 0.0 else carryAtChange,
@@ -401,20 +402,23 @@ object InvestmentInterestService {
 
         var settledPeriods = 0
         while (due <= today && occurrence < MAX_OCCURRENCES && principal.signum() > 0) {
-            val days = daysBetween(cursor, due)
-            if (days > 0) {
-                val rawInterest = principal
-                    .multiply(annualDailyRate, mathContext)
-                    .multiply(BigDecimal.valueOf(days.toLong()), mathContext)
-                    .add(carry, mathContext)
-                var posted = rawInterest.setScale(decimals, RoundingMode.HALF_UP)
-                if (principal.add(posted).signum() < 0) posted = principal.negate()
-                carry = rawInterest.subtract(posted, mathContext)
-                principal = principal.add(posted, mathContext)
-                postedTotal = postedTotal.add(posted, mathContext)
+            // 防御：期次序列回跳时不回退 cursor，避免从历史日期重新逐日计息
+            if (due > cursor) {
+                val days = daysBetween(cursor, due)
+                if (days > 0) {
+                    val rawInterest = principal
+                        .multiply(annualDailyRate, mathContext)
+                        .multiply(BigDecimal.valueOf(days.toLong()), mathContext)
+                        .add(carry, mathContext)
+                    var posted = rawInterest.setScale(decimals, RoundingMode.HALF_UP)
+                    if (principal.add(posted).signum() < 0) posted = principal.negate()
+                    carry = rawInterest.subtract(posted, mathContext)
+                    principal = principal.add(posted, mathContext)
+                    postedTotal = postedTotal.add(posted, mathContext)
+                }
+                cursor = due
+                settledPeriods++
             }
-            cursor = due
-            settledPeriods++
             occurrence++
             due = payoutOccurrence(start, first, cycle, interval, occurrence)
         }

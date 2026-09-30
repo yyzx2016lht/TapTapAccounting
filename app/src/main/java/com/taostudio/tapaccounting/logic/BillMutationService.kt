@@ -6,12 +6,14 @@ import com.taostudio.tapaccounting.Logger
 import com.taostudio.tapaccounting.Prefs
 import com.taostudio.tapaccounting.data.local.AppDatabase
 import com.taostudio.tapaccounting.data.local.entity.Bill
+import com.taostudio.tapaccounting.data.repository.CategoryRepository
 import com.taostudio.tapaccounting.data.sync.SharedMutationHooks
 import com.taostudio.tapaccounting.widget.ExpenseWidgetUpdater
 
 object BillMutationService {
 
     private const val REFUND_CATEGORY_PREFIX = "\u9000\u6b3e\uff1a"
+    private const val REFUND_CATEGORY_PREFIX_ALT = "\u9000\u6b3e\u00b7"
 
     private fun baseOriginalAmount(bill: Bill): Double {
         return if (bill.originalAmount > 0.0) {
@@ -25,14 +27,117 @@ object BillMutationService {
         return CategoryNameNormalizer.stripRefundPrefix(categoryName)
     }
 
-    private fun normalizeBillCategoryName(bill: Bill): Bill {
-        return bill.copy(categoryName = CategoryNameNormalizer.normalizeForStorage(bill.categoryName))
+    private suspend fun normalizeBillCategoryName(db: AppDatabase, bill: Bill): Bill {
+        val normalized = bill.copy(categoryName = CategoryNameNormalizer.normalizeForStorage(bill.categoryName))
+        return alignCategoryLink(db, normalized)
+    }
+
+    /**
+     * 给「绕过写入漏斗、自己管理资产余额影响」的路径复用（CSV 导入、回收站还原）。
+     *
+     * 这些路径不能整个走漏斗（漏斗会施加余额影响），但分类关联必须和漏斗完全一致：
+     * 缺 `categoryId` 会让账单对分类预算隐形，展示名过期会让它在统计页上变成「幽灵分类」。
+     */
+    suspend fun alignCategoryLinkForDirectWrite(db: AppDatabase, bill: Bill): Bill =
+        normalizeBillCategoryName(db, bill)
+
+    /**
+     * 写入漏斗统一对齐分类关联。
+     *
+     * `bills.categoryId` 是权威，`categoryName` 只是展示路径快照（"吃的 - 三餐"）——统计页与
+     * 洞察都按这份快照聚合，从不回查 id。快照一旦和分类树不一致，同一笔支出就会在统计页上被
+     * 拆成两个分类。所以这里两个方向都对齐：
+     *
+     * - 有 id：按分类树重算展示名（保留退款前缀，退款靠前缀单独识别）。周期模板、聊天改写、
+     *   导入都可能抄来一个过期的名字，这一步统一纠正；
+     * - 没 id：按名字反查 id，只认 (叶子名, 收支类型) 唯一匹配，宁可留空也不猜。
+     *
+     * 对齐只是锦上添花，任何异常都放行原账单——绝不能让它导致一笔正常记账失败。
+     */
+    private suspend fun alignCategoryLink(db: AppDatabase, bill: Bill): Bill {
+        if (bill.type == Bill.TYPE_TRANSFER) return bill
+        val categories = try {
+            db.categoryDao().getAllCategoriesList()
+        } catch (e: Exception) {
+            logWarn("BILL_CATEGORY", "（警告）分类关联对齐失败，按原样写入：${e.message}")
+            return bill
+        }
+        // 分类表为空时保守放行：可能是恢复/迁移的中间态，不要据此把 categoryId 全清掉
+        if (categories.isEmpty()) return bill
+        return alignAgainstTree(
+            bill = bill,
+            paths = CategoryRepository.displayNamesById(categories),
+            uniqueByLeafAndType = UncategorizedBillRelinker.uniqueLeafTypeIndex(categories)
+        )
+    }
+
+    /**
+     * 对齐逻辑的纯函数形态：给定分类树，算出这笔账单该写成什么样。
+     *
+     * - 有 id 且能在树里找到：展示名重算为当前路径（退款前缀保留）；
+     * - 有 id 但树里找不到（分类已删除）：**清空 categoryId**，对齐外键 `SET_NULL` 的语义。
+     *   悬空 id 既进不了分类预算（`categoryId IN (...)` 匹配不上），又永远挂在旧名字下，
+     *   比清空更糟——清空后还能被启动回填按名字重新认领；
+     * - 没有 id：按名字反查，只认唯一匹配，宁可留空也不猜。
+     */
+    internal fun alignAgainstTree(
+        bill: Bill,
+        paths: Map<Long, String>,
+        uniqueByLeafAndType: Map<Pair<String, Int>, Long>
+    ): Bill {
+        if (bill.type == Bill.TYPE_TRANSFER) return bill
+        val currentId = bill.categoryId
+        if (currentId != null) {
+            val path = paths[currentId] ?: return bill.copy(categoryId = null)
+            return if (isDisplayNameAligned(bill.categoryName, path)) {
+                bill
+            } else {
+                bill.copy(categoryName = withRefundPrefixOf(bill.categoryName, path))
+            }
+        }
+        if (!needsCategoryRelink(bill)) return bill
+        val resolved = UncategorizedBillRelinker.resolveCategoryId(
+            rawName = bill.categoryName,
+            billType = bill.type,
+            uniqueByLeafAndType = uniqueByLeafAndType
+        )
+        return if (resolved == null) bill else bill.copy(categoryId = resolved)
+    }
+
+    /**
+     * 是否需要从分类名反查 categoryId：名字为空无从查，转账没有分类。
+     */
+    internal fun needsCategoryRelink(bill: Bill): Boolean =
+        bill.categoryId == null &&
+            bill.categoryName.isNotBlank() &&
+            bill.type != Bill.TYPE_TRANSFER
+
+    /**
+     * 账单的展示名是否已经和分类树里的路径一致。
+     *
+     * 退款账单的名字带「退款：」/「退款·」前缀，比对时必须把前缀算进去，
+     * 否则每次写入都会把一条本来正确的退款账单反复改写。
+     */
+    internal fun isDisplayNameAligned(existingName: String, path: String): Boolean =
+        existingName == withRefundPrefixOf(existingName, path)
+
+    /** 保留退款账单的展示前缀，只替换后面的分类路径。 */
+    private fun withRefundPrefixOf(existingName: String, path: String): String = when {
+        existingName.startsWith(REFUND_CATEGORY_PREFIX) -> REFUND_CATEGORY_PREFIX + path
+        existingName.startsWith(REFUND_CATEGORY_PREFIX_ALT) -> REFUND_CATEGORY_PREFIX_ALT + path
+        else -> path
     }
 
     private fun logFull(tag: String, message: String) {
         val ctx = runCatching { TapApplication.app() }.getOrNull() ?: return
         if (!Prefs.isDeveloperFullLoggingEnabled(ctx)) return
         Logger.d(ctx, tag, message)
+    }
+
+    /** 数据一致性告警：普通日志模式也会保留 */
+    private fun logWarn(tag: String, message: String) {
+        val ctx = runCatching { TapApplication.app() }.getOrNull() ?: return
+        Logger.w(ctx, tag, message)
     }
 
     private fun auditBill(op: String, bill: Bill) {
@@ -55,7 +160,7 @@ object BillMutationService {
     ): Bill {
         logFull("BILL_MUTATION", "insert:start type=${bill.type}, amount=${bill.amount}, account=${bill.accountName}, to=${bill.toAccountName}, assetImpact=$applyAssetImpact")
         return db.withTransaction {
-            val normalizedInput = normalizeBillCategoryName(SharedMutationHooks.prepareLocalBill(db, bill))
+            val normalizedInput = normalizeBillCategoryName(db, SharedMutationHooks.prepareLocalBill(db, bill))
             if (applyAssetImpact) {
                 validateRequiredRatesForBill(db, normalizedInput)
             }
@@ -63,7 +168,7 @@ object BillMutationService {
             if (applyAssetImpact) {
                 val impacted = BillAssetImpactService.applyBillBalanceImpact(db, savedBill)
                 if (impacted == 0 && savedBill.type in setOf(Bill.TYPE_EXPENSE, Bill.TYPE_INCOME, Bill.TYPE_TRANSFER)) {
-                    logFull("BILL_GUARD", "（警告）insert 已写账单但资产未变化，billId=${savedBill.id}, type=${savedBill.type}, asset=${savedBill.accountName}, toAsset=${savedBill.toAccountName}")
+                    logWarn("BILL_GUARD", "（警告）insert 已写账单但资产未变化，billId=${savedBill.id}, type=${savedBill.type}, asset=${savedBill.accountName}, toAsset=${savedBill.toAccountName}")
                 }
             }
             logFull("BILL_MUTATION", "insert:done id=${savedBill.id}, type=${savedBill.type}, amount=${savedBill.amount}, accountId=${savedBill.accountId}, toAccountId=${savedBill.toAccountId}")
@@ -80,7 +185,7 @@ object BillMutationService {
         applyAssetImpact: Boolean = true
     ): Bill {
         logFull("BILL_MUTATION", "insertTx:start type=${bill.type}, amount=${bill.amount}, account=${bill.accountName}, to=${bill.toAccountName}, assetImpact=$applyAssetImpact")
-        val normalizedInput = normalizeBillCategoryName(SharedMutationHooks.prepareLocalBill(db, bill))
+        val normalizedInput = normalizeBillCategoryName(db, SharedMutationHooks.prepareLocalBill(db, bill))
         if (applyAssetImpact) {
             validateRequiredRatesForBill(db, normalizedInput)
         }
@@ -88,7 +193,7 @@ object BillMutationService {
         if (applyAssetImpact) {
             val impacted = BillAssetImpactService.applyBillBalanceImpact(db, savedBill)
             if (impacted == 0 && savedBill.type in setOf(Bill.TYPE_EXPENSE, Bill.TYPE_INCOME, Bill.TYPE_TRANSFER)) {
-                logFull("BILL_GUARD", "（警告）insertTx 已写账单但资产未变化，billId=${savedBill.id}, type=${savedBill.type}, asset=${savedBill.accountName}, toAsset=${savedBill.toAccountName}")
+                logWarn("BILL_GUARD", "（警告）insertTx 已写账单但资产未变化，billId=${savedBill.id}, type=${savedBill.type}, asset=${savedBill.accountName}, toAsset=${savedBill.toAccountName}")
             }
         }
         logFull("BILL_MUTATION", "insertTx:done id=${savedBill.id}, type=${savedBill.type}, amount=${savedBill.amount}")
@@ -109,6 +214,7 @@ object BillMutationService {
         applyAssetImpact: Boolean = true
     ): Bill {
         val localBill = normalizeBillCategoryName(
+            db,
             bill.copy(
                 sharedId = null,
                 memberId = null,
@@ -202,6 +308,7 @@ object BillMutationService {
                 )
             }
             val normalizedBillForStorage = normalizeBillCategoryName(
+                db,
                 SharedMutationHooks.prepareLocalBill(db, sharedFields)
             )
 
@@ -234,7 +341,7 @@ object BillMutationService {
 
             val oldImpacted = BillAssetImpactService.revertBillBalanceImpact(db, freshOldBill)
             if (applyAssetImpact && oldImpacted == 0 && freshOldBill.type in setOf(Bill.TYPE_EXPENSE, Bill.TYPE_INCOME, Bill.TYPE_TRANSFER)) {
-                logFull("BILL_GUARD", "（警告）replace 回滚旧账单时资产未变化，oldBillId=${freshOldBill.id}, type=${freshOldBill.type}, asset=${freshOldBill.accountName}, toAsset=${freshOldBill.toAccountName}")
+                logWarn("BILL_GUARD", "（警告）replace 回滚旧账单时资产未变化，oldBillId=${freshOldBill.id}, type=${freshOldBill.type}, asset=${freshOldBill.accountName}, toAsset=${freshOldBill.toAccountName}")
             }
 
             // 编辑路径：使用 updateBill 而非 insertBill，避免外键级联删除/重建
@@ -247,7 +354,7 @@ object BillMutationService {
             if (applyAssetImpact) {
                 val newImpacted = BillAssetImpactService.applyBillBalanceImpact(db, savedBill)
                 if (newImpacted == 0 && savedBill.type in setOf(Bill.TYPE_EXPENSE, Bill.TYPE_INCOME, Bill.TYPE_TRANSFER)) {
-                    logFull("BILL_GUARD", "（警告）replace 写入新账单后资产未变化，billId=${savedBill.id}, type=${savedBill.type}, asset=${savedBill.accountName}, toAsset=${savedBill.toAccountName}")
+                    logWarn("BILL_GUARD", "（警告）replace 写入新账单后资产未变化，billId=${savedBill.id}, type=${savedBill.type}, asset=${savedBill.accountName}, toAsset=${savedBill.toAccountName}")
                 }
             }
             InvestmentInterestService.syncLotAfterBillReplacement(db, freshOldBill, savedBill)
@@ -315,6 +422,7 @@ object BillMutationService {
                 originalAmount = refundBill.amount
             )
             val normalizedRefundForStorage = normalizeBillCategoryName(
+                db,
                 SharedMutationHooks.prepareLocalBill(db, normalizedRefundBill.copy(
                     sharedId = existingRefund?.sharedId,
                     memberId = existingRefund?.memberId,
@@ -328,7 +436,7 @@ object BillMutationService {
             existingRefund?.let {
                 val impacted = BillAssetImpactService.revertBillBalanceImpact(db, it)
                 if (impacted == 0 && it.type in setOf(Bill.TYPE_EXPENSE, Bill.TYPE_INCOME, Bill.TYPE_TRANSFER)) {
-                    logFull("BILL_GUARD", "（警告）refund 编辑回滚旧退款时资产未变化，billId=${it.id}, type=${it.type}, asset=${it.accountName}, toAsset=${it.toAccountName}")
+                    logWarn("BILL_GUARD", "（警告）refund 编辑回滚旧退款时资产未变化，billId=${it.id}, type=${it.type}, asset=${it.accountName}, toAsset=${it.toAccountName}")
                 }
             }
 
@@ -340,7 +448,7 @@ object BillMutationService {
             }
             val impacted = BillAssetImpactService.applyBillBalanceImpact(db, savedRefundBill)
             if (impacted == 0 && savedRefundBill.type in setOf(Bill.TYPE_EXPENSE, Bill.TYPE_INCOME, Bill.TYPE_TRANSFER)) {
-                logFull("BILL_GUARD", "（警告）refund 写入后资产未变化，billId=${savedRefundBill.id}, type=${savedRefundBill.type}, asset=${savedRefundBill.accountName}, toAsset=${savedRefundBill.toAccountName}")
+                logWarn("BILL_GUARD", "（警告）refund 写入后资产未变化，billId=${savedRefundBill.id}, type=${savedRefundBill.type}, asset=${savedRefundBill.accountName}, toAsset=${savedRefundBill.toAccountName}")
             }
             logFull("BILL_MUTATION", "refund:done refundId=${savedRefundBill.id}, sourceId=${latestOriginal.id}, refundAmount=${savedRefundBill.amount}, sourceCurrentAmount=${newActualExpense}")
             auditBill("refund", savedRefundBill)

@@ -197,7 +197,10 @@ object RuleDialogHelper {
             }
 
             val finalType = spType.selectedItemPosition
-            val finalCat = tvCategory.text.toString().takeIf { it != ctx.getString(R.string.tap_select_category) && it.isNotBlank() }
+            val finalCat = tvCategory.text.toString()
+                .takeIf { it != ctx.getString(R.string.tap_select_category) && it.isNotBlank() }
+                // 归一化到存储格式，顺带治愈历史遗留的 " > " / "/::/" 规则分类
+                ?.let { CategoryNameNormalizer.normalizeForStorage(it) }
             val finalAcc1Str = spAccount1.selectedItem?.toString()
             val finalAcc1 = if (categoryOnlyLearnMode) {
                 null

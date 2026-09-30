@@ -143,7 +143,7 @@ object LocalAsrService {
 
     private fun dumpModelDirTree(ctx: Context, modelDir: File) {
         if (!modelDir.exists()) {
-            Logger.d(ctx, "LocalAsrService", "modelDir does not exist")
+            Logger.e(ctx, "LocalAsrService", "modelDir does not exist")
             return
         }
         val entries = modelDir.walkTopDown().maxDepth(6).toList()
@@ -401,7 +401,7 @@ object LocalAsrService {
         val files = resolveModelFiles(modelDir)
         if (files == null) {
             lastInitError = "未找到离线模型文件"
-            Logger.d(ctx, "LocalAsrService", "Model folder not found")
+            Logger.e(ctx, "LocalAsrService", "Model folder not found")
             dumpModelDirTree(ctx, modelDir)
 
             if (allowAutoDownload && !isDownloading) {
@@ -420,7 +420,7 @@ object LocalAsrService {
         val tokensOk = isModelFilePlausible(files.tokens, MIN_TOKENS_BYTES)
         if (!onnxOk || !tokensOk) {
             lastInitError = "模型文件不完整: onnx=${files.onnx.length()}B, tokens=${files.tokens.length()}B"
-            Logger.d(ctx, "LocalAsrService", lastInitError ?: "Model files invalid")
+            Logger.e(ctx, "LocalAsrService", lastInitError ?: "Model files invalid")
             dumpModelDirTree(ctx, files.dir)
 
             if (allowAutoDownload && !isDownloading) {
@@ -463,13 +463,13 @@ object LocalAsrService {
 
                 val elapsed = System.currentTimeMillis() - t0
                 lastInitError = null
-                Logger.d(ctx, "LocalAsrService", "initModel success: elapsed=${elapsed}ms")
+                Logger.i(ctx, "LocalAsrService", "initModel success: elapsed=${elapsed}ms")
                 true
             } catch (e: Throwable) {
                 val elapsed = System.currentTimeMillis() - t0
                 lastInitError = formatInitError(e)
                 val cause = e.cause?.toString() ?: "no cause"
-                Logger.d(
+                Logger.e(
                     ctx,
                     "LocalAsrService",
                     "initModel failed: elapsed=${elapsed}ms [${e.javaClass.simpleName}] ${e.message} | cause=$cause"

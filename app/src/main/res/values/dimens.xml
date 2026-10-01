@@ -141,7 +141,7 @@
     <dimen name="settings_card_radius">16dp</dimen>
     <dimen name="settings_card_margin_bottom">16dp</dimen>
     <dimen name="settings_item_padding_h">18dp</dimen>
-    <dimen name="settings_item_min_height">58dp</dimen>
+    <dimen name="settings_item_min_height">60dp</dimen>
     <dimen name="settings_icon_badge_size">40dp</dimen>
     <dimen name="settings_title_size">15sp</dimen>
     <dimen name="settings_subtitle_size">12sp</dimen>

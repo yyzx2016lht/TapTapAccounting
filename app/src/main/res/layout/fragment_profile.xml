@@ -71,10 +71,7 @@
                 android:clickable="true"
                 android:focusable="true"
                 android:foreground="?attr/selectableItemBackground"
-                app:cardBackgroundColor="@color/settings_card_bg"
-                app:cardCornerRadius="@dimen/settings_card_radius"
-                app:cardElevation="0dp"
-                app:cardUseCompatPadding="false">
+                style="@style/SettingsCard">
 
                 <LinearLayout
                     android:layout_width="match_parent"
@@ -90,12 +87,7 @@
                         android:layout_height="56dp"
                         android:src="@drawable/ic_user_avatar_default" />
 
-                    <LinearLayout
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_marginStart="14dp"
-                        android:layout_weight="1"
-                        android:orientation="vertical">
+                    <LinearLayout style="@style/SettingsTextBlock">
 
                         <TextView
                             android:id="@+id/tv_profile_user_name"
@@ -112,7 +104,7 @@
                             android:layout_height="wrap_content"
                             android:layout_marginTop="4dp"
                             android:text="@string/profile_edit_hint"
-                            android:textColor="#7B8794"
+                            android:textColor="@color/settings_item_subtitle"
                             android:textSize="@dimen/text_size_12" />
                     </LinearLayout>
 
@@ -223,14 +215,7 @@
             <!-- ══════════════════════════════════
                  分区：数据与偏好
                  ══════════════════════════════════ -->
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center_vertical"
-                android:layout_marginBottom="10dp"
-                android:layout_marginTop="8dp"
-                android:layout_marginStart="2dp">
+            <LinearLayout style="@style/SettingsSectionHeader">
 
                 <View
                     android:layout_width="3dp"
@@ -239,23 +224,15 @@
                     android:layout_marginEnd="8dp" />
 
                 <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="@string/data_and_basic"
-                    android:textColor="@color/settings_section_title"
-                    android:textSize="@dimen/settings_section_title_size"
-                    android:textStyle="bold"
-                    android:letterSpacing="0.03" />
+                    style="@style/SettingsSectionTitle"
+                    android:text="@string/data_and_basic" />
             </LinearLayout>
 
             <androidx.cardview.widget.CardView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="@dimen/settings_card_margin_bottom"
-                app:cardBackgroundColor="@color/settings_card_bg"
-                app:cardCornerRadius="@dimen/settings_card_radius"
-                app:cardElevation="0dp"
-                app:cardUseCompatPadding="false">
+                style="@style/SettingsCard">
 
                 <LinearLayout
                     android:layout_width="match_parent"
@@ -271,62 +248,31 @@
 
                         <LinearLayout
                             android:id="@+id/btn_manage_categories"
-                            android:layout_width="match_parent"
-                            android:layout_height="60dp"
-                            android:background="?attr/selectableItemBackground"
-                            android:clickable="true"
-                            android:focusable="true"
-                            android:gravity="center_vertical"
-                            android:orientation="horizontal"
-                            android:paddingHorizontal="18dp">
+                            style="@style/SettingsRow.Clickable">
 
                             <FrameLayout
-                                android:layout_width="40dp"
-                                android:layout_height="40dp"
+                                style="@style/SettingsBadge"
                                 android:background="@drawable/bg_icon_badge_blue">
                                 <ImageView
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:layout_gravity="center"
-                                    android:src="@drawable/ic_profile_category_tree"
-                                    android:tint="#FFFFFF" />
+                                    style="@style/SettingsBadgeIcon"
+                                    android:src="@drawable/ic_profile_category_tree" />
                             </FrameLayout>
 
-                            <LinearLayout
-                                android:layout_width="0dp"
-                                android:layout_height="wrap_content"
-                                android:layout_weight="1"
-                                android:layout_marginStart="14dp"
-                                android:orientation="vertical">
+                            <LinearLayout style="@style/SettingsTextBlock">
                                 <TextView
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:text="@string/category_management"
-                                    android:textColor="@color/settings_item_title"
-                                    android:textSize="@dimen/text_size_15"
-                                    android:textStyle="bold" />
+                                    style="@style/SettingsItemTitle"
+                                    android:text="@string/category_management" />
                                 <TextView
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:text="@string/category_management_desc"
-                                    android:textColor="@color/settings_item_subtitle"
-                                    android:textSize="@dimen/text_size_11"
-                                    android:layout_marginTop="1dp" />
+                                    style="@style/SettingsItemSubtitle"
+                                    android:text="@string/category_management_desc" />
                             </LinearLayout>
 
-                            <ImageView
-                                android:layout_width="@dimen/settings_chevron_size"
-                                android:layout_height="@dimen/settings_chevron_size"
-                                android:src="@drawable/ic_chevron_right"
-                                android:tint="@color/settings_chevron" />
+                            <ImageView style="@style/SettingsChevron" />
                         </LinearLayout>
 
                         <View
                             android:id="@+id/divider_after_categories"
-                            android:layout_width="match_parent"
-                            android:layout_height="0.5dp"
-                            android:layout_marginStart="@dimen/settings_item_text_inset"
-                            android:background="@color/settings_divider" />
+                            style="@style/SettingsDivider" />
                     </LinearLayout>
 
                     <!-- 账单显示效果 -->
@@ -338,62 +284,31 @@
 
                         <LinearLayout
                             android:id="@+id/btn_bill_display_settings"
-                            android:layout_width="match_parent"
-                            android:layout_height="60dp"
-                            android:background="?attr/selectableItemBackground"
-                            android:clickable="true"
-                            android:focusable="true"
-                            android:gravity="center_vertical"
-                            android:orientation="horizontal"
-                            android:paddingHorizontal="18dp">
+                            style="@style/SettingsRow.Clickable">
 
                             <FrameLayout
-                                android:layout_width="40dp"
-                                android:layout_height="40dp"
+                                style="@style/SettingsBadge"
                                 android:background="@drawable/bg_icon_badge_purple">
                                 <ImageView
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:layout_gravity="center"
-                                    android:src="@drawable/ic_profile_bill_display"
-                                    android:tint="#FFFFFF" />
+                                    style="@style/SettingsBadgeIcon"
+                                    android:src="@drawable/ic_profile_bill_display" />
                             </FrameLayout>
 
-                            <LinearLayout
-                                android:layout_width="0dp"
-                                android:layout_height="wrap_content"
-                                android:layout_weight="1"
-                                android:layout_marginStart="14dp"
-                                android:orientation="vertical">
+                            <LinearLayout style="@style/SettingsTextBlock">
                                 <TextView
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:text="@string/bill_display_effect"
-                                    android:textColor="@color/settings_item_title"
-                                    android:textSize="@dimen/text_size_15"
-                                    android:textStyle="bold" />
+                                    style="@style/SettingsItemTitle"
+                                    android:text="@string/bill_display_effect" />
                                 <TextView
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:text="@string/bill_display_desc"
-                                    android:textColor="@color/settings_item_subtitle"
-                                    android:textSize="@dimen/text_size_11"
-                                    android:layout_marginTop="1dp" />
+                                    style="@style/SettingsItemSubtitle"
+                                    android:text="@string/bill_display_desc" />
                             </LinearLayout>
 
-                            <ImageView
-                                android:layout_width="@dimen/settings_chevron_size"
-                                android:layout_height="@dimen/settings_chevron_size"
-                                android:src="@drawable/ic_chevron_right"
-                                android:tint="@color/settings_chevron" />
+                            <ImageView style="@style/SettingsChevron" />
                         </LinearLayout>
 
                         <View
                             android:id="@+id/divider_after_bill_display"
-                            android:layout_width="match_parent"
-                            android:layout_height="0.5dp"
-                            android:layout_marginStart="@dimen/settings_item_text_inset"
-                            android:background="@color/settings_divider" />
+                            style="@style/SettingsDivider" />
                     </LinearLayout>
 
                     <!-- 多币种与汇率 -->
@@ -406,62 +321,31 @@
 
                         <LinearLayout
                             android:id="@+id/btn_manage_currencies"
-                            android:layout_width="match_parent"
-                            android:layout_height="60dp"
-                            android:background="?attr/selectableItemBackground"
-                            android:clickable="true"
-                            android:focusable="true"
-                            android:gravity="center_vertical"
-                            android:orientation="horizontal"
-                            android:paddingHorizontal="18dp">
+                            style="@style/SettingsRow.Clickable">
 
                             <FrameLayout
-                                android:layout_width="40dp"
-                                android:layout_height="40dp"
+                                style="@style/SettingsBadge"
                                 android:background="@drawable/bg_icon_badge_green">
                                 <ImageView
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:layout_gravity="center"
-                                    android:src="@drawable/ic_profile_exchange"
-                                    android:tint="#FFFFFF" />
+                                    style="@style/SettingsBadgeIcon"
+                                    android:src="@drawable/ic_profile_exchange" />
                             </FrameLayout>
 
-                            <LinearLayout
-                                android:layout_width="0dp"
-                                android:layout_height="wrap_content"
-                                android:layout_weight="1"
-                                android:layout_marginStart="14dp"
-                                android:orientation="vertical">
+                            <LinearLayout style="@style/SettingsTextBlock">
                                 <TextView
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:text="@string/multi_currency_rate"
-                                    android:textColor="@color/settings_item_title"
-                                    android:textSize="@dimen/text_size_15"
-                                    android:textStyle="bold" />
+                                    style="@style/SettingsItemTitle"
+                                    android:text="@string/multi_currency_rate" />
                                 <TextView
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:text="@string/multi_currency_desc_setting"
-                                    android:textColor="@color/settings_item_subtitle"
-                                    android:textSize="@dimen/text_size_11"
-                                    android:layout_marginTop="1dp" />
+                                    style="@style/SettingsItemSubtitle"
+                                    android:text="@string/multi_currency_desc_setting" />
                             </LinearLayout>
 
-                            <ImageView
-                                android:layout_width="@dimen/settings_chevron_size"
-                                android:layout_height="@dimen/settings_chevron_size"
-                                android:src="@drawable/ic_chevron_right"
-                                android:tint="@color/settings_chevron" />
+                            <ImageView style="@style/SettingsChevron" />
                         </LinearLayout>
 
                         <View
                             android:id="@+id/divider_after_currencies"
-                            android:layout_width="match_parent"
-                            android:layout_height="0.5dp"
-                            android:layout_marginStart="@dimen/settings_item_text_inset"
-                            android:background="@color/settings_divider" />
+                            style="@style/SettingsDivider" />
                     </LinearLayout>
 
                     <!-- 手势设置入口 -->
@@ -473,62 +357,31 @@
 
                         <LinearLayout
                             android:id="@+id/btn_sensitivity"
-                            android:layout_width="match_parent"
-                            android:layout_height="60dp"
-                            android:background="?attr/selectableItemBackground"
-                            android:clickable="true"
-                            android:focusable="true"
-                            android:gravity="center_vertical"
-                            android:orientation="horizontal"
-                            android:paddingHorizontal="18dp">
+                            style="@style/SettingsRow.Clickable">
 
                             <FrameLayout
-                                android:layout_width="40dp"
-                                android:layout_height="40dp"
+                                style="@style/SettingsBadge"
                                 android:background="@drawable/bg_icon_badge_orange">
                                 <ImageView
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:layout_gravity="center"
-                                    android:src="@drawable/ic_profile_sensitivity"
-                                    android:tint="#FFFFFF" />
+                                    style="@style/SettingsBadgeIcon"
+                                    android:src="@drawable/ic_profile_sensitivity" />
                             </FrameLayout>
 
-                            <LinearLayout
-                                android:layout_width="0dp"
-                                android:layout_height="wrap_content"
-                                android:layout_weight="1"
-                                android:layout_marginStart="14dp"
-                                android:orientation="vertical">
+                            <LinearLayout style="@style/SettingsTextBlock">
                                 <TextView
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:text="@string/quick_accounting"
-                                    android:textColor="@color/settings_item_title"
-                                    android:textSize="@dimen/text_size_15"
-                                    android:textStyle="bold" />
+                                    style="@style/SettingsItemTitle"
+                                    android:text="@string/quick_accounting" />
                                 <TextView
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:text="@string/quick_accounting_desc"
-                                    android:textColor="@color/settings_item_subtitle"
-                                    android:textSize="@dimen/text_size_11"
-                                    android:layout_marginTop="1dp" />
+                                    style="@style/SettingsItemSubtitle"
+                                    android:text="@string/quick_accounting_desc" />
                             </LinearLayout>
 
-                            <ImageView
-                                android:layout_width="@dimen/settings_chevron_size"
-                                android:layout_height="@dimen/settings_chevron_size"
-                                android:src="@drawable/ic_chevron_right"
-                                android:tint="@color/settings_chevron" />
+                            <ImageView style="@style/SettingsChevron" />
                         </LinearLayout>
 
                         <View
                             android:id="@+id/divider_after_sensitivity"
-                            android:layout_width="match_parent"
-                            android:layout_height="0.5dp"
-                            android:layout_marginStart="@dimen/settings_item_text_inset"
-                            android:background="@color/settings_divider" />
+                            style="@style/SettingsDivider" />
                     </LinearLayout>
 
                     <!-- 备份与恢复 -->
@@ -540,62 +393,31 @@
 
                         <LinearLayout
                             android:id="@+id/btn_backup_restore"
-                            android:layout_width="match_parent"
-                            android:layout_height="60dp"
-                            android:background="?attr/selectableItemBackground"
-                            android:clickable="true"
-                            android:focusable="true"
-                            android:gravity="center_vertical"
-                            android:orientation="horizontal"
-                            android:paddingHorizontal="18dp">
+                            style="@style/SettingsRow.Clickable">
 
                             <FrameLayout
-                                android:layout_width="40dp"
-                                android:layout_height="40dp"
+                                style="@style/SettingsBadge"
                                 android:background="@drawable/bg_icon_badge_pink">
                                 <ImageView
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:layout_gravity="center"
-                                    android:src="@drawable/ic_profile_backup"
-                                    android:tint="#FFFFFF" />
+                                    style="@style/SettingsBadgeIcon"
+                                    android:src="@drawable/ic_profile_backup" />
                             </FrameLayout>
 
-                            <LinearLayout
-                                android:layout_width="0dp"
-                                android:layout_height="wrap_content"
-                                android:layout_weight="1"
-                                android:layout_marginStart="14dp"
-                                android:orientation="vertical">
+                            <LinearLayout style="@style/SettingsTextBlock">
                                 <TextView
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:text="@string/backup_restore"
-                                    android:textColor="@color/settings_item_title"
-                                    android:textSize="@dimen/text_size_15"
-                                    android:textStyle="bold" />
+                                    style="@style/SettingsItemTitle"
+                                    android:text="@string/backup_restore" />
                                 <TextView
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:text="@string/backup_restore_desc"
-                                    android:textColor="@color/settings_item_subtitle"
-                                    android:textSize="@dimen/text_size_11"
-                                    android:layout_marginTop="1dp" />
+                                    style="@style/SettingsItemSubtitle"
+                                    android:text="@string/backup_restore_desc" />
                             </LinearLayout>
 
-                            <ImageView
-                                android:layout_width="@dimen/settings_chevron_size"
-                                android:layout_height="@dimen/settings_chevron_size"
-                                android:src="@drawable/ic_chevron_right"
-                                android:tint="@color/settings_chevron" />
+                            <ImageView style="@style/SettingsChevron" />
                         </LinearLayout>
 
                         <View
                             android:id="@+id/divider_sync_remote_config"
-                            android:layout_width="match_parent"
-                            android:layout_height="0.5dp"
-                            android:layout_marginStart="@dimen/settings_item_text_inset"
-                            android:background="@color/settings_divider"
+                            style="@style/SettingsDivider"
                             android:visibility="gone" />
                     </LinearLayout>
 
@@ -609,65 +431,34 @@
 
                         <LinearLayout
                             android:id="@+id/btn_sync_remote_config"
-                            android:layout_width="match_parent"
-                            android:layout_height="60dp"
-                            android:background="?attr/selectableItemBackground"
-                            android:clickable="true"
-                            android:focusable="true"
-                            android:gravity="center_vertical"
-                            android:orientation="horizontal"
-                            android:paddingHorizontal="18dp">
+                            style="@style/SettingsRow.Clickable">
 
                             <FrameLayout
-                                android:layout_width="40dp"
-                                android:layout_height="40dp"
+                                style="@style/SettingsBadge"
                                 android:background="@drawable/bg_icon_badge_cyan">
                                 <ImageView
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:layout_gravity="center"
+                                    style="@style/SettingsBadgeIcon"
                                     android:src="@drawable/ic_profile_backup"
-                                    android:tint="#FFFFFF"
                                     android:rotation="180" />
                             </FrameLayout>
 
-                            <LinearLayout
-                                android:layout_width="0dp"
-                                android:layout_height="wrap_content"
-                                android:layout_weight="1"
-                                android:layout_marginStart="14dp"
-                                android:orientation="vertical">
+                            <LinearLayout style="@style/SettingsTextBlock">
 
                                 <TextView
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:text="@string/sync_remote_config"
-                                    android:textColor="@color/settings_item_title"
-                                    android:textSize="@dimen/text_size_15"
-                                    android:textStyle="bold" />
+                                    style="@style/SettingsItemTitle"
+                                    android:text="@string/sync_remote_config" />
 
                                 <TextView
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:layout_marginTop="2dp"
-                                    android:text="@string/sync_remote_desc"
-                                    android:textColor="@color/settings_item_subtitle"
-                                    android:textSize="@dimen/text_size_11" />
+                                    style="@style/SettingsItemSubtitle"
+                                    android:text="@string/sync_remote_desc" />
                             </LinearLayout>
 
-                            <ImageView
-                                android:layout_width="@dimen/settings_chevron_size"
-                                android:layout_height="@dimen/settings_chevron_size"
-                                android:src="@drawable/ic_chevron_right"
-                                android:tint="@color/settings_chevron" />
+                            <ImageView style="@style/SettingsChevron" />
                         </LinearLayout>
 
                         <View
                             android:id="@+id/divider_ai_feature_entry"
-                            android:layout_width="match_parent"
-                            android:layout_height="0.5dp"
-                            android:layout_marginStart="@dimen/settings_item_text_inset"
-                            android:background="@color/settings_divider"
+                            style="@style/SettingsDivider"
                             android:visibility="visible" />
                     </LinearLayout>
 
@@ -680,63 +471,34 @@
 
                         <LinearLayout
                             android:id="@+id/layout_ai_feature_entry"
-                            android:layout_width="match_parent"
-                            android:layout_height="60dp"
-                            android:orientation="horizontal"
-                            android:gravity="center_vertical"
-                            android:paddingHorizontal="18dp"
-                            android:background="?attr/selectableItemBackground"
-                            android:clickable="true"
-                            android:focusable="true"
+                            style="@style/SettingsRow.Clickable"
                             android:visibility="visible">
 
                             <FrameLayout
-                                android:layout_width="40dp"
-                                android:layout_height="40dp"
+                                style="@style/SettingsBadge"
                                 android:background="@drawable/bg_icon_badge_indigo">
                                 <ImageView
+                                    style="@style/SettingsBadgeIcon"
                                     android:layout_width="24dp"
                                     android:layout_height="24dp"
-                                    android:layout_gravity="center"
-                                    android:src="@drawable/ic_ai_net_robot"
-                                    android:tint="#FFFFFF" />
+                                    android:src="@drawable/ic_ai_net_robot" />
                             </FrameLayout>
 
-                            <LinearLayout
-                                android:layout_width="0dp"
-                                android:layout_height="wrap_content"
-                                android:layout_weight="1"
-                                android:layout_marginStart="14dp"
-                                android:orientation="vertical">
+                            <LinearLayout style="@style/SettingsTextBlock">
                                 <TextView
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:text="@string/ai_feature_title"
-                                    android:textColor="@color/settings_item_title"
-                                    android:textSize="@dimen/text_size_15"
-                                    android:textStyle="bold" />
+                                    style="@style/SettingsItemTitle"
+                                    android:text="@string/ai_feature_title" />
                                 <TextView
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:layout_marginTop="1dp"
-                                    android:text="@string/ai_feature_manage_desc"
-                                    android:textColor="@color/settings_item_subtitle"
-                                    android:textSize="@dimen/text_size_11" />
+                                    style="@style/SettingsItemSubtitle"
+                                    android:text="@string/ai_feature_manage_desc" />
                             </LinearLayout>
 
-                            <ImageView
-                                android:layout_width="@dimen/settings_chevron_size"
-                                android:layout_height="@dimen/settings_chevron_size"
-                                android:src="@drawable/ic_chevron_right"
-                                android:tint="@color/settings_chevron" />
+                            <ImageView style="@style/SettingsChevron" />
                         </LinearLayout>
 
                         <View
                             android:id="@+id/divider_storage_cleanup_entry"
-                            android:layout_width="match_parent"
-                            android:layout_height="0.5dp"
-                            android:layout_marginStart="@dimen/settings_item_text_inset"
-                            android:background="@color/settings_divider" />
+                            style="@style/SettingsDivider" />
                     </LinearLayout>
 
                     <!-- 存储清理 -->
@@ -748,54 +510,28 @@
 
                         <LinearLayout
                             android:id="@+id/layout_storage_cleanup_entry"
-                            android:layout_width="match_parent"
-                            android:layout_height="60dp"
-                            android:background="?attr/selectableItemBackground"
-                            android:clickable="true"
-                            android:focusable="true"
-                            android:gravity="center_vertical"
-                            android:orientation="horizontal"
-                            android:paddingHorizontal="18dp">
+                            style="@style/SettingsRow.Clickable">
 
                             <FrameLayout
-                                android:layout_width="40dp"
-                                android:layout_height="40dp"
+                                style="@style/SettingsBadge"
                                 android:background="@drawable/bg_icon_badge_coral">
                                 <ImageView
+                                    style="@style/SettingsBadgeIcon"
                                     android:layout_width="24dp"
                                     android:layout_height="24dp"
-                                    android:layout_gravity="center"
-                                    android:src="@drawable/ic_profile_trash_white"
-                                    android:tint="#FFFFFF" />
+                                    android:src="@drawable/ic_profile_trash_white" />
                             </FrameLayout>
 
-                            <LinearLayout
-                                android:layout_width="0dp"
-                                android:layout_height="wrap_content"
-                                android:layout_weight="1"
-                                android:layout_marginStart="14dp"
-                                android:orientation="vertical">
+                            <LinearLayout style="@style/SettingsTextBlock">
                                 <TextView
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:text="@string/storage_cleanup"
-                                    android:textColor="@color/settings_item_title"
-                                    android:textSize="@dimen/text_size_15"
-                                    android:textStyle="bold" />
+                                    style="@style/SettingsItemTitle"
+                                    android:text="@string/storage_cleanup" />
                                 <TextView
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:layout_marginTop="1dp"
-                                    android:text="@string/storage_cleanup_desc"
-                                    android:textColor="@color/settings_item_subtitle"
-                                    android:textSize="@dimen/text_size_11" />
+                                    style="@style/SettingsItemSubtitle"
+                                    android:text="@string/storage_cleanup_desc" />
                             </LinearLayout>
 
-                            <ImageView
-                                android:layout_width="@dimen/settings_chevron_size"
-                                android:layout_height="@dimen/settings_chevron_size"
-                                android:src="@drawable/ic_chevron_right"
-                                android:tint="@color/settings_chevron" />
+                            <ImageView style="@style/SettingsChevron" />
                         </LinearLayout>
                     </LinearLayout>
 
@@ -808,54 +544,28 @@
 
                         <LinearLayout
                             android:id="@+id/layout_widget_settings_entry"
-                            android:layout_width="match_parent"
-                            android:layout_height="60dp"
-                            android:background="?attr/selectableItemBackground"
-                            android:clickable="true"
-                            android:focusable="true"
-                            android:gravity="center_vertical"
-                            android:orientation="horizontal"
-                            android:paddingHorizontal="18dp">
+                            style="@style/SettingsRow.Clickable">
 
                             <FrameLayout
-                                android:layout_width="40dp"
-                                android:layout_height="40dp"
+                                style="@style/SettingsBadge"
                                 android:background="@drawable/bg_icon_badge_indigo">
                                 <ImageView
+                                    style="@style/SettingsBadgeIcon"
                                     android:layout_width="24dp"
                                     android:layout_height="24dp"
-                                    android:layout_gravity="center"
-                                    android:src="@drawable/ic_profile_bill_display"
-                                    android:tint="#FFFFFF" />
+                                    android:src="@drawable/ic_profile_bill_display" />
                             </FrameLayout>
 
-                            <LinearLayout
-                                android:layout_width="0dp"
-                                android:layout_height="wrap_content"
-                                android:layout_weight="1"
-                                android:layout_marginStart="14dp"
-                                android:orientation="vertical">
+                            <LinearLayout style="@style/SettingsTextBlock">
                                 <TextView
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:text="桌面小组件"
-                                    android:textColor="@color/settings_item_title"
-                                    android:textSize="@dimen/text_size_15"
-                                    android:textStyle="bold" />
+                                    style="@style/SettingsItemTitle"
+                                    android:text="桌面小组件" />
                                 <TextView
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:layout_marginTop="1dp"
-                                    android:text="在桌面显示总支出、预算和预算剩余"
-                                    android:textColor="@color/settings_item_subtitle"
-                                    android:textSize="@dimen/text_size_11" />
+                                    style="@style/SettingsItemSubtitle"
+                                    android:text="在桌面显示总支出、预算和预算剩余" />
                             </LinearLayout>
 
-                            <ImageView
-                                android:layout_width="@dimen/settings_chevron_size"
-                                android:layout_height="@dimen/settings_chevron_size"
-                                android:src="@drawable/ic_chevron_right"
-                                android:tint="@color/settings_chevron" />
+                            <ImageView style="@style/SettingsChevron" />
                         </LinearLayout>
                     </LinearLayout>
 
@@ -865,14 +575,7 @@
             <!-- ══════════════════════════════════
                  分区：手势与偏好
                  ══════════════════════════════════ -->
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center_vertical"
-                android:layout_marginBottom="10dp"
-                android:layout_marginTop="8dp"
-                android:layout_marginStart="2dp">
+            <LinearLayout style="@style/SettingsSectionHeader">
 
                 <View
                     android:layout_width="3dp"
@@ -881,31 +584,20 @@
                     android:layout_marginEnd="8dp" />
 
                 <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="@string/gesture_and_interaction"
-                    android:textColor="@color/settings_section_title"
-                    android:textSize="@dimen/settings_section_title_size"
-                    android:textStyle="bold"
-                    android:letterSpacing="0.03" />
+                    style="@style/SettingsSectionTitle"
+                    android:text="@string/gesture_and_interaction" />
             </LinearLayout>
 
             <androidx.cardview.widget.CardView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginBottom="20dp"
-                app:cardBackgroundColor="#FFFFFF"
-                app:cardCornerRadius="@dimen/settings_card_radius"
-                app:cardElevation="0dp"
-                app:cardUseCompatPadding="false">
+                android:layout_marginBottom="@dimen/settings_card_margin_bottom"
+                style="@style/SettingsCard">
 
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:paddingHorizontal="18dp"
-                    android:paddingTop="8dp"
-                    android:paddingBottom="8dp">
+                    android:orientation="vertical">
 
                     <!-- 使用快捷手势 -->
                     <LinearLayout
@@ -916,44 +608,23 @@
                         android:visibility="gone">
 
                         <LinearLayout
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:gravity="center_vertical"
-                            android:orientation="horizontal"
-                            android:paddingVertical="10dp">
+                            style="@style/SettingsRow">
 
                             <FrameLayout
-                                android:layout_width="40dp"
-                                android:layout_height="40dp"
+                                style="@style/SettingsBadge"
                                 android:background="@drawable/bg_icon_badge_teal">
                                 <ImageView
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:layout_gravity="center"
-                                    android:src="@drawable/ic_profile_tap"
-                                    android:tint="#FFFFFF" />
+                                    style="@style/SettingsBadgeIcon"
+                                    android:src="@drawable/ic_profile_tap" />
                             </FrameLayout>
 
-                            <LinearLayout
-                                android:layout_width="0dp"
-                                android:layout_height="wrap_content"
-                                android:layout_weight="1"
-                                android:layout_marginStart="14dp"
-                                android:orientation="vertical">
+                            <LinearLayout style="@style/SettingsTextBlock">
                                 <TextView
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:text="@string/use_quick_gesture"
-                                    android:textColor="@color/settings_item_title"
-                                    android:textSize="@dimen/text_size_15"
-                                    android:textStyle="bold" />
+                                    style="@style/SettingsItemTitle"
+                                    android:text="@string/use_quick_gesture" />
                                 <TextView
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:layout_marginTop="1dp"
-                                    android:text="@string/gesture_desc_setting"
-                                    android:textColor="@color/settings_item_subtitle"
-                                    android:textSize="@dimen/text_size_11" />
+                                    style="@style/SettingsItemSubtitle"
+                                    android:text="@string/gesture_desc_setting" />
                             </LinearLayout>
 
                             <com.google.android.material.switchmaterial.SwitchMaterial
@@ -966,10 +637,7 @@
                         </LinearLayout>
 
                         <View
-                            android:layout_width="match_parent"
-                            android:layout_height="0.5dp"
-                            android:layout_marginStart="50dp"
-                            android:background="@color/settings_divider" />
+                            style="@style/SettingsDivider" />
                     </LinearLayout>
 
                     <!-- 显示表单账本入口 -->
@@ -981,45 +649,25 @@
 
                         <LinearLayout
                             android:id="@+id/layout_show_book_entry_container"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:gravity="center_vertical"
-                            android:orientation="horizontal"
-                            android:paddingVertical="10dp">
+                            style="@style/SettingsRow">
 
                             <FrameLayout
-                                android:layout_width="40dp"
-                                android:layout_height="40dp"
+                                style="@style/SettingsBadge"
                                 android:background="@drawable/bg_icon_badge_cyan">
                                 <ImageView
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:layout_gravity="center"
+                                    style="@style/SettingsBadgeIcon"
                                     android:src="@drawable/ic_profile_book_entry" />
                             </FrameLayout>
 
-                            <LinearLayout
-                                android:layout_width="0dp"
-                                android:layout_height="wrap_content"
-                                android:layout_weight="1"
-                                android:layout_marginStart="14dp"
-                                android:orientation="vertical">
+                            <LinearLayout style="@style/SettingsTextBlock">
 
                                 <TextView
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:text="@string/show_book_entry"
-                                    android:textColor="@color/settings_item_title"
-                                    android:textSize="@dimen/text_size_15"
-                                    android:textStyle="bold" />
+                                    style="@style/SettingsItemTitle"
+                                    android:text="@string/show_book_entry" />
 
                                 <TextView
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:layout_marginTop="1dp"
-                                    android:text="@string/book_entry_desc"
-                                    android:textColor="@color/settings_item_subtitle"
-                                    android:textSize="@dimen/text_size_11" />
+                                    style="@style/SettingsItemSubtitle"
+                                    android:text="@string/book_entry_desc" />
                             </LinearLayout>
 
                             <com.google.android.material.switchmaterial.SwitchMaterial
@@ -1031,10 +679,7 @@
                         </LinearLayout>
 
                         <View
-                            android:layout_width="match_parent"
-                            android:layout_height="0.5dp"
-                            android:layout_marginStart="50dp"
-                            android:background="@color/settings_divider" />
+                            style="@style/SettingsDivider" />
                     </LinearLayout>
 
                     <!-- 记账时启用资产功能 -->
@@ -1045,47 +690,26 @@
                         android:orientation="vertical">
 
                         <LinearLayout
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:orientation="horizontal"
-                            android:gravity="center_vertical"
-                            android:paddingVertical="10dp">
+                            style="@style/SettingsRow">
 
                             <FrameLayout
-                                android:layout_width="40dp"
-                                android:layout_height="40dp"
+                                style="@style/SettingsBadge"
                                 android:background="@drawable/bg_icon_badge_indigo">
                                 <ImageView
+                                    style="@style/SettingsBadgeIcon"
                                     android:layout_width="24dp"
                                     android:layout_height="24dp"
-                                    android:layout_gravity="center"
-                                    android:src="@drawable/ic_nav_assets"
-                                    android:scaleType="fitCenter"
-                                    android:adjustViewBounds="true"
-                                    android:tint="#FFFFFF" />
+                                    android:src="@drawable/ic_nav_assets" />
                             </FrameLayout>
 
-                            <LinearLayout
-                                android:layout_width="0dp"
-                                android:layout_height="wrap_content"
-                                android:layout_weight="1"
-                                android:layout_marginStart="14dp"
-                                android:orientation="vertical">
+                            <LinearLayout style="@style/SettingsTextBlock">
                                 <TextView
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:text="@string/enable_asset_feature"
-                                    android:textColor="@color/settings_item_title"
-                                    android:textSize="@dimen/text_size_15"
-                                    android:textStyle="bold" />
+                                    style="@style/SettingsItemTitle"
+                                    android:text="@string/enable_asset_feature" />
 
                                 <TextView
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:layout_marginTop="1dp"
-                                    android:text="@string/asset_disable_hint"
-                                    android:textColor="@color/settings_item_subtitle"
-                                    android:textSize="@dimen/text_size_11" />
+                                    style="@style/SettingsItemSubtitle"
+                                    android:text="@string/asset_disable_hint" />
                             </LinearLayout>
 
                             <com.google.android.material.switchmaterial.SwitchMaterial
@@ -1098,10 +722,7 @@
                         </LinearLayout>
 
                         <View
-                            android:layout_width="match_parent"
-                            android:layout_height="0.5dp"
-                            android:layout_marginStart="50dp"
-                            android:background="@color/settings_divider" />
+                            style="@style/SettingsDivider" />
                     </LinearLayout>
 
                     <!-- 显示首页趋势卡片 -->
@@ -1112,46 +733,25 @@
                         android:orientation="vertical">
 
                         <LinearLayout
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:orientation="horizontal"
-                            android:gravity="center_vertical"
-                            android:paddingVertical="10dp">
+                            style="@style/SettingsRow">
 
                             <FrameLayout
-                                android:layout_width="40dp"
-                                android:layout_height="40dp"
+                                style="@style/SettingsBadge"
                                 android:background="@drawable/bg_icon_badge_cyan">
                                 <ImageView
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:layout_gravity="center"
-                                    android:src="@drawable/ic_profile_trend"
-                                    android:tint="#FFFFFF" />
+                                    style="@style/SettingsBadgeIcon"
+                                    android:src="@drawable/ic_profile_trend" />
                             </FrameLayout>
 
-                            <LinearLayout
-                                android:layout_width="0dp"
-                                android:layout_height="wrap_content"
-                                android:layout_weight="1"
-                                android:layout_marginStart="14dp"
-                                android:orientation="vertical">
+                            <LinearLayout style="@style/SettingsTextBlock">
 
                                 <TextView
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:text="@string/show_trend_card"
-                                    android:textColor="@color/settings_item_title"
-                                    android:textSize="@dimen/text_size_15"
-                                    android:textStyle="bold" />
+                                    style="@style/SettingsItemTitle"
+                                    android:text="@string/show_trend_card" />
 
                                 <TextView
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:layout_marginTop="1dp"
-                                    android:text="@string/trend_card_desc"
-                                    android:textColor="@color/settings_item_subtitle"
-                                    android:textSize="@dimen/text_size_11" />
+                                    style="@style/SettingsItemSubtitle"
+                                    android:text="@string/trend_card_desc" />
                             </LinearLayout>
 
                             <com.google.android.material.switchmaterial.SwitchMaterial
@@ -1173,44 +773,23 @@
                         android:visibility="gone">
 
                         <LinearLayout
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:orientation="horizontal"
-                            android:gravity="center_vertical"
-                            android:paddingVertical="10dp">
+                            style="@style/SettingsRow">
 
                             <FrameLayout
-                                android:layout_width="40dp"
-                                android:layout_height="40dp"
+                                style="@style/SettingsBadge"
                                 android:background="@drawable/bg_icon_badge_purple">
                                 <ImageView
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:layout_gravity="center"
-                                    android:src="@drawable/ic_ai_net_magic"
-                                    android:tint="#FFFFFF" />
+                                    style="@style/SettingsBadgeIcon"
+                                    android:src="@drawable/ic_ai_net_magic" />
                             </FrameLayout>
 
-                            <LinearLayout
-                                android:layout_width="0dp"
-                                android:layout_height="wrap_content"
-                                android:layout_weight="1"
-                                android:layout_marginStart="14dp"
-                                android:orientation="vertical">
+                            <LinearLayout style="@style/SettingsTextBlock">
                                 <TextView
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:text="@string/enable_ai_feature"
-                                    android:textColor="@color/settings_item_title"
-                                    android:textSize="@dimen/text_size_15"
-                                    android:textStyle="bold" />
+                                    style="@style/SettingsItemTitle"
+                                    android:text="@string/enable_ai_feature" />
                                 <TextView
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:text="@string/ai_feature_entry_hint"
-                                    android:textColor="@color/settings_item_subtitle"
-                                    android:textSize="@dimen/text_size_11"
-                                    android:layout_marginTop="1dp" />
+                                    style="@style/SettingsItemSubtitle"
+                                    android:text="@string/ai_feature_entry_hint" />
                             </LinearLayout>
 
                             <com.google.android.material.switchmaterial.SwitchMaterial
@@ -1260,78 +839,41 @@
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="12dp"
                 android:visibility="gone"
-                app:cardBackgroundColor="#FFFFFF"
-                app:cardCornerRadius="@dimen/settings_card_radius"
-                app:cardElevation="0dp"
-                app:cardUseCompatPadding="false">
+                style="@style/SettingsCard">
 
                 <LinearLayout
                     android:id="@+id/btn_open_ai_settings_page"
-                    android:layout_width="match_parent"
-                    android:layout_height="64dp"
-                    android:background="?attr/selectableItemBackground"
-                    android:clickable="true"
-                    android:focusable="true"
-                    android:gravity="center_vertical"
-                    android:orientation="horizontal"
-                    android:paddingHorizontal="18dp">
+                    style="@style/SettingsRow.Clickable">
 
                     <FrameLayout
-                        android:layout_width="40dp"
-                        android:layout_height="40dp"
+                        style="@style/SettingsBadge"
                         android:background="@drawable/bg_icon_badge_pink">
-
                         <ImageView
+                            style="@style/SettingsBadgeIcon"
                             android:layout_width="24dp"
                             android:layout_height="24dp"
-                            android:layout_gravity="center"
-                            android:src="@drawable/ic_ai_net_robot"
-                            android:tint="#FFFFFF" />
+                            android:src="@drawable/ic_ai_net_robot" />
                     </FrameLayout>
 
-                    <LinearLayout
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_marginStart="14dp"
-                        android:layout_weight="1"
-                        android:orientation="vertical">
+                    <LinearLayout style="@style/SettingsTextBlock">
 
                         <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="@string/ai_feature_title"
-                            android:textColor="@color/settings_item_title"
-                            android:textSize="@dimen/text_size_15"
-                            android:textStyle="bold" />
+                            style="@style/SettingsItemTitle"
+                            android:text="@string/ai_feature_title" />
 
                         <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="1dp"
-                            android:text="@string/ai_config_entry"
-                            android:textColor="@color/settings_item_subtitle"
-                            android:textSize="@dimen/text_size_11" />
+                            style="@style/SettingsItemSubtitle"
+                            android:text="@string/ai_config_entry" />
                     </LinearLayout>
 
-                    <ImageView
-                                android:layout_width="@dimen/settings_chevron_size"
-                                android:layout_height="@dimen/settings_chevron_size"
-                                android:src="@drawable/ic_chevron_right"
-                                android:tint="@color/settings_chevron" />
+                    <ImageView style="@style/SettingsChevron" />
                 </LinearLayout>
             </androidx.cardview.widget.CardView>
 
             <!-- ══════════════════════════════════
                  分区：高级与调试
                  ══════════════════════════════════ -->
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center_vertical"
-                android:layout_marginBottom="10dp"
-                android:layout_marginTop="8dp"
-                android:layout_marginStart="2dp">
+            <LinearLayout style="@style/SettingsSectionHeader">
 
                 <View
                     android:layout_width="3dp"
@@ -1340,31 +882,20 @@
                     android:layout_marginEnd="8dp" />
 
                 <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="@string/advanced_debug"
-                    android:textColor="@color/settings_section_title"
-                    android:textSize="@dimen/settings_section_title_size"
-                    android:textStyle="bold"
-                    android:letterSpacing="0.03" />
+                    style="@style/SettingsSectionTitle"
+                    android:text="@string/advanced_debug" />
             </LinearLayout>
 
             <androidx.cardview.widget.CardView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginBottom="24dp"
-                app:cardBackgroundColor="#FFFFFF"
-                app:cardCornerRadius="@dimen/settings_card_radius"
-                app:cardElevation="0dp"
-                app:cardUseCompatPadding="false">
+                android:layout_marginBottom="@dimen/settings_card_margin_bottom"
+                style="@style/SettingsCard">
 
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:paddingHorizontal="18dp"
-                    android:paddingTop="8dp"
-                    android:paddingBottom="8dp">
+                    android:orientation="vertical">
 
                     <!-- Shizuku 模式 -->
                     <LinearLayout
@@ -1376,44 +907,23 @@
 
                         <LinearLayout
                             android:id="@+id/layout_shizuku_mode_row"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:orientation="horizontal"
-                            android:gravity="center_vertical"
-                            android:paddingVertical="10dp">
+                            style="@style/SettingsRow">
 
                             <FrameLayout
-                                android:layout_width="40dp"
-                                android:layout_height="40dp"
+                                style="@style/SettingsBadge"
                                 android:background="@drawable/bg_icon_badge_cyan">
                                 <ImageView
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:layout_gravity="center"
-                                    android:src="@drawable/ic_profile_shizuku_mode"
-                                    android:tint="#FFFFFF" />
+                                    style="@style/SettingsBadgeIcon"
+                                    android:src="@drawable/ic_profile_shizuku_mode" />
                             </FrameLayout>
 
-                            <LinearLayout
-                                android:layout_width="0dp"
-                                android:layout_height="wrap_content"
-                                android:layout_weight="1"
-                                android:layout_marginStart="14dp"
-                                android:orientation="vertical">
+                            <LinearLayout style="@style/SettingsTextBlock">
                                 <TextView
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:text="@string/shizuku_mode"
-                                    android:textColor="@color/settings_item_title"
-                                    android:textSize="@dimen/text_size_15"
-                                    android:textStyle="bold" />
+                                    style="@style/SettingsItemTitle"
+                                    android:text="@string/shizuku_mode" />
                                 <TextView
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:text="@string/shizuku_mode_hint"
-                                    android:textColor="@color/settings_item_subtitle"
-                                    android:textSize="@dimen/text_size_11"
-                                    android:layout_marginTop="1dp" />
+                                    style="@style/SettingsItemSubtitle"
+                                    android:text="@string/shizuku_mode_hint" />
                             </LinearLayout>
 
                             <com.google.android.material.switchmaterial.SwitchMaterial
@@ -1427,10 +937,7 @@
 
                         <View
                             android:id="@+id/divider_shizuku_persistence"
-                            android:layout_width="match_parent"
-                            android:layout_height="0.5dp"
-                            android:layout_marginStart="50dp"
-                            android:background="@color/settings_divider"
+                            style="@style/SettingsDivider"
                             android:visibility="gone" />
                     </LinearLayout>
 
@@ -1444,44 +951,23 @@
 
                         <LinearLayout
                             android:id="@+id/layout_shizuku_persistence"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:orientation="horizontal"
-                            android:gravity="center_vertical"
-                            android:paddingVertical="10dp">
+                            style="@style/SettingsRow">
 
                             <FrameLayout
-                                android:layout_width="40dp"
-                                android:layout_height="40dp"
+                                style="@style/SettingsBadge"
                                 android:background="@drawable/bg_icon_badge_amber">
                                 <ImageView
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:layout_gravity="center"
-                                    android:src="@drawable/ic_profile_shizuku_guard"
-                                    android:tint="#FFFFFF" />
+                                    style="@style/SettingsBadgeIcon"
+                                    android:src="@drawable/ic_profile_shizuku_guard" />
                             </FrameLayout>
 
-                            <LinearLayout
-                                android:layout_width="0dp"
-                                android:layout_height="wrap_content"
-                                android:layout_weight="1"
-                                android:layout_marginStart="14dp"
-                                android:orientation="vertical">
+                            <LinearLayout style="@style/SettingsTextBlock">
                                 <TextView
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:text="@string/shizuku_auto_restore"
-                                    android:textColor="@color/settings_item_title"
-                                    android:textSize="@dimen/text_size_15"
-                                    android:textStyle="bold" />
+                                    style="@style/SettingsItemTitle"
+                                    android:text="@string/shizuku_auto_restore" />
                                 <TextView
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:text="@string/keep_alive_auto_restart_desc"
-                                    android:textColor="@color/settings_item_subtitle"
-                                    android:textSize="@dimen/text_size_11"
-                                    android:layout_marginTop="1dp" />
+                                    style="@style/SettingsItemSubtitle"
+                                    android:text="@string/keep_alive_auto_restart_desc" />
                             </LinearLayout>
 
                             <com.google.android.material.switchmaterial.SwitchMaterial
@@ -1495,10 +981,7 @@
 
                         <View
                             android:id="@+id/divider_after_shizuku_persistence"
-                            android:layout_width="match_parent"
-                            android:layout_height="0.5dp"
-                            android:layout_marginStart="50dp"
-                            android:background="@color/settings_divider" />
+                            style="@style/SettingsDivider" />
                     </LinearLayout>
 
                     <!-- 启用多币种功能 -->
@@ -1509,46 +992,25 @@
                         android:orientation="vertical">
 
                         <LinearLayout
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:orientation="horizontal"
-                            android:gravity="center_vertical"
-                            android:paddingVertical="10dp">
+                            style="@style/SettingsRow">
 
                             <FrameLayout
-                                android:layout_width="40dp"
-                                android:layout_height="40dp"
+                                style="@style/SettingsBadge"
                                 android:background="@drawable/bg_icon_badge_green">
                                 <ImageView
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:layout_gravity="center"
-                                    android:src="@drawable/ic_profile_currency_switch"
-                                    android:tint="#FFFFFF" />
+                                    style="@style/SettingsBadgeIcon"
+                                    android:src="@drawable/ic_profile_currency_switch" />
                             </FrameLayout>
 
-                            <LinearLayout
-                                android:layout_width="0dp"
-                                android:layout_height="wrap_content"
-                                android:layout_weight="1"
-                                android:layout_marginStart="14dp"
-                                android:orientation="vertical">
+                            <LinearLayout style="@style/SettingsTextBlock">
 
                                 <TextView
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:text="@string/enable_multi_currency"
-                                    android:textColor="@color/settings_item_title"
-                                    android:textSize="@dimen/text_size_15"
-                                    android:textStyle="bold" />
+                                    style="@style/SettingsItemTitle"
+                                    android:text="@string/enable_multi_currency" />
 
                                 <TextView
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:layout_marginTop="1dp"
-                                    android:text="@string/multi_currency_desc"
-                                    android:textColor="@color/settings_item_subtitle"
-                                    android:textSize="@dimen/text_size_11" />
+                                    style="@style/SettingsItemSubtitle"
+                                    android:text="@string/multi_currency_desc" />
                             </LinearLayout>
 
                             <com.google.android.material.switchmaterial.SwitchMaterial
@@ -1561,10 +1023,7 @@
                         </LinearLayout>
 
                         <View
-                            android:layout_width="match_parent"
-                            android:layout_height="0.5dp"
-                            android:layout_marginStart="50dp"
-                            android:background="@color/settings_divider" />
+                            style="@style/SettingsDivider" />
                     </LinearLayout>
 
                     <!-- 开发者日志 -->
@@ -1575,43 +1034,23 @@
                         android:orientation="vertical">
 
                         <LinearLayout
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:orientation="horizontal"
-                            android:gravity="center_vertical"
-                            android:paddingVertical="10dp">
+                            style="@style/SettingsRow">
 
                             <FrameLayout
-                                android:layout_width="40dp"
-                                android:layout_height="40dp"
+                                style="@style/SettingsBadge"
                                 android:background="@drawable/bg_icon_badge_cyan">
                                 <ImageView
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:layout_gravity="center"
-                                    android:src="@drawable/ic_profile_dev_terminal"
-                                    android:tint="#FFFFFF" />
+                                    style="@style/SettingsBadgeIcon"
+                                    android:src="@drawable/ic_profile_dev_terminal" />
                             </FrameLayout>
 
-                            <LinearLayout
-                                android:layout_width="0dp"
-                                android:layout_height="wrap_content"
-                                android:layout_weight="1"
-                                android:layout_marginStart="14dp"
-                                android:orientation="vertical">
+                            <LinearLayout style="@style/SettingsTextBlock">
                                 <TextView
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:text="@string/developer_log"
-                                    android:textColor="@color/settings_item_title"
-                                    android:textSize="@dimen/text_size_15"
-                                    android:textStyle="bold" />
+                                    style="@style/SettingsItemTitle"
+                                    android:text="@string/developer_log" />
                                 <TextView
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:text="@string/developer_log_desc"
-                                    android:textColor="#8A000000"
-                                    android:textSize="@dimen/text_size_11" />
+                                    style="@style/SettingsItemSubtitle"
+                                    android:text="@string/developer_log_desc" />
                                 <com.google.android.material.button.MaterialButton
                                     android:id="@+id/btn_share_logs"
                                     style="@style/Widget.MaterialComponents.Button.TextButton"
@@ -1622,8 +1061,8 @@
                                     android:minHeight="0dp"
                                     android:paddingVertical="0dp"
                                     android:text="@string/view_log"
-                                    android:textColor="#5C6BC0"
-                                    android:textSize="@dimen/text_size_11"
+                                    android:textColor="@color/brand_primary"
+                                    android:textSize="@dimen/settings_subtitle_size"
                                     android:visibility="gone" />
                             </LinearLayout>
 

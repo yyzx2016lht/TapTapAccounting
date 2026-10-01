@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <style name="SettingsCard">
+        <item name="cardBackgroundColor">@color/settings_card_bg</item>
+        <item name="cardCornerRadius">@dimen/settings_card_radius</item>
+        <item name="cardElevation">0dp</item>
+        <item name="cardUseCompatPadding">false</item>
+    </style>
+
+    <style name="SettingsRow">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:minHeight">@dimen/settings_item_min_height</item>
+        <item name="android:orientation">horizontal</item>
+        <item name="android:gravity">center_vertical</item>
+        <item name="android:paddingStart">@dimen/settings_item_padding_h</item>
+        <item name="android:paddingEnd">@dimen/settings_item_padding_h</item>
+        <item name="android:paddingTop">10dp</item>
+        <item name="android:paddingBottom">10dp</item>
+    </style>
+
+    <style name="SettingsRow.Clickable">
+        <item name="android:background">?attr/selectableItemBackground</item>
+        <item name="android:clickable">true</item>
+        <item name="android:focusable">true</item>
+    </style>
+
+    <style name="SettingsBadge">
+        <item name="android:layout_width">@dimen/settings_icon_badge_size</item>
+        <item name="android:layout_height">@dimen/settings_icon_badge_size</item>
+    </style>
+
+    <style name="SettingsBadgeIcon">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_gravity">center</item>
+        <item name="android:scaleType">fitCenter</item>
+        <item name="android:tint">#FFFFFF</item>
+    </style>
+
+    <style name="SettingsTextBlock">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_weight">1</item>
+        <item name="android:layout_marginStart">14dp</item>
+        <item name="android:layout_marginEnd">8dp</item>
+        <item name="android:orientation">vertical</item>
+    </style>
+
+    <style name="SettingsItemTitle">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:textColor">@color/settings_item_title</item>
+        <item name="android:textSize">@dimen/settings_title_size</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+
+    <style name="SettingsItemSubtitle">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">2dp</item>
+        <item name="android:textColor">@color/settings_item_subtitle</item>
+        <item name="android:textSize">@dimen/settings_subtitle_size</item>
+    </style>
+
+    <style name="SettingsChevron">
+        <item name="android:layout_width">@dimen/settings_chevron_size</item>
+        <item name="android:layout_height">@dimen/settings_chevron_size</item>
+        <item name="android:src">@drawable/ic_chevron_right</item>
+        <item name="android:tint">@color/settings_chevron</item>
+    </style>
+
+    <style name="SettingsDivider">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">0.5dp</item>
+        <item name="android:layout_marginStart">@dimen/settings_item_text_inset</item>
+        <item name="android:background">@color/settings_divider</item>
+    </style>
+
+    <style name="SettingsSectionHeader">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">8dp</item>
+        <item name="android:layout_marginBottom">10dp</item>
+        <item name="android:layout_marginStart">2dp</item>
+        <item name="android:orientation">horizontal</item>
+        <item name="android:gravity">center_vertical</item>
+    </style>
+
+    <style name="SettingsSectionTitle">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:textColor">@color/settings_section_title</item>
+        <item name="android:textSize">@dimen/settings_section_title_size</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:letterSpacing">0.03</item>
+    </style>
+
+</resources>

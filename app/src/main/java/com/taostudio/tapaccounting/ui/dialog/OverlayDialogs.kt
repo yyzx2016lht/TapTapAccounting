@@ -367,7 +367,7 @@ object OverlayDialogs {
         var currentSelection = currentSelectionText.replace(" - ", "/::/").replace(" > ", "/::/")
 
         val dbType = if (type == Prefs.TYPE_INCOME) 1 else 0
-        val normalIconColor = if (dbType == 1) Color.parseColor("#43A047") else BillColors.expense
+        val normalIconColor = if (dbType == 1) BillColors.income else BillColors.expense
         val normalBgColor   = if (dbType == 1) Color.parseColor("#E8F5E9") else Color.parseColor("#FFEBEE")
         val selectedIconColor = Color.parseColor("#5C6BC0")
         val selectedBgColor   = Color.parseColor("#E8EAF6")
@@ -483,7 +483,7 @@ object OverlayDialogs {
         dbType: Int,
         onClick: (CategoryNode) -> Unit
     ): View {
-        val normalIconColor   = if (dbType == 1) Color.parseColor("#43A047") else BillColors.expense
+        val normalIconColor   = if (dbType == 1) BillColors.income else BillColors.expense
         val normalBgColor     = if (dbType == 1) Color.parseColor("#E8F5E9") else Color.parseColor("#FFEBEE")
         val selectedIconColor = Color.parseColor("#5C6BC0")
         val selectedBgColor   = Color.parseColor("#E8EAF6")
@@ -787,7 +787,7 @@ object OverlayDialogs {
 
         fun render(categories: List<CategoryNode>) {
             container.removeAllViews()
-            val normalIconColor   = if (dbType == 1) Color.parseColor("#43A047") else BillColors.expense
+            val normalIconColor   = if (dbType == 1) BillColors.income else BillColors.expense
             val normalBgColor     = if (dbType == 1) Color.parseColor("#E8F5E9") else Color.parseColor("#FFEBEE")
             val selectedIconColor = Color.parseColor("#5C6BC0")
             val selectedBgColor   = Color.parseColor("#E8EAF6")

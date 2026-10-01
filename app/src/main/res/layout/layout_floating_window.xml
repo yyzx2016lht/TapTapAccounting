@@ -43,7 +43,7 @@
                 android:hint="0.00"
                 android:inputType="none"
                 android:longClickable="false"
-                android:textColor="#2E7D32"
+                android:textColor="@color/income_color"
                 android:textSize="@dimen/text_size_24"
                 android:textStyle="bold" />
         </RelativeLayout>
@@ -554,7 +554,7 @@
                 android:text="@string/save_and_record"
                 android:textColor="#FFFFFF"
                 android:textStyle="bold"
-                app:backgroundTint="#4F6EDB"
+                app:backgroundTint="@color/brand_primary"
                 app:cornerRadius="14dp" />
         </LinearLayout>
 
@@ -565,7 +565,7 @@
             android:layout_height="44dp"
             android:layout_marginTop="10dp"
             android:text="@string/switch_to_ai_chat"
-            android:textColor="#1A73E8"
+            android:textColor="@color/brand_primary"
             android:textSize="13sp"
             android:visibility="gone"
             app:cornerRadius="14dp"

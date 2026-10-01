@@ -96,7 +96,7 @@
                         android:layout_height="wrap_content"
                         android:layout_gravity="center"
                         android:text="退"
-                        android:textColor="#2E7D32"
+                        android:textColor="@color/income_color"
                         android:textSize="16sp"
                         android:textStyle="bold" />
                 </FrameLayout>
@@ -161,7 +161,7 @@
                         android:layout_weight="1"
                         android:gravity="end"
                         android:text="+¥0.00"
-                        android:textColor="#1A9B5F"
+                        android:textColor="@color/income_color"
                         android:textSize="19sp"
                         android:textStyle="bold" />
 

@@ -1347,7 +1347,7 @@ class AssetDetailActivity : AppCompatActivity() {
                     when {
                         isRefund -> Color.parseColor("#9AA1AA")
                         bill.type == Bill.TYPE_EXPENSE -> BillColors.expense
-                        bill.type == Bill.TYPE_INCOME -> Color.parseColor("#4CAF50")
+                        bill.type == Bill.TYPE_INCOME -> BillColors.income
                         else -> Color.parseColor("#757575")
                     }
                 )
@@ -1397,7 +1397,7 @@ class AssetDetailActivity : AppCompatActivity() {
                     val iconTint = when {
                         isRefund -> Color.parseColor("#8E98A3")
                         bill.type == Bill.TYPE_EXPENSE -> BillColors.expense
-                        bill.type == Bill.TYPE_INCOME -> Color.parseColor("#4CAF50")
+                        bill.type == Bill.TYPE_INCOME -> BillColors.income
                         else -> Color.parseColor("#9E9E9E")
                     }
                     ivIcon.setColorFilter(iconTint)

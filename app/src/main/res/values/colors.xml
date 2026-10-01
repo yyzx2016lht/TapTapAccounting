@@ -29,8 +29,7 @@
 
     <!-- Domain: accounting -->
     <color name="expense_color">#FF5252</color>
-    <color name="income_color">#43A047</color>
-
+    <color name="income_color">#4CAF50</color>
     <!-- Semantic: feedback -->
     <color name="warning_color">#FB8C00</color>
     <color name="success_color">#43A047</color>

@@ -64,7 +64,6 @@ class HomeAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
         private const val COLOR_TEXT_DETAIL_REFUND = "#A1A8AF"
         private const val COLOR_TEXT_NORMAL = "#333333"
         private const val COLOR_TEXT_DETAIL_NORMAL = "#999999"
-        private const val COLOR_AMOUNT_INCOME = "#4CAF50"
         private const val COLOR_AMOUNT_REFUND = "#9AA1AA"
         private const val COLOR_AMOUNT_OTHER = "#757575"
         private const val COLOR_ICON_OTHER = "#9E9E9E"
@@ -75,7 +74,7 @@ class HomeAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
     private val textColorNormal = Color.parseColor(COLOR_TEXT_NORMAL)
     private val textColorDetailNormal = Color.parseColor(COLOR_TEXT_DETAIL_NORMAL)
     private val amountColorExpense = BillColors.expense
-    private val amountColorIncome = Color.parseColor(COLOR_AMOUNT_INCOME)
+    private val amountColorIncome = BillColors.income
     private val amountColorRefund = Color.parseColor(COLOR_AMOUNT_REFUND)
     private val amountColorOther = Color.parseColor(COLOR_AMOUNT_OTHER)
     private val iconColorOther = Color.parseColor(COLOR_ICON_OTHER)

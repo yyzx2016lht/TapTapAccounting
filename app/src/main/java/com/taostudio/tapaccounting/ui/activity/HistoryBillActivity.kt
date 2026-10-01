@@ -571,7 +571,7 @@ class HistoryBillActivity : AppCompatActivity() {
                 val amountColor = when {
                     isRefund -> Color.parseColor("#9AA1AA")
                     bill.type == Bill.TYPE_EXPENSE -> BillColors.expense
-                    bill.type == Bill.TYPE_INCOME -> Color.parseColor("#4CAF50")
+                    bill.type == Bill.TYPE_INCOME -> BillColors.income
                     else -> Color.parseColor("#757575")
                 }
                 tvAmount.setTextColor(amountColor)
@@ -582,7 +582,7 @@ class HistoryBillActivity : AppCompatActivity() {
                 val iconColor = when {
                     isRefund -> Color.parseColor("#9E9E9E")
                     bill.type == Bill.TYPE_EXPENSE -> BillColors.expense
-                    bill.type == Bill.TYPE_INCOME -> Color.parseColor("#4CAF50")
+                    bill.type == Bill.TYPE_INCOME -> BillColors.income
                     else -> Color.parseColor("#9E9E9E")
                 }
                 ivIcon.setColorFilter(iconColor)

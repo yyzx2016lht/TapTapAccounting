@@ -443,7 +443,7 @@ class BillDetailActivity : AppCompatActivity() {
             tvAsset?.setTextColor(Color.parseColor("#8A8A8E"))
             when (bill.type) {
                 Bill.TYPE_EXPENSE -> tvAmountRow.setTextColor(BillColors.expense)
-                Bill.TYPE_INCOME -> tvAmountRow.setTextColor(Color.parseColor("#4CAF50"))
+                Bill.TYPE_INCOME -> tvAmountRow.setTextColor(BillColors.income)
                 else -> tvAmountRow.setTextColor(Color.parseColor("#5F6772"))
             }
         }
@@ -459,7 +459,7 @@ class BillDetailActivity : AppCompatActivity() {
         val iconTint = when {
             forceGrayStyle || isRefund -> Color.parseColor("#8E98A3")
             bill.type == Bill.TYPE_EXPENSE -> BillColors.expense
-            bill.type == Bill.TYPE_INCOME -> Color.parseColor("#4CAF50")
+            bill.type == Bill.TYPE_INCOME -> BillColors.income
             else -> Color.parseColor("#9E9E9E")
         }
         ivIcon?.layoutParams = ivIcon?.layoutParams?.apply {
@@ -721,7 +721,7 @@ class BillDetailActivity : AppCompatActivity() {
         tvCategoryInitial.setTextColor(
             when (currentUiType) {
                 Bill.TYPE_EXPENSE -> BillColors.expense
-                Bill.TYPE_INCOME -> Color.parseColor("#2E7D32")
+                Bill.TYPE_INCOME -> BillColors.income
                 else -> Color.parseColor("#6F7A8A")
             }
         )
@@ -804,7 +804,7 @@ class BillDetailActivity : AppCompatActivity() {
     private fun resolveAmountColor(uiType: Int): Int {
         return when (uiType) {
             Bill.TYPE_EXPENSE -> BillColors.expense
-            Bill.TYPE_INCOME -> Color.parseColor("#1A9B5F")
+            Bill.TYPE_INCOME -> BillColors.income
             else -> Color.parseColor("#6F7A8A")
         }
     }
@@ -812,7 +812,7 @@ class BillDetailActivity : AppCompatActivity() {
     private fun resolveIconTintColor(uiType: Int): Int {
         return when (uiType) {
             Bill.TYPE_EXPENSE -> Color.parseColor("#C62828")
-            Bill.TYPE_INCOME -> Color.parseColor("#2E7D32")
+            Bill.TYPE_INCOME -> BillColors.income
             else -> Color.parseColor("#7A8598")
         }
     }

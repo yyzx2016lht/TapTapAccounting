@@ -383,7 +383,7 @@ object BillDetailSheetHelper {
         } else {
             when (bill.type) {
                 Bill.TYPE_EXPENSE -> tvAmount.setTextColor(BillColors.expense)
-                Bill.TYPE_INCOME -> tvAmount.setTextColor(Color.parseColor("#4CAF50"))
+                Bill.TYPE_INCOME -> tvAmount.setTextColor(BillColors.income)
                 else -> tvAmount.setTextColor(Color.parseColor("#5F6772"))
             }
         }
@@ -421,7 +421,7 @@ object BillDetailSheetHelper {
             val iconTint = when {
                 forceGrayStyle || isRefund -> Color.parseColor("#8E98A3")
                 bill.type == Bill.TYPE_EXPENSE -> BillColors.expense
-                bill.type == Bill.TYPE_INCOME -> Color.parseColor("#4CAF50")
+                bill.type == Bill.TYPE_INCOME -> BillColors.income
                 else -> Color.parseColor("#9E9E9E")
             }
             ivIcon.layoutParams = ivIcon.layoutParams.apply {

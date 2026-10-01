@@ -717,7 +717,7 @@ class SettingsActivity : AppCompatActivity() {
                     amount.text = "$amountPrefix${String.format(Locale.getDefault(), "%.2f", bill.amount)}"
                     amount.setTextColor(
                         when (bill.type) {
-                            Bill.TYPE_INCOME -> Color.parseColor("#2E7D32")
+                            Bill.TYPE_INCOME -> BillColors.income
                             Bill.TYPE_TRANSFER -> Color.parseColor("#5B6B80")
                             else -> BillColors.expense
                         }

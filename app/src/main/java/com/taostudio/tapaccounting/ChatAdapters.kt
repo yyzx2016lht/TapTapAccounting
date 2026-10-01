@@ -814,7 +814,7 @@ class ChatAdapter(
                 val amountText = String.format(Locale.getDefault(), "%.2f", bill.amount)
                 tvAmount.text = "$sign$amountText"
                 val amountColor = when (bill.type) {
-                    Bill.TYPE_INCOME -> Color.parseColor("#2E7D32")
+                    Bill.TYPE_INCOME -> BillColors.income
                     Bill.TYPE_TRANSFER -> Color.parseColor("#7A8598")
                     else -> BillColors.expense
                 }

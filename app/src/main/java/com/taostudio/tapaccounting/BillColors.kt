@@ -9,4 +9,8 @@ object BillColors {
     @get:ColorInt
     val expense: Int
         get() = ContextCompat.getColor(TapApplication.app(), R.color.expense_color)
+
+    @get:ColorInt
+    val income: Int
+        get() = ContextCompat.getColor(TapApplication.app(), R.color.income_color)
 }

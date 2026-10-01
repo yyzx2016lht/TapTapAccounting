@@ -630,7 +630,7 @@ class ChatSessionController(
             val icon = ImageView(context).apply {
                 layoutParams = android.widget.FrameLayout.LayoutParams(dp(16), dp(16), android.view.Gravity.CENTER)
                 val typeColor = when (bill.type) {
-                    Bill.TYPE_INCOME -> Color.parseColor("#2E7D32")
+                    Bill.TYPE_INCOME -> BillColors.income
                     Bill.TYPE_TRANSFER -> Color.parseColor("#7A8598")
                     else -> BillColors.expense
                 }
@@ -676,7 +676,7 @@ class ChatSessionController(
                 textSize = 13f
                 setTextColor(
                     when (bill.type) {
-                        Bill.TYPE_INCOME -> Color.parseColor("#2E7D32")
+                        Bill.TYPE_INCOME -> BillColors.income
                         Bill.TYPE_TRANSFER -> Color.parseColor("#7A8598")
                         else -> BillColors.expense
                     }

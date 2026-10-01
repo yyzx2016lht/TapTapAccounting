@@ -528,7 +528,7 @@ class CalendarActivity : AppCompatActivity() {
             tvTime.setTextColor(Color.parseColor("#8A8A8E"))
             when (bill.type) {
                 Bill.TYPE_EXPENSE -> tvAmount.setTextColor(BillColors.expense)
-                Bill.TYPE_INCOME -> tvAmount.setTextColor(Color.parseColor("#4CAF50"))
+                Bill.TYPE_INCOME -> tvAmount.setTextColor(BillColors.income)
                 else -> tvAmount.setTextColor(Color.parseColor("#5F6772"))
             }
         }
@@ -1384,7 +1384,7 @@ class CalendarActivity : AppCompatActivity() {
                         if (balance != 0.0) {
                             tvTopValue.visibility = View.VISIBLE
                             tvTopValue.text = if (balance > 0) "+${formatAmt(balance)}" else formatAmt(balance)
-                            tvTopValue.setTextColor(if (balance > 0) Color.parseColor("#4CAF50") else BillColors.expense)
+                            tvTopValue.setTextColor(if (balance > 0) BillColors.income else BillColors.expense)
                         } else if (summary.expense <= 0 && summary.income <= 0) {
                             tvTopValue.visibility = View.VISIBLE
                             tvTopValue.text = lunarOrFestivalText(date.year, date.monthValue, date.dayOfMonth)

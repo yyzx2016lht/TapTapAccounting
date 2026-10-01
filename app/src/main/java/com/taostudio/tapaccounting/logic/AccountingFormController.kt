@@ -270,7 +270,7 @@ class AccountingFormController(
             }
             tvCategoryIconEmoji?.visibility = View.GONE
             ivCategoryIcon?.visibility = View.VISIBLE
-            val tintColor = if (category.type == 1) Color.parseColor("#43A047") else BillColors.expense
+            val tintColor = if (category.type == 1) BillColors.income else BillColors.expense
             ivCategoryIcon?.let {
                 Glide.with(ctx)
                     .load(icon)
@@ -365,7 +365,7 @@ class AccountingFormController(
 
         when (position) {
             0 -> etMoney.setTextColor(BillColors.expense)
-            1 -> etMoney.setTextColor(Color.parseColor("#4CAF50"))
+            1 -> etMoney.setTextColor(BillColors.income)
             2 -> etMoney.setTextColor(Color.parseColor("#8A8A8E"))
             3 -> etMoney.setTextColor(Color.parseColor("#FF9800"))
         }

@@ -80,7 +80,7 @@
                     android:textSize="16sp"
                     android:letterSpacing="0.01"
                     android:textStyle="bold"
-                    android:textColor="#D32F2F" />
+                    android:textColor="@color/expense_color" />
 
                 <EditText
                     android:id="@+id/et_chat_bill_amount"
@@ -93,7 +93,7 @@
                     android:textSize="16sp"
                     android:letterSpacing="0.01"
                     android:textStyle="bold"
-                    android:textColor="#D32F2F"
+                    android:textColor="@color/expense_color"
                     android:inputType="numberDecimal"
                     android:maxLines="1"
                     android:gravity="center"

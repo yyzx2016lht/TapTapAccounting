@@ -1,5 +1,6 @@
 package com.taostudio.tapaccounting.ui.main.home
 
+import com.taostudio.tapaccounting.BillColors
 import android.content.Context
 import android.content.Intent
 import android.graphics.Color
@@ -182,7 +183,7 @@ object BillDetailSheetHelper {
                             }
                         }
                     }
-                    tvAmount.setTextColor(Color.parseColor("#FF3B30"))
+                    tvAmount.setTextColor(BillColors.expense)
                 } else {
                     tvAmount.text = "+${HomeBillFormatHelper.formatMoney(bill.amount, bill.currency)}"
                     tvAmount.setTextColor(Color.parseColor("#4CAF50"))
@@ -381,7 +382,7 @@ object BillDetailSheetHelper {
             tvAmount.setTextColor(Color.parseColor("#8A8A8E"))
         } else {
             when (bill.type) {
-                Bill.TYPE_EXPENSE -> tvAmount.setTextColor(Color.parseColor("#FF3B30"))
+                Bill.TYPE_EXPENSE -> tvAmount.setTextColor(BillColors.expense)
                 Bill.TYPE_INCOME -> tvAmount.setTextColor(Color.parseColor("#4CAF50"))
                 else -> tvAmount.setTextColor(Color.parseColor("#5F6772"))
             }
@@ -419,7 +420,7 @@ object BillDetailSheetHelper {
             val iconLookupType = if (isRefund) Bill.TYPE_EXPENSE else bill.type
             val iconTint = when {
                 forceGrayStyle || isRefund -> Color.parseColor("#8E98A3")
-                bill.type == Bill.TYPE_EXPENSE -> Color.parseColor("#FF3B30")
+                bill.type == Bill.TYPE_EXPENSE -> BillColors.expense
                 bill.type == Bill.TYPE_INCOME -> Color.parseColor("#4CAF50")
                 else -> Color.parseColor("#9E9E9E")
             }

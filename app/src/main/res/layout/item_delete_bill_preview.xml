@@ -60,7 +60,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:gravity="end"
-            android:textColor="#D32F2F"
+            android:textColor="@color/expense_color"
             android:textSize="14sp"
             android:textStyle="bold" />
 

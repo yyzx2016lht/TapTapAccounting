@@ -5,6 +5,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
+import com.taostudio.tapaccounting.BillColors
 import com.taostudio.tapaccounting.R
 import java.util.Locale
 
@@ -31,7 +32,7 @@ class DailyReportAdapter(
         
         holder.tvBalance.text = String.format(Locale.getDefault(), "楼%.2f", report.balance)
         if (report.balance < 0) {
-            holder.tvBalance.setTextColor(android.graphics.Color.parseColor("#E53935")) // Red for negative
+            holder.tvBalance.setTextColor(BillColors.expense)
         } else {
             holder.tvBalance.setTextColor(android.graphics.Color.parseColor("#4CAF50")) // Green for positive
         }

@@ -125,7 +125,7 @@
                     android:layout_height="wrap_content"
                     android:paddingVertical="6dp"
                     android:text="@string/chat_bill_delete_all"
-                    android:textColor="#D32F2F"
+                    android:textColor="@color/expense_color"
                     android:textSize="12sp"
                     android:textStyle="bold"
                     android:visibility="gone" />

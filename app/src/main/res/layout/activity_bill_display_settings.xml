@@ -84,7 +84,7 @@
                             android:layout_width="22dp"
                             android:layout_height="22dp"
                             android:src="@drawable/ic_profile_category"
-                            android:tint="#E55361" />
+                            android:tint="@color/expense_color" />
                     </LinearLayout>
 
                     <LinearLayout
@@ -120,7 +120,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:text="-12.00"
-                        android:textColor="#D9667A"
+                        android:textColor="@color/expense_color"
                         android:textSize="@dimen/text_size_17" />
                 </LinearLayout>
             </androidx.cardview.widget.CardView>

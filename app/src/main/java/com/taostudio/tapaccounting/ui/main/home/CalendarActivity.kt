@@ -1,5 +1,6 @@
 package com.taostudio.tapaccounting.ui.main.home
 
+import com.taostudio.tapaccounting.BillColors
 import androidx.appcompat.app.AlertDialog
 import android.content.Context
 import android.content.Intent
@@ -526,7 +527,7 @@ class CalendarActivity : AppCompatActivity() {
             tvDetail.setTextColor(Color.parseColor("#8A8A8E"))
             tvTime.setTextColor(Color.parseColor("#8A8A8E"))
             when (bill.type) {
-                Bill.TYPE_EXPENSE -> tvAmount.setTextColor(Color.parseColor("#FF3B30"))
+                Bill.TYPE_EXPENSE -> tvAmount.setTextColor(BillColors.expense)
                 Bill.TYPE_INCOME -> tvAmount.setTextColor(Color.parseColor("#4CAF50"))
                 else -> tvAmount.setTextColor(Color.parseColor("#5F6772"))
             }
@@ -783,7 +784,7 @@ class CalendarActivity : AppCompatActivity() {
                     } else {
                         tvAmount.text = "-${formatMoney(bill.amount, bill.currency)}"
                     }
-                    tvAmount.setTextColor(Color.parseColor("#FF3B30"))
+                    tvAmount.setTextColor(BillColors.expense)
                 } else {
                     tvAmount.text = "+${formatMoney(bill.amount, bill.currency)}"
                     tvAmount.setTextColor(Color.parseColor("#4CAF50"))
@@ -1359,7 +1360,7 @@ class CalendarActivity : AppCompatActivity() {
                             summary.expense > 0 -> {
                                 tvTopValue.visibility = View.VISIBLE
                                 tvTopValue.text = "-${formatAmt(summary.expense)}"
-                                tvTopValue.setTextColor(Color.parseColor("#FF5252"))
+                                tvTopValue.setTextColor(BillColors.expense)
                                 if (summary.income > 0) {
                                     tvBottomValue.visibility = View.VISIBLE
                                     tvBottomValue.text = "+${formatAmt(summary.income)}"
@@ -1383,7 +1384,7 @@ class CalendarActivity : AppCompatActivity() {
                         if (balance != 0.0) {
                             tvTopValue.visibility = View.VISIBLE
                             tvTopValue.text = if (balance > 0) "+${formatAmt(balance)}" else formatAmt(balance)
-                            tvTopValue.setTextColor(if (balance > 0) Color.parseColor("#4CAF50") else Color.parseColor("#FF5252"))
+                            tvTopValue.setTextColor(if (balance > 0) Color.parseColor("#4CAF50") else BillColors.expense)
                         } else if (summary.expense <= 0 && summary.income <= 0) {
                             tvTopValue.visibility = View.VISIBLE
                             tvTopValue.text = lunarOrFestivalText(date.year, date.monthValue, date.dayOfMonth)
@@ -1405,7 +1406,7 @@ class CalendarActivity : AppCompatActivity() {
                         if (summary.expense > 0) {
                             tvTopValue.visibility = View.VISIBLE
                             tvTopValue.text = "-${formatAmt(summary.expense)}"
-                            tvTopValue.setTextColor(Color.parseColor("#FF5252"))
+                            tvTopValue.setTextColor(BillColors.expense)
                         } else if (summary.expense <= 0 && summary.income <= 0) {
                             tvTopValue.visibility = View.VISIBLE
                             tvTopValue.text = lunarOrFestivalText(date.year, date.monthValue, date.dayOfMonth)

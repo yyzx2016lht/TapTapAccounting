@@ -1,5 +1,6 @@
 package com.taostudio.tapaccounting.ui.main.assets
 
+import com.taostudio.tapaccounting.BillColors
 import android.content.Intent
 import android.graphics.Color
 import android.os.Build
@@ -1345,7 +1346,7 @@ class AssetDetailActivity : AppCompatActivity() {
                 tvAmount.setTextColor(
                     when {
                         isRefund -> Color.parseColor("#9AA1AA")
-                        bill.type == Bill.TYPE_EXPENSE -> Color.parseColor("#FF5252")
+                        bill.type == Bill.TYPE_EXPENSE -> BillColors.expense
                         bill.type == Bill.TYPE_INCOME -> Color.parseColor("#4CAF50")
                         else -> Color.parseColor("#757575")
                     }
@@ -1395,7 +1396,7 @@ class AssetDetailActivity : AppCompatActivity() {
                     }
                     val iconTint = when {
                         isRefund -> Color.parseColor("#8E98A3")
-                        bill.type == Bill.TYPE_EXPENSE -> Color.parseColor("#FF5252")
+                        bill.type == Bill.TYPE_EXPENSE -> BillColors.expense
                         bill.type == Bill.TYPE_INCOME -> Color.parseColor("#4CAF50")
                         else -> Color.parseColor("#9E9E9E")
                     }

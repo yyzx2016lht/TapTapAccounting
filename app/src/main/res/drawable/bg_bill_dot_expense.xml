@@ -4,5 +4,5 @@
     <size
         android:width="6dp"
         android:height="6dp" />
-    <solid android:color="#E55361" />
+    <solid android:color="@color/expense_color" />
 </shape>

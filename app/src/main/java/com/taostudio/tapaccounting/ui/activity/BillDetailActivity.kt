@@ -1,5 +1,6 @@
 package com.taostudio.tapaccounting.ui.activity
 
+import com.taostudio.tapaccounting.BillColors
 import android.content.Context
 import android.content.Intent
 import android.graphics.Color
@@ -441,7 +442,7 @@ class BillDetailActivity : AppCompatActivity() {
             tvTime?.setTextColor(Color.parseColor("#8A8A8E"))
             tvAsset?.setTextColor(Color.parseColor("#8A8A8E"))
             when (bill.type) {
-                Bill.TYPE_EXPENSE -> tvAmountRow.setTextColor(Color.parseColor("#FF3B30"))
+                Bill.TYPE_EXPENSE -> tvAmountRow.setTextColor(BillColors.expense)
                 Bill.TYPE_INCOME -> tvAmountRow.setTextColor(Color.parseColor("#4CAF50"))
                 else -> tvAmountRow.setTextColor(Color.parseColor("#5F6772"))
             }
@@ -457,7 +458,7 @@ class BillDetailActivity : AppCompatActivity() {
         val iconLookupType = if (isRefund) Bill.TYPE_EXPENSE else bill.type
         val iconTint = when {
             forceGrayStyle || isRefund -> Color.parseColor("#8E98A3")
-            bill.type == Bill.TYPE_EXPENSE -> Color.parseColor("#FF3B30")
+            bill.type == Bill.TYPE_EXPENSE -> BillColors.expense
             bill.type == Bill.TYPE_INCOME -> Color.parseColor("#4CAF50")
             else -> Color.parseColor("#9E9E9E")
         }
@@ -719,7 +720,7 @@ class BillDetailActivity : AppCompatActivity() {
         ivCategoryIcon.setColorFilter(resolveIconTintColor(currentUiType))
         tvCategoryInitial.setTextColor(
             when (currentUiType) {
-                Bill.TYPE_EXPENSE -> Color.parseColor("#D32F2F")
+                Bill.TYPE_EXPENSE -> BillColors.expense
                 Bill.TYPE_INCOME -> Color.parseColor("#2E7D32")
                 else -> Color.parseColor("#6F7A8A")
             }
@@ -802,7 +803,7 @@ class BillDetailActivity : AppCompatActivity() {
 
     private fun resolveAmountColor(uiType: Int): Int {
         return when (uiType) {
-            Bill.TYPE_EXPENSE -> Color.parseColor("#D32F2F")
+            Bill.TYPE_EXPENSE -> BillColors.expense
             Bill.TYPE_INCOME -> Color.parseColor("#1A9B5F")
             else -> Color.parseColor("#6F7A8A")
         }

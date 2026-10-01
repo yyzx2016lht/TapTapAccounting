@@ -816,7 +816,7 @@ class ChatAdapter(
                 val amountColor = when (bill.type) {
                     Bill.TYPE_INCOME -> Color.parseColor("#2E7D32")
                     Bill.TYPE_TRANSFER -> Color.parseColor("#7A8598")
-                    else -> Color.parseColor("#D32F2F")
+                    else -> BillColors.expense
                 }
                 val amountBgRes = when (bill.type) {
                     Bill.TYPE_INCOME -> R.drawable.bg_chat_bill_amount_tag_income
@@ -862,7 +862,7 @@ class ChatAdapter(
                     etAmount.isEnabled = true
                 }
                 val iconTint = when (bill.type) {
-                    0 -> Color.parseColor("#D32F2F")
+                    0 -> BillColors.expense
                     1 -> Color.parseColor("#2E7D32")
                     else -> Color.parseColor("#7A8598")
                 }

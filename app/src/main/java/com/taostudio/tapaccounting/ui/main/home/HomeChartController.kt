@@ -1,5 +1,6 @@
 package com.taostudio.tapaccounting.ui.main.home
 
+import com.taostudio.tapaccounting.BillColors
 import android.graphics.Color
 import android.text.SpannableString
 import android.text.Spanned
@@ -351,10 +352,10 @@ internal class HomeChartController(
         if (currentType == 0 || currentType == 2) {
             dataSets.add(
                 BarDataSet(expenseEntries, "支出").apply {
-                    color = Color.parseColor("#FF5252")
+                    color = BillColors.expense
                     setDrawValues(shouldDrawValues)
                     valueTextSize = chartValueTextSize
-                    valueTextColor = Color.parseColor("#FF5252")
+                    valueTextColor = BillColors.expense
                     valueFormatter = chartValueFormatter
                 }
             )

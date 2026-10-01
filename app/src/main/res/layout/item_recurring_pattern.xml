@@ -39,7 +39,7 @@
             android:id="@+id/tv_amount_approx"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:textColor="#FF5252"
+            android:textColor="@color/expense_color"
             android:textSize="@dimen/text_size_14"
             android:textStyle="bold" />
     </LinearLayout>

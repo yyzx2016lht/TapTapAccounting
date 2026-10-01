@@ -632,7 +632,7 @@ class ChatSessionController(
                 val typeColor = when (bill.type) {
                     Bill.TYPE_INCOME -> Color.parseColor("#2E7D32")
                     Bill.TYPE_TRANSFER -> Color.parseColor("#7A8598")
-                    else -> Color.parseColor("#D32F2F")
+                    else -> BillColors.expense
                 }
                 setImageResource(android.R.drawable.ic_menu_info_details)
                 setColorFilter(typeColor)
@@ -678,7 +678,7 @@ class ChatSessionController(
                     when (bill.type) {
                         Bill.TYPE_INCOME -> Color.parseColor("#2E7D32")
                         Bill.TYPE_TRANSFER -> Color.parseColor("#7A8598")
-                        else -> Color.parseColor("#D32F2F")
+                        else -> BillColors.expense
                     }
                 )
             }

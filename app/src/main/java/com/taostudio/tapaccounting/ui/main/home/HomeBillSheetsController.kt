@@ -1,5 +1,6 @@
 package com.taostudio.tapaccounting.ui.main.home
 
+import com.taostudio.tapaccounting.BillColors
 import android.content.Intent
 import android.graphics.Color
 import android.os.SystemClock
@@ -102,7 +103,7 @@ internal class HomeBillSheetsController(
             tvDetail.setTextColor(Color.parseColor("#8A8A8E"))
             tvTime.setTextColor(Color.parseColor("#8A8A8E"))
             when (bill.type) {
-                Bill.TYPE_EXPENSE -> tvAmount.setTextColor(Color.parseColor("#FF3B30"))
+                Bill.TYPE_EXPENSE -> tvAmount.setTextColor(BillColors.expense)
                 Bill.TYPE_INCOME -> tvAmount.setTextColor(Color.parseColor("#4CAF50"))
                 else -> tvAmount.setTextColor(Color.parseColor("#5F6772"))
             }
@@ -204,7 +205,7 @@ internal class HomeBillSheetsController(
             val iconLookupType = if (isRefund) Bill.TYPE_EXPENSE else bill.type
             val iconTint = when {
                 forceGrayStyle || isRefund -> Color.parseColor("#8E98A3")
-                bill.type == Bill.TYPE_EXPENSE -> Color.parseColor("#FF3B30")
+                bill.type == Bill.TYPE_EXPENSE -> BillColors.expense
                 bill.type == Bill.TYPE_INCOME -> Color.parseColor("#4CAF50")
                 else -> Color.parseColor("#9E9E9E")
             }
@@ -422,7 +423,7 @@ internal class HomeBillSheetsController(
                             }
                         }
                     }
-                    tvAmount.setTextColor(Color.parseColor("#FF3B30"))
+                    tvAmount.setTextColor(BillColors.expense)
                 } else {
                     tvAmount.text = "+${HomeBillFormatHelper.formatMoney(bill.amount, bill.currency)}"
                     tvAmount.setTextColor(Color.parseColor("#4CAF50"))

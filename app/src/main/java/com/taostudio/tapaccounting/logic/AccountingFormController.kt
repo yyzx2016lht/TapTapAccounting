@@ -1,5 +1,6 @@
 package com.taostudio.tapaccounting.logic
 
+import com.taostudio.tapaccounting.BillColors
 import android.animation.ObjectAnimator
 import android.app.Activity
 import android.content.ClipData
@@ -269,7 +270,7 @@ class AccountingFormController(
             }
             tvCategoryIconEmoji?.visibility = View.GONE
             ivCategoryIcon?.visibility = View.VISIBLE
-            val tintColor = if (category.type == 1) Color.parseColor("#43A047") else Color.parseColor("#E53935")
+            val tintColor = if (category.type == 1) Color.parseColor("#43A047") else BillColors.expense
             ivCategoryIcon?.let {
                 Glide.with(ctx)
                     .load(icon)
@@ -363,7 +364,7 @@ class AccountingFormController(
         val isRepayment  = position == 3
 
         when (position) {
-            0 -> etMoney.setTextColor(Color.parseColor("#FF5252"))
+            0 -> etMoney.setTextColor(BillColors.expense)
             1 -> etMoney.setTextColor(Color.parseColor("#4CAF50"))
             2 -> etMoney.setTextColor(Color.parseColor("#8A8A8E"))
             3 -> etMoney.setTextColor(Color.parseColor("#FF9800"))

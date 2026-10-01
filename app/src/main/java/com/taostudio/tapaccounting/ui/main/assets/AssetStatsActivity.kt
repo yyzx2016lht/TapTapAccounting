@@ -1,5 +1,6 @@
 package com.taostudio.tapaccounting.ui.main.assets
 
+import com.taostudio.tapaccounting.BillColors
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.ColorDrawable
@@ -2483,7 +2484,7 @@ class AssetStatsActivity : AppCompatActivity() {
                 tvAmount.setTextColor(
                     when {
                         isRefund -> Color.parseColor("#9AA1AA")
-                        bill.type == Bill.TYPE_EXPENSE -> Color.parseColor("#FF5252")
+                        bill.type == Bill.TYPE_EXPENSE -> BillColors.expense
                         bill.type == Bill.TYPE_INCOME -> Color.parseColor("#4CAF50")
                         else -> Color.parseColor("#757575")
                     }
@@ -2524,7 +2525,7 @@ class AssetStatsActivity : AppCompatActivity() {
                     setIconSizeDp(21)
                     val iconTint = when {
                         isRefund -> Color.parseColor("#8E98A3")
-                        bill.type == Bill.TYPE_EXPENSE -> Color.parseColor("#FF5252")
+                        bill.type == Bill.TYPE_EXPENSE -> BillColors.expense
                         bill.type == Bill.TYPE_INCOME -> Color.parseColor("#4CAF50")
                         else -> Color.parseColor("#9E9E9E")
                     }

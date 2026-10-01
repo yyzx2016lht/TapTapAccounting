@@ -74,7 +74,7 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="-50.00"
-        android:textColor="#D32F2F"
+        android:textColor="@color/expense_color"
         android:textSize="@dimen/text_size_20"
         android:textStyle="bold" />
 

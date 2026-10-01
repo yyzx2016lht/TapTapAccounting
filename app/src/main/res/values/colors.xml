@@ -28,7 +28,7 @@
     <color name="brand_secondary">#FF4081</color>
 
     <!-- Domain: accounting -->
-    <color name="expense_color">#E53935</color>
+    <color name="expense_color">#FF5252</color>
     <color name="income_color">#43A047</color>
 
     <!-- Semantic: feedback -->

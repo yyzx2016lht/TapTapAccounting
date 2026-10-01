@@ -719,7 +719,7 @@ class SettingsActivity : AppCompatActivity() {
                         when (bill.type) {
                             Bill.TYPE_INCOME -> Color.parseColor("#2E7D32")
                             Bill.TYPE_TRANSFER -> Color.parseColor("#5B6B80")
-                            else -> Color.parseColor("#D32F2F")
+                            else -> BillColors.expense
                         }
                     )
                     time.text = df.format(Date(normalizedTimeMillis(bill.time)))

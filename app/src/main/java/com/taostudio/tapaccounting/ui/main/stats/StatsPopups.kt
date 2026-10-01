@@ -1,5 +1,6 @@
 package com.taostudio.tapaccounting.ui.main.stats
 
+import com.taostudio.tapaccounting.BillColors
 import android.content.Intent
 import android.graphics.Color
 import android.os.Bundle
@@ -482,7 +483,7 @@ class BillListBottomSheet(
         tvAmount.setTextColor(
             when {
                 isRefund -> Color.parseColor("#9AA1AA")
-                bill.type == Bill.TYPE_EXPENSE -> Color.parseColor("#FF5252")
+                bill.type == Bill.TYPE_EXPENSE -> BillColors.expense
                 bill.type == Bill.TYPE_INCOME -> Color.parseColor("#4CAF50")
                 else -> Color.parseColor("#757575")
             }
@@ -524,7 +525,7 @@ class BillListBottomSheet(
             val iconLookupType = if (isRefund) Bill.TYPE_EXPENSE else bill.type
             val iconTint = when {
                 isRefund -> Color.parseColor("#8E98A3")
-                bill.type == Bill.TYPE_EXPENSE -> Color.parseColor("#FF5252")
+                bill.type == Bill.TYPE_EXPENSE -> BillColors.expense
                 bill.type == Bill.TYPE_INCOME -> Color.parseColor("#4CAF50")
                 else -> Color.parseColor("#9E9E9E")
             }
@@ -657,7 +658,7 @@ class BillDetailBottomSheet(
         amountView.setTextColor(
             when {
                 isRefund -> Color.parseColor("#9AA1AA")
-                bill.type == Bill.TYPE_EXPENSE -> Color.parseColor("#FF3B30")
+                bill.type == Bill.TYPE_EXPENSE -> BillColors.expense
                 bill.type == Bill.TYPE_INCOME -> Color.parseColor("#4CAF50")
                 else -> Color.parseColor("#5F6772")
             }

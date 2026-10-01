@@ -1,5 +1,6 @@
 package com.taostudio.tapaccounting.ui.main.assets
 
+import com.taostudio.tapaccounting.BillColors
 import android.content.Intent
 import android.graphics.Color
 import android.os.SystemClock
@@ -115,7 +116,7 @@ internal class AssetBillDetailSheetController(
             tvTime.setTextColor(Color.parseColor("#8A8A8E"))
             tvAsset.setTextColor(Color.parseColor("#8A8A8E"))
             when (bill.type) {
-                Bill.TYPE_EXPENSE -> tvAmount.setTextColor(Color.parseColor("#FF3B30"))
+                Bill.TYPE_EXPENSE -> tvAmount.setTextColor(BillColors.expense)
                 Bill.TYPE_INCOME -> tvAmount.setTextColor(Color.parseColor("#4CAF50"))
                 else -> tvAmount.setTextColor(Color.parseColor("#5F6772"))
             }
@@ -181,7 +182,7 @@ internal class AssetBillDetailSheetController(
             val iconLookupType = if (isRefund) Bill.TYPE_EXPENSE else bill.type
             val iconTint = when {
                 forceGrayStyle || isRefund -> Color.parseColor("#8E98A3")
-                bill.type == Bill.TYPE_EXPENSE -> Color.parseColor("#FF3B30")
+                bill.type == Bill.TYPE_EXPENSE -> BillColors.expense
                 bill.type == Bill.TYPE_INCOME -> Color.parseColor("#4CAF50")
                 else -> Color.parseColor("#9E9E9E")
             }
@@ -379,7 +380,7 @@ internal class AssetBillDetailSheetController(
             tvAmount.setTextColor(
                 when {
                     isRefund -> Color.parseColor("#9AA1AA")
-                    bill.type == Bill.TYPE_EXPENSE -> Color.parseColor("#FF5252")
+                    bill.type == Bill.TYPE_EXPENSE -> BillColors.expense
                     bill.type == Bill.TYPE_INCOME -> Color.parseColor("#4CAF50")
                     else -> Color.parseColor("#5F6772")
                 }

@@ -1,5 +1,6 @@
 package com.taostudio.tapaccounting.ui.dialog
 
+import com.taostudio.tapaccounting.BillColors
 import android.app.Activity
 import android.content.Context
 import android.content.Intent
@@ -366,7 +367,7 @@ object OverlayDialogs {
         var currentSelection = currentSelectionText.replace(" - ", "/::/").replace(" > ", "/::/")
 
         val dbType = if (type == Prefs.TYPE_INCOME) 1 else 0
-        val normalIconColor = if (dbType == 1) Color.parseColor("#43A047") else Color.parseColor("#E53935")
+        val normalIconColor = if (dbType == 1) Color.parseColor("#43A047") else BillColors.expense
         val normalBgColor   = if (dbType == 1) Color.parseColor("#E8F5E9") else Color.parseColor("#FFEBEE")
         val selectedIconColor = Color.parseColor("#5C6BC0")
         val selectedBgColor   = Color.parseColor("#E8EAF6")
@@ -482,7 +483,7 @@ object OverlayDialogs {
         dbType: Int,
         onClick: (CategoryNode) -> Unit
     ): View {
-        val normalIconColor   = if (dbType == 1) Color.parseColor("#43A047") else Color.parseColor("#E53935")
+        val normalIconColor   = if (dbType == 1) Color.parseColor("#43A047") else BillColors.expense
         val normalBgColor     = if (dbType == 1) Color.parseColor("#E8F5E9") else Color.parseColor("#FFEBEE")
         val selectedIconColor = Color.parseColor("#5C6BC0")
         val selectedBgColor   = Color.parseColor("#E8EAF6")
@@ -786,7 +787,7 @@ object OverlayDialogs {
 
         fun render(categories: List<CategoryNode>) {
             container.removeAllViews()
-            val normalIconColor   = if (dbType == 1) Color.parseColor("#43A047") else Color.parseColor("#E53935")
+            val normalIconColor   = if (dbType == 1) Color.parseColor("#43A047") else BillColors.expense
             val normalBgColor     = if (dbType == 1) Color.parseColor("#E8F5E9") else Color.parseColor("#FFEBEE")
             val selectedIconColor = Color.parseColor("#5C6BC0")
             val selectedBgColor   = Color.parseColor("#E8EAF6")
@@ -1749,7 +1750,7 @@ object OverlayDialogs {
                             }
                             textSize = 15f
                             setTypeface(null, android.graphics.Typeface.BOLD)
-                            setTextColor(android.graphics.Color.parseColor("#E53935"))
+                            setTextColor(BillColors.expense)
                             gravity = android.view.Gravity.END
                         }
 

@@ -1231,11 +1231,11 @@
 
     <!-- 硬编码中文抽取 - 存储清理 -->
     <string name="deleted_bill_count_fmt">已删除 %1$d 条账单</string>
-    <string name="cleanup_voice_stats_fmt">聊天语音：%1$d 个 · %2$s</string>
-    <string name="cleanup_images_stats_fmt">聊天图片：%1$d 个 · %2$s</string>
-    <string name="cleanup_avatar_stats_fmt">聊天头像：%1$d 个 · %2$s</string>
-    <string name="cleanup_book_cover_stats_fmt">账本封面与背景：%1$d 个 · %2$s</string>
-    <string name="cleanup_temp_stats_fmt">临时与缓存：%1$d 个 · %2$s</string>
+    <string name="cleanup_voice_stats_fmt">%1$d 个 · %2$s</string>
+    <string name="cleanup_images_stats_fmt">%1$d 个 · %2$s</string>
+    <string name="cleanup_avatar_stats_fmt">%1$d 个 · %2$s</string>
+    <string name="cleanup_book_cover_stats_fmt">%1$d 个 · %2$s</string>
+    <string name="cleanup_temp_stats_fmt">%1$d 个 · %2$s</string>
     <string name="select_preview_content">请先勾选要预览的内容</string>
     <string name="confirm_cleanup_title">确认清理</string>
     <string name="confirm_cleanup_message_fmt">将删除 %1$d 个文件，预计释放 %2$s。\n\n不会删除账单、分类、资产和设置等核心数据。</string>

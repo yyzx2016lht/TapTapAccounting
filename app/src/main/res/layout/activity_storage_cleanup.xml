@@ -27,12 +27,10 @@
             <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginBottom="12dp"
-                app:cardBackgroundColor="#FFFFFF"
+                app:cardBackgroundColor="@color/settings_card_bg"
                 app:cardCornerRadius="@dimen/settings_card_radius"
                 app:cardElevation="0dp"
-                app:strokeColor="#DEE6F2"
-                app:strokeWidth="1dp">
+                app:strokeWidth="0dp">
 
                 <LinearLayout
                     android:layout_width="match_parent"
@@ -52,22 +50,22 @@
                         android:id="@+id/tv_cleanup_total_stats"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="6dp"
+                        android:layout_marginTop="4dp"
+                        android:layout_marginBottom="14dp"
                         android:text="可清理总计：0 个文件 · 0 B"
-                        android:textColor="#5A6B84"
+                        android:textColor="@color/text_muted"
                         android:textSize="13sp" />
 
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/btn_cleanup_refresh"
                         style="@style/Widget.MaterialComponents.Button.UnelevatedButton"
                         android:layout_width="match_parent"
-                        android:layout_height="44dp"
-                        android:layout_marginTop="10dp"
-                        android:elevation="0dp"
-                        android:stateListAnimator="@null"
+                        android:layout_height="48dp"
+                        android:letterSpacing="0"
                         android:text="@string/rescan"
-                        android:textColor="#44556E"
-                        app:backgroundTint="#EAF0FB"
+                        android:textColor="@color/text_body"
+                        android:textSize="14sp"
+                        app:backgroundTint="@color/backup_panel_bg"
                         app:cornerRadius="10dp" />
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
@@ -75,11 +73,11 @@
             <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                app:cardBackgroundColor="#FFFFFF"
+                android:layout_marginTop="12dp"
+                app:cardBackgroundColor="@color/settings_card_bg"
                 app:cardCornerRadius="@dimen/settings_card_radius"
                 app:cardElevation="0dp"
-                app:strokeColor="#DEE6F2"
-                app:strokeWidth="1dp">
+                app:strokeWidth="0dp">
 
                 <LinearLayout
                     android:layout_width="match_parent"
@@ -90,155 +88,138 @@
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                    android:text="@string/select_cleanup_content"
-                    android:textColor="@color/settings_item_title"
-                    android:textSize="@dimen/text_size_16"
+                        android:text="@string/select_cleanup_content"
+                        android:textColor="@color/settings_item_title"
+                        android:textSize="@dimen/text_size_16"
                         android:textStyle="bold" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:layout_marginBottom="6dp"
+                        android:lineSpacingExtra="2dp"
+                        android:text="@string/cleanup_safe_hint"
+                        android:textColor="@color/text_muted"
+                        android:textSize="13sp" />
+
+                    <LinearLayout style="@style/CleanupItemRow">
+
+                        <com.google.android.material.checkbox.MaterialCheckBox
+                            android:id="@+id/cb_cleanup_voice"
+                            style="@style/CleanupItemCheck"
+                            android:checked="true"
+                            android:text="@string/chat_voice_files" />
+
+                        <TextView
+                            android:id="@+id/tv_cleanup_voice_stats"
+                            style="@style/CleanupItemStats"
+                            android:text="0 个 · 0 B" />
+                    </LinearLayout>
+
+                    <LinearLayout style="@style/CleanupItemRow">
+
+                        <com.google.android.material.checkbox.MaterialCheckBox
+                            android:id="@+id/cb_cleanup_images"
+                            style="@style/CleanupItemCheck"
+                            android:checked="true"
+                            android:text="@string/chat_image_files" />
+
+                        <TextView
+                            android:id="@+id/tv_cleanup_images_stats"
+                            style="@style/CleanupItemStats"
+                            android:text="0 个 · 0 B" />
+                    </LinearLayout>
+
+                    <LinearLayout style="@style/CleanupItemRow">
+
+                        <com.google.android.material.checkbox.MaterialCheckBox
+                            android:id="@+id/cb_cleanup_chat_avatar"
+                            style="@style/CleanupItemCheck"
+                            android:checked="false"
+                            android:text="@string/chat_avatar_files" />
+
+                        <TextView
+                            android:id="@+id/tv_cleanup_chat_avatar_stats"
+                            style="@style/CleanupItemStats"
+                            android:text="0 个 · 0 B" />
+                    </LinearLayout>
+
+                    <LinearLayout style="@style/CleanupItemRow">
+
+                        <com.google.android.material.checkbox.MaterialCheckBox
+                            android:id="@+id/cb_cleanup_book_cover_bg"
+                            style="@style/CleanupItemCheck"
+                            android:checked="false"
+                            android:text="@string/book_cover_bg" />
+
+                        <TextView
+                            android:id="@+id/tv_cleanup_book_cover_bg_stats"
+                            style="@style/CleanupItemStats"
+                            android:text="0 个 · 0 B" />
+                    </LinearLayout>
+
+                    <LinearLayout style="@style/CleanupItemRow">
+
+                        <com.google.android.material.checkbox.MaterialCheckBox
+                            android:id="@+id/cb_cleanup_temp_cache"
+                            style="@style/CleanupItemCheck"
+                            android:checked="true"
+                            android:text="@string/temp_cache_files" />
+
+                        <TextView
+                            android:id="@+id/tv_cleanup_temp_cache_stats"
+                            style="@style/CleanupItemStats"
+                            android:text="0 个 · 0 B" />
+                    </LinearLayout>
+
+                    <View
+                        android:layout_width="match_parent"
+                        android:layout_height="1dp"
+                        android:layout_marginVertical="6dp"
+                        android:background="@color/divider_soft" />
 
                     <com.google.android.material.checkbox.MaterialCheckBox
                         android:id="@+id/cb_cleanup_older_30"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="6dp"
+                        android:minHeight="44dp"
                         android:text="@string/cleanup_30day_hint"
-                        android:textColor="#5A6B84"
-                        android:textSize="12sp"
-                        app:buttonTint="#5C80EA" />
-
-                    <com.google.android.material.checkbox.MaterialCheckBox
-                        android:id="@+id/cb_cleanup_voice"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="8dp"
-                        android:checked="true"
-                        android:text="@string/chat_voice_files"
-                        android:textColor="#23324A"
-                        android:textSize="14sp"
-                        app:buttonTint="#5C80EA" />
-
-                    <TextView
-                        android:id="@+id/tv_cleanup_voice_stats"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="2dp"
-                        android:text="聊天语音：0 个 · 0 B"
-                        android:textColor="#7A879A"
-                        android:textSize="12sp" />
-
-                    <com.google.android.material.checkbox.MaterialCheckBox
-                        android:id="@+id/cb_cleanup_images"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="8dp"
-                        android:checked="true"
-                        android:text="@string/chat_image_files"
-                        android:textColor="#23324A"
-                        android:textSize="14sp"
-                        app:buttonTint="#5C80EA" />
-
-                    <TextView
-                        android:id="@+id/tv_cleanup_images_stats"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="2dp"
-                        android:text="聊天图片：0 个 · 0 B"
-                        android:textColor="#7A879A"
-                        android:textSize="12sp" />
-
-                    <com.google.android.material.checkbox.MaterialCheckBox
-                        android:id="@+id/cb_cleanup_chat_avatar"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="8dp"
-                        android:checked="false"
-                        android:text="@string/chat_avatar_files"
-                        android:textColor="#23324A"
-                        android:textSize="14sp"
-                        app:buttonTint="#5C80EA" />
-
-                    <TextView
-                        android:id="@+id/tv_cleanup_chat_avatar_stats"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="2dp"
-                        android:text="聊天头像：0 个 · 0 B"
-                        android:textColor="#7A879A"
-                        android:textSize="12sp" />
-
-                    <com.google.android.material.checkbox.MaterialCheckBox
-                        android:id="@+id/cb_cleanup_book_cover_bg"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="8dp"
-                        android:checked="false"
-                        android:text="@string/book_cover_bg"
-                        android:textColor="#23324A"
-                        android:textSize="14sp"
-                        app:buttonTint="#5C80EA" />
-
-                    <TextView
-                        android:id="@+id/tv_cleanup_book_cover_bg_stats"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="2dp"
-                        android:text="账本封面与背景：0 个 · 0 B"
-                        android:textColor="#7A879A"
-                        android:textSize="12sp" />
-
-                    <com.google.android.material.checkbox.MaterialCheckBox
-                        android:id="@+id/cb_cleanup_temp_cache"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="8dp"
-                        android:checked="true"
-                        android:text="@string/temp_cache_files"
-                        android:textColor="#23324A"
-                        android:textSize="14sp"
-                        app:buttonTint="#5C80EA" />
-
-                    <TextView
-                        android:id="@+id/tv_cleanup_temp_cache_stats"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="2dp"
-                        android:text="临时与缓存：0 个 · 0 B"
-                        android:textColor="#7A879A"
-                        android:textSize="12sp" />
-
-                    <TextView
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="12dp"
-                        android:text="@string/cleanup_safe_hint"
-                        android:textColor="#5A6B84"
-                        android:textSize="12sp" />
+                        android:textColor="@color/text_muted"
+                        android:textSize="13sp"
+                        app:buttonTint="@color/brand_primary" />
 
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/btn_cleanup_preview"
                         style="@style/Widget.MaterialComponents.Button.UnelevatedButton"
                         android:layout_width="match_parent"
                         android:layout_height="48dp"
-                        android:layout_marginTop="12dp"
-                        android:elevation="0dp"
-                        android:stateListAnimator="@null"
+                        android:layout_marginTop="10dp"
+                        android:letterSpacing="0"
                         android:text="@string/preview_files"
-                        android:textColor="#44556E"
-                        app:backgroundTint="#EAF0FB"
+                        android:textColor="@color/text_body"
+                        android:textSize="14sp"
+                        app:backgroundTint="@color/backup_panel_bg"
                         app:cornerRadius="10dp" />
 
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/btn_cleanup_do"
+                        style="@style/Widget.MaterialComponents.Button.OutlinedButton"
                         android:layout_width="match_parent"
                         android:layout_height="48dp"
                         android:layout_marginTop="8dp"
-                        android:elevation="0dp"
+                        android:letterSpacing="0"
                         android:maxLines="1"
-                        android:stateListAnimator="@null"
                         android:text="@string/cleanup_selected"
-                        app:backgroundTint="#D1495B"
+                        android:textColor="@color/settings_danger_text"
+                        android:textSize="14sp"
                         app:cornerRadius="10dp"
-                        app:icon="@android:drawable/ic_menu_delete"
-                        app:iconGravity="textStart" />
+                        app:icon="@drawable/ic_delete"
+                        app:iconGravity="textStart"
+                        app:iconPadding="8dp"
+                        app:iconTint="@color/settings_danger_text"
+                        app:strokeColor="@color/backup_danger_stroke"
+                        app:strokeWidth="1dp" />
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
@@ -247,11 +228,10 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="12dp"
-                app:cardBackgroundColor="#FFFFFF"
+                app:cardBackgroundColor="@color/settings_card_bg"
                 app:cardCornerRadius="@dimen/settings_card_radius"
                 app:cardElevation="0dp"
-                app:strokeColor="#DEE6F2"
-                app:strokeWidth="1dp">
+                app:strokeWidth="0dp">
 
                 <LinearLayout
                     android:layout_width="match_parent"
@@ -280,8 +260,8 @@
                             android:layout_height="wrap_content"
                             android:layout_marginTop="4dp"
                             android:text="@string/view_deleted_bills"
-                            android:textColor="#7A879A"
-                            android:textSize="12sp" />
+                            android:textColor="@color/text_muted"
+                            android:textSize="13sp" />
                     </LinearLayout>
 
                     <ImageView
@@ -296,4 +276,3 @@
     </ScrollView>
 
 </LinearLayout>
-

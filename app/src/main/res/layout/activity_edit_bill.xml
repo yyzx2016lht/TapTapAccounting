@@ -36,7 +36,7 @@
             android:layout_alignParentEnd="true"
             android:gravity="center"
             android:text="@string/save"
-            android:textColor="#2196F3"
+            android:textColor="@color/brand_primary"
             android:textSize="@dimen/text_size_16"
             android:textStyle="bold" />
     </RelativeLayout>
@@ -437,7 +437,7 @@
                 android:layout_height="56dp"
                 android:layout_marginTop="24dp"
                 android:text="@string/delete_this_bill"
-                android:textColor="#F44336" />
+                android:textColor="@color/danger_color" />
 
         </LinearLayout>
     </ScrollView>

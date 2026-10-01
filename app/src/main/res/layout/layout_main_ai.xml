@@ -317,7 +317,7 @@
                         android:layout_weight="1"
                         android:text="@string/expand_content"
                         android:textSize="@dimen/text_size_12"
-                        android:textColor="#1A73E8"
+                        android:textColor="@color/brand_primary"
                         android:padding="4dp"
                         android:background="?attr/selectableItemBackground"/>
                 </LinearLayout>
@@ -510,7 +510,7 @@
                 android:textSize="@dimen/text_size_16"
                 android:textStyle="bold"
                 app:cornerRadius="12dp"
-                android:backgroundTint="#2E7D32"
+                android:backgroundTint="@color/brand_primary"
                 android:layout_marginBottom="40dp"/>
         </LinearLayout>
     </ScrollView>

@@ -123,7 +123,7 @@
             android:background="@drawable/shape_button_outline"
             android:gravity="center"
             android:text="@string/move"
-            android:textColor="#4080FF"
+            android:textColor="@color/brand_primary"
             android:textSize="@dimen/text_size_16" />
 
         <TextView
@@ -135,7 +135,7 @@
             android:background="@drawable/shape_button_outline_red"
             android:gravity="center"
             android:text="@string/delete"
-            android:textColor="#FF5252"
+            android:textColor="@color/danger_color"
             android:textSize="@dimen/text_size_16" />
     </LinearLayout>
 </FrameLayout>

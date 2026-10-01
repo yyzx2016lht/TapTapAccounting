@@ -104,7 +104,7 @@
                     android:paddingHorizontal="4dp"
                     android:paddingVertical="2dp"
                     android:text="@string/chat_switch_conversation_mode"
-                    android:textColor="#3B5CCC"
+                    android:textColor="@color/brand_primary"
                     android:textSize="12sp"
                     android:textStyle="bold" />
             </LinearLayout>

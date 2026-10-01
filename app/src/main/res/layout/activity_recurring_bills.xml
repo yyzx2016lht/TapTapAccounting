@@ -182,7 +182,7 @@
             android:gravity="center"
             android:paddingHorizontal="8dp"
             android:text="@string/recurring_bulk_confirm"
-            android:textColor="#4CAF50"
+            android:textColor="@color/brand_primary"
             android:textSize="@dimen/text_size_12"
             android:textStyle="bold" />
 
@@ -206,7 +206,7 @@
             android:gravity="center"
             android:paddingHorizontal="8dp"
             android:text="@string/recurring_bulk_delete"
-            android:textColor="#E53935"
+            android:textColor="@color/danger_color"
             android:textSize="@dimen/text_size_12"
             android:textStyle="bold" />
     </LinearLayout>

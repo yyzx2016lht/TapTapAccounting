@@ -44,7 +44,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="@string/search"
-            android:textColor="#1A73E8"
+            android:textColor="@color/brand_primary"
             android:textSize="14sp"
             android:paddingHorizontal="8dp" />
     </LinearLayout>

@@ -91,7 +91,7 @@
         android:focusable="true"
         android:paddingVertical="8dp"
         android:text="@string/asset_bill_balance_reset_create"
-        android:textColor="#4080FF"
+        android:textColor="@color/brand_primary"
         android:textSize="@dimen/text_size_13" />
 
 </LinearLayout>

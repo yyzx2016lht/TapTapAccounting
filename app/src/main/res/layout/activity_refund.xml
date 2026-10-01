@@ -44,7 +44,7 @@
             android:gravity="center"
             android:paddingHorizontal="8dp"
             android:text="@string/save"
-            android:textColor="#1F5FC8"
+            android:textColor="@color/brand_primary"
             android:textSize="15sp"
             android:textStyle="bold"
             app:layout_constraintBottom_toBottomOf="parent"

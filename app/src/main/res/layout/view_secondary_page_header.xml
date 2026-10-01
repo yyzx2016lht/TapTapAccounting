@@ -68,7 +68,7 @@
                     android:background="@drawable/bg_segmented_selected"
                     android:gravity="center"
                     android:text="@string/month_label"
-                    android:textColor="#4080FF"
+                    android:textColor="@color/brand_primary"
                     android:textSize="13sp"
                     android:textStyle="bold" />
 
@@ -89,7 +89,7 @@
                 android:layout_height="34dp"
                 android:gravity="center"
                 android:paddingHorizontal="12dp"
-                android:textColor="#4080FF"
+                android:textColor="@color/brand_primary"
                 android:textSize="14sp"
                 android:textStyle="bold"
                 android:visibility="gone" />

@@ -76,7 +76,7 @@
                     android:id="@+id/rb_single"
                     android:layout_width="wrap_content"
                     android:layout_height="32dp"
-                    android:buttonTint="#5C6BC0"
+                    android:buttonTint="@color/brand_primary"
                     android:minHeight="0dp"
                     android:text="@string/single_bill"
                     android:textColor="#5C6BC0"
@@ -87,7 +87,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="32dp"
                     android:layout_marginStart="12dp"
-                    android:buttonTint="#5C6BC0"
+                    android:buttonTint="@color/brand_primary"
                     android:minHeight="0dp"
                     android:text="@string/multi_bill"
                     android:textColor="#5C6BC0"
@@ -512,7 +512,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:text="@string/smart_recognition"
-                        android:textColor="#673AB7"
+                        android:textColor="@color/brand_primary"
                         android:textSize="@dimen/text_size_15"
                         android:textStyle="bold" />
 

@@ -14,7 +14,7 @@
         android:layout_width="32dp"
         android:layout_height="32dp"
         android:layout_marginEnd="6dp"
-        android:buttonTint="#4080FF"
+        android:buttonTint="@color/brand_primary"
         android:clickable="false"
         android:focusable="false"
         android:visibility="gone" />

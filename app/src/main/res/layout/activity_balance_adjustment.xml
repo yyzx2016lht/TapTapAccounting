@@ -305,7 +305,7 @@
             android:textSize="@dimen/text_size_16"
             android:textColor="@android:color/white"
             app:cornerRadius="26dp"
-            app:backgroundTint="#2196F3"
+            app:backgroundTint="@color/brand_primary"
             android:layout_marginBottom="10dp"/>
 
         <com.google.android.material.button.MaterialButton
@@ -314,10 +314,10 @@
             android:layout_height="52dp"
             android:text="@string/modify_balance_only"
             android:textSize="@dimen/text_size_16"
-            android:textColor="#2196F3"
+            android:textColor="@color/brand_primary"
             app:cornerRadius="26dp"
             app:backgroundTint="@android:color/transparent"
-            app:strokeColor="#2196F3"
+            app:strokeColor="@color/brand_primary"
             app:strokeWidth="1.5dp"
             style="@style/Widget.MaterialComponents.Button.OutlinedButton"/>
 

@@ -106,7 +106,7 @@
             android:layout_width="wrap_content"
             android:layout_height="36dp"
             android:text="@string/recurring_confirm"
-            android:textColor="#4CAF50"
+            android:textColor="@color/brand_primary"
             android:textSize="@dimen/text_size_12" />
 
         <com.google.android.material.button.MaterialButton

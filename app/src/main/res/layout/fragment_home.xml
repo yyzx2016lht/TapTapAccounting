@@ -403,7 +403,7 @@
                 android:background="@drawable/shape_button_outline"
                 android:gravity="center"
                 android:text="@string/move"
-                android:textColor="#4080FF"
+                android:textColor="@color/brand_primary"
                 android:textSize="@dimen/text_size_16" />
 
             <TextView
@@ -415,7 +415,7 @@
                 android:background="@drawable/shape_button_outline_red"
                 android:gravity="center"
                 android:text="@string/delete"
-                android:textColor="#FF5252"
+                android:textColor="@color/danger_color"
                 android:textSize="@dimen/text_size_16" />
         </LinearLayout>
 
@@ -487,7 +487,7 @@
                     android:paddingStart="12dp"
                     android:paddingEnd="12dp"
                     android:text="@string/overview"
-                    android:textColor="#4F75E2"
+                    android:textColor="@color/brand_primary"
                     android:textSize="13sp"
                     android:textStyle="bold" />
             </LinearLayout>
@@ -597,7 +597,7 @@
                     android:background="@drawable/bg_book_item_selected"
                     android:gravity="center"
                     android:text="@string/add_new_book"
-                    android:textColor="#3D67DA"
+                    android:textColor="@color/brand_primary"
                     android:textSize="15sp"
                     android:textStyle="bold" />
 
@@ -609,7 +609,7 @@
                     android:background="@drawable/bg_book_item_normal"
                     android:gravity="center"
                     android:text="加入共享账本"
-                    android:textColor="#3D67DA"
+                    android:textColor="@color/brand_primary"
                     android:textSize="14sp"
                     android:textStyle="bold" />
 

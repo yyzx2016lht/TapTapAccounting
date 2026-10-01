@@ -44,7 +44,7 @@
             android:gravity="center"
             android:paddingHorizontal="8dp"
             android:text="@string/save"
-            android:textColor="#1F5FC8"
+            android:textColor="@color/brand_primary"
             android:textSize="15sp"
             android:textStyle="bold"
             app:layout_constraintBottom_toBottomOf="parent"
@@ -604,7 +604,7 @@
                 android:background="@drawable/bg_bill_detail_outline_blue"
                 android:gravity="center"
                 android:text="@string/refund"
-                android:textColor="#1F5FC8"
+                android:textColor="@color/brand_primary"
                 android:textSize="16sp"
                 android:textStyle="bold"
                 android:visibility="gone" />
@@ -617,7 +617,7 @@
                 android:background="@drawable/bg_bill_detail_delete"
                 android:gravity="center"
                 android:text="@string/delete"
-                android:textColor="#FF6B61"
+                android:textColor="@color/danger_color"
                 android:textSize="16sp"
                 android:textStyle="bold" />
         </LinearLayout>

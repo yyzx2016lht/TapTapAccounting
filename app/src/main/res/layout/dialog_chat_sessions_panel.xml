@@ -108,6 +108,6 @@
         android:background="@drawable/bg_chat_sidebar_action_danger"
         android:gravity="center"
         android:text="@string/clear_current_session"
-        android:textColor="#DC2626"
+        android:textColor="@color/danger_color"
         android:textSize="14sp" />
 </LinearLayout>

@@ -73,7 +73,7 @@
             android:paddingStart="10dp"
             android:paddingEnd="10dp"
             android:text="@string/set_as_default"
-            android:textColor="#4F75E2"
+            android:textColor="@color/brand_primary"
             android:textSize="12sp"
             android:textStyle="bold"
             android:visibility="gone" />
@@ -89,7 +89,7 @@
             android:paddingStart="8dp"
             android:paddingEnd="8dp"
             android:text="@string/current"
-            android:textColor="#3D67DA"
+            android:textColor="@color/brand_primary"
             android:textSize="11sp"
             android:textStyle="bold"
             android:visibility="gone" />

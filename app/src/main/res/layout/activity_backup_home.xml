@@ -185,7 +185,7 @@
                         android:layout_height="48dp"
                         android:layout_marginTop="12dp"
                         android:text="@string/enter_local_backup"
-                        app:backgroundTint="#5C80EA"
+                        app:backgroundTint="@color/brand_primary"
                         app:cornerRadius="10dp"
                         app:icon="@android:drawable/ic_menu_save"
                         app:iconGravity="textStart" />

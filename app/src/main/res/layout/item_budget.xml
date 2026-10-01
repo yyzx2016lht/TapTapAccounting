@@ -38,7 +38,7 @@
             android:gravity="center"
             android:minWidth="44dp"
             android:text="@string/budget_delete"
-            android:textColor="#E35D5D"
+            android:textColor="@color/danger_color"
             android:textSize="@dimen/text_size_12"
             android:textStyle="bold" />
     </LinearLayout>

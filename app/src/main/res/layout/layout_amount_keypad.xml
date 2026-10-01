@@ -193,7 +193,7 @@
                 android:background="@drawable/bg_amount_key_operator"
                 android:stateListAnimator="@null"
                 android:text="+"
-                android:textColor="#3B82F6"
+                android:textColor="@color/brand_primary"
                 android:textSize="24sp"
                 android:textStyle="bold" />
 
@@ -206,7 +206,7 @@
                 android:background="@drawable/bg_amount_key_operator"
                 android:stateListAnimator="@null"
                 android:text="−"
-                android:textColor="#3B82F6"
+                android:textColor="@color/brand_primary"
                 android:textSize="24sp"
                 android:textStyle="bold" />
 
@@ -219,7 +219,7 @@
                 android:background="@drawable/bg_amount_key_operator"
                 android:stateListAnimator="@null"
                 android:text="÷"
-                android:textColor="#3B82F6"
+                android:textColor="@color/brand_primary"
                 android:textSize="24sp"
                 android:textStyle="bold" />
 
@@ -231,7 +231,7 @@
                 android:background="@drawable/bg_amount_key_operator"
                 android:stateListAnimator="@null"
                 android:text="×"
-                android:textColor="#3B82F6"
+                android:textColor="@color/brand_primary"
                 android:textSize="24sp"
                 android:textStyle="bold" />
 

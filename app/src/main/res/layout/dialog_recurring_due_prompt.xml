@@ -120,7 +120,7 @@
             android:background="?attr/selectableItemBackground"
             android:gravity="center"
             android:text="@string/recurring_due_cancel_pattern"
-            android:textColor="#D85C5C"
+            android:textColor="@color/danger_color"
             android:textSize="@dimen/text_size_13" />
     </LinearLayout>
 </LinearLayout>

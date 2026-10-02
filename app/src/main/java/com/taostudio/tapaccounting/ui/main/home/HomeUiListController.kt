@@ -12,6 +12,7 @@ import com.google.android.material.floatingactionbutton.FloatingActionButton
 import com.taostudio.tapaccounting.MainActivity
 import com.taostudio.tapaccounting.R
 import com.taostudio.tapaccounting.ui.common.StatusBarStyle
+import com.taostudio.tapaccounting.ui.common.UiMotion.FabScrollBehavior
 
 internal class HomeUiListController(
     private val fragment: Fragment,
@@ -38,6 +39,18 @@ internal class HomeUiListController(
     private val onShowBillDetailSheet: (com.taostudio.tapaccounting.data.local.entity.Bill) -> Unit,
     private val onRefreshAccountCurrencyCache: () -> Unit,
 ) {
+    /**
+     * FAB 的显隐交给共享策略（见 [FabScrollBehavior]），显示与否的最终判断仍在
+     * [updateHomeFabVisibilityByDrawerState]：空态、账本抽屉、多选下它要继续隐藏。
+     */
+    private val fabScrollBehavior = FabScrollBehavior(
+        hide = {
+            (fragment.activity as? MainActivity)
+                ?.findViewById<FloatingActionButton>(R.id.fab_add)?.hide()
+        },
+        show = { updateHomeFabVisibilityByDrawerState() },
+    )
+
     fun setupRecyclerView() {
         val homeAdapter = homeViewModel.adapter
         setHomeAdapter(homeAdapter)
@@ -68,20 +81,20 @@ internal class HomeUiListController(
                 setIsMultiSelectModeActive(false)
                 layoutMultiSelectActions.visibility = View.GONE
             }
-            updateHomeFabVisibilityByDrawerState()
+            fabScrollBehavior.syncVisible()
         }
 
         rvTransactions.clearOnScrollListeners()
         rvTransactions.addOnScrollListener(object : RecyclerView.OnScrollListener() {
             override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
-                val fab = (fragment.activity as? MainActivity)
-                    ?.findViewById<FloatingActionButton>(R.id.fab_add) ?: return
-                if (!fragment.isAdded || !fragment.isVisible || layoutEmptyView.visibility == View.VISIBLE || homeAdapter.itemCount <= 1) {
-                    updateHomeFabVisibilityByDrawerState()
+                if (!fragment.isAdded || !fragment.isVisible ||
+                    layoutEmptyView.visibility == View.VISIBLE ||
+                    homeAdapter.itemCount <= 1
+                ) {
+                    fabScrollBehavior.syncVisible()
                     return
                 }
-                if (dy > 8) fab.hide()
-                else if (dy < -8) updateHomeFabVisibilityByDrawerState()
+                fabScrollBehavior.onScroll(dy, atTop = !recyclerView.canScrollVertically(-1))
             }
         })
         homeAdapter.chartView = cvChartContainer
@@ -123,6 +136,7 @@ internal class HomeUiListController(
     }
 
     fun updateHomeFabVisibilityByDrawerState() {
+        fabScrollBehavior.markVisible()
         val fab = (fragment.activity as? MainActivity)
             ?.findViewById<FloatingActionButton>(R.id.fab_add) ?: return
         if (!fragment.isAdded ||

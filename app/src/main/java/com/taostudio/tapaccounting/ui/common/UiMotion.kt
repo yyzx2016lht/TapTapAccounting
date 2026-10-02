@@ -156,6 +156,82 @@ object UiMotion {
             .start()
     }
 
+    // ── FAB scroll behaviour ────────────────────────────────────────
+
+    /** 累计向下位移超过该值才收起 FAB。 */
+    const val FAB_HIDE_THRESHOLD_PX = 8
+
+    /** 累计向上位移超过该值才唤回 FAB。 */
+    const val FAB_SHOW_THRESHOLD_PX = 8
+
+    /**
+     * 滚动感知型 FAB 的显隐策略，三个页面共用一份规则。
+     *
+     * 之前账单首页 / 资产页 / 资产详情各写各的（+8/-8、+8/-2、+20/-8），只有资产详情
+     * 做了位移累加，阈值也因此漂移。这里收敛成一条：
+     *  - **累加 dy**：慢慢拖动时每次只走几像素，单次比较永远达不到阈值，FAB 会一直赖着
+     *    不走；累加之后同样的位移能累积到阈值，"一上一下就能控制"的手感不受影响。
+     *  - **方向一反转就清零**（关键）：只按"翻转后清零"是不够的——一次长距离下滑会把
+     *    累加值攒成几百像素的"债"，用户往回滑时得先补回这段距离 FAB 才肯回来，表现为
+     *    "往上滑半天没反应，非得滑到顶才行"。按方向清零后，不管刚才滑多远，往回滑 8px
+     *    就唤回。
+     *  - **[atTop]** 列表已在顶部时强制显示，不管当前处于什么状态。
+     */
+    class FabScrollBehavior(
+        private val hide: () -> Unit,
+        private val show: () -> Unit,
+    ) {
+        private var accumulator = 0
+        private var hidden = false
+
+        /** 喂入每帧的滚动位移。[atTop] 表示列表已无法继续向上滚。 */
+        fun onScroll(dy: Int, atTop: Boolean) {
+            if (atTop) {
+                syncVisible()
+                return
+            }
+            if (dy == 0) return
+            if (accumulator != 0 && (accumulator > 0) != (dy > 0)) accumulator = 0
+            accumulator += dy
+            when {
+                !hidden && accumulator > FAB_HIDE_THRESHOLD_PX -> {
+                    hidden = true
+                    accumulator = 0
+                    hide()
+                }
+                hidden && accumulator < -FAB_SHOW_THRESHOLD_PX -> {
+                    hidden = false
+                    accumulator = 0
+                    show()
+                }
+            }
+        }
+
+        /**
+         * 非滚动原因导致的显示（抽屉关闭、退出多选、空态退出……）。
+         * 显隐逻辑仍由 [show] 决定——它可能因为空态/抽屉而选择继续隐藏。
+         */
+        fun syncVisible() {
+            markVisible()
+            show()
+        }
+
+        /**
+         * 外部直接操作了 FAB 时用它对齐内部状态，否则下一次滚动会用过期状态做判断
+         * （典型后果：FAB 明明可见，却要等一次上滑才肯再响应）。
+         */
+        fun markVisible() {
+            hidden = false
+            accumulator = 0
+        }
+
+        /** 外部直接隐藏了 FAB 时用它对齐内部状态（切 Tab、弹层遮挡等）。 */
+        fun markHidden() {
+            hidden = true
+            accumulator = 0
+        }
+    }
+
     // ── Form / overlay helpers ──────────────────────────────────────
 
     /**

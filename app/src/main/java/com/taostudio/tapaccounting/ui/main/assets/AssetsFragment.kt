@@ -46,6 +46,7 @@ import com.taostudio.tapaccounting.logic.CurrencyManager
 import com.taostudio.tapaccounting.logic.CurrencyUtils
 import com.taostudio.tapaccounting.logic.InvestmentInterestService
 import com.taostudio.tapaccounting.ui.common.UiMotion
+import com.taostudio.tapaccounting.ui.common.UiMotion.FabScrollBehavior
 import com.taostudio.tapaccounting.ui.common.UiMotion.applyItemPressFeedback
 import com.taostudio.tapaccounting.ui.common.UiMotion.crossfadeText
 
@@ -88,8 +89,11 @@ class AssetsFragment : Fragment() {
 
     private val db by lazy { AppDatabase.getDatabase(requireContext()) }
     private var hasTriggeredInitialRateRefresh = false
-    private var fabHiddenByScroll = false
-    private var fabScrollAccumulator = 0
+    /** FAB 显隐规则与账单首页、资产详情共用同一份（见 [FabScrollBehavior]）。 */
+    private val fabScrollBehavior = FabScrollBehavior(
+        hide = { hideAssetFab() },
+        show = { showAssetFab() },
+    )
     private var dragAutoScrollActive = false
     private var dragAutoScrollDirection = 0
     private var dragAutoScrollSpeedPx = 0
@@ -308,15 +312,13 @@ class AssetsFragment : Fragment() {
 
     fun showAssetFab() {
         if (!isAdded || !::fabAddAsset.isInitialized) return
-        fabHiddenByScroll = false
-        fabScrollAccumulator = 0
+        fabScrollBehavior.markVisible()
         fabAddAsset.show()
     }
 
     fun hideAssetFab() {
         if (!::fabAddAsset.isInitialized) return
-        fabHiddenByScroll = true
-        fabScrollAccumulator = 0
+        fabScrollBehavior.markHidden()
         fabAddAsset.hide()
     }
 
@@ -337,19 +339,7 @@ class AssetsFragment : Fragment() {
     }
 
     private fun applyFabScrollBehavior(dy: Int, scrollY: Int) {
-        if (dy == 0) return
-        if (scrollY <= 0) {
-            showAssetFab()
-            return
-        }
-
-        if (dy > 8 && !fabHiddenByScroll) {
-            hideAssetFab()
-            return
-        }
-        if (dy < -2 && fabHiddenByScroll) {
-            showAssetFab()
-        }
+        fabScrollBehavior.onScroll(dy, atTop = scrollY <= 0)
     }
 
     private fun observeData() {

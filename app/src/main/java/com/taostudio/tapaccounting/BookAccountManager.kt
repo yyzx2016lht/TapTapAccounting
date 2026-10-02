@@ -21,7 +21,16 @@ object BookAccountManager {
     // 每个账本对应的主题色前缀（key = "book_color_" + 账本名，存 ARGB int）
     private const val KEY_BOOK_COLOR_PREFIX = "book_color_"
 
-    /** 预置的账本颜色池，按账本顺序循环取用（共 16 色） */
+    /**
+     * 预置的账本颜色池，按账本顺序循环取用（共 15 色）。
+     *
+     * 刻意不收高饱和的黄绿（#6BBF40）：它紧挨着收入语义色 income_color #4CAF50，
+     * 两个绿同屏时会被读成「收入绿」，而大面积高饱和底色压白字也糊得厉害。
+     * 绿色系已有 绿 / 深绿 两档，第四档本就冗余。
+     *
+     * 注意：手动选色器（HomeBannerController 里的 colorOptions）是另一份列表，
+     * 增删颜色时两边要同步。
+     */
     val BOOK_COLOR_PALETTE = intArrayOf(
         0xFF4080FF.toInt(), // 蓝
         0xFF2FA36B.toInt(), // 绿
@@ -32,7 +41,6 @@ object BookAccountManager {
         0xFF1A56CC.toInt(), // 深蓝
         0xFF29A8E0.toInt(), // 天蓝
         0xFF1E7A50.toInt(), // 深绿
-        0xFF6BBF40.toInt(), // 黄绿
         0xFFC0392B.toInt(), // 深红
         0xFFE0609A.toInt(), // 粉色
         0xFF5E3596.toInt(), // 深紫

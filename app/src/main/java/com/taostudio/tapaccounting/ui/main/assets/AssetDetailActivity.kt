@@ -60,6 +60,7 @@ import com.taostudio.tapaccounting.logic.CurrencyManager
 import com.taostudio.tapaccounting.logic.CurrencyUtils
 import com.taostudio.tapaccounting.ui.activity.EditBillActivity
 import com.taostudio.tapaccounting.ui.common.AddBillEntrySheetLauncher
+import com.taostudio.tapaccounting.ui.common.UiMotion.FabScrollBehavior
 import com.taostudio.tapaccounting.logic.InvestmentLotDraftStorage
 import com.taostudio.tapaccounting.logic.InvestmentLotEntryHelper
 import com.taostudio.tapaccounting.logic.InvestmentInterestService
@@ -100,8 +101,11 @@ class AssetDetailActivity : AppCompatActivity() {
     private lateinit var tvActionArchive: TextView
     private lateinit var tvExcludeHint: TextView
     private lateinit var toolbarDoubleTapDetector: GestureDetector
-    private var fabHiddenByScroll = false
-    private var fabScrollAccumulator = 0
+    /** FAB 显隐规则与账单首页、资产页共用同一份（见 [FabScrollBehavior]）。 */
+    private val fabScrollBehavior = FabScrollBehavior(
+        hide = { hideAssetDetailFab() },
+        show = { showAssetDetailFab() },
+    )
 
     private var assetId: Long = -1
     private var currentAsset: Asset? = null
@@ -867,32 +871,17 @@ class AssetDetailActivity : AppCompatActivity() {
     }
 
     private fun showAssetDetailFab() {
-        fabHiddenByScroll = false
-        fabScrollAccumulator = 0
+        fabScrollBehavior.markVisible()
         fabAddBill.show()
     }
 
     private fun hideAssetDetailFab() {
-        fabHiddenByScroll = true
-        fabScrollAccumulator = 0
+        fabScrollBehavior.markHidden()
         fabAddBill.hide()
     }
 
     private fun applyFabScrollBehavior(dy: Int) {
-        if (dy == 0) return
-        if (!rvTransactions.canScrollVertically(-1)) {
-            showAssetDetailFab()
-            return
-        }
-
-        fabScrollAccumulator += dy
-        if (!fabHiddenByScroll && fabScrollAccumulator > 20) {
-            hideAssetDetailFab()
-            return
-        }
-        if (fabHiddenByScroll && fabScrollAccumulator < -8) {
-            showAssetDetailFab()
-        }
+        fabScrollBehavior.onScroll(dy, atTop = !rvTransactions.canScrollVertically(-1))
     }
 
     private fun showDeleteConfirmDialog() {

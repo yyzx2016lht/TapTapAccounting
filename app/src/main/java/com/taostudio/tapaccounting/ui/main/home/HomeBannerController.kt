@@ -143,7 +143,6 @@ internal class HomeBannerController(
             "青色" to 0xFF29A8A8.toInt(),
             "绿色" to 0xFF2FA36B.toInt(),
             "深绿" to 0xFF1E7A50.toInt(),
-            "黄绿" to 0xFF6BBF40.toInt(),
             "橙色" to 0xFFE07A30.toInt(),
             "红色" to 0xFFE05A5A.toInt(),
             "深红" to 0xFFC0392B.toInt(),

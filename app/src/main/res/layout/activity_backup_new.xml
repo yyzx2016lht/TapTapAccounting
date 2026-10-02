@@ -1112,54 +1112,71 @@
 
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/btn_cleanup_by_date"
-                        style="@style/Widget.MaterialComponents.Button.UnelevatedButton"
+
+                        style="@style/Widget.MaterialComponents.Button.OutlinedButton"
                         android:layout_width="match_parent"
                         android:layout_height="48dp"
                         android:letterSpacing="0"
                         android:text="@string/cleanup_by_date"
-                        android:textColor="@color/text_body"
+
+                        android:textColor="@color/settings_danger_text"
                         android:textSize="14sp"
-                        app:backgroundTint="@color/backup_panel_bg"
+
+                        app:backgroundTint="@android:color/transparent"
                         app:cornerRadius="10dp"
                         app:icon="@drawable/ic_home_calendar"
                         app:iconGravity="textStart"
                         app:iconPadding="8dp"
-                        app:iconTint="@color/text_muted" />
+
+                        app:iconTint="@color/settings_danger_text"                         app:strokeColor="@color/backup_danger_stroke"
+                                                app:strokeWidth="1dp"
+                        />
 
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/btn_cleanup_by_book"
-                        style="@style/Widget.MaterialComponents.Button.UnelevatedButton"
-                        android:layout_width="match_parent"
-                        android:layout_height="48dp"
-                        android:layout_marginTop="8dp"
-                        android:letterSpacing="0"
-                        android:text="@string/cleanup_by_book"
-                        android:textColor="@color/text_body"
-                        android:textSize="14sp"
-                        app:backgroundTint="@color/backup_panel_bg"
-                        app:cornerRadius="10dp"
-                        app:icon="@drawable/ic_restore_action"
-                        app:iconGravity="textStart"
-                        app:iconPadding="8dp"
-                        app:iconTint="@color/text_muted" />
 
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/btn_cleanup_all"
                         style="@style/Widget.MaterialComponents.Button.OutlinedButton"
                         android:layout_width="match_parent"
                         android:layout_height="48dp"
                         android:layout_marginTop="8dp"
                         android:letterSpacing="0"
-                        android:text="@string/cleanup_all_bills"
+                        android:text="@string/cleanup_by_book"
+
                         android:textColor="@color/settings_danger_text"
+                        android:textSize="14sp"
+
+                        app:backgroundTint="@android:color/transparent"
+                        app:cornerRadius="10dp"
+                        app:icon="@drawable/ic_profile_book_entry"
+                        app:iconGravity="textStart"
+                        app:iconPadding="8dp"
+
+                        app:iconTint="@color/settings_danger_text"                         app:strokeColor="@color/backup_danger_stroke"
+                                                app:strokeWidth="1dp"
+                        />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btn_cleanup_all"
+
+                        style="@style/Widget.MaterialComponents.Button.UnelevatedButton"
+                        android:layout_width="match_parent"
+                        android:layout_height="48dp"
+                        android:layout_marginTop="8dp"
+                        android:letterSpacing="0"
+                        android:text="@string/cleanup_all_bills"
+
+                        android:textColor="@color/dialog_button_danger_text"
                         android:textSize="14sp"
                         app:cornerRadius="10dp"
                         app:icon="@drawable/ic_delete"
                         app:iconGravity="textStart"
                         app:iconPadding="8dp"
-                        app:iconTint="@color/settings_danger_text"
-                        app:strokeColor="@color/backup_danger_stroke"
-                        app:strokeWidth="1dp" />
+
+                        app:iconTint="@color/dialog_button_danger_text"
+
+                        app:strokeColor="@color/danger_color"
+                        app:strokeWidth="1dp"                         app:backgroundTint="@color/danger_color"
+                        />
 
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>

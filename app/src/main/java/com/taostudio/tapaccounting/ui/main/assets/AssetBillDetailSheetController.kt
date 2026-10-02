@@ -446,15 +446,15 @@ internal class AssetBillDetailSheetController(
         var currentExcludeFromStats = bill.excludeFromStats
 
         fun updateExcludeStatsButton() {
-            if (currentExcludeFromStats) {
-                btnExcludeStats.text = activity.getString(R.string.exclude)
-                btnExcludeStats.setBackgroundResource(R.drawable.bg_dialog_button_outline)
-                btnExcludeStats.setTextColor(activity.getColor(R.color.text_secondary))
+            // 标签写「点了会怎样」，不是当前状态：现在计入中 → 按下去会排除
+            btnExcludeStats.text = if (currentExcludeFromStats) {
+                activity.getString(R.string.include)
             } else {
-                btnExcludeStats.text = activity.getString(R.string.include)
-                btnExcludeStats.setBackgroundResource(R.drawable.bg_dialog_button_primary)
-                btnExcludeStats.setTextColor(activity.getColor(R.color.dialog_button_primary_text))
+                activity.getString(R.string.exclude)
             }
+            // 与 退款/编辑 同级的描边样式：可逆的状态开关不该被抬成主操作
+            btnExcludeStats.setBackgroundResource(R.drawable.bg_dialog_button_outline)
+            btnExcludeStats.setTextColor(activity.getColor(R.color.text_secondary))
         }
         updateExcludeStatsButton()
 

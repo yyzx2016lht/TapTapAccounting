@@ -997,6 +997,7 @@
     <string name="exchange_rate_desc">以人民币为基准，查看已启用币种的最新汇率</string>
     <string name="refresh_rate">刷新汇率</string>
     <string name="enabled_currencies">已启用币种</string>
+    <string name="currency_primary_badge">主币种</string>
     <string name="no_foreign_currency">还没有启用外币</string>
     <string name="no_foreign_hint">先去多币种页面勾选常用货币，这里就会显示汇率</string>
     <string name="enabled_currency_count">已启用 %1$d 种货币</string>

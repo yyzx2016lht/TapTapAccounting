@@ -24,6 +24,7 @@
 
     <!-- Brand palette (aligned with existing indigo primary) -->
     <color name="brand_primary">#5C6BC0</color>
+    <color name="brand_primary_soft">#EDEFFA</color>
     <color name="brand_primary_dark">#3F51B5</color>
     <color name="brand_secondary">#FF4081</color>
 

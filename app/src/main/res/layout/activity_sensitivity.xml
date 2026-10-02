@@ -1291,7 +1291,7 @@
                         <View
                             android:layout_width="4dp"
                             android:layout_height="18dp"
-                            android:background="@drawable/bg_section_indicator_red" />
+                            android:background="@drawable/bg_section_indicator_indigo" />
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"

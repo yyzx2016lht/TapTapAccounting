@@ -72,17 +72,19 @@
                 android:id="@+id/tv_reverse_info"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="≈ 7.14 CNY"
-                android:textColor="#2C74FF"
+                android:text="≈ 7.1428 CNY"
+                android:textColor="@color/brand_primary"
                 android:textSize="14sp"
                 android:textStyle="bold" />
 
+            <!-- 单位标签必须由代码按行填：这行可能是 KRW/EUR/PLN，不是 USD -->
             <TextView
+                android:id="@+id/tv_reverse_unit"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="2dp"
                 android:text="1 USD"
-                android:textColor="#8090A6"
+                android:textColor="@color/text_muted"
                 android:textSize="11sp" />
         </LinearLayout>
     </LinearLayout>

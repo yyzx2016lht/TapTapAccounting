@@ -24,6 +24,11 @@ import com.taostudio.tapaccounting.logic.CurrencyManager
 
 class CurrencyManagerActivity : AppCompatActivity() {
 
+    private companion object {
+        /** 主币种：默认启用且不可取消。 */
+        const val PRIMARY_CURRENCY = "CNY"
+    }
+
     private lateinit var rvList: RecyclerView
     private lateinit var etSearch: EditText
     private lateinit var tvSelectedSummary: TextView
@@ -169,6 +174,7 @@ class CurrencyManagerActivity : AppCompatActivity() {
             val tvSymbol: TextView = itemView.findViewById(R.id.tv_currency_symbol)
             val tvName: TextView = itemView.findViewById(R.id.tv_currency_name)
             val cbSelect: CheckBox = itemView.findViewById(R.id.cb_select)
+            val tvPrimaryBadge: TextView = itemView.findViewById(R.id.tv_primary_badge)
 
             fun bind(item: CurrencyInfo) {
                 tvFlag.text = item.flagEmoji
@@ -178,21 +184,24 @@ class CurrencyManagerActivity : AppCompatActivity() {
 
                 val isChecked = enabledSet.contains(item.code)
                 cbSelect.isChecked = isChecked
-                
-                // CNY is mandatory
-                if (item.code == "CNY") {
-                    cbSelect.isEnabled = false
-                    itemView.alpha = 0.58f
+                tvPrimaryBadge.visibility =
+                    if (item.code == PRIMARY_CURRENCY) View.VISIBLE else View.GONE
+
+                // CNY 是主币种，不可取消。
+                // 不再设 alpha / isEnabled：变暗 + 灰勾在 Android 上等于「不可用」的通用信号，
+                // 而主币种恰恰是默认且必须开启的那一个。现在整行保持正常对比度、勾保持品牌色，
+                // 由「主币种」徽章解释它为什么点不动（勾本身不挂监听，XML 里也是 clickable=false）。
+                cbSelect.isEnabled = true
+                if (item.code == PRIMARY_CURRENCY) {
+                    cbSelect.setOnClickListener(null)
                     itemView.setOnClickListener(null)
                 } else {
-                    cbSelect.isEnabled = true
-                    itemView.alpha = 1.0f
                     itemView.setOnClickListener {
                         toggleSelection(item)
                     }
                     // Allow clicking checkbox directly too, but better just item click
-                    cbSelect.setOnClickListener { 
-                        toggleSelection(item) 
+                    cbSelect.setOnClickListener {
+                        toggleSelection(item)
                     }
                 }
             }

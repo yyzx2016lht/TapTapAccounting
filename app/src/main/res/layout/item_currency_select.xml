@@ -50,6 +50,20 @@
                     android:textSize="16sp"
                     android:textStyle="bold" />
 
+                <!-- 主币种徽章：用徽章解释 CNY 为何不可取消，而不是把整行变暗 -->
+                <TextView
+                    android:id="@+id/tv_primary_badge"
+                    android:layout_width="wrap_content"
+                    android:layout_height="20dp"
+                    android:layout_marginStart="8dp"
+                    android:background="@drawable/bg_segmented_container"
+                    android:gravity="center"
+                    android:paddingHorizontal="8dp"
+                    android:text="@string/currency_primary_badge"
+                    android:textColor="@color/brand_primary"
+                    android:textSize="11sp"
+                    android:visibility="gone" />
+
                 <TextView
                     android:id="@+id/tv_currency_symbol"
                     android:layout_width="wrap_content"

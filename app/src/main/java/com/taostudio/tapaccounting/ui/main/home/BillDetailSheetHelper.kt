@@ -229,15 +229,16 @@ object BillDetailSheetHelper {
         }
 
         fun updateExcludeStatsButton() {
-            if (currentExcludeFromStats) {
-                btnExcludeStats.text = context.getString(R.string.exclude)
-                btnExcludeStats.setBackgroundResource(R.drawable.bg_dialog_button_outline)
-                btnExcludeStats.setTextColor(context.getColor(R.color.text_secondary))
+            // 标签写「点了会怎样」，不是当前状态：现在计入中 → 按下去会排除。
+            // 之前写的是状态，于是「计入」这个标签对应的操作是"变成不计入"，读起来正好相反。
+            btnExcludeStats.text = if (currentExcludeFromStats) {
+                context.getString(R.string.include)
             } else {
-                btnExcludeStats.text = context.getString(R.string.include)
-                btnExcludeStats.setBackgroundResource(R.drawable.bg_dialog_button_primary)
-                btnExcludeStats.setTextColor(context.getColor(R.color.dialog_button_primary_text))
+                context.getString(R.string.exclude)
             }
+            // 与 退款/编辑 同级的描边样式：这是个可逆的状态开关，不该被实心填充抬成主操作
+            btnExcludeStats.setBackgroundResource(R.drawable.bg_dialog_button_outline)
+            btnExcludeStats.setTextColor(context.getColor(R.color.text_secondary))
         }
         updateExcludeStatsButton()
 

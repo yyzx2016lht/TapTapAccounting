@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    选择器格子的选中态：淡品牌色底 + 靛蓝字。
+    年份格与月份格共用同一份，之前年份格用实心胶囊（太重）、月份格只换字色（太轻），
+    两边都不一致。淡底 + 靛蓝字比实心胶囊轻，又比只换字色明显。
+-->
+<ripple xmlns:android="http://schemas.android.com/apk/res/android"
+    android:color="#1A5C6BC0">
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="@color/brand_primary_soft" />
+            <corners android:radius="10dp" />
+        </shape>
+    </item>
+</ripple>

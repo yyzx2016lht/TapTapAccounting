@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    分区标识竖条 - 靛紫（#7E8BC6）。
+    原文件名叫 bg_section_indicator_red，内容却是这个偏紫的色，名字和内容对不上，
+    很容易被当成红色误用（AI 功能页就因为它把「识别能力」染成了和另外三条不同的颜色），
+    故改名，颜色保持不变。
+-->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="#7E8BC6" />
+    <corners android:radius="2dp" />
+</shape>

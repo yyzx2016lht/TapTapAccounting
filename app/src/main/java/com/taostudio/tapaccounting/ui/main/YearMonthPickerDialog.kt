@@ -28,6 +28,22 @@ object YearMonthPickerDialog {
     private val supportedMonths = (1..12).toList()
 
     /**
+     * 年份格与月份格共用的选中态。
+     *
+     * 之前两格各写一套：年份格是实心品牌色胶囊 + 白字（视觉过重），
+     * 月份格只有文字从深灰变靛蓝、没有背景（几乎看不出选中）。
+     * 现在统一为淡品牌色底 + 靛蓝字 + 加粗。
+     */
+    private object PickerCellStyle {
+        fun bgOf(selected: Boolean): Int =
+            if (selected) R.drawable.bg_picker_cell_selected else android.R.color.transparent
+
+        fun textColorOf(context: Context, selected: Boolean): Int =
+            if (selected) context.getColor(R.color.brand_primary)
+            else context.getColor(R.color.text_body)
+    }
+
+    /**
      * 兼容旧调用：
      * - yearOnly=false: 月份选择（即时生效）
      * - yearOnly=true: 年份选择（即时生效）
@@ -275,12 +291,9 @@ object YearMonthPickerDialog {
 
             fun bind(year: Int, selected: Boolean) {
                 tvYear.text = itemView.context.getString(R.string.year_format, year)
-                tvYear.setBackgroundResource(
-                    if (selected) R.drawable.bg_year_month_selected_pill else android.R.color.transparent
-                )
-                tvYear.setTextColor(
-                    if (selected) 0xFFFFFFFF.toInt() else 0xFF1F2937.toInt()
-                )
+                tvYear.setBackgroundResource(PickerCellStyle.bgOf(selected))
+                tvYear.setTextColor(PickerCellStyle.textColorOf(itemView.context, selected))
+                tvYear.setTypeface(null, if (selected) android.graphics.Typeface.BOLD else android.graphics.Typeface.NORMAL)
                 itemView.setOnClickListener {
                     if (selectedValue != year) {
                         val oldIndex = years.indexOf(selectedValue)
@@ -319,9 +332,9 @@ object YearMonthPickerDialog {
 
             fun bind(month: Int, selected: Boolean) {
                 tvMonth.text = itemView.context.getString(R.string.month_format, month)
-                tvMonth.setTextColor(
-                    if (selected) 0xFF5C6BC0.toInt() else 0xFF1F2937.toInt()
-                )
+                tvMonth.setBackgroundResource(PickerCellStyle.bgOf(selected))
+                tvMonth.setTextColor(PickerCellStyle.textColorOf(itemView.context, selected))
+                tvMonth.setTypeface(null, if (selected) android.graphics.Typeface.BOLD else android.graphics.Typeface.NORMAL)
                 itemView.setOnClickListener {
                     if (selectedValue != month) {
                         val oldIndex = months.indexOf(selectedValue)

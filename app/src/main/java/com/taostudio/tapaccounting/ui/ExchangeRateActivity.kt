@@ -17,9 +17,12 @@ import com.taostudio.tapaccounting.CurrencyData
 import com.taostudio.tapaccounting.CurrencyInfo
 import com.taostudio.tapaccounting.R
 import com.taostudio.tapaccounting.logic.CurrencyManager
+import java.text.DecimalFormat
+import java.text.DecimalFormatSymbols
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlin.math.abs
 
 class ExchangeRateActivity : AppCompatActivity() {
 
@@ -152,11 +155,14 @@ class ExchangeRateActivity : AppCompatActivity() {
             holder.tvCode.text = "${item.info.code} ${item.info.nameZh}"
             
             // 1 人民币(CNY) = X 目标币种
-            holder.tvInfo.text = "1 人民币（CNY） = ${String.format(Locale.US, "%.4f", item.rate)} ${item.info.code}"
+            holder.tvInfo.text = "1 人民币（CNY） = ${formatRate(item.rate)} ${item.info.code}"
 
-            // 1 目标币种 ≈ 反向人民币(CNY)
+            // 1 目标币种 ≈ 反向人民币(CNY)。
+            // 小数位按数量级自适应：韩元的反向汇率是 0.004958，固定两位小数会打成 0.00，
+            // 看上去像功能坏了。
             val reverseRate = if (item.rate != 0.0) 1.0 / item.rate else 0.0
-            holder.tvReverseInfo.text = "≈ ${String.format(Locale.US, "%.2f", reverseRate)} CNY"
+            holder.tvReverseInfo.text = "≈ ${formatRate(reverseRate)} CNY"
+            holder.tvReverseUnit.text = "1 ${item.info.code}"
         }
 
         inner class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
@@ -164,6 +170,27 @@ class ExchangeRateActivity : AppCompatActivity() {
             val tvCode: TextView = view.findViewById(R.id.tv_code)
             val tvInfo: TextView = view.findViewById(R.id.tv_info)
             val tvReverseInfo: TextView = view.findViewById(R.id.tv_reverse_info)
+            val tvReverseUnit: TextView = view.findViewById(R.id.tv_reverse_unit)
+        }
+    }
+
+    companion object {
+        /**
+         * 汇率格式化：按数量级选小数位，避免小额货币被四舍五入成 0.00。
+         *
+         * 恒定两位小数对 KRW（1 KRW ≈ 0.00496 CNY）这类汇率是有害的。
+         * 一律 [Locale.US]，界面与数据库里都是字面小数点，不能跟系统区域跑。
+         */
+        private fun formatRate(value: Double): String {
+            val magnitude = abs(value)
+            val pattern = when {
+                magnitude >= 1000 -> "#,##0.##"
+                magnitude >= 1 -> "#,##0.####"
+                magnitude >= 0.01 -> "0.####"
+                magnitude == 0.0 -> "0"
+                else -> "0.######"
+            }
+            return DecimalFormat(pattern, DecimalFormatSymbols(Locale.US)).format(value)
         }
     }
 }

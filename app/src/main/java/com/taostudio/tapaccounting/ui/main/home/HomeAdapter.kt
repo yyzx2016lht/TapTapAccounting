@@ -416,6 +416,14 @@ class HomeAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
             holder.iconJob?.cancel()
             holder.iconJob = null
             Glide.with(holder.ivIcon.context).clear(holder.ivIcon)
+            // 入场动画（UiMotion.staggerFirstLoadAnimation）直接往行上写 translationY/alpha，
+            // RecyclerView 回收时不会重置它们。行若在半路被回收再复用给别的位置，
+            // 上一次的偏移会跟着走，所以回收点统一清干净。
+            holder.itemView.animate().cancel()
+            holder.itemView.translationY = 0f
+            holder.itemView.alpha = 1f
+            holder.itemView.scaleX = 1f
+            holder.itemView.scaleY = 1f
         }
     }
 
@@ -581,12 +589,14 @@ class HomeAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
                 itemView.animate().cancel()
                 itemView.scaleX = 1f
                 itemView.scaleY = 1f
+                itemView.translationY = 0f
             } else {
                 checkBox.visibility = View.GONE
                 checkBox.isChecked = false
                 itemView.animate().cancel()
                 itemView.scaleX = 1f
                 itemView.scaleY = 1f
+                itemView.translationY = 0f
                 iconContainer?.visibility = View.VISIBLE
             }
         }

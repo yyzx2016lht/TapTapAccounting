@@ -341,6 +341,12 @@ object UiMotion {
      *
      * Call this from [RecyclerView.Adapter.onViewAttachedToWindow] or ViewHolder init,
      * NOT from bind, to avoid re-setting on every rebind.
+     *
+     * [translationY] 必须一起收/放，不能只管 scale 和 alpha：按下时的
+     * `animate().cancel()` 会连带杀掉同一个 view 上正在跑的动画——包括
+     * [staggerFirstLoadAnimation] 的入场位移。一旦被打断，那个 `translationY = 24f`
+     * 就没人复位了（RecyclerView 复用时也不会重置），账单行会永久停在 +24px，
+     * 表现为「日期表头和下面那条账单之间裂开一条缝」。所以恢复分支必须显式写回 0f。
      */
     fun View.applyItemPressFeedback() {
         var isPressed = false
@@ -353,6 +359,7 @@ object UiMotion {
                         .scaleX(0.98f)
                         .scaleY(0.98f)
                         .alpha(0.92f)
+                        .translationY(0f)
                         .setDuration(FAST)
                         .setInterpolator(EXIT_EASING)
                         .withLayer()
@@ -367,6 +374,7 @@ object UiMotion {
                             .scaleX(1f)
                             .scaleY(1f)
                             .alpha(1f)
+                            .translationY(0f)
                             .setDuration(FAST)
                             .setInterpolator(STANDARD_EASING)
                             .withLayer()

@@ -105,6 +105,28 @@
                                     android:lineSpacingExtra="0dp" />
                             </LinearLayout>
 
+                            <!--
+                                预算进度条：仅在「启用预算」且该月确实有预算时显示。
+                                底色（track）与填充（indicator）不写死颜色，由 HomeBannerController
+                                按 banner 底色明暗切成浅色/深色，否则浅色账本色下会看不见。
+                                也不写死橙红预警色——banner 底色是用户可变的 16 色色板，
+                                预警信号靠长度和 ⚠ 文案表达。
+                            -->
+                            <com.google.android.material.progressindicator.LinearProgressIndicator
+                                android:id="@+id/progressBudgetBar"
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="10dp"
+                                android:layout_marginBottom="12dp"
+                                android:visibility="gone"
+                                app:layout_constraintBottom_toTopOf="@id/layoutSummaryFooter"
+                                app:layout_constraintEnd_toEndOf="parent"
+                                app:layout_constraintStart_toStartOf="parent"
+                                app:layout_constraintTop_toBottomOf="@id/layoutHeadlineBlock"
+                                app:trackCornerRadius="3dp"
+                                app:trackThickness="4dp"
+                                tools:visibility="visible" />
+
                             <LinearLayout
                                 android:id="@+id/layoutSummaryFooter"
                                 android:layout_width="0dp"

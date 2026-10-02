@@ -176,6 +176,7 @@ class HomeFragment : Fragment() {
     private lateinit var tvMonthIncome: TextView
     private lateinit var tvMonthBalanceLabel: TextView
     private lateinit var tvMonthBalance: TextView
+    private lateinit var progressBudgetBar: com.google.android.material.progressindicator.LinearProgressIndicator
     private lateinit var tvMonthSelector: TextView
     private lateinit var tvChartTotal: TextView
     private lateinit var tvChartTitle: TextView
@@ -303,6 +304,7 @@ class HomeFragment : Fragment() {
         tvMonthIncome = view.findViewById(R.id.tvMonthIncome)
         tvMonthBalanceLabel = view.findViewById(R.id.tvMonthBalanceLabel)
         tvMonthBalance = view.findViewById(R.id.tvMonthBalance)
+        progressBudgetBar = view.findViewById(R.id.progressBudgetBar)
         tvMonthSelector = view.findViewById(R.id.tvMonthSelector)
         ivCalendarView = view.findViewById(R.id.ivCalendarView)
         ivSearchBill = view.findViewById(R.id.ivSearchBill)
@@ -399,6 +401,7 @@ class HomeFragment : Fragment() {
             tvMonthIncome = tvMonthIncome,
             tvMonthBalanceLabel = tvMonthBalanceLabel,
             tvMonthBalance = tvMonthBalance,
+            progressBudgetBar = progressBudgetBar,
             ivBookSwitcher = ivBookSwitcher,
             ivCalendarView = ivCalendarView,
             ivSearchBill = ivSearchBill,
@@ -1173,7 +1176,21 @@ class HomeFragment : Fragment() {
                 val budget = db.budgetDao().getTotalBudget(yearMonth, budgetBook)
                 val used = BudgetService(db.budgetDao(), db.billDao(), db.categoryDao())
                     .getMonthSpend(budgetBook, null, yearMonth)
-                (budget?.amount ?: 0.0) to used
+                val amount = budget?.amount ?: 0.0
+                // 走 BudgetService 拿到 status/percent，进度条和 ⚠ 提示才有依据；
+                // 该月压根没设预算时 amount=0，不画进度条（buildProgress 会把 percent 兜成 0）。
+                val progress = if (amount > 0.0) {
+                    BudgetService.buildProgress(
+                        budgetAmount = amount,
+                        usedAmount = used,
+                        alertThreshold = budget?.alertThreshold ?: 0.8,
+                        yearMonth = yearMonth,
+                        nowMillis = System.currentTimeMillis()
+                    )
+                } else {
+                    null
+                }
+                HomeBudgetSummary(amount, used, progress)
             }
         } else {
             null
@@ -1181,14 +1198,15 @@ class HomeFragment : Fragment() {
         if (generation != summaryRenderGeneration || !isAdded) return
 
         updateSummaryLabels(displayMode, useBudget)
+        applyBudgetProgressBar(budgetAmounts?.progress)
         val oldExpense = tvMonthExpense.text?.toString()
         val oldIncome = tvMonthIncome.text?.toString()
         val oldBalance = tvMonthBalance.text?.toString()
         // updateSummary 会同步设置 TextView 文本
         updateSummary(
             transactions = transactions,
-            incomeOverride = budgetAmounts?.first,
-            balanceOverride = budgetAmounts?.let { (budget, used) -> budget - used }
+            incomeOverride = budgetAmounts?.amount,
+            balanceOverride = budgetAmounts?.let { it.amount - it.used }
         )
         val newExpense = tvMonthExpense.text?.toString()
         val newIncome = tvMonthIncome.text?.toString()
@@ -1209,6 +1227,40 @@ class HomeFragment : Fragment() {
             tvMonthBalance.animate().alpha(1f).setDuration(180L)
                 .setStartDelay(60L)
                 .setInterpolator(UiMotion.STANDARD_EASING).start()
+        }
+    }
+
+    /** 预算汇总在 banner 上要用的三样东西；[progress] 为 null 表示该月没有预算。 */
+    private data class HomeBudgetSummary(
+        val amount: Double,
+        val used: Double,
+        val progress: BudgetService.BudgetProgress?
+    )
+
+    /**
+     * banner 里的预算进度条 + ⚠ 提示。
+     *
+     * 只用长度和文字表达预警，**不用橙/红**：banner 底色是用户可变的 16 色账本色板，
+     * 写死的预警色压到黄绿/橙色底上会糊成一片。
+     * [progress] 为 null 有两种情况——没启用预算汇总，或该月压根没设预算，都不该画条。
+     */
+    private fun applyBudgetProgressBar(progress: BudgetService.BudgetProgress?) {
+        if (!::progressBudgetBar.isInitialized) return
+        if (progress == null) {
+            progressBudgetBar.visibility = View.GONE
+            return
+        }
+        progressBudgetBar.visibility = View.VISIBLE
+        progressBudgetBar.setProgressCompat(
+            progress.percent.coerceIn(0.0, 1.0).times(100).toInt(),
+            false
+        )
+        val status = progress.status
+        tvMonthBalanceLabel.text = when (status) {
+            BudgetService.BudgetStatus.EXCEEDED -> getString(R.string.home_month_budget_exceeded)
+            BudgetService.BudgetStatus.WARNING -> getString(R.string.home_month_budget_warning)
+            BudgetService.BudgetStatus.NORMAL ->
+                getString(R.string.home_month_budget_remaining)
         }
     }
 

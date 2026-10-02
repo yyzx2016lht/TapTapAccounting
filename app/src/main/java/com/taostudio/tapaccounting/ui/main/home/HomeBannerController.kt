@@ -14,6 +14,7 @@ import androidx.appcompat.view.ContextThemeWrapper
 import androidx.core.widget.ImageViewCompat
 import androidx.fragment.app.Fragment
 import com.bumptech.glide.Glide
+import com.google.android.material.progressindicator.LinearProgressIndicator
 import com.taostudio.tapaccounting.BookAccountManager
 import com.taostudio.tapaccounting.R
 import com.taostudio.tapaccounting.ui.dialog.OverlayDialogs
@@ -32,6 +33,7 @@ internal class HomeBannerController(
     private val tvMonthIncome: TextView,
     private val tvMonthBalanceLabel: TextView,
     private val tvMonthBalance: TextView,
+    private val progressBudgetBar: LinearProgressIndicator,
     private val ivBookSwitcher: ImageView,
     private val ivCalendarView: ImageView,
     private val ivSearchBill: ImageView,
@@ -267,6 +269,9 @@ internal class HomeBannerController(
         tvMonthIncome.setTextColor(valueAccent)
         tvMonthBalanceLabel.setTextColor(secondary)
         tvMonthBalance.setTextColor(valueAccent)
+        // 预算进度条跟着明暗走：底色是半透明 track + 实色 indicator，两者在 16 色账本底色下都得读得出
+        progressBudgetBar.trackColor = if (useLightText) 0x33FFFFFF else 0x1F000000
+        progressBudgetBar.setIndicatorColor(valueAccent)
         ImageViewCompat.setImageTintList(ivBookSwitcher, tintList)
         ImageViewCompat.setImageTintList(ivCalendarView, tintList)
         ImageViewCompat.setImageTintList(ivSearchBill, tintList)

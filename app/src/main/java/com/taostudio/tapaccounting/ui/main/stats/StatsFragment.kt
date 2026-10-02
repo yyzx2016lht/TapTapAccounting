@@ -741,8 +741,15 @@ class StatsFragment : Fragment() {
             val remaining = totalBudget - spentAmount
             tvTotalExpense.text = "$symbol${AmountFormatHelper.formatAmount(totalBudget)}"
             tvDailyAvg.text = "$symbol${AmountFormatHelper.formatAmount(remaining)}"
+            // 按用量占比上色，而不是"还剩多少"：剩 79.81（已花 95%）涂绿色，
+            // 语义上是"好"，用户完全看不出快超支了。三档与 BudgetAdapter 一致。
+            val usedPercent = if (totalBudget > 0.0) spentAmount / totalBudget else 0.0
             tvDailyAvg.setTextColor(requireContext().getColor(
-                if (remaining < 0.0) R.color.expense_color else R.color.income_color
+                when {
+                    usedPercent >= 1.0 -> R.color.expense_color
+                    usedPercent >= 0.8 -> R.color.warning_color
+                    else -> R.color.income_color
+                }
             ))
         }
     }

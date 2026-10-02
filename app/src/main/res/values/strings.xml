@@ -1962,6 +1962,8 @@
     <string name="home_month_balance">本月结余</string>
     <string name="home_month_budget">本月预算</string>
     <string name="home_month_budget_remaining">预算剩余</string>
+    <string name="home_month_budget_warning">⚠ 预算剩余</string>
+    <string name="home_month_budget_exceeded">⚠ 已超支</string>
     <string name="home_year_expense">本年总支出</string>
     <string name="home_year_income">本年总收入</string>
     <string name="home_year_balance">本年结余</string>

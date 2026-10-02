@@ -802,6 +802,7 @@ class BillDetailActivity : AppCompatActivity() {
     }
 
     private fun resolveAmountColor(uiType: Int): Int {
+        if (bill?.excludeFromStats == true) return Color.parseColor("#9AA1AA")
         return when (uiType) {
             Bill.TYPE_EXPENSE -> BillColors.expense
             Bill.TYPE_INCOME -> BillColors.income

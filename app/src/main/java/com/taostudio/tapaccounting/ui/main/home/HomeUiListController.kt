@@ -12,6 +12,7 @@ import com.google.android.material.floatingactionbutton.FloatingActionButton
 import com.taostudio.tapaccounting.MainActivity
 import com.taostudio.tapaccounting.R
 import com.taostudio.tapaccounting.ui.common.StatusBarStyle
+import com.taostudio.tapaccounting.ui.common.BillStatsMultiSelect
 import com.taostudio.tapaccounting.ui.common.UiMotion.FabScrollBehavior
 
 internal class HomeUiListController(
@@ -20,6 +21,7 @@ internal class HomeUiListController(
     private val layoutEmptyView: View,
     private val layoutMultiSelectActions: View,
     private val btnMsDelete: View,
+    private val btnMsExcludeStats: View,
     private val swipeRefreshLayout: SwipeRefreshLayout,
     private val cvChartContainer: View,
     private val layoutStickyTopBar: View,
@@ -77,6 +79,10 @@ internal class HomeUiListController(
                 setIsMultiSelectModeActive(true)
                 layoutMultiSelectActions.visibility = View.VISIBLE
                 (btnMsDelete as TextView).text = if (count > 0) "删除($count)" else "删除"
+                BillStatsMultiSelect.refreshButton(
+                    btnMsExcludeStats as TextView,
+                    homeAdapter.selectedBills.toList()
+                )
             } else {
                 setIsMultiSelectModeActive(false)
                 layoutMultiSelectActions.visibility = View.GONE

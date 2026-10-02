@@ -28,8 +28,10 @@ import com.taostudio.tapaccounting.data.local.AppDatabase
 import com.taostudio.tapaccounting.data.local.entity.Bill
 import com.taostudio.tapaccounting.logic.BillDisplayFormatter
 import com.taostudio.tapaccounting.logic.CurrencyManager
+import com.taostudio.tapaccounting.logic.BillMutationService
 import com.taostudio.tapaccounting.ui.activity.EditBillActivity
 import com.taostudio.tapaccounting.ui.dialog.OverlayDialogs
+import com.taostudio.tapaccounting.ui.common.BillDetailStatsToggle
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -102,10 +104,14 @@ internal class HomeBillSheetsController(
             tvCategory.setTextColor(Color.parseColor("#1A1A1A"))
             tvDetail.setTextColor(Color.parseColor("#8A8A8E"))
             tvTime.setTextColor(Color.parseColor("#8A8A8E"))
-            when (bill.type) {
-                Bill.TYPE_EXPENSE -> tvAmount.setTextColor(BillColors.expense)
-                Bill.TYPE_INCOME -> tvAmount.setTextColor(BillColors.income)
-                else -> tvAmount.setTextColor(Color.parseColor("#5F6772"))
+            if (bill.excludeFromStats) {
+                tvAmount.setTextColor(Color.parseColor("#9AA1AA"))
+            } else {
+                when (bill.type) {
+                    Bill.TYPE_EXPENSE -> tvAmount.setTextColor(BillColors.expense)
+                    Bill.TYPE_INCOME -> tvAmount.setTextColor(BillColors.income)
+                    else -> tvAmount.setTextColor(Color.parseColor("#5F6772"))
+                }
             }
         }
 
@@ -319,8 +325,6 @@ internal class HomeBillSheetsController(
         val isRepayment = isTransfer && bill.subType == Bill.SUBTYPE_REPAYMENT
         val isRefund = isRefundBill(bill)
         var linkedOriginalForRefund: Bill? = null
-        var currentExcludeFromStats = bill.excludeFromStats
-
         tvAmountFormula.visibility = View.GONE
         layoutIncoming.visibility = View.GONE
         lineIncoming.visibility = View.GONE
@@ -423,10 +427,18 @@ internal class HomeBillSheetsController(
                             }
                         }
                     }
-                    tvAmount.setTextColor(BillColors.expense)
+                    if (bill.excludeFromStats) {
+                        tvAmount.setTextColor(Color.parseColor("#9AA1AA"))
+                    } else {
+                        tvAmount.setTextColor(BillColors.expense)
+                    }
                 } else {
                     tvAmount.text = "+${HomeBillFormatHelper.formatMoney(bill.amount, bill.currency)}"
-                    tvAmount.setTextColor(Color.parseColor("#4CAF50"))
+                    if (bill.excludeFromStats) {
+                        tvAmount.setTextColor(Color.parseColor("#9AA1AA"))
+                    } else {
+                        tvAmount.setTextColor(Color.parseColor("#4CAF50"))
+                    }
                     fragment.lifecycleScope.launch(Dispatchers.IO) {
                         val crossCurrencyText = HomeBillFormatHelper.buildCrossCurrencyDetailFormula(bill, "CNY")
                         withContext(Dispatchers.Main) {
@@ -468,26 +480,19 @@ internal class HomeBillSheetsController(
             btnRefund.visibility = View.VISIBLE
         }
 
-        fun updateExcludeStatsButton() {
-            if (currentExcludeFromStats) {
-                btnExcludeStats.text = "不计入"
-                btnExcludeStats.setBackgroundResource(R.drawable.bg_dialog_button_outline)
-                btnExcludeStats.setTextColor(fragment.requireContext().getColor(R.color.text_secondary))
-            } else {
-                btnExcludeStats.text = "计入"
-                btnExcludeStats.setBackgroundResource(R.drawable.bg_dialog_button_primary)
-                btnExcludeStats.setTextColor(fragment.requireContext().getColor(R.color.dialog_button_primary_text))
-            }
-        }
-        updateExcludeStatsButton()
-
-        btnExcludeStats.setOnClickListener {
-            currentExcludeFromStats = !currentExcludeFromStats
-            updateExcludeStatsButton()
-            fragment.lifecycleScope.launch(Dispatchers.IO) {
-                val db = AppDatabase.getDatabase(fragment.requireContext())
-                com.taostudio.tapaccounting.logic.BillMutationService.setExcludeFromStats(db, bill, currentExcludeFromStats)
-            }
+        BillDetailStatsToggle.bind(
+            btnExcludeStats,
+            bill = bill,
+            context = fragment.requireContext(),
+            scope = fragment.lifecycleScope
+        ) { excluded ->
+            tvAmount.setTextColor(
+                when {
+                    excluded -> Color.parseColor("#9AA1AA")
+                    bill.type == Bill.TYPE_INCOME -> Color.parseColor("#4CAF50")
+                    else -> BillColors.expense
+                }
+            )
         }
 
         btnRefund.setOnClickListener {

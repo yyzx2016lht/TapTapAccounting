@@ -719,6 +719,15 @@
     <string name="recorded_at">记录于 %1$s</string>
     <string name="exclude">不计入</string>
     <string name="include">计入</string>
+    <string name="include_done">已计入</string>
+    <string name="close_symbol">✕</string>
+    <string name="exclude_from_stats_short">不计入统计</string>
+    <string name="toast_exclude_from_stats">已设为不计入收支统计</string>
+    <string name="toast_include_from_stats">已恢复计入收支统计</string>
+    <string name="toast_exclude_from_stats_fmt">已将 %1$d 条账单设为不计入收支统计</string>
+    <string name="toast_include_from_stats_fmt">已将 %1$d 条账单恢复计入收支统计</string>
+    <string name="toast_exclude_stats_update_failed">修改失败，请稍后重试</string>
+    <string name="toast_exclude_stats_not_owner">只有自己创建的账单才能修改</string>
     <string name="confirm_delete">确认删除</string>
     <string name="confirm_delete_message">删除后可在回收站恢复，是否继续？</string>
     <string name="month_format">%1$d月</string>
@@ -761,9 +770,6 @@
     <string name="retrying_with_vision">正在使用视觉模型重试…</string>
     <string name="verify_receipt_hint">请核对小票内容，可补充时间、账户等信息</string>
     <string name="parse_failed_retry">解析失败，请修改后重试</string>
-    <string name="single_bill">单笔</string>
-    <string name="multi_bill">多笔</string>
-    <string name="bill_mode">账单模式</string>
     <string name="swap_accounts">互换转出与转入账户</string>
     <string name="screenshot_recognition">截屏识别</string>
     <string name="image_accounting">图片记账</string>

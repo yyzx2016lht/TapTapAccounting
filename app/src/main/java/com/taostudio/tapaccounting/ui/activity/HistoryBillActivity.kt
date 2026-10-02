@@ -569,6 +569,7 @@ class HistoryBillActivity : AppCompatActivity() {
                 tvAmount.text = amountText
 
                 val amountColor = when {
+                    bill.excludeFromStats -> Color.parseColor("#9AA1AA")
                     isRefund -> Color.parseColor("#9AA1AA")
                     bill.type == Bill.TYPE_EXPENSE -> BillColors.expense
                     bill.type == Bill.TYPE_INCOME -> BillColors.income

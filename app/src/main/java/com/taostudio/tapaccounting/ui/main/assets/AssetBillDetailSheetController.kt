@@ -30,8 +30,10 @@ import com.taostudio.tapaccounting.data.local.entity.Bill
 import com.taostudio.tapaccounting.logic.BillAssetImpactService
 import com.taostudio.tapaccounting.logic.BillDisplayFormatter
 import com.taostudio.tapaccounting.logic.CurrencyManager
+import com.taostudio.tapaccounting.logic.BillMutationService
 import com.taostudio.tapaccounting.ui.activity.EditBillActivity
 import com.taostudio.tapaccounting.ui.dialog.OverlayDialogs
+import com.taostudio.tapaccounting.ui.common.BillDetailStatsToggle
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -379,6 +381,7 @@ internal class AssetBillDetailSheetController(
             }
             tvAmount.setTextColor(
                 when {
+                    bill.excludeFromStats -> Color.parseColor("#9AA1AA")
                     isRefund -> Color.parseColor("#9AA1AA")
                     bill.type == Bill.TYPE_EXPENSE -> BillColors.expense
                     bill.type == Bill.TYPE_INCOME -> BillColors.income
@@ -443,20 +446,20 @@ internal class AssetBillDetailSheetController(
         val btnRefund = view.findViewById<View>(R.id.btn_refund)
         val btnEdit = view.findViewById<View>(R.id.btn_edit)
         val btnExcludeStats = view.findViewById<TextView>(R.id.btn_exclude_stats)
-        var currentExcludeFromStats = bill.excludeFromStats
-
-        fun updateExcludeStatsButton() {
-            // 标签写「点了会怎样」，不是当前状态：现在计入中 → 按下去会排除
-            btnExcludeStats.text = if (currentExcludeFromStats) {
-                activity.getString(R.string.include)
-            } else {
-                activity.getString(R.string.exclude)
-            }
-            // 与 退款/编辑 同级的描边样式：可逆的状态开关不该被抬成主操作
-            btnExcludeStats.setBackgroundResource(R.drawable.bg_dialog_button_outline)
-            btnExcludeStats.setTextColor(activity.getColor(R.color.text_secondary))
+        BillDetailStatsToggle.bind(
+            btnExcludeStats,
+            bill = bill,
+            context = activity,
+            scope = scope
+        ) { excluded ->
+            tvAmount.setTextColor(
+                when {
+                    excluded -> Color.parseColor("#9AA1AA")
+                    bill.type == Bill.TYPE_INCOME -> BillColors.income
+                    else -> BillColors.expense
+                }
+            )
         }
-        updateExcludeStatsButton()
 
         if (isRefund) {
             btnExcludeStats.visibility = View.GONE
@@ -465,14 +468,6 @@ internal class AssetBillDetailSheetController(
             btnRefund.visibility = View.GONE
         } else {
             btnRefund.visibility = View.VISIBLE
-        }
-
-        btnExcludeStats.setOnClickListener {
-            currentExcludeFromStats = !currentExcludeFromStats
-            updateExcludeStatsButton()
-            scope.launch(Dispatchers.IO) {
-                com.taostudio.tapaccounting.logic.BillMutationService.setExcludeFromStats(db, bill, currentExcludeFromStats)
-            }
         }
 
         btnRefund.setOnClickListener {

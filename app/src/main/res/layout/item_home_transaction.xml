@@ -107,6 +107,17 @@
                 tools:text="成员1" />
 
             <TextView
+                android:id="@+id/tv_bill_exclude_stats"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="4dp"
+                android:text="@string/exclude_from_stats_short"
+                android:textColor="#9AA1AA"
+                android:textSize="@dimen/text_size_11"
+                android:visibility="gone"
+                tools:visibility="visible" />
+
+            <TextView
                 android:id="@+id/tv_bill_asset"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"

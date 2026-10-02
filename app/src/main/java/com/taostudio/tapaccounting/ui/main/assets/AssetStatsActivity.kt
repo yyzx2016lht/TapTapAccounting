@@ -138,6 +138,7 @@ class AssetStatsActivity : AppCompatActivity() {
     private lateinit var btnMsSelectAll: TextView
     private lateinit var btnMsMove: TextView
     private lateinit var btnMsDelete: TextView
+    private lateinit var btnMsExcludeStats: TextView
     private lateinit var nsvContent: NestedScrollView
     private lateinit var appBarStats: View
 
@@ -297,6 +298,7 @@ class AssetStatsActivity : AppCompatActivity() {
         btnMsSelectAll = findViewById(R.id.btn_ms_select_all)
         btnMsMove = findViewById(R.id.btn_ms_move)
         btnMsDelete = findViewById(R.id.btn_ms_delete)
+        btnMsExcludeStats = findViewById(R.id.btn_ms_exclude_stats)
         nsvContent = findViewById(R.id.nsv_content)
         appBarStats = findViewById(R.id.appbar_stats)
 
@@ -481,6 +483,22 @@ class AssetStatsActivity : AppCompatActivity() {
                 }
             }
         }
+        btnMsExcludeStats.setOnClickListener {
+            val targets = billAdapter.getSelectedBills()
+            if (targets.isEmpty()) return@setOnClickListener
+            com.taostudio.tapaccounting.ui.common.BillStatsMultiSelect.apply(
+                context = this,
+                scope = lifecycleScope,
+                bills = targets
+            ) {
+                // 保留多选模式，只清空勾选，方便连续处理多批。
+                billAdapter.deselectAll()
+                filteredBillsCache.clear()
+                billRowsCache.clear()
+                categoryBreakdownCache.clear()
+                loadAssetAndBills()
+            }
+        }
         updateStatsMultiSelectUi(0)
     }
 
@@ -488,10 +506,13 @@ class AssetStatsActivity : AppCompatActivity() {
         val active = billAdapter.isMultiSelectMode
         layoutMultiSelectActions.visibility = if (active) View.VISIBLE else View.GONE
         val hasSelection = selectedCount > 0
-        btnMsCancel.text = getString(R.string.exit_multi_select)
         btnMsDelete.text = if (selectedCount > 0) getString(R.string.delete_fmt, selectedCount) else getString(R.string.delete_label)
         btnMsDelete.isEnabled = hasSelection
         btnMsMove.isEnabled = hasSelection
+        com.taostudio.tapaccounting.ui.common.BillStatsMultiSelect.refreshButton(
+            btnMsExcludeStats,
+            billAdapter.selectedBills.toList()
+        )
         btnMsDelete.alpha = if (hasSelection) 1f else 0.45f
         btnMsMove.alpha = if (hasSelection) 1f else 0.45f
     }
@@ -2483,6 +2504,7 @@ class AssetStatsActivity : AppCompatActivity() {
                 }
                 tvAmount.setTextColor(
                     when {
+                        bill.excludeFromStats -> Color.parseColor("#9AA1AA")
                         isRefund -> Color.parseColor("#9AA1AA")
                         bill.type == Bill.TYPE_EXPENSE -> BillColors.expense
                         bill.type == Bill.TYPE_INCOME -> BillColors.income

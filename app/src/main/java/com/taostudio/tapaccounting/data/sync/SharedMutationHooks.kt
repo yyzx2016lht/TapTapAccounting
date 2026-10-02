@@ -34,6 +34,13 @@ object SharedMutationHooks {
         require(bill.memberId == local) { "只能编辑自己创建的共享账单" }
     }
 
+    /** [requireOwner] 的非抛异常版本，用于在 UI 上隐藏不可操作的入口。 */
+    suspend fun isOwner(db: AppDatabase, bill: Bill): Boolean {
+        if (!bill.isShared) return true
+        val local = db.sharedLedgerDao().getByBookName(bill.bookName)?.localMemberId ?: return true
+        return bill.memberId == local
+    }
+
     suspend fun enqueueSaved(db: AppDatabase, bill: Bill, action: String = "update") {
         if (!bill.isShared || bill.sharedId == null || bill.memberId == null) return
         val book = db.bookDao().getByName(bill.bookName) ?: return

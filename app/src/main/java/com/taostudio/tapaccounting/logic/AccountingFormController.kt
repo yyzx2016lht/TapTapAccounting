@@ -151,7 +151,6 @@ class AccountingFormController(
         setupDefaults()
         btnCancel.text = ctx.getString(R.string.cancel)
         btnSave.text = ctx.getString(R.string.save_and_record)
-        setupModeToggle()
         applyAssetFeatureMode()
         refreshSelectionIcons()
     }
@@ -307,10 +306,6 @@ class AccountingFormController(
         // 记账页面 AI 对话入口按钮
         val btnOpenAiChat = rootView.findViewById<android.view.View>(R.id.btn_open_ai_chat)
         btnOpenAiChat?.visibility = View.GONE
-    }
-
-    private fun setupModeToggle() {
-        rootView.findViewById<View>(R.id.layout_bill_mode_switch)?.visibility = View.GONE
     }
 
     private fun isCurrentUiMultiMode(): Boolean = true

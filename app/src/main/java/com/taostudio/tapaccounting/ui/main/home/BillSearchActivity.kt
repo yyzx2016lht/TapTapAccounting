@@ -42,6 +42,7 @@ class BillSearchActivity : AppCompatActivity() {
     private lateinit var tvScope: TextView
     private lateinit var layoutMultiSelectActions: View
     private lateinit var btnMsDelete: TextView
+    private lateinit var btnMsExcludeStats: TextView
 
     private val db by lazy { AppDatabase.getDatabase(this) }
     private val adapter = HomeAdapter().apply { showChart = false }
@@ -66,6 +67,7 @@ class BillSearchActivity : AppCompatActivity() {
         tvScope = findViewById(R.id.tv_bill_search_scope)
         layoutMultiSelectActions = findViewById(R.id.layout_multi_select_actions)
         btnMsDelete = findViewById(R.id.btn_ms_delete)
+        btnMsExcludeStats = findViewById(R.id.btn_ms_exclude_stats)
 
         findViewById<View>(R.id.btn_bill_search_back).setOnClickListener { handleBackPressed() }
         onBackPressedDispatcher.addCallback(this) {
@@ -133,13 +135,21 @@ class BillSearchActivity : AppCompatActivity() {
         adapter.onSelectionChanged = { count ->
             layoutMultiSelectActions.visibility = if (adapter.isMultiSelectMode) View.VISIBLE else View.GONE
             btnMsDelete.text = if (count > 0) "删除($count)" else "删除"
+            com.taostudio.tapaccounting.ui.common.BillStatsMultiSelect.refreshButton(
+                btnMsExcludeStats,
+                adapter.selectedBills.toList()
+            )
         }
 
         findViewById<View>(R.id.btn_ms_cancel).setOnClickListener {
             adapter.clearSelection()
         }
         findViewById<View>(R.id.btn_ms_select_all).setOnClickListener {
-            val allCount = adapter.items.count { it is HomeAdapter.ListItem.Item }
+            val allCount = adapter.items.count {
+                it is HomeAdapter.ListItem.Item &&
+                    !it.displayBill.isDeprecated &&
+                    adapter.isOwnedByLocal(it.displayBill.bill)
+            }
             if (allCount > 0 && adapter.selectedBills.size >= allCount) {
                 adapter.deselectAll()
             } else {
@@ -150,6 +160,21 @@ class BillSearchActivity : AppCompatActivity() {
             val billsToMove = adapter.getSelectedBills()
             if (billsToMove.isEmpty()) return@setOnClickListener
             showMoveToBookDialog(billsToMove)
+        }
+        btnMsExcludeStats.setOnClickListener {
+            val bills = adapter.getSelectedBills()
+            if (bills.isEmpty()) return@setOnClickListener
+            com.taostudio.tapaccounting.ui.common.BillStatsMultiSelect.apply(
+                context = this,
+                scope = lifecycleScope,
+                bills = bills
+            ) { exclude ->
+                val ids = bills.map { it.id }.toSet()
+                allBills = allBills.map { if (it.id in ids) it.copy(excludeFromStats = exclude) else it }
+                // 保留多选模式，只清空勾选，方便连续处理多批。
+                adapter.deselectAll()
+                applyFilter(etSearch.text?.toString().orEmpty().trim())
+            }
         }
         btnMsDelete.setOnClickListener {
             val billsToDelete = adapter.getSelectedBills()

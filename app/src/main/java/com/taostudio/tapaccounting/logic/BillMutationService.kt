@@ -488,6 +488,27 @@ object BillMutationService {
         notifyWidgetsChanged()
     }
 
+    /**
+     * 批量把多笔账单设为（不）计入统计。先逐条做共享账本所有者校验，
+     * 再在一个事务内写库并入队同步；任何一条越权都会整批失败，绝不部分生效。
+     */
+    suspend fun setExcludeFromStatsBatch(db: AppDatabase, bills: List<Bill>, exclude: Boolean) {
+        val targets = bills.distinctBy { it.id }
+            .filter { it.id > 0L }
+            .mapNotNull { db.billDao().getBillById(it.id) }
+            .filter { it.excludeFromStats != exclude }
+        if (targets.isEmpty()) return
+        targets.forEach { SharedMutationHooks.requireOwner(db, it) }
+        db.withTransaction {
+            targets.forEach { bill ->
+                val saved = SharedMutationHooks.prepareLocalBill(db, bill.copy(excludeFromStats = exclude))
+                db.billDao().updateBill(saved)
+                SharedMutationHooks.enqueueSaved(db, saved)
+            }
+        }
+        notifyWidgetsChanged()
+    }
+
     suspend fun validateRequiredRatesForBill(db: AppDatabase, bill: Bill) {
         val sourceAsset = bill.accountId?.let { db.assetDao().getAssetById(it) }
             ?: bill.accountName.takeIf { it.isNotBlank() }?.let { db.assetDao().getAssetByName(it) }

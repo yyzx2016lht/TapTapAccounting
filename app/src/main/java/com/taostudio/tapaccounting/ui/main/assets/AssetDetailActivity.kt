@@ -94,6 +94,7 @@ class AssetDetailActivity : AppCompatActivity() {
     private lateinit var btnMsSelectAll: TextView
     private lateinit var btnMsMove: TextView
     private lateinit var btnMsDelete: TextView
+    private lateinit var btnMsExcludeStats: TextView
     private lateinit var toolbar: androidx.appcompat.widget.Toolbar
     private lateinit var layoutBalancePanelTap: View
     private lateinit var tvAssetBalance: TextView
@@ -172,6 +173,7 @@ class AssetDetailActivity : AppCompatActivity() {
         btnMsSelectAll = findViewById(R.id.btn_ms_select_all)
         btnMsMove = findViewById(R.id.btn_ms_move)
         btnMsDelete = findViewById(R.id.btn_ms_delete)
+        btnMsExcludeStats = findViewById(R.id.btn_ms_exclude_stats)
 
         toolbar = findViewById(R.id.toolbar)
         toolbar.setNavigationOnClickListener { finish() }
@@ -362,6 +364,19 @@ class AssetDetailActivity : AppCompatActivity() {
                 }
             }
         }
+        btnMsExcludeStats.setOnClickListener {
+            val targets = adapter.getSelectedBills()
+            if (targets.isEmpty()) return@setOnClickListener
+            com.taostudio.tapaccounting.ui.common.BillStatsMultiSelect.apply(
+                context = this,
+                scope = lifecycleScope,
+                bills = targets
+            ) {
+                // 保留多选模式，只清空勾选，方便连续处理多批。
+                adapter.deselectAll()
+                applyBillSearch()
+            }
+        }
         updateDetailMultiSelectUi(0)
     }
 
@@ -369,10 +384,13 @@ class AssetDetailActivity : AppCompatActivity() {
         val active = adapter.isMultiSelectMode
         layoutMultiSelectActions.visibility = if (active) View.VISIBLE else View.GONE
         val hasSelection = selectedCount > 0
-        btnMsCancel.text = "退出多选"
         btnMsDelete.text = if (selectedCount > 0) "删除($selectedCount)" else "删除"
         btnMsDelete.isEnabled = hasSelection
         btnMsMove.isEnabled = hasSelection
+        com.taostudio.tapaccounting.ui.common.BillStatsMultiSelect.refreshButton(
+            btnMsExcludeStats,
+            adapter.selectedBills.toList()
+        )
         btnMsDelete.alpha = if (hasSelection) 1f else 0.45f
         btnMsMove.alpha = if (hasSelection) 1f else 0.45f
         if (active) {
@@ -1334,6 +1352,7 @@ class AssetDetailActivity : AppCompatActivity() {
                 }
                 tvAmount.setTextColor(
                     when {
+                        bill.excludeFromStats -> Color.parseColor("#9AA1AA")
                         isRefund -> Color.parseColor("#9AA1AA")
                         bill.type == Bill.TYPE_EXPENSE -> BillColors.expense
                         bill.type == Bill.TYPE_INCOME -> BillColors.income

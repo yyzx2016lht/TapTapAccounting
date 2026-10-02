@@ -137,6 +137,16 @@ class HomeAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
     }
     private fun isRefundBill(bill: Bill): Boolean = bill.subType == Bill.SUBTYPE_REFUND
 
+    /** 共享账本里别人创建的账单不可编辑/删除，也不可多选。 */
+    fun isOwnedByLocal(bill: Bill): Boolean {
+        if (!bill.isShared) return true
+        val ctx = memberContexts[BookAccountManager.normalizeBookName(bill.bookName)] ?: return true
+        return bill.memberId != null && bill.memberId == ctx.localMemberId
+    }
+
+    private fun isSelectable(bill: Bill, isDeprecated: Boolean): Boolean =
+        !isDeprecated && isOwnedByLocal(bill)
+
     private fun refundAmountOfExpenseBill(bill: Bill): Double {
         return BillDisplayFormatter.refundAmountOfExpenseBill(bill)
     }
@@ -297,7 +307,11 @@ class HomeAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
     fun selectAll() {
         isMultiSelectMode = true
         selectedBills.clear()
-        selectedBills.addAll(rawBills.filterNot { it.isDeprecated }.map { it.bill })
+        selectedBills.addAll(
+            rawBills.filterNot { it.isDeprecated }
+                .map { it.bill }
+                .filter { isOwnedByLocal(it) }
+        )
         onSelectionChanged?.invoke(selectedBills.size)
         notifyItemRangeChanged(0, items.size, PAYLOAD_MODE_CHANGE)
     }
@@ -310,7 +324,8 @@ class HomeAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
             .takeWhile { it !is ListItem.Header }
             .mapNotNull { item ->
                 val displayBill = (item as? ListItem.Item)?.displayBill ?: return@mapNotNull null
-                if (displayBill.isDeprecated) null else displayBill.bill
+                if (displayBill.isDeprecated) null
+                else displayBill.bill.takeIf { isOwnedByLocal(it) }
             }
             .toList()
     }
@@ -528,6 +543,7 @@ class HomeAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
         private val tvAmount: TextView = itemView.findViewById(R.id.tv_bill_amount)
         private val tvMember: TextView = itemView.findViewById(R.id.tv_bill_member)
         private val tvAsset: TextView = itemView.findViewById(R.id.tv_bill_asset)
+        private val tvExcludeStats: TextView = itemView.findViewById(R.id.tv_bill_exclude_stats)
         private val tvTime: TextView = itemView.findViewById(R.id.tv_bill_time)
         private val tvDetail: TextView = itemView.findViewById(R.id.tv_bill_detail)
         private val checkBox: CheckBox = itemView.findViewById(R.id.cb_bill_select)
@@ -540,6 +556,7 @@ class HomeAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
         var iconJob: Job? = null
         private var boundBill: Bill? = null
         private var boundDeprecated: Boolean = false
+        private var boundSelectable: Boolean = true
 
         init {
             checkBox.isClickable = false
@@ -549,6 +566,7 @@ class HomeAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
                 val bill = boundBill ?: return@setOnClickListener
                 if (boundDeprecated) return@setOnClickListener
                 if (isMultiSelectMode) {
+                    if (!boundSelectable) return@setOnClickListener
                     if (selectedBills.contains(bill)) {
                         selectedBills.remove(bill)
                     } else {
@@ -569,6 +587,7 @@ class HomeAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
                 val bill = boundBill ?: return@setOnLongClickListener true
                 if (boundDeprecated) return@setOnLongClickListener true
                 if (!isMultiSelectMode) {
+                    if (!boundSelectable) return@setOnLongClickListener true
                     toggleMultiSelectMode()
                     selectedBills.add(bill)
                     val pos = adapterPosition
@@ -585,13 +604,17 @@ class HomeAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
         fun updateMode(isSelected: Boolean, animate: Boolean) {
             if (isMultiSelectMode) {
                 checkBox.visibility = View.VISIBLE
-                checkBox.isChecked = isSelected
+                checkBox.isEnabled = boundSelectable
+                checkBox.alpha = if (boundSelectable) 1f else 0.45f
+                checkBox.isChecked = boundSelectable && isSelected
                 itemView.animate().cancel()
                 itemView.scaleX = 1f
                 itemView.scaleY = 1f
                 itemView.translationY = 0f
             } else {
                 checkBox.visibility = View.GONE
+                checkBox.isEnabled = true
+                checkBox.alpha = 1f
                 checkBox.isChecked = false
                 itemView.animate().cancel()
                 itemView.scaleX = 1f
@@ -602,7 +625,7 @@ class HomeAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
         }
 
         fun updateSelection(isSelected: Boolean) {
-            checkBox.isChecked = isSelected
+            checkBox.isChecked = boundSelectable && isSelected
         }
 
         private fun setIconSizeDp(dp: Int) {
@@ -627,6 +650,7 @@ class HomeAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
             val isDeprecated = displayBill.isDeprecated
             boundBill = bill
             boundDeprecated = isDeprecated
+            boundSelectable = isSelectable(bill, isDeprecated)
             val isTransfer = bill.type == Bill.TYPE_TRANSFER
             val isRepayment = isTransfer && bill.subType == Bill.SUBTYPE_REPAYMENT
             val isRefund = isRefundBill(bill)
@@ -700,6 +724,8 @@ class HomeAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
 
             if (isDeprecated) {
                 tvAmount.setTextColor(amountColorRefund)
+            } else if (bill.excludeFromStats) {
+                tvAmount.setTextColor(amountColorRefund)
             } else if (isRefund) {
                 tvAmount.setTextColor(amountColorRefund)
             } else if (bill.type == Bill.TYPE_EXPENSE) {
@@ -764,6 +790,8 @@ class HomeAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
             } else {
                 tvAsset.visibility = View.GONE
             }
+
+            tvExcludeStats.visibility = if (bill.excludeFromStats && !isDeprecated) View.VISIBLE else View.GONE
 
             val suffix = detailSuffixProvider?.invoke(bill).orEmpty()
             val (primaryText, secondaryText) = BillDisplayFormatter.resolvePrimarySecondaryText(

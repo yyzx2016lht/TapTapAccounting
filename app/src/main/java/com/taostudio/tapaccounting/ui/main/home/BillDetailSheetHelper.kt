@@ -29,6 +29,7 @@ import com.taostudio.tapaccounting.logic.BillMutationService
 import com.taostudio.tapaccounting.logic.CurrencyManager
 import com.taostudio.tapaccounting.ui.activity.EditBillActivity
 import com.taostudio.tapaccounting.ui.dialog.OverlayDialogs
+import com.taostudio.tapaccounting.ui.common.BillDetailStatsToggle
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -79,8 +80,6 @@ object BillDetailSheetHelper {
         val isRepayment = isTransfer && bill.subType == Bill.SUBTYPE_REPAYMENT
         val isRefund = bill.subType == Bill.SUBTYPE_REFUND
         var linkedOriginalForRefund: Bill? = null
-        var currentExcludeFromStats = bill.excludeFromStats
-
         tvAmountFormula.visibility = View.GONE
         layoutIncoming.visibility = View.GONE
         lineIncoming.visibility = View.GONE
@@ -183,10 +182,18 @@ object BillDetailSheetHelper {
                             }
                         }
                     }
-                    tvAmount.setTextColor(BillColors.expense)
+                    if (bill.excludeFromStats) {
+                        tvAmount.setTextColor(Color.parseColor("#9AA1AA"))
+                    } else {
+                        tvAmount.setTextColor(BillColors.expense)
+                    }
                 } else {
                     tvAmount.text = "+${HomeBillFormatHelper.formatMoney(bill.amount, bill.currency)}"
-                    tvAmount.setTextColor(Color.parseColor("#4CAF50"))
+                    if (bill.excludeFromStats) {
+                        tvAmount.setTextColor(Color.parseColor("#9AA1AA"))
+                    } else {
+                        tvAmount.setTextColor(Color.parseColor("#4CAF50"))
+                    }
                     lifecycleOwner.lifecycleScope.launch(Dispatchers.IO) {
                         val crossCurrencyText = HomeBillFormatHelper.buildCrossCurrencyDetailFormula(bill, "CNY")
                         withContext(Dispatchers.Main) {
@@ -228,27 +235,19 @@ object BillDetailSheetHelper {
             btnRefund.visibility = View.VISIBLE
         }
 
-        fun updateExcludeStatsButton() {
-            // 标签写「点了会怎样」，不是当前状态：现在计入中 → 按下去会排除。
-            // 之前写的是状态，于是「计入」这个标签对应的操作是"变成不计入"，读起来正好相反。
-            btnExcludeStats.text = if (currentExcludeFromStats) {
-                context.getString(R.string.include)
-            } else {
-                context.getString(R.string.exclude)
-            }
-            // 与 退款/编辑 同级的描边样式：这是个可逆的状态开关，不该被实心填充抬成主操作
-            btnExcludeStats.setBackgroundResource(R.drawable.bg_dialog_button_outline)
-            btnExcludeStats.setTextColor(context.getColor(R.color.text_secondary))
-        }
-        updateExcludeStatsButton()
-
-        btnExcludeStats.setOnClickListener {
-            currentExcludeFromStats = !currentExcludeFromStats
-            updateExcludeStatsButton()
-            lifecycleOwner.lifecycleScope.launch(Dispatchers.IO) {
-                val db = AppDatabase.getDatabase(context)
-                com.taostudio.tapaccounting.logic.BillMutationService.setExcludeFromStats(db, bill, currentExcludeFromStats)
-            }
+        BillDetailStatsToggle.bind(
+            btnExcludeStats,
+            bill = bill,
+            context = context,
+            scope = lifecycleOwner.lifecycleScope
+        ) { excluded ->
+            tvAmount.setTextColor(
+                when {
+                    excluded -> Color.parseColor("#9AA1AA")
+                    bill.type == Bill.TYPE_INCOME -> Color.parseColor("#4CAF50")
+                    else -> BillColors.expense
+                }
+            )
         }
 
         btnRefund.setOnClickListener {
@@ -382,10 +381,14 @@ object BillDetailSheetHelper {
             tvTime.setTextColor(Color.parseColor("#8A8A8E"))
             tvAmount.setTextColor(Color.parseColor("#8A8A8E"))
         } else {
-            when (bill.type) {
-                Bill.TYPE_EXPENSE -> tvAmount.setTextColor(BillColors.expense)
-                Bill.TYPE_INCOME -> tvAmount.setTextColor(BillColors.income)
-                else -> tvAmount.setTextColor(Color.parseColor("#5F6772"))
+            if (bill.excludeFromStats) {
+                tvAmount.setTextColor(Color.parseColor("#8A8A8E"))
+            } else {
+                when (bill.type) {
+                    Bill.TYPE_EXPENSE -> tvAmount.setTextColor(BillColors.expense)
+                    Bill.TYPE_INCOME -> tvAmount.setTextColor(BillColors.income)
+                    else -> tvAmount.setTextColor(Color.parseColor("#5F6772"))
+                }
             }
         }
 

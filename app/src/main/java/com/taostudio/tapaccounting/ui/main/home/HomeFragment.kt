@@ -215,6 +215,7 @@ class HomeFragment : Fragment() {
     private lateinit var btnMsSelectAll: View
     private lateinit var btnMsDelete: View
     private lateinit var btnMsMoveBook: View
+    private lateinit var btnMsExcludeStats: View
     private var multiSelectActionsBaseBottomMargin: Int = 0
 
     // Settings state
@@ -367,6 +368,7 @@ class HomeFragment : Fragment() {
         btnMsSelectAll = view.findViewById(R.id.btn_ms_select_all)
         btnMsDelete = view.findViewById(R.id.btn_ms_delete)
         btnMsMoveBook = view.findViewById(R.id.btn_ms_move_book)
+        btnMsExcludeStats = view.findViewById(R.id.btn_ms_exclude_stats)
         multiSelectActionsBaseBottomMargin =
             (layoutMultiSelectActions.layoutParams as? ViewGroup.MarginLayoutParams)?.bottomMargin ?: 0
         multiSelectController = HomeMultiSelectController(
@@ -376,6 +378,7 @@ class HomeFragment : Fragment() {
             btnMsSelectAll = btnMsSelectAll,
             btnMsDelete = btnMsDelete,
             btnMsMoveBook = btnMsMoveBook,
+            btnMsExcludeStats = btnMsExcludeStats,
             multiSelectActionsBaseBottomMargin = multiSelectActionsBaseBottomMargin,
             getAvailableBookNames = { availableBookNames },
             getHomeAdapter = { homeAdapter },
@@ -445,6 +448,7 @@ class HomeFragment : Fragment() {
             layoutEmptyView = layoutEmptyView,
             layoutMultiSelectActions = layoutMultiSelectActions,
             btnMsDelete = btnMsDelete,
+            btnMsExcludeStats = btnMsExcludeStats,
             swipeRefreshLayout = swipeRefreshLayout,
             cvChartContainer = cvChartContainer,
             layoutStickyTopBar = layoutStickyTopBar,

@@ -27,6 +27,7 @@ internal class HomeMultiSelectController(
     private val btnMsSelectAll: View,
     private val btnMsDelete: View,
     private val btnMsMoveBook: View,
+    private val btnMsExcludeStats: View,
     private val multiSelectActionsBaseBottomMargin: Int,
     private val getAvailableBookNames: () -> List<String>,
     private val getHomeAdapter: () -> HomeAdapter,
@@ -51,6 +52,20 @@ internal class HomeMultiSelectController(
             val billsToMove = getHomeAdapter().selectedBills.toList()
             if (billsToMove.isEmpty()) return@setOnClickListener
             showMoveToBookDialog(billsToMove)
+        }
+        btnMsExcludeStats.setOnClickListener {
+            val adapter = getHomeAdapter()
+            val bills = adapter.selectedBills.toList()
+            if (bills.isEmpty()) return@setOnClickListener
+            com.taostudio.tapaccounting.ui.common.BillStatsMultiSelect.apply(
+                context = fragment.requireContext(),
+                scope = fragment.lifecycleScope,
+                bills = bills
+            ) {
+                // 不退出多选，只清空勾选，方便连续处理多批。
+                adapter.deselectAll()
+                onDataChanged()
+            }
         }
         btnMsDelete.setOnClickListener {
             val billsToDelete = getHomeAdapter().selectedBills.toList()

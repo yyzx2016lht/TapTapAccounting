@@ -188,9 +188,6 @@ class OverlayManager(private val ctx: Context) {
             cornerRadius = ctx.resources.displayMetrics.density * 16
         }
 
-        overlayView?.findViewById<View>(R.id.layout_bill_mode_switch)?.visibility = View.GONE
-        overlayView?.findViewById<RadioGroup>(R.id.rg_bill_mode)?.visibility = View.GONE
-
         overlayParams = WindowManager.LayoutParams().apply {
             width = (ctx.resources.displayMetrics.widthPixels * 0.9f).toInt()
             height = WindowManager.LayoutParams.WRAP_CONTENT

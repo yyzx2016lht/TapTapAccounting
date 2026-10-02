@@ -422,14 +422,13 @@
 
         <TextView
             android:id="@+id/btn_ms_cancel"
-            android:layout_width="0dp"
+            android:layout_width="48dp"
             android:layout_height="48dp"
-            android:layout_weight="1"
             android:background="@drawable/shape_button_outline"
             android:gravity="center"
-            android:text="@string/exit_multi_select"
+            android:text="@string/close_symbol"
             android:textColor="@color/text_secondary"
-            android:textSize="@dimen/text_size_16" />
+            android:textSize="@dimen/text_size_18" />
 
         <TextView
             android:id="@+id/btn_ms_select_all"
@@ -453,6 +452,18 @@
             android:gravity="center"
             android:text="@string/move"
             android:textColor="@color/brand_primary"
+            android:textSize="@dimen/text_size_16" />
+
+        <TextView
+            android:id="@+id/btn_ms_exclude_stats"
+            android:layout_width="0dp"
+            android:layout_height="48dp"
+            android:layout_marginStart="8dp"
+            android:layout_weight="1"
+            android:background="@drawable/shape_button_outline"
+            android:gravity="center"
+            android:text="@string/exclude"
+            android:textColor="@color/text_primary"
             android:textSize="@dimen/text_size_16" />
 
         <TextView

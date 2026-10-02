@@ -50,10 +50,12 @@ import com.taostudio.tapaccounting.data.local.entity.Bill
 import com.taostudio.tapaccounting.logic.BillStatsContribution
 import com.taostudio.tapaccounting.logic.BillDisplayFormatter
 import com.taostudio.tapaccounting.logic.CurrencyManager
+import com.taostudio.tapaccounting.logic.BillMutationService
 import com.taostudio.tapaccounting.ui.activity.EditBillActivity
 import com.taostudio.tapaccounting.ui.dialog.OverlayDialogs
 import com.taostudio.tapaccounting.ui.main.SharedYearMonthSession
 import com.taostudio.tapaccounting.ui.main.YearMonthPickerDialog
+import com.taostudio.tapaccounting.ui.common.BillDetailStatsToggle
 import com.taostudio.tapaccounting.viewscope.LedgerMemberScope
 import com.taostudio.tapaccounting.viewscope.LedgerViewScopeStore
 import com.taostudio.tapaccounting.viewscope.ResolvedLedgerViewScope
@@ -95,6 +97,7 @@ class CalendarActivity : AppCompatActivity() {
     private lateinit var btnMsCancel: TextView
     private lateinit var btnMsSelectAll: TextView
     private lateinit var btnMsDelete: TextView
+    private lateinit var btnMsExcludeStats: TextView
     private var isMultiSelectModeActive = false
 
     private var selectedYear: Int = 2025
@@ -238,6 +241,7 @@ class CalendarActivity : AppCompatActivity() {
         btnMsCancel = findViewById(R.id.btn_ms_cancel)
         btnMsSelectAll = findViewById(R.id.btn_ms_select_all)
         btnMsDelete = findViewById(R.id.btn_ms_delete)
+        btnMsExcludeStats = findViewById(R.id.btn_ms_exclude_stats)
     }
 
     private fun updateWeekdaysHeader() {
@@ -297,6 +301,19 @@ class CalendarActivity : AppCompatActivity() {
                 dailyAdapter.clearSelection()
                 loadDataForMonth()
                 Toast.makeText(this@CalendarActivity, "已删除 ${billsToDelete.size} 条账单", Toast.LENGTH_SHORT).show()
+            }
+        }
+        btnMsExcludeStats.setOnClickListener {
+            val bills = dailyAdapter.selectedBills.toList()
+            if (bills.isEmpty()) return@setOnClickListener
+            com.taostudio.tapaccounting.ui.common.BillStatsMultiSelect.apply(
+                context = this,
+                scope = lifecycleScope,
+                bills = bills
+            ) {
+                // 保留多选模式，只清空勾选，方便连续处理多批。
+                dailyAdapter.deselectAll()
+                loadDataForMonth()
             }
         }
     }
@@ -445,6 +462,10 @@ class CalendarActivity : AppCompatActivity() {
                 isMultiSelectModeActive = true
                 layoutMultiSelectActions.visibility = View.VISIBLE
                 btnMsDelete.text = if (count > 0) "删除($count)" else "删除"
+                com.taostudio.tapaccounting.ui.common.BillStatsMultiSelect.refreshButton(
+                    btnMsExcludeStats,
+                    dailyAdapter.selectedBills.toList()
+                )
             } else {
                 isMultiSelectModeActive = false
                 layoutMultiSelectActions.visibility = View.GONE
@@ -526,10 +547,14 @@ class CalendarActivity : AppCompatActivity() {
             tvCategory.setTextColor(Color.parseColor("#1A1A1A"))
             tvDetail.setTextColor(Color.parseColor("#8A8A8E"))
             tvTime.setTextColor(Color.parseColor("#8A8A8E"))
-            when (bill.type) {
-                Bill.TYPE_EXPENSE -> tvAmount.setTextColor(BillColors.expense)
-                Bill.TYPE_INCOME -> tvAmount.setTextColor(BillColors.income)
-                else -> tvAmount.setTextColor(Color.parseColor("#5F6772"))
+            if (bill.excludeFromStats) {
+                tvAmount.setTextColor(Color.parseColor("#9AA1AA"))
+            } else {
+                when (bill.type) {
+                    Bill.TYPE_EXPENSE -> tvAmount.setTextColor(BillColors.expense)
+                    Bill.TYPE_INCOME -> tvAmount.setTextColor(BillColors.income)
+                    else -> tvAmount.setTextColor(Color.parseColor("#5F6772"))
+                }
             }
         }
 
@@ -715,8 +740,6 @@ class CalendarActivity : AppCompatActivity() {
         val isRepayment = isTransfer && bill.subType == Bill.SUBTYPE_REPAYMENT
         val isRefund = isRefundBill(bill)
         var linkedOriginalForRefund: Bill? = null
-        var currentExcludeFromStats = bill.excludeFromStats
-
         tvAmountFormula.visibility = View.GONE
         view.findViewById<LinearLayout>(R.id.layout_refund_records_section).visibility = View.GONE
         view.findViewById<LinearLayout>(R.id.layout_original_bill_section).visibility = View.GONE
@@ -784,10 +807,18 @@ class CalendarActivity : AppCompatActivity() {
                     } else {
                         tvAmount.text = "-${formatMoney(bill.amount, bill.currency)}"
                     }
-                    tvAmount.setTextColor(BillColors.expense)
+                    if (bill.excludeFromStats) {
+                        tvAmount.setTextColor(Color.parseColor("#9AA1AA"))
+                    } else {
+                        tvAmount.setTextColor(BillColors.expense)
+                    }
                 } else {
                     tvAmount.text = "+${formatMoney(bill.amount, bill.currency)}"
-                    tvAmount.setTextColor(Color.parseColor("#4CAF50"))
+                    if (bill.excludeFromStats) {
+                        tvAmount.setTextColor(Color.parseColor("#9AA1AA"))
+                    } else {
+                        tvAmount.setTextColor(Color.parseColor("#4CAF50"))
+                    }
                 }
             }
         }
@@ -819,26 +850,19 @@ class CalendarActivity : AppCompatActivity() {
             btnRefund.visibility = View.VISIBLE
         }
 
-        fun updateExcludeStatsButton() {
-            if (currentExcludeFromStats) {
-                btnExcludeStats.text = "不计入"
-                btnExcludeStats.setBackgroundResource(R.drawable.bg_dialog_button_outline)
-                btnExcludeStats.setTextColor(getColor(R.color.text_secondary))
-            } else {
-                btnExcludeStats.text = "计入"
-                btnExcludeStats.setBackgroundResource(R.drawable.bg_dialog_button_primary)
-                btnExcludeStats.setTextColor(getColor(R.color.dialog_button_primary_text))
-            }
-        }
-        updateExcludeStatsButton()
-
-        btnExcludeStats.setOnClickListener {
-            currentExcludeFromStats = !currentExcludeFromStats
-            updateExcludeStatsButton()
-            lifecycleScope.launch(Dispatchers.IO) {
-                val db = AppDatabase.getDatabase(this@CalendarActivity)
-                com.taostudio.tapaccounting.logic.BillMutationService.setExcludeFromStats(db, bill, currentExcludeFromStats)
-            }
+        BillDetailStatsToggle.bind(
+            btnExcludeStats,
+            bill = bill,
+            context = this,
+            scope = lifecycleScope
+        ) { excluded ->
+            tvAmount.setTextColor(
+                when {
+                    excluded -> Color.parseColor("#9AA1AA")
+                    bill.type == Bill.TYPE_INCOME -> Color.parseColor("#4CAF50")
+                    else -> BillColors.expense
+                }
+            )
         }
 
         btnRefund.setOnClickListener {

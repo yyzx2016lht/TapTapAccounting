@@ -95,7 +95,7 @@ class AccountingFormController(
     private val layoutBook: View = rootView.findViewById(R.id.layout_book)
     private val tvBook: TextView = rootView.findViewById(R.id.tv_book)
     private var amountKeypadView: View? = null
-    private var confirmKeyView: View? = null
+    private var amountKeypad: AmountKeypad? = null
     private var isAmountKeypadVisible: Boolean = false
     /** layout_form_body 首次布局后记录的高度，用于键盘显示时保持面板总高度不变 */
     private var formBodyMeasuredHeight: Int = 0
@@ -803,13 +803,13 @@ class AccountingFormController(
                 selectedRefundSourceBill = chosenBill
                 val df = java.text.SimpleDateFormat("MM-dd HH:mm", java.util.Locale.getDefault())
                 val symbol = com.taostudio.tapaccounting.logic.CurrencyManager.getSymbol(chosenBill.currency)
-                val label = "${chosenBill.categoryName.ifEmpty { ctx.getString(R.string.uncategorized) }}  ${df.format(java.util.Date(chosenBill.time))}  ${symbol}${String.format(java.util.Locale.getDefault(), "%.2f", chosenBill.amount)}"
+                val label = "${chosenBill.categoryName.ifEmpty { ctx.getString(R.string.uncategorized) }}  ${df.format(java.util.Date(chosenBill.time))}  ${symbol}${AmountExpression.format(chosenBill.amount)}"
                 tvRefundSourceBill?.text = label
                 tvRefundSourceBill?.setTextColor(android.graphics.Color.parseColor("#E53935"))
                 // 自动填充：账户、分类（金额仅在未填写时才填入）
                 val currentAmount = parseAmountInput()
                 if (currentAmount == null || currentAmount == 0.0) {
-                    etMoney.setText(String.format(java.util.Locale.getDefault(), "%.2f", chosenBill.amount))
+                    etMoney.setText(AmountExpression.format(chosenBill.amount))
                 }
                 if (tvAccount.text.toString().contains(ctx.getString(R.string.select_asset).take(2)) || tvAccount.text.isBlank()) {
                     tvAccount.text = chosenBill.accountName
@@ -914,57 +914,22 @@ class AccountingFormController(
             }
         }
 
-        val digitIds = listOf(
-            R.id.btn_key_0 to "0",
-            R.id.btn_key_1 to "1",
-            R.id.btn_key_2 to "2",
-            R.id.btn_key_3 to "3",
-            R.id.btn_key_4 to "4",
-            R.id.btn_key_5 to "5",
-            R.id.btn_key_6 to "6",
-            R.id.btn_key_7 to "7",
-            R.id.btn_key_8 to "8",
-            R.id.btn_key_9 to "9",
-            R.id.btn_key_dot to "."
+        val keypad = AmountKeypad(
+            container = keypadView,
+            editText = etMoney,
+            hapticsEnabled = { Prefs.isVibrateFeedbackEnabled(ctx) }
         )
-        digitIds.forEach { (id, value) ->
-            keypadView.findViewById<View>(id)?.setOnClickListener { appendAmountInput(value) }
-        }
-        val operatorIds = listOf(
-            R.id.btn_key_add to "+",
-            R.id.btn_key_subtract to "-",
-            R.id.btn_key_multiply to "×",
-            R.id.btn_key_divide to "÷"
-        )
-        operatorIds.forEach { (id, value) ->
-            keypadView.findViewById<View>(id)?.setOnClickListener { appendOperatorInput(value) }
-        }
-        keypadView.findViewById<View>(R.id.btn_key_delete)?.apply {
-            setOnClickListener { deleteAmountInput() }
-            setOnLongClickListener {
-                performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
-                clearAmountInput()
-                true
-            }
-        }
-        keypadView.findViewById<View>(R.id.btn_key_clear)?.setOnClickListener { clearAmountInput() }
-        confirmKeyView = keypadView.findViewById<View>(R.id.btn_key_confirm)
-        confirmKeyView?.setOnClickListener { confirmAmountInput() }
-
-        etMoney.addTextChangedListener(object : TextWatcher {
-            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
-            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = Unit
-            override fun afterTextChanged(s: Editable?) {
-                updateConfirmKeyState()
-            }
-        })
-        updateConfirmKeyState()
+        keypad.confirmButton?.setOnClickListener { confirmAmountInput() }
+        keypad.refresh()
+        amountKeypad = keypad
     }
 
     private fun showAmountKeypad() {
         etMoney.isCursorVisible = true
         val keypad = amountKeypadView ?: return
         if (isAmountKeypadVisible) return
+        // 进入编辑态前去掉格式化补出的尾零：12.00 -> 12，续写补尾数不再被多余小数挡住
+        amountKeypad?.normalizeForEditing()
         val formBody = rootView.findViewById<View>(R.id.layout_form_body)
         // 若还未记录高度（极少情况），此刻补测
         if (formBodyMeasuredHeight == 0 && formBody != null && formBody.height > 0) {
@@ -982,144 +947,39 @@ class AccountingFormController(
     }
 
     private fun hideAmountKeypad() {
-        val keypad = amountKeypadView ?: return
         if (!isAmountKeypadVisible) return
-        applyAmountInputResult()
-        keypad.visibility = View.GONE
-        rootView.findViewById<View>(R.id.layout_form_body)?.visibility = View.VISIBLE
-        isAmountKeypadVisible = false
-        etMoney.isCursorVisible = false
-        etMoney.clearFocus()
+        amountKeypad?.normalize()
+        closeAmountKeypad()
     }
 
     fun handleBackPressed(): Boolean {
         return if (isAmountKeypadVisible) {
-            confirmAmountInput()
+            // 返回键只收起键盘；表达式可求值时规整为结果，不提交账单
+            hideAmountKeypad()
             true
         } else {
             false
         }
     }
 
-    private fun appendAmountInput(token: String) {
-        val current = etMoney.text?.toString().orEmpty()
-        applyAmountEdit(
-            AmountInputEditor.insert(current, etMoney.selectionStart, etMoney.selectionEnd, token)
-        )
-    }
-
-    private fun deleteAmountInput() {
-        val current = etMoney.text?.toString().orEmpty()
-        applyAmountEdit(
-            AmountInputEditor.delete(current, etMoney.selectionStart, etMoney.selectionEnd)
-        )
-    }
-
-    private fun clearAmountInput() {
-        etMoney.setText("")
-        etMoney.setSelection(0)
-        updateConfirmKeyState()
-    }
-
-    private fun appendOperatorInput(operator: String) {
-        val current = etMoney.text?.toString().orEmpty()
-        applyAmountEdit(
-            AmountInputEditor.insertOperator(current, etMoney.selectionStart, etMoney.selectionEnd, operator)
-        )
-    }
-
-    private fun applyAmountEdit(edit: AmountInputEdit) {
-        etMoney.setText(edit.text)
-        etMoney.setSelection(edit.cursor.coerceIn(0, edit.text.length))
-    }
-
-    private fun confirmAmountInput() {
-        // 输入为空时也应关闭键盘（不修改金额），不阻拦
-        if (isConfirmInputValid()) {
-            applyAmountInputResult()
-        }
-        val keypad = amountKeypadView ?: return
-        keypad.visibility = View.GONE
+    private fun closeAmountKeypad() {
+        amountKeypadView?.visibility = View.GONE
         rootView.findViewById<View>(R.id.layout_form_body)?.visibility = View.VISIBLE
         isAmountKeypadVisible = false
+        amountKeypad?.close()
         etMoney.isCursorVisible = false
         etMoney.clearFocus()
     }
 
-    private fun isConfirmInputValid(): Boolean {
-        val raw = etMoney.text?.toString()?.trim().orEmpty()
-        if (raw.isEmpty()) return false
-        return parseAmountInput() != null
-    }
-
-    private fun updateConfirmKeyState() {
-        val enabled = isConfirmInputValid()
-        confirmKeyView?.isEnabled = enabled
-        confirmKeyView?.alpha = if (enabled) 1f else 0.45f
-    }
-
-    private fun applyAmountInputResult() {
-        val evaluated = parseAmountInput()
-        if (evaluated != null) {
-            etMoney.setText(String.format(Locale.getDefault(), "%.2f", evaluated))
-            etMoney.setSelection(etMoney.text?.length ?: 0)
-        }
+    private fun confirmAmountInput() {
+        // 输入为空/非法时也收起键盘，不修改金额、不阻拦
+        hideAmountKeypad()
     }
 
     private fun parseAmountInput(): Double? {
         val raw = etMoney.text?.toString()?.trim().orEmpty()
         if (raw.isEmpty()) return null
-        return evaluateAmountExpression(raw)
-    }
-
-    private fun evaluateAmountExpression(raw: String): Double? {
-        val expr = raw.replace("×", "*").replace("÷", "/").replace("\\s+".toRegex(), "")
-        if (expr.isEmpty()) return null
-        val values = java.util.Stack<Double>()
-        val ops = java.util.Stack<Char>()
-        var i = 0
-        while (i < expr.length) {
-            val ch = expr[i]
-            if (ch.isDigit() || ch == '.' || (ch == '-' && (i == 0 || expr[i - 1] in charArrayOf('+', '-', '*', '/')))) {
-                val start = i
-                i++
-                while (i < expr.length && (expr[i].isDigit() || expr[i] == '.')) i++
-                val token = expr.substring(start, i)
-                values.push(token.toDoubleOrNull() ?: return null)
-                continue
-            }
-            if (ch !in charArrayOf('+', '-', '*', '/')) return null
-            while (ops.isNotEmpty() && precedence(ops.peek()) >= precedence(ch)) {
-                applyTopOperator(values, ops) ?: return null
-            }
-            ops.push(ch)
-            i++
-        }
-        while (ops.isNotEmpty()) {
-            applyTopOperator(values, ops) ?: return null
-        }
-        return values.takeIf { it.size == 1 }?.peek()
-    }
-
-    private fun precedence(op: Char): Int = when (op) {
-        '*', '/' -> 2
-        '+', '-' -> 1
-        else -> 0
-    }
-
-    private fun applyTopOperator(values: java.util.Stack<Double>, ops: java.util.Stack<Char>): Double? {
-        if (values.size < 2 || ops.isEmpty()) return null
-        val right = values.pop()
-        val left = values.pop()
-        val result = when (ops.pop()) {
-            '+' -> left + right
-            '-' -> left - right
-            '*' -> left * right
-            '/' -> if (right == 0.0) return null else left / right
-            else -> return null
-        }
-        values.push(result)
-        return result
+        return AmountExpression.evaluate(raw)
     }
 
     /** 进入退款模式：隐藏分类行，显示退款来源账单行 */
@@ -1189,7 +1049,7 @@ class AccountingFormController(
                         targetCurrency,
                         customTransferRate ?: savedTransferRateForEdit,
                         onConfirm = { src, tgt, rate ->
-                            etMoney.setText(String.format("%.2f", src))
+                            etMoney.setText(AmountExpression.format(src))
                             customTargetAmount = tgt
                             customTransferRate = rate
                             hasConfirmedExchangeRate = true

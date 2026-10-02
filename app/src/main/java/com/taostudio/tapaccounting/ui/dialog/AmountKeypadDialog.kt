@@ -3,16 +3,14 @@ package com.taostudio.tapaccounting.ui.dialog
 import android.app.Dialog
 import android.content.Context
 import android.os.Bundle
-import android.text.Editable
-import android.text.TextWatcher
 import android.view.Gravity
-import android.view.HapticFeedbackConstants
 import android.view.View
 import android.view.ViewGroup
 import android.widget.EditText
+import com.taostudio.tapaccounting.Prefs
 import com.taostudio.tapaccounting.R
-import com.taostudio.tapaccounting.logic.AmountInputEdit
-import com.taostudio.tapaccounting.logic.AmountInputEditor
+import com.taostudio.tapaccounting.logic.AmountExpression
+import com.taostudio.tapaccounting.logic.AmountKeypad
 
 class AmountKeypadDialog(
     context: Context,
@@ -21,8 +19,7 @@ class AmountKeypadDialog(
 ) : Dialog(context, R.style.Theme_TapAccounting_Transparent) {
 
     private lateinit var etAmount: EditText
-    private lateinit var btnConfirm: View
-    private var currentAmount: String = initialAmount
+    private lateinit var keypad: AmountKeypad
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -36,114 +33,37 @@ class AmountKeypadDialog(
 
         initViews()
         setupKeypad()
-        updateAmountDisplay()
     }
 
     private fun initViews() {
         etAmount = findViewById(R.id.et_amount)
         etAmount.showSoftInputOnFocus = false
-        btnConfirm = findViewById(R.id.btn_key_confirm)
         findViewById<View>(R.id.layout_amount_keypad)?.visibility = View.VISIBLE
 
-        etAmount.setText(initialAmount)
-        etAmount.setSelection(initialAmount.length)
+        // 外部带入的已格式化值（如 12.00）还原成可编辑形式，避免补尾数时被多余小数挡住
+        etAmount.setText(AmountExpression.normalizeForEditing(initialAmount))
+        etAmount.setSelection(etAmount.text?.length ?: 0)
+    }
 
-        btnConfirm.setOnClickListener {
-            onConfirm(currentAmount)
+    private fun setupKeypad() {
+        keypad = AmountKeypad(
+            container = findViewById(R.id.layout_amount_keypad),
+            editText = etAmount,
+            hapticsEnabled = { Prefs.isVibrateFeedbackEnabled(context) },
+            previewView = findViewById(R.id.tv_amount_preview)
+        )
+        keypad.confirmButton?.setOnClickListener {
+            // 与主表单一致：先求值再回填，避免 12+3 这类表达式被静默当成 0
+            val value = keypad.formattedValueOrNull() ?: return@setOnClickListener
+            keypad.close()
+            onConfirm(value)
             dismiss()
         }
     }
 
-    private fun setupKeypad() {
-        val digitIds = listOf(
-            R.id.btn_key_0 to "0",
-            R.id.btn_key_1 to "1",
-            R.id.btn_key_2 to "2",
-            R.id.btn_key_3 to "3",
-            R.id.btn_key_4 to "4",
-            R.id.btn_key_5 to "5",
-            R.id.btn_key_6 to "6",
-            R.id.btn_key_7 to "7",
-            R.id.btn_key_8 to "8",
-            R.id.btn_key_9 to "9",
-            R.id.btn_key_dot to "."
-        )
-        digitIds.forEach { (id, value) ->
-            findViewById<View>(id)?.setOnClickListener { appendAmountInput(value) }
-        }
-
-        val operatorIds = listOf(
-            R.id.btn_key_add to "+",
-            R.id.btn_key_subtract to "-",
-            R.id.btn_key_multiply to "×",
-            R.id.btn_key_divide to "÷"
-        )
-        operatorIds.forEach { (id, value) ->
-            findViewById<View>(id)?.setOnClickListener { appendOperatorInput(value) }
-        }
-
-        findViewById<View>(R.id.btn_key_delete)?.apply {
-            setOnClickListener { deleteAmountInput() }
-            setOnLongClickListener {
-                performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
-                clearAmountInput()
-                true
-            }
-        }
-        findViewById<View>(R.id.btn_key_clear)?.setOnClickListener { clearAmountInput() }
-
-        etAmount.addTextChangedListener(object : TextWatcher {
-            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
-            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = Unit
-            override fun afterTextChanged(s: Editable?) {
-                currentAmount = s?.toString().orEmpty()
-                updateConfirmKeyState()
-            }
-        })
-        updateConfirmKeyState()
-    }
-
-    private fun appendAmountInput(token: String) {
-        val current = etAmount.text?.toString().orEmpty()
-        applyAmountEdit(
-            AmountInputEditor.insert(current, etAmount.selectionStart, etAmount.selectionEnd, token)
-        )
-    }
-
-    private fun deleteAmountInput() {
-        val current = etAmount.text?.toString().orEmpty()
-        applyAmountEdit(
-            AmountInputEditor.delete(current, etAmount.selectionStart, etAmount.selectionEnd)
-        )
-    }
-
-    private fun clearAmountInput() {
-        etAmount.setText("")
-        etAmount.setSelection(0)
-        updateConfirmKeyState()
-    }
-
-    private fun appendOperatorInput(operator: String) {
-        val current = etAmount.text?.toString().orEmpty()
-        applyAmountEdit(
-            AmountInputEditor.insertOperator(current, etAmount.selectionStart, etAmount.selectionEnd, operator)
-        )
-    }
-
-    private fun applyAmountEdit(edit: AmountInputEdit) {
-        etAmount.setText(edit.text)
-        etAmount.setSelection(edit.cursor.coerceIn(0, edit.text.length))
-    }
-
-    private fun updateConfirmKeyState() {
-        val enabled = currentAmount.isNotBlank() && !currentAmount.all { it in charArrayOf('+', '-', '×', '÷') }
-        btnConfirm.isEnabled = enabled
-        btnConfirm.alpha = if (enabled) 1f else 0.45f
-    }
-
-    private fun updateAmountDisplay() {
-        etAmount.setText(currentAmount)
-        etAmount.setSelection(currentAmount.length)
+    override fun dismiss() {
+        if (::keypad.isInitialized) keypad.close()
+        super.dismiss()
     }
 
     companion object {
@@ -158,4 +78,3 @@ class AmountKeypadDialog(
         }
     }
 }
-

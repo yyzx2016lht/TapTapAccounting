@@ -8,31 +8,46 @@ data class AmountInputEdit(
 object AmountInputEditor {
     private val operators = charArrayOf('+', '-', '×', '÷')
 
+    /** 默认最多两位小数（分）。 */
+    const val DEFAULT_MAX_DECIMALS = 2
+
     fun insert(
         text: String,
         selectionStart: Int,
         selectionEnd: Int,
-        token: String
+        token: String,
+        maxDecimals: Int = DEFAULT_MAX_DECIMALS
     ): AmountInputEdit {
         val selection = selection(text, selectionStart, selectionEnd)
         val base = text.removeRange(selection.first, selection.last)
         val cursor = selection.first
 
+        val segmentStart = base.substring(0, cursor).indexOfLast { it in operators } + 1
+        val nextOperator = base.indexOfAny(operators, startIndex = cursor)
+        val segmentEnd = nextOperator.takeIf { it >= 0 } ?: base.length
+        val segment = base.substring(segmentStart, segmentEnd)
+
         if (token == ".") {
-            val segmentStart = base.substring(0, cursor).indexOfLast { it in operators } + 1
-            val nextOperator = base.indexOfAny(operators, startIndex = cursor)
-            val segmentEnd = nextOperator.takeIf { it >= 0 } ?: base.length
-            if (base.substring(segmentStart, segmentEnd).contains('.')) {
+            if (segment.contains('.')) {
                 return AmountInputEdit(text, selection.first)
             }
             val inserted = if (cursor == segmentStart) "0." else "."
             return insertAt(base, cursor, inserted)
         }
 
-        val segmentStart = base.substring(0, cursor).indexOfLast { it in operators } + 1
-        val nextOperator = base.indexOfAny(operators, startIndex = cursor)
-        val segmentEnd = nextOperator.takeIf { it >= 0 } ?: base.length
-        if (cursor == segmentEnd && base.substring(segmentStart, segmentEnd) == "0") {
+        // 小数位上限：光标落在小数点之后时，超出位数直接忽略（整数位不设限）。
+        if (maxDecimals > 0 && token.length == 1 && token[0].isDigit()) {
+            val dotIndex = segment.indexOf('.')
+            if (dotIndex >= 0) {
+                val cursorOffset = cursor - segmentStart
+                val fractionLength = segment.length - dotIndex - 1
+                if (cursorOffset > dotIndex && fractionLength >= maxDecimals) {
+                    return AmountInputEdit(text, selection.first)
+                }
+            }
+        }
+
+        if (cursor == segmentEnd && segment == "0") {
             val next = base.replaceRange(segmentStart, segmentEnd, token)
             return AmountInputEdit(next, segmentStart + token.length)
         }

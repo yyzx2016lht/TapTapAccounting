@@ -10,6 +10,18 @@
     android:paddingBottom="12dp"
     android:visibility="gone">
 
+    <!-- 表达式实时预览：仅当输入含运算符且可求值时显示，如 "= 18.00" -->
+    <TextView
+        android:id="@+id/tv_amount_preview"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="end"
+        android:paddingEnd="6dp"
+        android:paddingBottom="6dp"
+        android:textColor="#8A9099"
+        android:textSize="13sp"
+        android:visibility="gone" />
+
     <!-- 按键区域：弹性撑满键盘容器 -->
     <LinearLayout
         android:layout_width="match_parent"

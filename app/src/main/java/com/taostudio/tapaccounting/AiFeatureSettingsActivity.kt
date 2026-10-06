@@ -381,6 +381,7 @@ class AiFeatureSettingsActivity : AppCompatActivity() {
         val etPassword = EditText(this).apply {
             hint = getString(R.string.input_key_hint)
             inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+            transformationMethod = android.text.method.PasswordTransformationMethod.getInstance()
         }
         layout.addView(tvHint)
         layout.addView(etPassword)

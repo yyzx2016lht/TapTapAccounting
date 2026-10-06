@@ -510,6 +510,7 @@ class ProfileFragment : Fragment(R.layout.fragment_profile) {
         val etKey = EditText(ctx).apply {
             hint = getString(R.string.api_key)
             inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+            transformationMethod = android.text.method.PasswordTransformationMethod.getInstance()
             setText(Prefs.getAiKey(ctx))
         }
         layout.addView(tvHint)

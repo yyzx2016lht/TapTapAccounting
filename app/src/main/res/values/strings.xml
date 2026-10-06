@@ -1591,6 +1591,20 @@
     <string name="ai_model_cap_probe_ok">检测通过：该模型支持图片输入</string>
     <string name="ai_model_cap_probe_fail">检测未通过：该模型可能不支持图片输入</string>
     <string name="ai_vision_no_capable_model">当前提供商暂无可用于图片记账的模型，请刷新模型列表或更换提供商</string>
+    <string name="ai_api_key_section">API 密钥</string>
+    <string name="ai_key_state_saved_fmt">已保存 · %1$s</string>
+    <string name="ai_key_state_missing">未配置密钥</string>
+    <string name="ai_key_action_replace">更换密钥</string>
+    <string name="ai_key_action_add">填写密钥</string>
+    <string name="ai_key_show">显示</string>
+    <string name="ai_key_hide">隐藏</string>
+    <string name="ai_key_save">保存密钥</string>
+    <string name="ai_key_saved_toast">API Key 已保存</string>
+    <string name="ai_key_replace_hint">输入新的 API Key，保存后加密存储</string>
+    <string name="ai_key_keep_hint">留空则沿用已保存的密钥</string>
+    <string name="ai_thinking_text_label">文本模型思考</string>
+    <string name="ai_thinking_vision_label">视觉模型思考</string>
+    <string name="ai_provider_configured">已配置</string>
 
     <!-- AiRuleManageActivity 硬编码抽取 -->
     <string name="cancel_select_all">取消全选</string>

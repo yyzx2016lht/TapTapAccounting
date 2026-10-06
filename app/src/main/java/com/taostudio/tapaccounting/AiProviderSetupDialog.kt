@@ -3,13 +3,15 @@ package com.taostudio.tapaccounting
 import android.content.Context
 import android.content.Intent
 import android.graphics.Color
+import android.graphics.Typeface
+import android.graphics.drawable.GradientDrawable
 import android.net.Uri
+import android.text.method.PasswordTransformationMethod
+import android.view.Gravity
 import android.view.View
-import android.widget.AdapterView
-import android.widget.ArrayAdapter
 import android.widget.EditText
 import android.widget.LinearLayout
-import android.widget.Spinner
+import android.widget.ScrollView
 import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
@@ -28,111 +30,179 @@ object AiProviderSetupDialog {
         onFinished: ((AiProviderSetupResult?) -> Unit)? = null
     ) {
         val presets = AiProviderRegistry.allPresets()
+        val density = activity.resources.displayMetrics.density
+
+        fun dp(value: Int): Int = (value * density).toInt()
+
         val layout = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(48, 24, 48, 8)
+            setPadding(dp(20), dp(8), dp(20), dp(4))
         }
 
         val tvHint = TextView(activity).apply {
             text = activity.getString(R.string.ai_provider_setup_hint)
             textSize = 13f
             setTextColor(Color.parseColor("#9AA4B2"))
-            setPadding(0, 0, 0, 12)
+            setPadding(0, 0, 0, dp(12))
         }
-
-        val spinner = Spinner(activity)
-        val names = presets.map { it.displayName }
-        spinner.adapter = ArrayAdapter(activity, android.R.layout.simple_spinner_dropdown_item, names)
 
         val currentProvider = initialProviderId?.trim().orEmpty().ifBlank { Prefs.getAiProvider(activity) }
-        val selectedIndex = presets.indexOfFirst { it.id == currentProvider }.coerceAtLeast(0)
-        spinner.setSelection(selectedIndex)
-        val draftKeys = mutableMapOf<String, String>()
-        var activeProviderIndex = selectedIndex
+        var selectedIndex = presets.indexOfFirst { it.id == currentProvider }.coerceAtLeast(0)
 
-        fun keyForProvider(providerId: String): String {
-            draftKeys[providerId]?.let { return it }
-            val saved = Prefs.getAiProviderKey(activity, providerId)
-            draftKeys[providerId] = saved
-            return saved
+        val rowsContainer = LinearLayout(activity).apply { orientation = LinearLayout.VERTICAL }
+        val scroll = ScrollView(activity).apply {
+            addView(rowsContainer)
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                dp(300)
+            )
+        }
+        val rowRoots = mutableListOf<LinearLayout>()
+        val rowChecks = mutableListOf<TextView>()
+
+        fun rowBackground(selected: Boolean): GradientDrawable = GradientDrawable().apply {
+            cornerRadius = dp(10).toFloat()
+            if (selected) {
+                setColor(Color.parseColor("#EEF0FB"))
+                setStroke(dp(1), Color.parseColor("#C5CAE9"))
+            } else {
+                setColor(Color.TRANSPARENT)
+            }
         }
 
-        val tvCapabilities = TextView(activity).apply {
-            textSize = 12f
-            setTextColor(Color.parseColor("#667085"))
-            setPadding(0, 8, 0, 0)
-        }
-
-        val tvProviderNotice = TextView(activity).apply {
-            textSize = 12f
-            setTextColor(Color.parseColor("#B26A00"))
-            setPadding(0, 8, 0, 8)
-            visibility = View.GONE
-        }
+        // ── 密钥输入（不预填已保存密钥；留空=沿用） ──
 
         val tvKeyLabel = TextView(activity).apply {
             text = activity.getString(R.string.api_key)
             textSize = 12f
             setTextColor(Color.parseColor("#666666"))
-            setPadding(0, 8, 0, 6)
+            setPadding(0, dp(14), 0, dp(6))
         }
 
         val etKey = EditText(activity).apply {
-            hint = presets[selectedIndex].keyHint
             inputType = android.text.InputType.TYPE_CLASS_TEXT or
                 android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
             setSingleLine()
-            setText(keyForProvider(presets[selectedIndex].id))
+            // setSingleLine() 会重置 transformationMethod，必须在其后显式恢复密码掩码。
+            transformationMethod = PasswordTransformationMethod.getInstance()
+            importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_NO
         }
 
         val tvHowToGet = TextView(activity).apply {
             textSize = 12f
             setTextColor(Color.parseColor("#5C6BC0"))
-            setPadding(0, 12, 0, 0)
+            setPadding(0, dp(10), 0, 0)
             isClickable = true
             isFocusable = true
         }
 
-        fun updateProviderUi(index: Int) {
-            val preset = presets[index]
-            etKey.hint = preset.keyHint
-            tvCapabilities.text = AiProviderRegistry.capabilitySummary(preset)
-            tvHowToGet.text = activity.getString(R.string.ai_provider_get_key_fmt, preset.displayName)
-            val notice = preset.selectionNotice
-            if (notice.isNullOrBlank()) {
-                tvProviderNotice.visibility = View.GONE
+        fun updateSelectionUi() {
+            val preset = presets[selectedIndex]
+            val hasSavedKey = Prefs.getAiProviderKey(activity, preset.id).isNotBlank()
+            etKey.setText("")
+            etKey.hint = if (hasSavedKey) {
+                activity.getString(R.string.ai_key_keep_hint)
             } else {
-                tvProviderNotice.visibility = View.VISIBLE
-                tvProviderNotice.text = notice
+                preset.keyHint
+            }
+            tvHowToGet.text = activity.getString(R.string.ai_provider_get_key_fmt, preset.displayName)
+        }
+
+        fun renderRows() {
+            rowRoots.forEachIndexed { index, row ->
+                row.background = rowBackground(index == selectedIndex)
+            }
+            rowChecks.forEachIndexed { index, check ->
+                check.visibility = if (index == selectedIndex) View.VISIBLE else View.GONE
             }
         }
 
-        spinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
-            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
-                if (position != activeProviderIndex) {
-                    draftKeys[presets[activeProviderIndex].id] = etKey.text?.toString().orEmpty()
-                    activeProviderIndex = position
-                    etKey.setText(keyForProvider(presets[position].id))
-                    etKey.setSelection(etKey.text?.length ?: 0)
+        fun rebuildProviderRows() {
+            rowsContainer.removeAllViews()
+            rowRoots.clear()
+            rowChecks.clear()
+            presets.forEachIndexed { index, preset ->
+                val hasKey = Prefs.getAiProviderKey(activity, preset.id).isNotBlank()
+
+                val nameView = TextView(activity).apply {
+                    text = preset.displayName
+                    textSize = 15f
+                    setTextColor(Color.parseColor("#333333"))
+                    setTypeface(typeface, Typeface.BOLD)
                 }
-                updateProviderUi(position)
+                val capabilityView = TextView(activity).apply {
+                    text = AiProviderRegistry.capabilitySummary(preset)
+                    textSize = 11f
+                    setTextColor(Color.parseColor("#667085"))
+                    setPadding(0, dp(2), 0, 0)
+                }
+                val labelColumn = LinearLayout(activity).apply {
+                    orientation = LinearLayout.VERTICAL
+                    layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+                    addView(nameView)
+                    addView(capabilityView)
+                }
+
+                val configuredView = TextView(activity).apply {
+                    text = activity.getString(R.string.ai_provider_configured)
+                    textSize = 10f
+                    setTextColor(Color.parseColor("#1976D2"))
+                    background = GradientDrawable().apply {
+                        cornerRadius = dp(6).toFloat()
+                        setColor(Color.parseColor("#E3F2FD"))
+                    }
+                    setPadding(dp(6), dp(2), dp(6), dp(2))
+                    visibility = if (hasKey) View.VISIBLE else View.GONE
+                }
+                val checkView = TextView(activity).apply {
+                    text = "✓"
+                    textSize = 16f
+                    setTextColor(Color.parseColor("#5C6BC0"))
+                    setPadding(dp(8), 0, 0, 0)
+                    visibility = if (index == selectedIndex) View.VISIBLE else View.GONE
+                }
+
+                val row = LinearLayout(activity).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                    setPadding(dp(12), dp(10), dp(12), dp(10))
+                    isClickable = true
+                    isFocusable = true
+                    addView(labelColumn)
+                    addView(configuredView)
+                    addView(checkView)
+                }
+                row.setOnClickListener {
+                    if (selectedIndex != index) {
+                        selectedIndex = index
+                        renderRows()
+                        updateSelectionUi()
+                    }
+                }
+                rowsContainer.addView(row, LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ))
+                rowRoots.add(row)
+                rowChecks.add(checkView)
             }
-            override fun onNothingSelected(parent: AdapterView<*>?) = Unit
+            renderRows()
         }
+
         tvHowToGet.setOnClickListener {
-            val preset = presets[spinner.selectedItemPosition]
+            val preset = presets[selectedIndex]
             runCatching {
                 activity.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(preset.createKeyUrl)))
             }.onFailure {
                 Utils.toast(activity, activity.getString(R.string.ai_provider_open_link_failed))
             }
         }
-        updateProviderUi(selectedIndex)
+
+        rebuildProviderRows()
+        updateSelectionUi()
 
         layout.addView(tvHint)
-        layout.addView(spinner)
-        layout.addView(tvCapabilities)
-        layout.addView(tvProviderNotice)
+        layout.addView(scroll)
         layout.addView(tvKeyLabel)
         layout.addView(etKey)
         layout.addView(tvHowToGet)
@@ -153,12 +223,8 @@ object AiProviderSetupDialog {
         dialog.setOnShowListener {
             val confirm = dialog.getButton(AlertDialog.BUTTON_POSITIVE)
             confirm.setOnClickListener {
-                val preset = presets[spinner.selectedItemPosition]
+                val preset = presets[selectedIndex]
                 val input = etKey.text?.toString()?.trim().orEmpty()
-                if (input.isBlank()) {
-                    etKey.error = activity.getString(R.string.please_input_api_key)
-                    return@setOnClickListener
-                }
                 if (input == "1433223") {
                     Prefs.setAiDetailConfigUnlocked(activity, true)
                     Utils.toast(activity, activity.getString(R.string.ai_config_unlocked))
@@ -167,11 +233,20 @@ object AiProviderSetupDialog {
                     return@setOnClickListener
                 }
 
+                // 留空则沿用该提供商已保存的密钥（不预填、不回显明文）。
+                val effectiveKey = input.ifBlank {
+                    Prefs.getAiProviderKey(activity, preset.id).trim()
+                }
+                if (effectiveKey.isBlank()) {
+                    etKey.error = activity.getString(R.string.please_input_api_key)
+                    return@setOnClickListener
+                }
+
                 confirm.isEnabled = false
                 confirm.text = activity.getString(R.string.ai_provider_testing)
                 CoroutineScope(Dispatchers.IO).launch {
                     val result = runCatching {
-                        val models = AIService.fetchModelsForProvider(activity, preset, input)
+                        val models = AIService.fetchModelsForProvider(activity, preset, effectiveKey)
                         // 能力目录拉取失败不阻塞配置流程，仅影响视觉列表过滤精度。
                         runCatching { AiModelCatalog.refreshFromNetwork(activity) }
                         models
@@ -184,7 +259,7 @@ object AiProviderSetupDialog {
                             AiProviderRegistry.applyProvider(
                                 activity,
                                 preset,
-                                input,
+                                effectiveKey,
                                 modelsCache = cleaned.takeIf { it.isNotEmpty() }
                             )
                             Utils.toast(
@@ -199,7 +274,7 @@ object AiProviderSetupDialog {
                             onFinished?.invoke(
                                 AiProviderSetupResult(
                                     preset = preset,
-                                    apiKey = input,
+                                    apiKey = effectiveKey,
                                     models = cleaned
                                 )
                             )

@@ -779,15 +779,11 @@ class OverlayManager(private val ctx: Context) {
     }
 
     private fun bitmapToTempUri(bitmap: Bitmap): android.net.Uri? {
-        val maxDim = 1440
-        val scaled = if (bitmap.width > maxDim || bitmap.height > maxDim) {
-            val ratio = minOf(maxDim.toFloat() / bitmap.width, maxDim.toFloat() / bitmap.height)
-            Bitmap.createScaledBitmap(bitmap, (bitmap.width * ratio).toInt(), (bitmap.height * ratio).toInt(), true)
-        } else bitmap
         val dir = java.io.File(ctx.cacheDir, "screen_captures").apply { mkdirs() }
         val file = java.io.File(dir, "screenshot_${System.currentTimeMillis()}.jpg")
         return try {
-            file.outputStream().use { scaled.compress(Bitmap.CompressFormat.JPEG, 88, it) }
+            // 与聊天附件/图片记账共用同一套压缩参数（见 AiImageCompressor），截屏也保持可读分辨率
+            if (!AiImageCompressor.compressBitmapToFile(bitmap, file)) return null
             android.net.Uri.fromFile(file)
         } catch (e: Exception) {
             Logger.e(ctx, "OverlayManager", "bitmapToTempUri failed: ${e.message}")

@@ -277,28 +277,31 @@ object ReceiptImageInputHelper {
     }
 
     /**
-     * 读图 → 压缩 → base64。
+     * 读图 → 温和压缩 → base64。
      *
-     * 这里必须压缩：图片记账拿到的大多是长截图（实测 1216×3790 / 640KB），
-     * 原样 base64 后约 854KB，慢网下会长时间无响应，甚至被上游重置连接。
-     * 压到长边 1280px 后同一张图只需约 33KB，识别质量不受影响。
+     * 先生成临时文件再交给 [AiImageCompressor]：常见截图保持原始分辨率，只按像素上限
+     * 温和缩放（长截图放大后仍能看清文字），压缩失败则退回原始字节。
+     * 临时文件用完即删，不占用户存储。
      */
     suspend fun readImagePayload(ctx: Context, uri: android.net.Uri): ImagePayload? {
         val sourceMime = ctx.contentResolver.getType(uri) ?: "image/jpeg"
-        val imageDir = File(ctx.filesDir, "receipt_inputs").also { it.mkdirs() }
-        val outFile = File(imageDir, "receipt_${System.currentTimeMillis()}.jpg")
-        ctx.contentResolver.openInputStream(uri)?.use { input ->
-            outFile.outputStream().use { output -> input.copyTo(output) }
-        } ?: return null
+        val tmp = File.createTempFile("receipt_input_", ".img", ctx.cacheDir)
+        return try {
+            ctx.contentResolver.openInputStream(uri)?.use { input ->
+                tmp.outputStream().use { output -> input.copyTo(output) }
+            } ?: return null
 
-        // 压缩成功后文件内容一定是 JPEG，MIME 必须跟着改，否则会把 JPEG 字节标成 image/png
-        val compressed = AiImageCompressor.compressInPlace(outFile)
-        val bytes = outFile.readBytes()
-        if (bytes.isEmpty()) return null
-        return ImagePayload(
-            base64 = Base64.encodeToString(bytes, Base64.NO_WRAP),
-            mime = if (compressed) AiImageCompressor.JPEG_MIME else sourceMime,
-            supplement = ""
-        )
+            // 压缩成功后文件内容一定是 JPEG，MIME 必须跟着改，否则会把 JPEG 字节标成 image/png
+            val compressed = AiImageCompressor.compressInPlace(tmp)
+            val bytes = tmp.readBytes()
+            if (bytes.isEmpty()) return null
+            ImagePayload(
+                base64 = Base64.encodeToString(bytes, Base64.NO_WRAP),
+                mime = if (compressed) AiImageCompressor.JPEG_MIME else sourceMime,
+                supplement = ""
+            )
+        } finally {
+            tmp.delete()
+        }
     }
 }

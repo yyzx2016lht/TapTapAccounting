@@ -24,6 +24,10 @@ object PrefsAiSupport {
     private const val KEY_AI_LLM_ROUTER_ENABLED = "ai_llm_router_enabled"
     private const val KEY_AI_RULE_MODEL = "ai_rule_model_id"
     private const val KEY_AI_MODELS_CACHE = "ai_models_cache"
+    private const val KEY_AI_MODEL_CATALOG = "ai_model_catalog_v1"
+    private const val KEY_AI_MODEL_CATALOG_AT = "ai_model_catalog_fetched_at_v1"
+    private const val KEY_AI_MODEL_CAP_OVERRIDES = "ai_model_capability_overrides_v1"
+    private const val KEY_AI_OPENCODE_SESSION = "ai_opencode_session_id_v1"
     private const val KEY_AI_PROVIDER = "ai_provider"
     private const val KEY_AI_URL = "ai_api_url"
     private const val KEY_AI_RECEIPT_MODEL = "ai_receipt_model_id"
@@ -313,6 +317,63 @@ object PrefsAiSupport {
         (prefs(ctx).getStringSet(KEY_AI_MODELS_CACHE, null) ?: emptySet()).toList()
     fun setAiModelsCache(ctx: Context, models: List<String>) =
         prefs(ctx).edit().putStringSet(KEY_AI_MODELS_CACHE, models.toSet()).apply()
+
+    // ── 模型能力目录（models.dev 裁剪结果，仅供输入模态标注） ──
+
+    fun getAiModelCatalog(ctx: Context): String =
+        prefs(ctx).getString(KEY_AI_MODEL_CATALOG, "").orEmpty()
+
+    fun setAiModelCatalog(ctx: Context, raw: String) =
+        prefs(ctx).edit().putString(KEY_AI_MODEL_CATALOG, raw).apply()
+
+    fun getAiModelCatalogFetchedAt(ctx: Context): Long =
+        prefs(ctx).getLong(KEY_AI_MODEL_CATALOG_AT, 0L)
+
+    fun setAiModelCatalogFetchedAt(ctx: Context, timestamp: Long) =
+        prefs(ctx).edit().putLong(KEY_AI_MODEL_CATALOG_AT, timestamp).apply()
+
+    /** 单模型手动能力标记：image / text；null 表示跟随目录。 */
+    fun getAiModelCapabilityOverride(ctx: Context, providerId: String, modelId: String): String? {
+        val key = capabilityOverrideKey(providerId, modelId)
+        return readCapabilityOverrides(ctx)[key]
+    }
+
+    fun setAiModelCapabilityOverride(ctx: Context, providerId: String, modelId: String, value: String?) {
+        if (providerId.isBlank() || modelId.isBlank()) return
+        val map = readCapabilityOverrides(ctx).toMutableMap()
+        val key = capabilityOverrideKey(providerId, modelId)
+        if (value.isNullOrBlank()) map.remove(key) else map[key] = value
+        val obj = JSONObject()
+        map.forEach { (k, v) -> obj.put(k, v) }
+        prefs(ctx).edit().putString(KEY_AI_MODEL_CAP_OVERRIDES, obj.toString()).apply()
+    }
+
+    /** 面向 OpenCode Go 的稳定会话 ID（x-opencode-session），首次使用时生成并持久化。 */
+    fun getOrCreateAiOpencodeSessionId(ctx: Context): String {
+        val saved = prefs(ctx).getString(KEY_AI_OPENCODE_SESSION, "").orEmpty().trim()
+        if (saved.isNotEmpty()) return saved
+        val created = java.util.UUID.randomUUID().toString().replace("-", "").take(24)
+        prefs(ctx).edit().putString(KEY_AI_OPENCODE_SESSION, created).apply()
+        return created
+    }
+
+    private fun capabilityOverrideKey(providerId: String, modelId: String): String =
+        "${providerId.trim()}::${modelId.trim()}"
+
+    private fun readCapabilityOverrides(ctx: Context): Map<String, String> {
+        val raw = prefs(ctx).getString(KEY_AI_MODEL_CAP_OVERRIDES, null) ?: return emptyMap()
+        return runCatching {
+            val obj = JSONObject(raw)
+            buildMap {
+                val keys = obj.keys()
+                while (keys.hasNext()) {
+                    val key = keys.next()
+                    val value = obj.optString(key, "").trim()
+                    if (value.isNotEmpty()) put(key, value)
+                }
+            }
+        }.getOrDefault(emptyMap())
+    }
 
     /** Atomically persist provider switch so UI can read updated values immediately. */
     fun applyAiProviderConfigSync(

@@ -84,7 +84,9 @@ class ChatAdapter(
     private val onShowBillMessageMenu: (View, ChatDisplayItem) -> Unit,
     private val onBillsDeleted: (List<Long>, Long) -> Unit,
     private val onConfirmAllBills: (ChatDisplayItem) -> Unit,
-    private val onSwitchConversationModeClick: () -> Unit = {}
+    private val onSwitchConversationModeClick: () -> Unit = {},
+    /** 当前是否处于对话模式（用于选择 nudge 文案与点击行为）。 */
+    private val isConversationMode: () -> Boolean = { false }
 ) : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
     private val imageThumbSizeCache = mutableMapOf<String, Pair<Int, Int>>()
     private val imageThumbSizeLoading = mutableSetOf<String>()
@@ -626,6 +628,7 @@ class ChatAdapter(
         private val cbSelect: android.widget.CheckBox = v.findViewById(R.id.cb_ai_text_select)
         private val contentColumn: LinearLayout = v.findViewById(R.id.layout_ai_text_content)
         private val nudgeRow: LinearLayout = v.findViewById(R.id.layout_conversation_mode_nudge)
+        private val tvNudge: TextView = v.findViewById(R.id.tv_conversation_mode_nudge)
         private val btnSwitchConversationMode: TextView = v.findViewById(R.id.btn_switch_conversation_mode)
 
         fun bind(item: ChatDisplayItem) {
@@ -659,6 +662,16 @@ class ChatAdapter(
                 tvText.visibility = View.VISIBLE
                 ChatMarkdownFormatter.applyTo(tvText, item.content)
                 if (item.showConversationModeNudge && item.content.isNotBlank()) {
+                    // nudge 指向「另一个模式」：对话模式 → 提示去记账；记账模式 → 提示去对话
+                    val conversationMode = isConversationMode()
+                    tvNudge.text = context.getString(
+                        if (conversationMode) R.string.chat_accounting_mode_nudge
+                        else R.string.chat_conversation_mode_nudge
+                    )
+                    btnSwitchConversationMode.text = context.getString(
+                        if (conversationMode) R.string.chat_switch_accounting_mode
+                        else R.string.chat_switch_conversation_mode
+                    )
                     nudgeRow.visibility = View.VISIBLE
                     btnSwitchConversationMode.setOnClickListener { onSwitchConversationModeClick() }
                     nudgeRow.setOnClickListener { onSwitchConversationModeClick() }
@@ -692,13 +705,13 @@ class ChatAdapter(
                 if (display.isNotEmpty()) tvLoading.text = display
                 return
             }
-            // 流式正文阶段：直接使用与最终消息完全相同的气泡（字号/颜色/边距/宽度一致），
-            // 完成后仅追加 Markdown 样式，不再发生几何跳变。
+            // 流式正文阶段：直接使用与最终消息完全相同的气泡和 Markdown 渲染（字号/颜色/边距/宽度一致），
+            // 边接收边排版，`**加粗**` 这类标记不再以原文裸露；链接等定稿后再启用交互。
             loadingRow.visibility = View.GONE
             tvText.visibility = View.VISIBLE
             typingDots.visibility = View.GONE
             tvLoading.visibility = View.GONE
-            tvText.text = display
+            ChatMarkdownFormatter.applyTo(tvText, display)
             tvText.linksClickable = false
             tvText.movementMethod = null
         }

@@ -8,6 +8,23 @@ import retrofit2.HttpException
 import java.io.File
 import java.util.Locale
 
+/** 调用 OpenCode Go 等网关时随请求发送的客户端标识（官方要求第三方客户端自定义 UA）。 */
+internal const val AI_USER_AGENT = "FlipAccounting-AI/1.0"
+
+internal fun isOpencodeHost(url: String): Boolean =
+    url.contains("opencode.ai", ignoreCase = true)
+
+/** OpenCode 网关建议的附加请求头：自定义 UA + 稳定会话 ID（便于路由与缓存）。 */
+internal fun opencodeExtraHeaders(url: String, sessionId: String?): Map<String, String> =
+    if (isOpencodeHost(url)) {
+        buildMap {
+            put("User-Agent", AI_USER_AGENT)
+            sessionId?.trim()?.takeIf { it.isNotEmpty() }?.let { put("x-opencode-session", it) }
+        }
+    } else {
+        emptyMap()
+    }
+
 internal fun normalizeBaseUrl(url: String): String {
     var baseUrl = url
     if (baseUrl.isEmpty()) baseUrl = "https://api.siliconflow.cn/"
@@ -89,6 +106,10 @@ internal fun adaptChatRequestForProvider(
     if (adapted.has("thinking") && !adapted.has("enable_thinking")) {
         return adapted
     }
+    // glm 系列用 reasoning_effort 控制思考，二次 adapt 时保持首次结果。
+    if (adapted.has("reasoning_effort") && !adapted.has("enable_thinking")) {
+        return adapted
+    }
     val model = adapted.get("model")?.asString.orEmpty()
 
     when (providerId) {
@@ -112,6 +133,22 @@ internal fun adaptChatRequestForProvider(
                     addProperty("type", if (thinkingEnabled) "enabled" else "disabled")
                 })
                 // 不覆盖调用方指定的 temperature，避免记账场景（temperature=0.3）被改为 1.0
+            }
+        }
+
+        AiProviderRegistry.PROVIDER_OPENCODE_GO -> {
+            // zen 网关按底层模型族接受不同的关思考参数（2026-10 实测）：
+            // deepseek/kimi/mimo 收 thinking.type；glm 只收 reasoning_effort；其余不猜参数。
+            when {
+                model.startsWith("deepseek-") || model.startsWith("kimi-") || model.startsWith("mimo-") ->
+                    adapted.add("thinking", JsonObject().apply {
+                        addProperty("type", if (thinkingEnabled) "enabled" else "disabled")
+                    })
+
+                model.startsWith("glm-") ->
+                    adapted.addProperty("reasoning_effort", if (thinkingEnabled) "high" else "none")
+
+                thinkingEnabled -> adapted.addProperty("enable_thinking", true)
             }
         }
 

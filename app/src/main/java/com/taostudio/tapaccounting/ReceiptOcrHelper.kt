@@ -1,19 +1,16 @@
 package com.taostudio.tapaccounting
 
 import android.content.Context
-import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import android.net.Uri
-import android.util.Base64
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-import java.io.ByteArrayOutputStream
 
 /**
  * 小票识别帮助类
  *
- * 图片记账统一走多模态 AI：把图片压缩成 Base64 直接发给支持视觉的模型，
+ * 图片记账统一走多模态 AI：把图片（温和压缩后）转成 Base64 直接发给支持视觉的模型，
  * 由模型一次性完成「读图 + 结构化」两步，省掉本地 OCR 的中间环节。
+ *
+ * 压缩参数与图片记账直出链路共用（见 [AiImageCompressor] / [ReceiptImageInputHelper.readImagePayload]）：
+ * 常见截图保持原始分辨率，只按像素上限温和缩放，长截图放大后仍能看清文字。
  *
  * 历史背景：早期还有一条「本地 ML Kit OCR → 文本 AI」的链路（OCR_MODE_LOCAL），
  * 但多模态模型成熟后该分支已无人使用，ML Kit 依赖与代码均已移除，
@@ -67,69 +64,12 @@ object ReceiptOcrHelper {
     ): String {
         onProgress("正在压缩图片...")
 
-        val bitmap = loadBitmapFromUri(ctx, imageUri)
-        val base64 = bitmapToBase64(bitmap)
+        val payload = ReceiptImageInputHelper.readImagePayload(ctx, imageUri)
+            ?: throw IllegalArgumentException("无法读取图片文件")
 
         onProgress("正在发送图片给 AI 分析...")
 
-        return AIService.analyzeReceiptByImage(ctx, base64, "image/jpeg", supplementText)
+        return AIService.analyzeReceiptByImage(ctx, payload.base64, payload.mime, supplementText)
     }
-
-    /**
-     * 从 URI 加载 Bitmap，并自动缩放到合理大小（避免内存爆炸）
-     */
-    private suspend fun loadBitmapFromUri(ctx: Context, uri: Uri): Bitmap =
-        withContext(Dispatchers.IO) {
-            val options = BitmapFactory.Options().apply {
-                inJustDecodeBounds = true
-            }
-            ctx.contentResolver.openInputStream(uri)?.use {
-                BitmapFactory.decodeStream(it, null, options)
-            }
-
-            // 计算合适的缩放比例（目标最长边 2048px，足够 OCR 精度）
-            val maxDim = 2048
-            val scale = maxOf(
-                1,
-                maxOf(
-                    (options.outWidth + maxDim - 1) / maxDim,
-                    (options.outHeight + maxDim - 1) / maxDim
-                )
-            )
-
-            val decodeOptions = BitmapFactory.Options().apply {
-                inSampleSize = scale
-            }
-
-            ctx.contentResolver.openInputStream(uri)?.use {
-                BitmapFactory.decodeStream(it, null, decodeOptions)
-            } ?: throw IllegalArgumentException("无法读取图片文件")
-        }
-
-    /**
-     * 将 Bitmap 转为 Base64 字符串（用于多模态模式）
-     * 压缩到 1024px 以内，质量 80%，避免请求体过大
-     */
-    private suspend fun bitmapToBase64(bitmap: Bitmap): String =
-        withContext(Dispatchers.IO) {
-            val maxDim = 1024
-            val scaled = if (bitmap.width > maxDim || bitmap.height > maxDim) {
-                val ratio = minOf(
-                    maxDim.toFloat() / bitmap.width,
-                    maxDim.toFloat() / bitmap.height
-                )
-                Bitmap.createScaledBitmap(
-                    bitmap,
-                    (bitmap.width * ratio).toInt(),
-                    (bitmap.height * ratio).toInt(),
-                    true
-                )
-            } else {
-                bitmap
-            }
-            val baos = ByteArrayOutputStream()
-            scaled.compress(Bitmap.CompressFormat.JPEG, 80, baos)
-            Base64.encodeToString(baos.toByteArray(), Base64.NO_WRAP)
-        }
 }
 

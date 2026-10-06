@@ -6,7 +6,6 @@ import android.app.ActivityOptions
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.graphics.drawable.ColorDrawable
 import android.net.Uri
@@ -644,7 +643,7 @@ class ChatMediaController(
 
         val storedUri = copyPickedAttachmentToStorage(uri, mime, fileName)
         val stableFile = File(storedUri.path ?: "")
-        compressImageForAi(stableFile)
+        val compressed = compressImageForAi(stableFile)
         if (stableFile.length() > ChatAttachmentHelper.MAX_IMAGE_BYTES) {
             throw IOException(context.getString(R.string.chat_attach_image_too_large))
         }
@@ -657,7 +656,8 @@ class ChatMediaController(
             PendingImage(
                 uri = storedUri,
                 base64 = android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP),
-                mime = mime,
+                // 压缩成功后文件内容一定是 JPEG，MIME 必须跟着改，避免把 JPEG 字节标成原图 MIME
+                mime = if (compressed) AiImageCompressor.JPEG_MIME else mime,
                 fileName = fileName
             )
         )
@@ -693,31 +693,12 @@ class ChatMediaController(
 
     private class UnsupportedAttachmentException(message: String) : IOException(message)
 
-    private fun compressImageInPlace(file: File) {
-        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-        BitmapFactory.decodeFile(file.absolutePath, bounds)
-        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return
-        var sample = 1
-        while (bounds.outWidth / sample > 1600 || bounds.outHeight / sample > 1600) {
-            sample *= 2
-        }
-        val opts = BitmapFactory.Options().apply { inSampleSize = sample }
-        val bitmap = BitmapFactory.decodeFile(file.absolutePath, opts) ?: return
-        try {
-            FileOutputStream(file, false).use { out ->
-                bitmap.compress(Bitmap.CompressFormat.JPEG, 82, out)
-            }
-        } finally {
-            bitmap.recycle()
-        }
-    }
-
     /**
-     * 为 AI 发送压缩图片（类似微信发图策略）：长边 ≤1280px、JPEG 75。
+     * 为 AI 发送压缩图片（微信级：常见截图保持原始分辨率，长截图放大后仍能看清文字）。
      * 参数与「图片记账」入口共用，见 [AiImageCompressor]。
      */
-    private fun compressImageForAi(file: File) {
-        AiImageCompressor.compressInPlace(file)
+    private fun compressImageForAi(file: File): Boolean {
+        return AiImageCompressor.compressInPlace(file)
     }
 
     private fun copyPickedAttachmentToStorage(sourceUri: Uri, sourceMime: String, fileName: String): Uri {

@@ -281,11 +281,13 @@ assistant: 过去已入账（仅上下文，不是当前任务结果）：支出
 新规则要求：商品名与单价都相同的多行合并为一条，`amount` 取**累加值**，`remarks` 写 `xN`，
 并用「Σbills == 实付总额」自检兜底。商品名相同但单价不同、或商品名不同，一律不合并。
 
-**图片压缩**：`AiImageCompressor.compressInPlace()`（长边 ≤1280px / JPEG 75），
-由「图片记账」入口 `ReceiptImageInputHelper.readImagePayload()` 与聊天附件
-`ChatMediaController` 共用。此前图片记账不压缩，实测一张 1216×3790 的订单长截图
-原始 base64 达 854KB，慢网下长时间无响应甚至被上游重置连接（`SocketException`）；
-压到 304×947 后仅 46KB base64（**18.5×**），识别质量不变。
+**图片压缩（2026-09-15 引入，2026-10-06 调轻）**：`AiImageCompressor`（总像素 ≤4MP / JPEG 88），
+由「图片记账」入口 `ReceiptImageInputHelper.readImagePayload()`、自然语言识别 `ReceiptOcrHelper`、
+聊天附件 `ChatMediaController` 与截屏捕获共用。此前图片记账不压缩，实测一张 1216×3790 的订单长截图
+原始 base64 达 854KB，慢网下长时间无响应甚至被上游重置连接（`SocketException`），因此压缩必须保留；
+但旧参数「长边 ≤1280px / JPEG 75」叠加 2 的幂次 `inSampleSize`，把同一张长截图砍到 304×947，字被压糊
+（放大看不清）。现改为按面积温和缩放：常见截图（1080×2400、1216×3790、1440×3200）保持原始分辨率，
+超过 4MP 才等比缩小，且按精确目标尺寸重采样，不再粗砍。
 
 任务指令由 `buildScreenAccountingTaskInstruction()` 生成，三种分支：
 

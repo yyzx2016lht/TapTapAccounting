@@ -80,6 +80,18 @@ object AIService {
             .readTimeout(API_READ_TIMEOUT_SECONDS, TimeUnit.SECONDS)
             .writeTimeout(API_WRITE_TIMEOUT_SECONDS, TimeUnit.SECONDS)
             .connectionPool(ConnectionPool(5, 5, TimeUnit.MINUTES))
+            .addInterceptor { chain ->
+                val request = chain.request()
+                if (isOpencodeHost(request.url.toString())) {
+                    val builder = request.newBuilder().header("User-Agent", AI_USER_AGENT)
+                    opencodeSessionId?.takeIf { it.isNotBlank() }?.let {
+                        builder.header("x-opencode-session", it)
+                    }
+                    chain.proceed(builder.build())
+                } else {
+                    chain.proceed(request)
+                }
+            }
             .build()
     }
 
@@ -94,8 +106,10 @@ object AIService {
 
     @Volatile private var cachedApi: Pair<String, SiliconFlowApi>? = null
     @Volatile private var cachedSpeechApi: Pair<String, SiliconFlowApi>? = null
+    @Volatile private var opencodeSessionId: String? = null
 
     private fun getApi(ctx: Context): SiliconFlowApi {
+        opencodeSessionId = Prefs.getOrCreateAiOpencodeSessionId(ctx)
         val baseUrl = normalizeBaseUrl(Prefs.getAiUrl(ctx))
         cachedApi?.let { (url, api) -> if (url == baseUrl) return api }
         val api = Retrofit.Builder()
@@ -109,6 +123,7 @@ object AIService {
     }
 
     private fun getSpeechApi(ctx: Context): SiliconFlowApi {
+        opencodeSessionId = Prefs.getOrCreateAiOpencodeSessionId(ctx)
         val baseUrl = normalizeBaseUrl(Prefs.getAiUrl(ctx))
         cachedSpeechApi?.let { (url, api) -> if (url == baseUrl) return api }
         val api = Retrofit.Builder()
@@ -772,20 +787,26 @@ object AIService {
     }
 
     suspend fun fetchModels(ctx: Context, apiKey: String): List<String> =
-        fetchModelsWithDetails(Prefs.getAiUrl(ctx), apiKey)
+        fetchModelsWithDetails(
+            Prefs.getAiUrl(ctx),
+            apiKey,
+            opencodeSessionId = Prefs.getOrCreateAiOpencodeSessionId(ctx)
+        )
 
     suspend fun fetchModelsForProvider(
+        ctx: Context,
         preset: AiProviderPreset,
         apiKey: String
     ): List<String> {
+        val sessionId = Prefs.getOrCreateAiOpencodeSessionId(ctx)
         return runCatching {
-            fetchModelsWithDetails(preset.baseUrl, apiKey)
+            fetchModelsWithDetails(preset.baseUrl, apiKey, sessionId)
                 .takeIf { it.isNotEmpty() }
                 ?: throw IllegalStateException("模型列表为空")
         }.getOrElse { modelListError ->
             val detail = modelListError.message.orEmpty()
             if (detail.contains("401") || detail.contains("403")) throw modelListError
-            verifyProviderConnection(preset, apiKey)
+            verifyProviderConnection(preset, apiKey, sessionId)
             listOf(
                 preset.defaultTextModel,
                 preset.defaultVisionModel,
@@ -796,7 +817,8 @@ object AIService {
 
     private fun verifyProviderConnection(
         preset: AiProviderPreset,
-        apiKey: String
+        apiKey: String,
+        opencodeSessionId: String? = null
     ) {
         val requestJson = buildTextChatRequest(
             model = preset.defaultTextModel,
@@ -806,10 +828,14 @@ object AIService {
         ).let {
             adaptChatRequestForProvider(preset.id, it)
         }
-        val request = Request.Builder()
+        val requestBuilder = Request.Builder()
             .url(normalizeBaseUrl(preset.baseUrl) + "v1/chat/completions")
             .addHeader("Authorization", "Bearer $apiKey")
             .addHeader("Content-Type", "application/json")
+        opencodeExtraHeaders(preset.baseUrl, opencodeSessionId).forEach { (name, value) ->
+            requestBuilder.addHeader(name, value)
+        }
+        val request = requestBuilder
             .post(requestJson.toString().toRequestBody("application/json".toMediaTypeOrNull()))
             .build()
         OkHttpClient.Builder()
@@ -826,7 +852,11 @@ object AIService {
             }
     }
 
-    suspend fun fetchModelsWithDetails(url: String, apiKey: String): List<String> {
+    suspend fun fetchModelsWithDetails(
+        url: String,
+        apiKey: String,
+        opencodeSessionId: String? = null
+    ): List<String> {
         var baseUrl = url
         if (baseUrl.isEmpty()) baseUrl = "https://api.siliconflow.cn/"
         if (!baseUrl.endsWith("/")) baseUrl += "/"
@@ -835,12 +865,14 @@ object AIService {
             .readTimeout(30, TimeUnit.SECONDS)
             .writeTimeout(30, TimeUnit.SECONDS)
             .build()
-        val rawRequest = Request.Builder()
+        val requestBuilder = Request.Builder()
             .url(baseUrl + "v1/models")
             .addHeader("Authorization", "Bearer $apiKey")
             .addHeader("Accept", "application/json")
-            .get()
-            .build()
+        opencodeExtraHeaders(baseUrl, opencodeSessionId).forEach { (name, value) ->
+            requestBuilder.addHeader(name, value)
+        }
+        val rawRequest = requestBuilder.get().build()
 
         val rawResponse = client.newCall(rawRequest).execute()
         if (!rawResponse.isSuccessful) {

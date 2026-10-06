@@ -90,6 +90,16 @@ class BillDetailActivity : AppCompatActivity() {
     private var currentBillTimeMillis: Long = System.currentTimeMillis()
     private var originalRecordedTimeMillis: Long = System.currentTimeMillis()
 
+    // 进入页面时的初始快照，用于保存时对比生成本次「改了哪些字段」的 toast。
+    private var initialUiType: Int = Bill.TYPE_EXPENSE
+    private var initialCategoryName: String = ""
+    private var initialAmount: Double = 0.0
+    private var initialAssetName: String = ""
+    private var initialBookName: String = ""
+    private var initialExcludeFromStats: Boolean = false
+    private var initialBillTimeMillis: Long = 0L
+    private var initialRemark: String = ""
+
     private var iconLoadJob: Job? = null
 
     private val detailPickerFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
@@ -212,6 +222,15 @@ class BillDetailActivity : AppCompatActivity() {
 
         etRemark.setText(loadedBill.remark)
         switchExcludeStats.isChecked = loadedBill.excludeFromStats
+
+        initialUiType = currentUiType
+        initialCategoryName = currentCategoryName
+        initialAmount = loadedBill.amount
+        initialAssetName = currentAssetName
+        initialBookName = currentBookName
+        initialExcludeFromStats = currentExcludeFromStats
+        initialBillTimeMillis = currentBillTimeMillis
+        initialRemark = loadedBill.remark
 
         renderBillState()
         loadCategoryIcon()
@@ -667,6 +686,22 @@ class BillDetailActivity : AppCompatActivity() {
                     time = currentBillTimeMillis
                 )
 
+                val changedLabelRes = buildList {
+                    if (kotlin.math.abs(amount - initialAmount) > 1e-9) add(R.string.bill_change_amount)
+                    if (currentBillTimeMillis != initialBillTimeMillis) add(R.string.bill_change_time)
+                    if (currentUiType != initialUiType) add(R.string.bill_change_property)
+                    if (persistedCategory != initialCategoryName) add(R.string.bill_change_category)
+                    if (persistedAssetName != initialAssetName) add(R.string.bill_change_asset)
+                    if (updatedBill.bookName != initialBookName) add(R.string.bill_change_book)
+                    if (updatedBill.remark != initialRemark) add(R.string.bill_change_remark)
+                    if (currentExcludeFromStats != initialExcludeFromStats) {
+                        add(
+                            if (currentExcludeFromStats) R.string.bill_change_excluded
+                            else R.string.bill_change_included
+                        )
+                    }
+                }
+
                 BillMutationService.replaceBill(
                     db = app.database,
                     oldBill = originalBill,
@@ -674,7 +709,15 @@ class BillDetailActivity : AppCompatActivity() {
                 )
 
                 withContext(Dispatchers.Main) {
-                    Toast.makeText(this@BillDetailActivity, getString(R.string.save_success), Toast.LENGTH_SHORT).show()
+                    val message = if (changedLabelRes.isEmpty()) {
+                        getString(R.string.bill_change_toast_none)
+                    } else {
+                        getString(
+                            R.string.bill_change_toast_fmt,
+                            changedLabelRes.joinToString("、") { getString(it) }
+                        )
+                    }
+                    Toast.makeText(this@BillDetailActivity, message, Toast.LENGTH_SHORT).show()
                     setResult(RESULT_OK)
                     finish()
                 }

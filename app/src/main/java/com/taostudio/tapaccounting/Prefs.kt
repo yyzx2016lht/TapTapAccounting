@@ -184,6 +184,19 @@ object Prefs {
     fun setAiModelsCache(ctx: Context, models: List<String>) =
         PrefsAiSupport.setAiModelsCache(ctx, models)
 
+    fun getAiModelCatalog(ctx: Context): String = PrefsAiSupport.getAiModelCatalog(ctx)
+    fun setAiModelCatalog(ctx: Context, raw: String) = PrefsAiSupport.setAiModelCatalog(ctx, raw)
+    fun getAiModelCatalogFetchedAt(ctx: Context): Long =
+        PrefsAiSupport.getAiModelCatalogFetchedAt(ctx)
+    fun setAiModelCatalogFetchedAt(ctx: Context, timestamp: Long) =
+        PrefsAiSupport.setAiModelCatalogFetchedAt(ctx, timestamp)
+    fun getAiModelCapabilityOverride(ctx: Context, providerId: String, modelId: String): String? =
+        PrefsAiSupport.getAiModelCapabilityOverride(ctx, providerId, modelId)
+    fun setAiModelCapabilityOverride(ctx: Context, providerId: String, modelId: String, value: String?) =
+        PrefsAiSupport.setAiModelCapabilityOverride(ctx, providerId, modelId, value)
+    fun getOrCreateAiOpencodeSessionId(ctx: Context): String =
+        PrefsAiSupport.getOrCreateAiOpencodeSessionId(ctx)
+
     fun applyAiProviderConfigSync(
         ctx: Context,
         preset: AiProviderPreset,

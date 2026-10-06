@@ -497,23 +497,14 @@ class ChatMessagePipeline(
                         if (!canWriteForRequest(requestContext)) return@launch
 
                         if (isConversationMode()) {
-                            if (intent == "BOOKKEEPING") {
-                                // 对话模式下检测到记账请求，提示用户切换模式
-                                finalizeAi(
-                                    loadingKey,
-                                    "检测到记账内容，你可以点击右上角切换到记账模式来记录这笔账",
-                                    requestContext.bookName,
-                                    requestContext.conversationId
-                                )
-                                return@launch
-                            }
-                            // 对话模式下的闲聊
+                            // 对话模式：不记账，正常看图聊天；识别到账单内容时回复后再提示切换记账模式
                             streamConversationWithImages(
                                 loadingKey = loadingKey,
                                 userInput = supplementText,
                                 images = imagePairs,
                                 chatHistoryTurns = chatHistoryTurns,
-                                requestContext = requestContext
+                                requestContext = requestContext,
+                                showConversationModeNudge = intent == "BOOKKEEPING"
                             )
                             return@launch
                         }
@@ -537,22 +528,13 @@ class ChatMessagePipeline(
                         if (!canWriteForRequest(requestContext)) return@launch
 
                         if (isConversationMode()) {
-                            if (intent == "BOOKKEEPING") {
-                                // 对话模式下检测到记账请求，提示用户切换模式
-                                finalizeAi(
-                                    loadingKey,
-                                    "检测到记账内容，你可以点击右上角切换到记账模式来记录这笔账",
-                                    requestContext.bookName,
-                                    requestContext.conversationId
-                                )
-                                return@launch
-                            }
-                            // 对话模式下的闲聊
+                            // 对话模式：不记账，正常聊天；识别到记账内容时回复后再提示切换记账模式
                             streamConversationWithText(
                                 loadingKey = loadingKey,
                                 userText = userText,
                                 chatHistoryTurns = chatHistoryTurns,
-                                requestContext = requestContext
+                                requestContext = requestContext,
+                                showConversationModeNudge = intent == "BOOKKEEPING"
                             )
                             return@launch
                         }
@@ -891,22 +873,13 @@ class ChatMessagePipeline(
                 if (!canWriteForRequest(requestContext)) return@launch
 
                 if (isConversationMode()) {
-                    if (intent == "BOOKKEEPING") {
-                        // 对话模式下检测到记账请求，提示用户切换模式
-                        finalizeAi(
-                            loadingKey,
-                            "检测到记账内容，你可以点击右上角切换到记账模式来记录这笔账",
-                            requestContext.bookName,
-                            requestContext.conversationId
-                        )
-                        return@launch
-                    }
-                    // 对话模式下的闲聊
+                    // 对话模式：不记账，正常聊天；识别到记账内容时回复后再提示切换记账模式
                     streamConversationWithText(
                         loadingKey = loadingKey,
                         userText = transcript,
                         chatHistoryTurns = buildChatHistoryTurns(transcript, requestContext),
-                        requestContext = requestContext
+                        requestContext = requestContext,
+                        showConversationModeNudge = intent == "BOOKKEEPING"
                     )
                     return@launch
                 }
@@ -1129,7 +1102,8 @@ class ChatMessagePipeline(
         loadingKey: String,
         userText: String,
         chatHistoryTurns: List<ChatTurn>,
-        requestContext: ChatRequestContext
+        requestContext: ChatRequestContext,
+        showConversationModeNudge: Boolean = false
     ) {
         updateLoadingMessage(loadingKey, "正在思考...")
         val streamedText = StreamingTextUiBuffer()
@@ -1150,7 +1124,8 @@ class ChatMessagePipeline(
                 loadingKey,
                 chatReply.content,
                 requestContext.bookName,
-                requestContext.conversationId
+                requestContext.conversationId,
+                showConversationModeNudge = showConversationModeNudge
             )
         } else {
             finalizeAi(
@@ -1167,7 +1142,8 @@ class ChatMessagePipeline(
         userInput: String,
         images: List<Pair<String, String>>,
         chatHistoryTurns: List<ChatTurn>,
-        requestContext: ChatRequestContext
+        requestContext: ChatRequestContext,
+        showConversationModeNudge: Boolean = false
     ) {
         updateLoadingMessage(loadingKey, "正在思考...")
         val streamedText = StreamingTextUiBuffer()
@@ -1189,7 +1165,8 @@ class ChatMessagePipeline(
                 loadingKey,
                 chatReply.content,
                 requestContext.bookName,
-                requestContext.conversationId
+                requestContext.conversationId,
+                showConversationModeNudge = showConversationModeNudge
             )
         } else {
             finalizeAi(

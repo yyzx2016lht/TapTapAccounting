@@ -283,7 +283,8 @@ class ChatActivity : AppCompatActivity() {
             onShowBillMessageMenu = ::showBillMessageMenu,
             onBillsDeleted = ::showBillDeleteUndo,
             onConfirmAllBills = ::confirmAllBillsInMessage,
-            onSwitchConversationModeClick = ::showSwitchConversationModeDialog
+            onSwitchConversationModeClick = ::onModeNudgeClick,
+            isConversationMode = { chatMode == MODE_CONVERSATION }
         )
     }
     private val sessionAdapter by lazy {
@@ -709,6 +710,19 @@ class ChatActivity : AppCompatActivity() {
                 }
             )
         )
+    }
+
+    /**
+     * 回复气泡上的模式 nudge 点击：
+     * - 对话模式（检测到记账内容）→ 直接切到记账模式
+     * - 记账模式（闲聊）→ 走原有的切换对话模式对话框（可在当前窗口继续或新开窗口）
+     */
+    private fun onModeNudgeClick() {
+        if (chatMode == MODE_CONVERSATION) {
+            toggleChatPageMode()
+        } else {
+            showSwitchConversationModeDialog()
+        }
     }
 
     private fun showSwitchConversationModeDialog() {

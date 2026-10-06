@@ -179,6 +179,38 @@ class AiConfigActivity : AppCompatActivity() {
                 showCapabilityNotSupportedToast(currentMode)
                 return
             }
+
+            val catalogProviderId = currentPreset.catalogProviderId
+            val catalogUsable = AiModelCatalog.isProviderCatalogUsable(this, catalogProviderId, allModelsList)
+            val baseModels: List<String> = when (currentMode) {
+                "vision" -> AiModelCatalog.visionModelsForPicker(
+                    this,
+                    catalogProviderId,
+                    allModelsList,
+                    currentPreset.defaultVisionModel
+                ) ?: allModelsList
+
+                else -> allModelsList
+            }
+            if (currentMode == "vision" && baseModels.isEmpty() && allModelsList.isNotEmpty()) {
+                Utils.toast(this, getString(R.string.ai_vision_no_capable_model))
+                return
+            }
+
+            fun displayLabel(model: String): String {
+                if (!catalogUsable) return model
+                val imageCapable = AiModelCatalog.imageCapabilityBadge(
+                    this,
+                    catalogProviderId,
+                    model,
+                    currentPreset.defaultVisionModel
+                ) ?: return model
+                val label = getString(
+                    if (imageCapable) R.string.ai_model_cap_image else R.string.ai_model_cap_text
+                )
+                return "$model  ·  $label"
+            }
+
             val dialogLayout = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
                 setPadding(48, 32, 48, 16)
@@ -198,35 +230,117 @@ class AiConfigActivity : AppCompatActivity() {
             ))
             dialogLayout.addView(listView)
 
-            val filteredList = mutableListOf<String>().also { it.addAll(allModelsList) }
-            val listAdapter = ArrayAdapter(this, android.R.layout.simple_list_item_1, filteredList)
+            val shownModels = mutableListOf<String>()
+            val shownLabels = mutableListOf<String>()
+            val listAdapter = ArrayAdapter(this, android.R.layout.simple_list_item_1, shownLabels)
             listView.adapter = listAdapter
+
+            fun rebuild(query: String) {
+                val filtered = if (query.isEmpty()) {
+                    baseModels
+                } else {
+                    baseModels.filter { it.contains(query, ignoreCase = true) }
+                }
+                shownModels.clear()
+                shownModels.addAll(filtered)
+                shownLabels.clear()
+                shownLabels.addAll(filtered.map(::displayLabel))
+                listAdapter.notifyDataSetChanged()
+            }
+            rebuild("")
 
             val dialog = AlertDialog.Builder(this)
                 .setTitle(R.string.select_ai_model)
                 .setView(dialogLayout)
                 .create()
 
+            fun showCapabilityEditor(model: String) {
+                if (catalogProviderId.isNullOrBlank()) return
+                val override = Prefs.getAiModelCapabilityOverride(this, catalogProviderId, model)
+                val currentImage = AiModelCatalog.supportsImageInput(
+                    this,
+                    catalogProviderId,
+                    model,
+                    currentPreset.defaultVisionModel
+                ) == true
+                val actions = mutableListOf<Pair<String, () -> Unit>>()
+                if (!currentImage) {
+                    actions.add(getString(R.string.ai_model_cap_mark_image) to {
+                        Prefs.setAiModelCapabilityOverride(
+                            this, catalogProviderId, model, AiModelCatalog.OVERRIDE_IMAGE
+                        )
+                        Utils.toast(this, getString(R.string.ai_model_cap_saved))
+                        rebuild(etSearch.text?.toString()?.trim().orEmpty())
+                    })
+                }
+                if (currentImage) {
+                    actions.add(getString(R.string.ai_model_cap_mark_text) to {
+                        Prefs.setAiModelCapabilityOverride(
+                            this, catalogProviderId, model, AiModelCatalog.OVERRIDE_TEXT
+                        )
+                        Utils.toast(this, getString(R.string.ai_model_cap_saved))
+                        rebuild(etSearch.text?.toString()?.trim().orEmpty())
+                    })
+                }
+                if (override != null) {
+                    actions.add(getString(R.string.ai_model_cap_clear) to {
+                        Prefs.setAiModelCapabilityOverride(this, catalogProviderId, model, null)
+                        Utils.toast(this, getString(R.string.ai_model_cap_saved))
+                        rebuild(etSearch.text?.toString()?.trim().orEmpty())
+                    })
+                }
+                if (currentPreset.supportsVision) {
+                    actions.add(getString(R.string.ai_model_cap_probe) to {
+                        Utils.toast(this, getString(R.string.ai_model_cap_probe_running))
+                        CoroutineScope(Dispatchers.IO).launch {
+                            val ok = runCatching {
+                                AIService.probeVisionInputSupport(this@AiConfigActivity, model)
+                            }.getOrDefault(false)
+                            withContext(Dispatchers.Main) {
+                                Prefs.setAiModelCapabilityOverride(
+                                    this@AiConfigActivity,
+                                    catalogProviderId,
+                                    model,
+                                    if (ok) AiModelCatalog.OVERRIDE_IMAGE else AiModelCatalog.OVERRIDE_TEXT
+                                )
+                                Utils.toast(
+                                    this@AiConfigActivity,
+                                    getString(
+                                        if (ok) R.string.ai_model_cap_probe_ok
+                                        else R.string.ai_model_cap_probe_fail
+                                    )
+                                )
+                                rebuild(etSearch.text?.toString()?.trim().orEmpty())
+                            }
+                        }
+                    })
+                }
+                if (actions.isEmpty()) return
+                AlertDialog.Builder(this)
+                    .setTitle(getString(R.string.ai_model_cap_title_fmt, model))
+                    .setItems(actions.map { it.first }.toTypedArray()) { _, which ->
+                        actions.getOrNull(which)?.second?.invoke()
+                    }
+                    .show()
+            }
+
             etSearch.addTextChangedListener(object : TextWatcher {
                 override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
                 override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
                 override fun afterTextChanged(s: Editable?) {
-                    val query = s?.toString()?.trim().orEmpty()
-                    filteredList.clear()
-                    if (query.isEmpty()) {
-                        filteredList.addAll(allModelsList)
-                    } else {
-                        filteredList.addAll(allModelsList.filter { it.contains(query, ignoreCase = true) })
-                    }
-                    listAdapter.notifyDataSetChanged()
+                    rebuild(s?.toString()?.trim().orEmpty())
                 }
             })
 
             listView.setOnItemClickListener { _, _, position, _ ->
-                val selected = listAdapter.getItem(position) ?: return@setOnItemClickListener
+                val selected = shownModels.getOrNull(position) ?: return@setOnItemClickListener
                 modeModels[currentMode] = selected
                 tvSelectedModel.text = selected
                 dialog.dismiss()
+            }
+            listView.setOnItemLongClickListener { _, _, position, _ ->
+                shownModels.getOrNull(position)?.let(::showCapabilityEditor)
+                true
             }
 
             OverlayDialogs.showPageCenterDialog(
@@ -343,7 +457,9 @@ class AiConfigActivity : AppCompatActivity() {
 
             CoroutineScope(Dispatchers.IO).launch {
                 try {
-                    val models = AIService.fetchModelsForProvider(currentPreset, key)
+                    val models = AIService.fetchModelsForProvider(this@AiConfigActivity, currentPreset, key)
+                    // 能力目录拉取失败不阻塞模型刷新，仅影响视觉列表过滤精度。
+                    runCatching { AiModelCatalog.refreshFromNetwork(this@AiConfigActivity) }
                     withContext(Dispatchers.Main) {
                         btnTest.isEnabled = true
                         btnTest.text = getString(R.string.refresh_test_model)
@@ -399,6 +515,18 @@ class AiConfigActivity : AppCompatActivity() {
                         if (selected.isNotBlank() && selected !in verifiedModels) {
                             modeModels[key] = ""
                         }
+                    }
+                }
+
+                // 能力目录可用时，视觉槽位不允许保存纯文本模型（清空后回落到预设默认）。
+                val catalogProviderId = currentPreset.catalogProviderId
+                if (AiModelCatalog.isProviderCatalogUsable(this, catalogProviderId, allModelsList)) {
+                    val selectedVision = modeModels["vision"].orEmpty()
+                    if (selectedVision.isNotBlank() &&
+                        selectedVision != currentPreset.defaultVisionModel &&
+                        AiModelCatalog.supportsImageInput(this, catalogProviderId, selectedVision) == false
+                    ) {
+                        modeModels["vision"] = ""
                     }
                 }
 

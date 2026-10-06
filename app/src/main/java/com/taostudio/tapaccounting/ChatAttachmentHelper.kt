@@ -8,7 +8,7 @@ import java.util.Locale
 
 object ChatAttachmentHelper {
 
-    const val MAX_IMAGE_BYTES = 4L * 1024L * 1024L
+    const val MAX_IMAGE_BYTES = 20L * 1024L * 1024L
     const val MAX_PDF_BYTES = 20L * 1024L * 1024L
     const val MAX_PDF_PAGES = 6
     /** Internal marker prepended to the multimodal supplement when a PDF was rasterized. */

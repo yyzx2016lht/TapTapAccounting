@@ -171,7 +171,10 @@ object AiProviderSetupDialog {
                 confirm.text = activity.getString(R.string.ai_provider_testing)
                 CoroutineScope(Dispatchers.IO).launch {
                     val result = runCatching {
-                        AIService.fetchModelsForProvider(preset, input)
+                        val models = AIService.fetchModelsForProvider(activity, preset, input)
+                        // 能力目录拉取失败不阻塞配置流程，仅影响视觉列表过滤精度。
+                        runCatching { AiModelCatalog.refreshFromNetwork(activity) }
+                        models
                     }
                     withContext(Dispatchers.Main) {
                         confirm.isEnabled = true

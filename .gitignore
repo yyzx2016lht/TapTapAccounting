@@ -66,7 +66,11 @@ assets/dexopt/
 
 # ===== 临时工作目录 =====
 .tmp/
+.tmp_*
 .workbuddy/
+.workbuddy-ai/
+.codex/
+.playwright-cli/
 
 # ===== 打包产物 =====
 dist/

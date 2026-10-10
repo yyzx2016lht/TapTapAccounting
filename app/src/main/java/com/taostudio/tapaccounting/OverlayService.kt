@@ -426,7 +426,7 @@ class OverlayService : Service() {
             ACTION_START_FLIP -> {
                 isFlipEnabled = true
                 cancelRestart()
-                promoteToForeground(getString(R.string.notif_quick_gesture_running))
+                promoteToForeground(currentNotificationText())
                 startFlipDetectionIfAllowed("user-start-flip")
             }
             ACTION_STOP_FLIP -> {
@@ -540,6 +540,8 @@ class OverlayService : Service() {
             Logger.e(this, "OverlayService", "FlipDetector start failed")
         } else {
             Logger.i(this, "OverlayService", "FlipDetector started")
+            // 翻转检测没有状态回调，起停后要自己刷通知，否则文案会停在上一状态
+            refreshDetectionNotification()
         }
     }
 
@@ -553,8 +555,10 @@ class OverlayService : Service() {
     }
 
     private fun stopFlipDetection() {
+        if (flipDetector == null) return
         flipDetector?.stop()
         flipDetector = null
+        refreshDetectionNotification()
     }
 
     private fun startTapDetection() {
@@ -722,22 +726,40 @@ class OverlayService : Service() {
                 TapDetectionState.HeuristicStandby -> getString(R.string.notif_tap_standby)
                 TapDetectionState.HeuristicTest -> getString(R.string.notif_tap_he_test)
                 TapDetectionState.AlwaysMl -> getString(R.string.notif_tap_always_ml)
-                TapDetectionState.Off -> getString(R.string.notif_tap_paused)
+                // 只在 stop() 到字段置空的间隙出现，照样按真实暂停原因显示
+                TapDetectionState.Off -> pausedDetectionText()
             }
         }
         if (isDoubleTapEnabled) {
-            // 开关开着但检测器没跑（息屏或横屏屏蔽）
-            return getString(R.string.notif_tap_paused)
+            // 敲击开关开着但检测器没跑：息屏/横屏屏蔽，或启动、重启间隙
+            return pausedDetectionText()
         }
         if (Prefs.isDoubleTapEnabled(this)) {
             // 开关仍然开着，只是被 AI 面板/悬浮窗临时暂停了——这时候说"运行中"是假的
             return getString(R.string.notif_tap_paused_temp)
         }
-        return if (isFlipEnabled) {
-            getString(R.string.notif_quick_gesture_running)
-        } else {
-            getString(R.string.notif_double_tap_running)
+        if (isFlipEnabled) {
+            // 翻转检测器没跑时（息屏/横屏屏蔽、启动间隙）同样不能再写"运行中"
+            return if (flipDetector != null) {
+                getString(R.string.notif_quick_gesture_running)
+            } else {
+                pausedDetectionText()
+            }
         }
+        // 手势全关、服务尚未退出的短暂兜底
+        return getString(R.string.notif_service_running)
+    }
+
+    /**
+     * 检测器没跑时的文案，按真实原因区分。
+     *
+     * 横屏屏蔽优先于息屏：两者同时成立时，光把屏幕点亮不会恢复，得先转回竖屏。
+     * 两个原因都不成立说明只是启动/重启间隙，不能谎称"亮屏后恢复"。
+     */
+    private fun pausedDetectionText(): String = when {
+        isLandscapeDetectionBlocked() -> getString(R.string.notif_detection_paused_landscape)
+        !isScreenInteractive() -> getString(R.string.notif_detection_paused)
+        else -> getString(R.string.notif_detection_starting)
     }
 
     /** 按当前状态重刷前台通知。 */
@@ -825,7 +847,7 @@ class OverlayService : Service() {
 
     fun exitMicrophoneMode() {
         try {
-            if (isDoubleTapEnabled) {
+            if (isDoubleTapEnabled || isFlipEnabled) {
                 promoteToForeground(currentNotificationText())
                 Logger.d(this, "OverlayService", "exitMicrophoneMode: restored SPECIAL_USE foreground")
             } else {

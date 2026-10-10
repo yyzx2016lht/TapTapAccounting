@@ -97,6 +97,133 @@
         <item name="android:letterSpacing">0.03</item>
     </style>
 
+    <!-- AI 功能页：无图标的列表行，子项缩进 -->
+    <style name="AiSectionLabel">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginStart">4dp</item>
+        <item name="android:layout_marginBottom">8dp</item>
+        <item name="android:textColor">#8F98A6</item>
+        <item name="android:textSize">@dimen/text_size_13</item>
+    </style>
+
+    <style name="AiRow" parent="SettingsRow.Clickable">
+        <item name="android:minHeight">64dp</item>
+        <item name="android:paddingTop">14dp</item>
+        <item name="android:paddingBottom">14dp</item>
+    </style>
+
+    <style name="AiSubRow" parent="AiRow">
+        <item name="android:minHeight">52dp</item>
+        <item name="android:paddingStart">34dp</item>
+        <item name="android:paddingTop">10dp</item>
+        <item name="android:paddingBottom">10dp</item>
+    </style>
+
+    <style name="AiRowText">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_weight">1</item>
+        <item name="android:layout_marginEnd">12dp</item>
+        <item name="android:orientation">vertical</item>
+    </style>
+
+    <style name="AiRowTitle">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:textColor">@color/settings_item_title</item>
+        <item name="android:textSize">@dimen/text_size_15</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+
+    <style name="AiRowDesc">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">3dp</item>
+        <item name="android:textColor">@color/settings_item_subtitle</item>
+        <item name="android:textSize">@dimen/text_size_12</item>
+    </style>
+
+    <style name="AiSubRowTitle" parent="AiRowTitle">
+        <item name="android:textSize">@dimen/text_size_14</item>
+        <item name="android:textStyle">normal</item>
+    </style>
+
+    <style name="AiSubRowDesc" parent="AiRowDesc">
+        <item name="android:layout_marginTop">2dp</item>
+        <item name="android:textColor">#9AA4B2</item>
+        <item name="android:textSize">@dimen/text_size_11</item>
+    </style>
+
+    <style name="AiDivider">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">0.5dp</item>
+        <item name="android:layout_marginStart">@dimen/settings_item_padding_h</item>
+        <item name="android:background">@color/settings_divider</item>
+    </style>
+
+    <style name="AiSubDivider" parent="AiDivider">
+        <item name="android:layout_marginStart">34dp</item>
+        <item name="android:background">#E9EDF2</item>
+    </style>
+
+    <style name="AiSubGroup">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:orientation">vertical</item>
+        <item name="android:background">@drawable/bg_ai_sub_group</item>
+        <item name="android:paddingBottom">6dp</item>
+        <item name="android:visibility">gone</item>
+    </style>
+
+    <style name="AiRowValue">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:textColor">@color/settings_item_subtitle</item>
+        <item name="android:textSize">@dimen/text_size_13</item>
+    </style>
+
+    <style name="AiModelValue" parent="AiRowValue">
+        <item name="android:maxWidth">150dp</item>
+        <item name="android:ellipsize">middle</item>
+        <item name="android:singleLine">true</item>
+        <item name="android:gravity">end</item>
+    </style>
+
+    <style name="AiStepDot">
+        <item name="android:layout_width">18dp</item>
+        <item name="android:layout_height">18dp</item>
+        <item name="android:background">@drawable/bg_ai_step_idle</item>
+        <item name="android:gravity">center</item>
+        <item name="android:includeFontPadding">false</item>
+        <item name="android:textColor">#9AA4B2</item>
+        <item name="android:textSize">@dimen/text_size_10</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+
+    <style name="AiStepLabel">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginStart">6dp</item>
+        <item name="android:textColor">#9AA4B2</item>
+        <item name="android:textSize">@dimen/text_size_12</item>
+    </style>
+
+    <style name="AiStepLine">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">1dp</item>
+        <item name="android:layout_weight">1</item>
+        <item name="android:layout_marginHorizontal">8dp</item>
+        <item name="android:background">#E3E7ED</item>
+    </style>
+
+    <style name="AiSwitch">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="thumbTint">@color/switch_thumb_tint</item>
+        <item name="trackTint">@color/switch_track_tint</item>
+    </style>
+
     <style name="CleanupItemRow">
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">wrap_content</item>

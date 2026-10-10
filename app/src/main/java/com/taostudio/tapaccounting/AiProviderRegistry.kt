@@ -5,6 +5,9 @@ import android.content.Context
 /**
  * Built-in AI provider presets. Default models are tuned per provider and can be
  * updated as compatibility is verified.
+ *
+ * `default*Model` 是“预设首选值”：运行时/设置流程会经 [AiModelDefaults] 与
+ * 实时模型列表比对，厂商换代后自动顶替（详见 [AiModelAutoPicker]）。
  */
 data class AiProviderPreset(
     val id: String,
@@ -112,8 +115,10 @@ object AiProviderRegistry {
             createKeyUrl = "https://platform.xiaomimimo.com/#/console/api-keys",
             supportsVision = true,
             supportsCloudSpeech = true,
-            defaultTextModel = "mimo-v2.5",
-            defaultVisionModel = "mimo-v2.5",
+            // mimo-v2.5 / v2.5-pro 于 2026.10.21 10:00 下线（10.14 18:00 起自动转发到 V2.6）。
+            // ASR 无后继型号，mimo-v2.5-asr 仍是官方现役语音识别模型，保持不动。
+            defaultTextModel = "mimo-v2.6-flash",
+            defaultVisionModel = "mimo-v2.6-flash",
             defaultSpeechModel = "mimo-v2.5-asr",
             keyHint = "请输入小米 MiMo API Key",
             catalogProviderId = "xiaomi"
@@ -140,34 +145,27 @@ object AiProviderRegistry {
     }.joinToString(" · ")
 
     fun applyDefaultModels(ctx: Context, preset: AiProviderPreset) {
-        val textModel = preset.defaultTextModel
+        val resolved = AiModelDefaults.resolve(ctx, preset)
         Prefs.resetChatModelOnProviderChange(ctx)
-        Prefs.setAiModel(ctx, textModel)
-        Prefs.setAiMultiModel(ctx, textModel)
-        Prefs.setAiModifyModel(ctx, textModel)
-        Prefs.setAiCategoryRefineModel(ctx, textModel)
-        Prefs.setAiRuleModel(ctx, textModel)
-        Prefs.setAiReceiptModel(ctx, textModel)
-        Prefs.setAiReceiptOcrRefineModel(ctx, textModel)
-        Prefs.setAiRouterModel(ctx, textModel)
+        Prefs.setAiModel(ctx, resolved.text)
+        Prefs.setAiMultiModel(ctx, resolved.text)
+        Prefs.setAiModifyModel(ctx, resolved.text)
+        Prefs.setAiCategoryRefineModel(ctx, resolved.text)
+        Prefs.setAiRuleModel(ctx, resolved.text)
+        Prefs.setAiReceiptModel(ctx, resolved.text)
+        Prefs.setAiReceiptOcrRefineModel(ctx, resolved.text)
+        Prefs.setAiRouterModel(ctx, resolved.text)
 
-        if (preset.supportsVision && preset.defaultVisionModel.isNotBlank()) {
-            Prefs.setAiReceiptVisionModel(ctx, preset.defaultVisionModel)
-            Prefs.setAiScreenModel(ctx, preset.defaultVisionModel)
-        } else {
-            Prefs.setAiReceiptVisionModel(ctx, "")
-            Prefs.setAiScreenModel(ctx, "")
-        }
+        Prefs.setAiReceiptVisionModel(ctx, resolved.vision)
+        Prefs.setAiScreenModel(ctx, resolved.vision)
 
-        if (preset.supportsCloudSpeech && preset.defaultSpeechModel.isNotBlank()) {
-            Prefs.setAiSpeechModel(ctx, preset.defaultSpeechModel)
-        } else {
-            Prefs.setAiSpeechModel(ctx, "")
-        }
+        Prefs.setAiSpeechModel(ctx, resolved.speech)
     }
 
     fun applyProvider(ctx: Context, preset: AiProviderPreset, apiKey: String, modelsCache: List<String>? = null) {
-        Prefs.applyAiProviderConfigSync(ctx, preset, apiKey.trim(), modelsCache)
+        // 用户输入 Key 后已拉到实时模型列表：默认值从列表里自动选，避免写死过时型号。
+        val resolved = AiModelDefaults.resolve(ctx, preset, modelsCache ?: Prefs.getAiModelsCache(ctx))
+        Prefs.applyAiProviderConfigSync(ctx, preset, apiKey.trim(), modelsCache, resolved)
         Prefs.resetChatModelOnProviderChange(ctx)
     }
 }

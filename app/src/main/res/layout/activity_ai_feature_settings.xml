@@ -6,11 +6,11 @@
     android:background="@color/page_background"
     android:orientation="vertical">
 
-        <RelativeLayout
-            android:layout_width="match_parent"
-            android:layout_height="56dp"
-            android:background="@color/surface_card"
-            android:paddingHorizontal="12dp">
+    <RelativeLayout
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+        android:background="@color/surface_card"
+        android:paddingHorizontal="12dp">
 
         <ImageView
             android:id="@+id/btn_back_ai_feature"
@@ -27,7 +27,7 @@
             android:layout_height="wrap_content"
             android:layout_centerInParent="true"
             android:text="@string/ai_feature_title"
-                android:textColor="@color/settings_item_title"
+            android:textColor="@color/settings_item_title"
             android:textSize="@dimen/text_size_18"
             android:textStyle="bold" />
     </RelativeLayout>
@@ -43,154 +43,436 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:padding="16dp">
+            android:paddingHorizontal="16dp"
+            android:paddingTop="16dp"
+            android:paddingBottom="32dp">
 
-            <LinearLayout
-                android:id="@+id/layout_ai_key_warning"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="16dp"
-                android:background="@drawable/bg_ai_key_warning"
-                android:clickable="true"
-                android:focusable="true"
-                android:foreground="?attr/selectableItemBackground"
-                android:gravity="center_vertical"
-                android:orientation="horizontal"
-                android:paddingHorizontal="14dp"
-                android:paddingVertical="12dp">
-
-                <TextView
-                    android:layout_width="28dp"
-                    android:layout_height="28dp"
-                    android:background="@drawable/bg_status_inactive"
-                    android:gravity="center"
-                    android:text="!"
-                    android:textColor="#B26A00"
-                    android:textSize="@dimen/text_size_16"
-                    android:textStyle="bold" />
-
-                <LinearLayout
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_marginStart="12dp"
-                    android:layout_weight="1"
-                    android:orientation="vertical">
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="@string/ai_feature_unconfigured"
-                        android:textColor="#5C4200"
-                        android:textSize="@dimen/text_size_15"
-                        android:textStyle="bold" />
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="2dp"
-                        android:text="@string/ai_feature_unconfigured_hint"
-                        android:textColor="#8A6A1E"
-                        android:textSize="@dimen/text_size_12" />
-                </LinearLayout>
-
-                <ImageView
-                    android:layout_width="20dp"
-                    android:layout_height="20dp"
-                    android:src="@drawable/ic_chevron_right"
-                    android:tint="#B26A00" />
-            </LinearLayout>
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="8dp"
-                android:gravity="center_vertical"
-                android:orientation="horizontal">
-
-                <View
-                    android:layout_width="3dp"
-                    android:layout_height="16dp"
-                    android:layout_marginEnd="8dp"
-                    android:background="@drawable/bg_section_indicator_blue" />
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:letterSpacing="0.02"
-                    android:text="@string/entry_and_card"
-                    android:textColor="@color/settings_section_title"
-                    android:textSize="@dimen/settings_section_title_size"
-                    android:textStyle="bold" />
-            </LinearLayout>
+            <!-- AI 服务 -->
+            <TextView
+                style="@style/AiSectionLabel"
+                android:text="@string/ai_page_section_service" />
 
             <androidx.cardview.widget.CardView
+                android:id="@+id/layout_ai_status_card"
+                style="@style/SettingsCard"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginBottom="16dp"
-                app:cardBackgroundColor="#FFFFFF"
-                app:cardCornerRadius="@dimen/settings_card_radius"
-                app:cardElevation="0dp"
-                app:cardUseCompatPadding="false">
+                android:layout_marginBottom="20dp"
+                android:clickable="true"
+                android:focusable="true"
+                android:foreground="?attr/selectableItemBackground">
 
-                <LinearLayout
+                <FrameLayout
                     android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:paddingHorizontal="18dp"
-                    android:paddingTop="10dp"
-                    android:paddingBottom="10dp">
+                    android:layout_height="wrap_content">
+
+                    <View
+                        android:layout_width="160dp"
+                        android:layout_height="160dp"
+                        android:layout_gravity="top|end"
+                        android:layout_marginTop="-64dp"
+                        android:layout_marginEnd="-48dp"
+                        android:background="@drawable/bg_ai_status_decor" />
 
                     <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:gravity="center_vertical"
-                        android:orientation="horizontal"
-                        android:paddingVertical="8dp">
-
-                        <FrameLayout
-                            android:layout_width="40dp"
-                            android:layout_height="40dp"
-                            android:background="@drawable/bg_icon_badge_purple">
-
-                            <ImageView
-                                android:layout_width="28dp"
-                                android:layout_height="28dp"
-                                android:layout_gravity="center"
-                                android:src="@drawable/ic_ai_net_magic"
-                                android:tint="#FFFFFF" />
-                        </FrameLayout>
+                        android:orientation="vertical"
+                        android:paddingHorizontal="18dp"
+                        android:paddingTop="18dp"
+                        android:paddingBottom="18dp">
 
                         <LinearLayout
-                            android:layout_width="0dp"
+                            android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:layout_marginStart="14dp"
-                            android:layout_weight="1"
-                            android:orientation="vertical">
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal">
 
                             <TextView
+                                android:id="@+id/tv_ai_status_provider"
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:text="@string/ai_feature_entry_title"
-                                android:textColor="#1A2744"
-                                android:textSize="@dimen/text_size_16"
+                                android:ellipsize="end"
+                                android:maxLines="1"
+                                android:text="@string/ai_page_unconfigured_title"
+                                android:textColor="@color/settings_item_title"
+                                android:textSize="@dimen/text_size_18"
                                 android:textStyle="bold" />
 
                             <TextView
+                                android:id="@+id/tv_ai_status_badge"
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:layout_marginTop="2dp"
-                                android:text="@string/ai_feature_entry_desc"
-                                android:textColor="#9AA4B2"
-                                android:textSize="@dimen/text_size_11" />
+                                android:layout_marginStart="8dp"
+                                android:background="@drawable/bg_ai_pill_warn"
+                                android:paddingHorizontal="8dp"
+                                android:paddingVertical="2dp"
+                                android:text="@string/ai_page_badge_unconfigured"
+                                android:textColor="#C77700"
+                                android:textSize="@dimen/text_size_11"
+                                android:textStyle="bold" />
+
+                            <Space
+                                android:layout_width="0dp"
+                                android:layout_height="1dp"
+                                android:layout_weight="1" />
+
+                            <LinearLayout
+                                android:id="@+id/layout_ai_status_action"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:gravity="center_vertical"
+                                android:orientation="horizontal">
+
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="@string/ai_page_action_switch"
+                                    android:textColor="@color/settings_item_subtitle"
+                                    android:textSize="@dimen/text_size_13" />
+
+                                <ImageView style="@style/SettingsChevron" />
+                            </LinearLayout>
+                        </LinearLayout>
+
+                        <TextView
+                            android:id="@+id/tv_ai_status_key"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="6dp"
+                            android:lineSpacingExtra="2dp"
+                            android:text="@string/ai_page_unconfigured_desc"
+                            android:textColor="@color/settings_item_subtitle"
+                            android:textSize="@dimen/text_size_12" />
+
+                        <!-- 已配置：能力标签，在代码中按服务商能力生成 -->
+                        <LinearLayout
+                            android:id="@+id/layout_ai_status_caps"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="14dp"
+                            android:orientation="horizontal"
+                            android:visibility="gone" />
+
+                        <!-- 未配置：三步引导 + 主按钮 -->
+                        <LinearLayout
+                            android:id="@+id/layout_ai_setup_guide"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="vertical">
+
+                            <LinearLayout
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="16dp"
+                                android:gravity="center_vertical"
+                                android:orientation="horizontal">
+
+                                <TextView
+                                    style="@style/AiStepDot"
+                                    android:background="@drawable/bg_ai_step_active"
+                                    android:text="1"
+                                    android:textColor="#FFFFFF" />
+
+                                <TextView
+                                    style="@style/AiStepLabel"
+                                    android:text="@string/ai_page_step_provider"
+                                    android:textColor="@color/settings_item_title" />
+
+                                <View style="@style/AiStepLine" />
+
+                                <TextView
+                                    style="@style/AiStepDot"
+                                    android:text="2" />
+
+                                <TextView
+                                    style="@style/AiStepLabel"
+                                    android:text="@string/ai_page_step_key" />
+
+                                <View style="@style/AiStepLine" />
+
+                                <TextView
+                                    style="@style/AiStepDot"
+                                    android:text="3" />
+
+                                <TextView
+                                    style="@style/AiStepLabel"
+                                    android:text="@string/ai_page_step_done" />
+                            </LinearLayout>
+
+                            <TextView
+                                android:id="@+id/btn_ai_setup"
+                                android:layout_width="match_parent"
+                                android:layout_height="40dp"
+                                android:layout_marginTop="16dp"
+                                android:background="@drawable/bg_ai_cta"
+                                android:gravity="center"
+                                android:text="@string/ai_page_setup_cta"
+                                android:textColor="#FFFFFF"
+                                android:textSize="@dimen/text_size_14"
+                                android:textStyle="bold" />
+                        </LinearLayout>
+                    </LinearLayout>
+                </FrameLayout>
+            </androidx.cardview.widget.CardView>
+
+            <!-- 记账方式 -->
+            <TextView
+                style="@style/AiSectionLabel"
+                android:text="@string/ai_page_section_capture" />
+
+            <androidx.cardview.widget.CardView
+                style="@style/SettingsCard"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="20dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical">
+
+                    <!-- 语音记账 -->
+                    <LinearLayout
+                        android:id="@+id/layout_tile_voice"
+                        style="@style/AiRow">
+
+                        <LinearLayout style="@style/AiRowText">
+
+                            <TextView
+                                style="@style/AiRowTitle"
+                                android:text="@string/ai_page_voice_title" />
+
+                            <TextView
+                                style="@style/AiRowDesc"
+                                android:text="@string/ai_page_voice_desc" />
                         </LinearLayout>
 
                         <com.google.android.material.switchmaterial.SwitchMaterial
-                            android:id="@+id/switch_show_ai"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            app:thumbTint="@color/switch_thumb_tint"
-                            app:trackTint="@color/switch_track_tint" />
+                            android:id="@+id/switch_show_voice"
+                            style="@style/AiSwitch" />
                     </LinearLayout>
+
+                    <LinearLayout
+                        android:id="@+id/layout_detail_voice"
+                        style="@style/AiSubGroup">
+
+                        <LinearLayout
+                            android:id="@+id/layout_asr_engine"
+                            style="@style/AiSubRow"
+                            android:background="@null"
+                            android:clickable="false">
+
+                            <TextView
+                                style="@style/AiSubRowTitle"
+                                android:layout_width="0dp"
+                                android:layout_weight="1"
+                                android:text="@string/ai_page_asr_mode" />
+
+                            <LinearLayout
+                                android:layout_width="wrap_content"
+                                android:layout_height="34dp"
+                                android:background="@drawable/bg_stats_segmented_control"
+                                android:orientation="horizontal"
+                                android:padding="3dp">
+
+                                <TextView
+                                    android:id="@+id/btn_asr_online"
+                                    android:layout_width="56dp"
+                                    android:layout_height="match_parent"
+                                    android:background="@drawable/bg_stats_segmented_unselected"
+                                    android:gravity="center"
+                                    android:text="@string/ai_page_asr_cloud"
+                                    android:textSize="@dimen/text_size_13" />
+
+                                <TextView
+                                    android:id="@+id/btn_asr_offline"
+                                    android:layout_width="56dp"
+                                    android:layout_height="match_parent"
+                                    android:background="@drawable/bg_stats_segmented_unselected"
+                                    android:gravity="center"
+                                    android:text="@string/ai_page_asr_local"
+                                    android:textSize="@dimen/text_size_13" />
+                            </LinearLayout>
+                        </LinearLayout>
+
+                        <LinearLayout
+                            android:id="@+id/layout_asr_model"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="vertical"
+                            android:visibility="gone">
+
+                            <View style="@style/AiSubDivider" />
+
+                            <LinearLayout
+                                style="@style/AiSubRow"
+                                android:paddingEnd="10dp"
+                                android:background="@null"
+                                android:clickable="false">
+
+                                <LinearLayout style="@style/AiRowText">
+
+                                    <TextView
+                                        style="@style/AiSubRowTitle"
+                                        android:text="@string/ai_page_asr_model" />
+
+                                    <TextView
+                                        android:id="@+id/tv_asr_model_status"
+                                        style="@style/AiSubRowDesc"
+                                        android:text="@string/model_status" />
+                                </LinearLayout>
+
+                                <com.google.android.material.button.MaterialButton
+                                    android:id="@+id/btn_asr_model_action"
+                                    style="@style/Widget.MaterialComponents.Button.TextButton"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="36dp"
+                                    android:insetTop="0dp"
+                                    android:insetBottom="0dp"
+                                    android:minWidth="0dp"
+                                    android:minHeight="0dp"
+                                    android:text="@string/download_model"
+                                    android:textColor="@color/brand_primary"
+                                    android:textSize="@dimen/text_size_13" />
+                            </LinearLayout>
+                        </LinearLayout>
+                    </LinearLayout>
+
+                    <View style="@style/AiDivider" />
+
+                    <!-- 图片记账 -->
+                    <LinearLayout
+                        android:id="@+id/layout_tile_image"
+                        style="@style/AiRow">
+
+                        <LinearLayout style="@style/AiRowText">
+
+                            <TextView
+                                style="@style/AiRowTitle"
+                                android:text="@string/ai_page_image_title" />
+
+                            <TextView
+                                style="@style/AiRowDesc"
+                                android:text="@string/ai_page_image_desc" />
+                        </LinearLayout>
+
+                        <com.google.android.material.switchmaterial.SwitchMaterial
+                            android:id="@+id/switch_show_ai_image"
+                            style="@style/AiSwitch" />
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:id="@+id/layout_image_accounting_sub_settings"
+                        style="@style/AiSubGroup">
+
+                        <LinearLayout
+                            android:id="@+id/layout_receipt_image_draft_confirm"
+                            style="@style/AiSubRow">
+
+                            <LinearLayout style="@style/AiRowText">
+
+                                <TextView
+                                    style="@style/AiSubRowTitle"
+                                    android:text="@string/ai_page_image_note_title" />
+
+                                <TextView
+                                    style="@style/AiSubRowDesc"
+                                    android:text="@string/ai_page_image_note_desc" />
+                            </LinearLayout>
+
+                            <com.google.android.material.switchmaterial.SwitchMaterial
+                                android:id="@+id/switch_receipt_image_draft_confirm"
+                                style="@style/AiSwitch" />
+                        </LinearLayout>
+
+                        <View style="@style/AiSubDivider" />
+
+                        <LinearLayout
+                            android:id="@+id/layout_image_accounting_natural_language"
+                            style="@style/AiSubRow">
+
+                            <LinearLayout style="@style/AiRowText">
+
+                                <TextView
+                                    style="@style/AiSubRowTitle"
+                                    android:text="@string/ai_page_image_review_title" />
+
+                                <TextView
+                                    style="@style/AiSubRowDesc"
+                                    android:text="@string/ai_page_image_review_desc" />
+                            </LinearLayout>
+
+                            <com.google.android.material.switchmaterial.SwitchMaterial
+                                android:id="@+id/switch_image_accounting_natural_language"
+                                style="@style/AiSwitch" />
+                        </LinearLayout>
+                    </LinearLayout>
+
+                    <View style="@style/AiDivider" />
+
+                    <!-- 截屏记账 -->
+                    <LinearLayout
+                        android:id="@+id/layout_screen_accounting"
+                        style="@style/AiRow">
+
+                        <LinearLayout style="@style/AiRowText">
+
+                            <TextView
+                                style="@style/AiRowTitle"
+                                android:text="@string/ai_page_screen_title" />
+
+                            <TextView
+                                android:id="@+id/tv_screen_accounting_desc"
+                                style="@style/AiRowDesc"
+                                android:text="@string/ai_page_screen_desc" />
+                        </LinearLayout>
+
+                        <com.google.android.material.switchmaterial.SwitchMaterial
+                            android:id="@+id/switch_screen_accounting"
+                            style="@style/AiSwitch" />
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:id="@+id/layout_screen_accounting_image_flow"
+                        style="@style/AiSubGroup">
+
+                        <LinearLayout style="@style/AiSubRow">
+
+                            <LinearLayout style="@style/AiRowText">
+
+                                <TextView
+                                    style="@style/AiSubRowTitle"
+                                    android:text="@string/ai_page_screen_flow_title" />
+
+                                <TextView
+                                    style="@style/AiSubRowDesc"
+                                    android:text="@string/ai_page_screen_flow_desc" />
+                            </LinearLayout>
+
+                            <com.google.android.material.switchmaterial.SwitchMaterial
+                                android:id="@+id/switch_screen_accounting_image_flow"
+                                style="@style/AiSwitch" />
+                        </LinearLayout>
+                    </LinearLayout>
+                </LinearLayout>
+            </androidx.cardview.widget.CardView>
+
+            <!-- 更多功能 -->
+            <TextView
+                style="@style/AiSectionLabel"
+                android:text="@string/ai_page_section_more" />
+
+            <androidx.cardview.widget.CardView
+                style="@style/SettingsCard"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="20dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical">
 
                     <LinearLayout
                         android:id="@+id/layout_ai_main_entry"
@@ -199,707 +481,106 @@
                         android:orientation="vertical">
 
                         <LinearLayout
-                            android:id="@+id/layout_ai_chat_entry_settings"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="4dp"
-                            android:background="@drawable/bg_inset_panel"
-                            android:orientation="vertical"
-                            android:paddingHorizontal="12dp"
-                            android:paddingVertical="6dp">
+                            android:id="@+id/layout_open_ai_chat_page"
+                            style="@style/AiRow">
 
-                            <LinearLayout
-                                android:id="@+id/layout_open_ai_chat_page"
-                                android:layout_width="match_parent"
-                                android:layout_height="wrap_content"
-                                android:background="?attr/selectableItemBackground"
-                                android:clickable="true"
-                                android:focusable="true"
-                                android:gravity="center_vertical"
-                                android:orientation="horizontal"
-                                android:paddingVertical="6dp">
-
-                                <LinearLayout
-                                    android:layout_width="0dp"
-                                    android:layout_height="wrap_content"
-                                    android:layout_weight="1"
-                                    android:orientation="vertical">
-
-                                    <TextView
-                                        android:layout_width="wrap_content"
-                                        android:layout_height="wrap_content"
-                                        android:text="@string/ai_chat_entry"
-                                        android:textColor="#1F2A3D"
-                                        android:textSize="@dimen/text_size_14"
-                                        android:textStyle="bold" />
-
-                                    <TextView
-                                        android:layout_width="wrap_content"
-                                        android:layout_height="wrap_content"
-                                        android:layout_marginTop="2dp"
-                                        android:text="@string/ai_chat_entry_desc"
-                                        android:textColor="#9AA4B2"
-                                        android:textSize="@dimen/text_size_11" />
-                                </LinearLayout>
-
-                                <com.google.android.material.switchmaterial.SwitchMaterial
-                                    android:id="@+id/switch_ai_chat_mode"
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    app:thumbTint="@color/switch_thumb_tint"
-                                    app:trackTint="@color/switch_track_tint" />
-                            </LinearLayout>
-
-                            <LinearLayout
-                                android:layout_width="match_parent"
-                                android:layout_height="wrap_content"
-                                android:gravity="center_vertical"
-                                android:orientation="horizontal"
-                                android:paddingVertical="6dp">
-
-                                <LinearLayout
-                                    android:layout_width="0dp"
-                                    android:layout_height="wrap_content"
-                                    android:layout_weight="1"
-                                    android:orientation="vertical">
-
-                                    <TextView
-                                        android:layout_width="wrap_content"
-                                        android:layout_height="wrap_content"
-                                        android:text="@string/ai_accounting_entry"
-                                        android:textColor="#1F2A3D"
-                                        android:textSize="@dimen/text_size_14"
-                                        android:textStyle="bold" />
-
-                                    <TextView
-                                        android:layout_width="wrap_content"
-                                        android:layout_height="wrap_content"
-                                        android:layout_marginTop="2dp"
-                                        android:text="@string/ai_accounting_entry_desc"
-                                        android:textColor="#9AA4B2"
-                                        android:textSize="@dimen/text_size_11" />
-                                </LinearLayout>
-
-                                <com.google.android.material.switchmaterial.SwitchMaterial
-                                    android:id="@+id/switch_show_ai_chat_entry"
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    app:thumbTint="@color/switch_thumb_tint"
-                                    app:trackTint="@color/switch_track_tint" />
-                            </LinearLayout>
-                        </LinearLayout>
-                    </LinearLayout>
-                </LinearLayout>
-            </androidx.cardview.widget.CardView>
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="8dp"
-                android:gravity="center_vertical"
-                android:orientation="horizontal">
-
-                <View
-                    android:layout_width="3dp"
-                    android:layout_height="16dp"
-                    android:layout_marginEnd="8dp"
-                    android:background="@drawable/bg_section_indicator_blue" />
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:letterSpacing="0.02"
-                    android:text="@string/strategy_and_rules"
-                    android:textColor="@color/settings_section_title"
-                    android:textSize="@dimen/settings_section_title_size"
-                    android:textStyle="bold" />
-            </LinearLayout>
-
-            <androidx.cardview.widget.CardView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="16dp"
-                app:cardBackgroundColor="#FFFFFF"
-                app:cardCornerRadius="@dimen/settings_card_radius"
-                app:cardElevation="0dp"
-                app:cardUseCompatPadding="false">
-
-                <LinearLayout
-                    android:id="@+id/layout_multi_bill_settings"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:background="@drawable/bg_inset_panel"
-                    android:layout_margin="12dp"
-                    android:orientation="vertical"
-                    android:paddingHorizontal="12dp"
-                    android:paddingVertical="6dp">
-
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:gravity="center_vertical"
-                        android:orientation="horizontal"
-                        android:paddingVertical="6dp">
-
-                        <TextView
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            android:text="@string/enable_local_rules"
-                            android:textColor="#1F2A3D"
-                            android:textSize="@dimen/text_size_14"
-                            android:textStyle="bold" />
-
-                        <com.google.android.material.switchmaterial.SwitchMaterial
-                            android:id="@+id/switch_local_rule_override"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            app:thumbTint="@color/switch_thumb_tint"
-                            app:trackTint="@color/switch_track_tint" />
-                    </LinearLayout>
-                </LinearLayout>
-            </androidx.cardview.widget.CardView>
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="8dp"
-                android:gravity="center_vertical"
-                android:orientation="horizontal">
-
-                <View
-                    android:layout_width="3dp"
-                    android:layout_height="16dp"
-                    android:layout_marginEnd="8dp"
-                    android:background="@drawable/bg_section_indicator_blue" />
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:letterSpacing="0.02"
-                    android:text="@string/recognition_capability"
-                    android:textColor="@color/settings_section_title"
-                    android:textSize="@dimen/settings_section_title_size"
-                    android:textStyle="bold" />
-            </LinearLayout>
-
-            <androidx.cardview.widget.CardView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="20dp"
-                app:cardBackgroundColor="#FFFFFF"
-                app:cardCornerRadius="@dimen/settings_card_radius"
-                app:cardElevation="0dp"
-                app:cardUseCompatPadding="false">
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:paddingHorizontal="18dp"
-                    android:paddingTop="8dp"
-                    android:paddingBottom="10dp">
-
-                    <LinearLayout
-                        android:id="@+id/group_voice_accounting"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:orientation="vertical">
-
-                        <LinearLayout
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:gravity="center_vertical"
-                            android:orientation="horizontal"
-                            android:paddingVertical="8dp">
-
-                            <LinearLayout
-                                android:layout_width="0dp"
-                                android:layout_height="wrap_content"
-                                android:layout_weight="1"
-                                android:orientation="vertical">
+                            <LinearLayout style="@style/AiRowText">
 
                                 <TextView
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:text="@string/ai_voice_accounting"
-                                    android:textColor="#1F2A3D"
-                                    android:textSize="@dimen/text_size_15"
-                                    android:textStyle="bold" />
+                                    style="@style/AiRowTitle"
+                                    android:text="@string/ai_page_chat_title" />
 
                                 <TextView
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:layout_marginTop="2dp"
-                                    android:text="@string/ai_voice_accounting_desc"
-                                    android:textColor="#9AA4B2"
-                                    android:textSize="@dimen/text_size_11" />
+                                    style="@style/AiRowDesc"
+                                    android:text="@string/ai_page_chat_desc" />
                             </LinearLayout>
 
                             <com.google.android.material.switchmaterial.SwitchMaterial
-                                android:id="@+id/switch_show_voice"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                app:thumbTint="@color/switch_thumb_tint"
-                                app:trackTint="@color/switch_track_tint" />
-                        </LinearLayout>
-
-                        <LinearLayout
-                            android:id="@+id/layout_asr_engine"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="4dp"
-                            android:background="@drawable/bg_inset_panel"
-                            android:gravity="center_horizontal"
-                            android:orientation="vertical"
-                            android:paddingHorizontal="12dp"
-                            android:paddingVertical="10dp"
-                            android:visibility="gone">
-
-                            <TextView
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:layout_marginBottom="8dp"
-                                android:text="@string/asr_engine_label"
-                                android:textColor="#4E5A6A"
-                                android:textSize="@dimen/text_size_14"
-                                android:textStyle="bold" />
-
-                            <LinearLayout
-                                android:layout_width="match_parent"
-                                android:layout_height="wrap_content"
-                                android:orientation="horizontal">
-
-                                <com.google.android.material.button.MaterialButton
-                                    android:id="@+id/btn_asr_online"
-                                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-                                    android:layout_width="0dp"
-                                    android:layout_height="40dp"
-                                    android:layout_weight="1"
-                                    android:layout_marginEnd="8dp"
-                                    android:text="@string/asr_online"
-                                    android:textSize="@dimen/text_size_13"
-                                    app:strokeColor="#DCE2EA"
-                                    app:cornerRadius="10dp" />
-
-                                <com.google.android.material.button.MaterialButton
-                                    android:id="@+id/btn_asr_offline"
-                                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-                                    android:layout_width="0dp"
-                                    android:layout_height="40dp"
-                                    android:layout_weight="1"
-                                    android:text="@string/asr_offline"
-                                    android:textSize="@dimen/text_size_13"
-                                    app:strokeColor="#DCE2EA"
-                                    app:cornerRadius="10dp" />
-                            </LinearLayout>
-                        </LinearLayout>
-
-                        <LinearLayout
-                            android:id="@+id/layout_asr_model"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="8dp"
-                            android:background="@drawable/bg_inset_panel"
-                            android:gravity="center_vertical"
-                            android:orientation="horizontal"
-                            android:paddingHorizontal="12dp"
-                            android:paddingVertical="10dp"
-                            android:visibility="gone">
-
-                            <LinearLayout
-                                android:layout_width="0dp"
-                                android:layout_height="wrap_content"
-                                android:layout_weight="1"
-                                android:orientation="vertical">
-
-                                <TextView
-                                    android:id="@+id/tv_asr_model_status"
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:text="@string/model_status"
-                                    android:textColor="#5F6B7A"
-                                    android:textSize="@dimen/text_size_13"
-                                    android:textStyle="bold" />
-                            </LinearLayout>
-
-                            <com.google.android.material.button.MaterialButton
-                                android:id="@+id/btn_asr_model_action"
-                                style="@style/Widget.MaterialComponents.Button.TextButton"
-                                android:layout_width="wrap_content"
-                                android:layout_height="36dp"
-                                android:minHeight="0dp"
-                                android:text="@string/download_model"
-                                android:textColor="#5C6BC0"
-                                android:textSize="@dimen/text_size_12" />
-                        </LinearLayout>
-
-                        <View
-                            android:layout_width="match_parent"
-                            android:layout_height="0.5dp"
-                            android:layout_marginBottom="6dp"
-                            android:background="#F0F2F5" />
-                    </LinearLayout>
-
-                    <LinearLayout
-                        android:id="@+id/group_image_accounting"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:orientation="vertical">
-
-                        <LinearLayout
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:gravity="center_vertical"
-                            android:orientation="horizontal"
-                            android:paddingVertical="8dp">
-
-                            <LinearLayout
-                                android:layout_width="0dp"
-                                android:layout_height="wrap_content"
-                                android:layout_weight="1"
-                                android:orientation="vertical">
-
-                                <TextView
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:text="@string/ai_image_accounting"
-                                    android:textColor="#1F2A3D"
-                                    android:textSize="@dimen/text_size_15"
-                                    android:textStyle="bold" />
-
-                                <TextView
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:layout_marginTop="2dp"
-                                    android:text="@string/ai_image_accounting_desc"
-                                    android:textColor="#9AA4B2"
-                                    android:textSize="@dimen/text_size_11" />
-                            </LinearLayout>
-
-                            <com.google.android.material.switchmaterial.SwitchMaterial
-                                android:id="@+id/switch_show_ai_image"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                app:thumbTint="@color/switch_thumb_tint"
-                                app:trackTint="@color/switch_track_tint" />
-                        </LinearLayout>
-
-                        <LinearLayout
-                            android:id="@+id/layout_image_accounting_sub_settings"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:orientation="vertical"
-                            android:paddingStart="24dp"
-                            android:visibility="gone">
-
-                            <LinearLayout
-                                android:id="@+id/layout_receipt_image_draft_confirm"
-                                android:layout_width="match_parent"
-                                android:layout_height="wrap_content"
-                                android:gravity="center_vertical"
-                                android:orientation="horizontal"
-                                android:paddingVertical="8dp">
-
-                                <LinearLayout
-                                    android:layout_width="0dp"
-                                    android:layout_height="wrap_content"
-                                    android:layout_weight="1"
-                                    android:orientation="vertical">
-
-                                    <TextView
-                                        android:layout_width="wrap_content"
-                                        android:layout_height="wrap_content"
-                                        android:text="@string/receipt_image_draft_confirm"
-                                        android:textColor="#1F2A3D"
-                                        android:textSize="@dimen/text_size_15"
-                                        android:textStyle="bold" />
-
-                                    <TextView
-                                        android:layout_width="wrap_content"
-                                        android:layout_height="wrap_content"
-                                        android:layout_marginTop="2dp"
-                                        android:text="@string/receipt_image_draft_confirm_desc"
-                                        android:textColor="#9AA4B2"
-                                        android:textSize="@dimen/text_size_11" />
-                                </LinearLayout>
-
-                                <com.google.android.material.switchmaterial.SwitchMaterial
-                                    android:id="@+id/switch_receipt_image_draft_confirm"
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    app:thumbTint="@color/switch_thumb_tint"
-                                    app:trackTint="@color/switch_track_tint" />
-                            </LinearLayout>
-
-                            <LinearLayout
-                                android:id="@+id/layout_image_accounting_natural_language"
-                                android:layout_width="match_parent"
-                                android:layout_height="wrap_content"
-                                android:gravity="center_vertical"
-                                android:orientation="horizontal"
-                                android:paddingVertical="8dp">
-
-                                <LinearLayout
-                                    android:layout_width="0dp"
-                                    android:layout_height="wrap_content"
-                                    android:layout_weight="1"
-                                    android:orientation="vertical">
-
-                                    <TextView
-                                        android:layout_width="wrap_content"
-                                        android:layout_height="wrap_content"
-                                        android:text="@string/image_accounting_natural_language"
-                                        android:textColor="#1F2A3D"
-                                        android:textSize="@dimen/text_size_15"
-                                        android:textStyle="bold" />
-
-                                    <TextView
-                                        android:layout_width="wrap_content"
-                                        android:layout_height="wrap_content"
-                                        android:layout_marginTop="2dp"
-                                        android:text="@string/image_accounting_natural_language_desc"
-                                        android:textColor="#9AA4B2"
-                                        android:textSize="@dimen/text_size_11" />
-                                </LinearLayout>
-
-                                <com.google.android.material.switchmaterial.SwitchMaterial
-                                    android:id="@+id/switch_image_accounting_natural_language"
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    app:thumbTint="@color/switch_thumb_tint"
-                                    app:trackTint="@color/switch_track_tint" />
-                            </LinearLayout>
-                        </LinearLayout>
-
-                        <View
-                            android:layout_width="match_parent"
-                            android:layout_height="0.5dp"
-                            android:layout_marginVertical="4dp"
-                            android:background="#F0F2F5" />
-                    </LinearLayout>
-
-                    <LinearLayout
-                        android:id="@+id/group_screen_accounting"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:orientation="vertical">
-
-                        <!-- 截屏记账 -->
-                        <LinearLayout
-                            android:id="@+id/layout_screen_accounting"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:gravity="center_vertical"
-                            android:orientation="horizontal"
-                            android:paddingVertical="8dp">
-
-                            <LinearLayout
-                                android:layout_width="0dp"
-                                android:layout_height="wrap_content"
-                                android:layout_weight="1"
-                                android:orientation="vertical">
-
-                                <TextView
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:text="@string/ai_screen_accounting"
-                                    android:textColor="#1F2A3D"
-                                    android:textSize="@dimen/text_size_15"
-                                    android:textStyle="bold" />
-
-                                <TextView
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:layout_marginTop="2dp"
-                                    android:text="@string/ai_screen_accounting_desc"
-                                    android:textColor="#9AA4B2"
-                                    android:textSize="@dimen/text_size_11" />
-                            </LinearLayout>
-
-                            <com.google.android.material.switchmaterial.SwitchMaterial
-                                android:id="@+id/switch_screen_accounting"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                app:thumbTint="@color/switch_thumb_tint"
-                                app:trackTint="@color/switch_track_tint" />
-                        </LinearLayout>
-
-                        <TextView
-                            android:id="@+id/tv_screen_accounting_hint"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="4dp"
-                            android:background="@drawable/bg_inset_panel"
-                            android:paddingHorizontal="12dp"
-                            android:paddingVertical="8dp"
-                            android:text="@string/ai_screen_accounting_perm_hint"
-                            android:textColor="#9AA4B2"
-                            android:textSize="@dimen/text_size_10"
-                            android:visibility="gone" />
-
-                        <!-- 截屏沿用图片记账（需先开启截屏记账） -->
-                        <LinearLayout
-                            android:id="@+id/layout_screen_accounting_image_flow"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:layout_marginStart="12dp"
-                            android:gravity="center_vertical"
-                            android:orientation="horizontal"
-                            android:paddingVertical="8dp"
-                            android:visibility="gone">
-
-                            <LinearLayout
-                                android:layout_width="0dp"
-                                android:layout_height="wrap_content"
-                                android:layout_weight="1"
-                                android:orientation="vertical">
-
-                                <TextView
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:text="@string/ai_screen_accounting_use_image_flow"
-                                    android:textColor="#1F2A3D"
-                                    android:textSize="@dimen/text_size_14"
-                                    android:textStyle="bold" />
-
-                                <TextView
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:layout_marginTop="2dp"
-                                    android:text="@string/ai_screen_accounting_use_image_flow_desc"
-                                    android:textColor="#9AA4B2"
-                                    android:textSize="@dimen/text_size_11" />
-                            </LinearLayout>
-
-                            <com.google.android.material.switchmaterial.SwitchMaterial
-                                android:id="@+id/switch_screen_accounting_image_flow"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                app:thumbTint="@color/switch_thumb_tint"
-                                app:trackTint="@color/switch_track_tint" />
+                                android:id="@+id/switch_ai_chat_mode"
+                                style="@style/AiSwitch" />
                         </LinearLayout>
                     </LinearLayout>
-                </LinearLayout>
-            </androidx.cardview.widget.CardView>
 
-            <!-- 消费洞察开关 -->
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="8dp"
-                android:gravity="center_vertical"
-                android:orientation="horizontal">
-
-                <View
-                    android:layout_width="3dp"
-                    android:layout_height="16dp"
-                    android:layout_marginEnd="8dp"
-                    android:background="@drawable/bg_section_indicator_blue" />
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:letterSpacing="0.02"
-                    android:text="@string/insight_section_title"
-                    android:textColor="@color/settings_section_title"
-                    android:textSize="@dimen/settings_section_title_size"
-                    android:textStyle="bold" />
-            </LinearLayout>
-
-            <androidx.cardview.widget.CardView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="16dp"
-                app:cardBackgroundColor="#FFFFFF"
-                app:cardCornerRadius="@dimen/settings_card_radius"
-                app:cardElevation="0dp"
-                app:cardUseCompatPadding="false">
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:background="@drawable/bg_inset_panel"
-                    android:layout_margin="12dp"
-                    android:orientation="vertical"
-                    android:paddingHorizontal="12dp"
-                    android:paddingVertical="6dp">
+                    <View style="@style/AiDivider" />
 
                     <LinearLayout
                         android:id="@+id/layout_insight_cards"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:gravity="center_vertical"
-                        android:orientation="horizontal"
-                        android:paddingVertical="6dp">
+                        style="@style/AiRow">
 
-                        <LinearLayout
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            android:orientation="vertical">
+                        <LinearLayout style="@style/AiRowText">
 
                             <TextView
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="@string/insight_section_title"
-                                android:textColor="#1F2A3D"
-                                android:textSize="@dimen/text_size_14"
-                                android:textStyle="bold" />
+                                style="@style/AiRowTitle"
+                                android:text="@string/ai_page_insight_title" />
 
                             <TextView
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:layout_marginTop="2dp"
-                                android:text="在首页和统计页显示消费洞察卡片"
-                                android:textColor="#9AA4B2"
-                                android:textSize="@dimen/text_size_11" />
+                                style="@style/AiRowDesc"
+                                android:text="@string/ai_page_insight_desc" />
                         </LinearLayout>
 
                         <com.google.android.material.switchmaterial.SwitchMaterial
                             android:id="@+id/switch_insight_cards"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            app:thumbTint="@color/switch_thumb_tint"
-                            app:trackTint="@color/switch_track_tint" />
+                            style="@style/AiSwitch" />
                     </LinearLayout>
-
                 </LinearLayout>
             </androidx.cardview.widget.CardView>
 
-            <LinearLayout
+            <!-- 分类规则 -->
+            <TextView
+                style="@style/AiSectionLabel"
+                android:text="@string/ai_page_section_rules" />
+
+            <androidx.cardview.widget.CardView
+                style="@style/SettingsCard"
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="2dp"
-                android:layout_marginBottom="8dp"
-                android:orientation="vertical">
+                android:layout_height="wrap_content">
 
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btn_manage_ai_rules"
-                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                <LinearLayout
                     android:layout_width="match_parent"
-                    android:layout_height="48dp"
-                    android:layout_marginBottom="8dp"
-                    android:text="@string/accounting_rules_btn"
-                    android:textColor="#4E5A6A"
-                    android:textSize="@dimen/text_size_14"
-                    app:backgroundTint="#FFFFFF"
-                    app:cornerRadius="12dp"
-                    app:rippleColor="#205C6BC0"
-                    app:strokeColor="#DCE2EA" />
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical">
 
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btn_ai_detailed_config"
-                    android:layout_width="match_parent"
-                    android:layout_height="48dp"
-                    android:text="@string/ai_service_config_btn"
-                    android:textColor="#FFFFFF"
-                    android:textSize="@dimen/text_size_14"
-                    android:textStyle="bold"
-                    android:visibility="gone"
-                    app:backgroundTint="#5C6BC0"
-                    app:cornerRadius="12dp" />
-            </LinearLayout>
+                    <LinearLayout
+                        android:id="@+id/layout_tile_rules"
+                        style="@style/AiRow">
+
+                        <LinearLayout style="@style/AiRowText">
+
+                            <TextView
+                                style="@style/AiRowTitle"
+                                android:text="@string/ai_page_rules_title" />
+
+                            <TextView
+                                style="@style/AiRowDesc"
+                                android:text="@string/ai_page_rules_desc" />
+                        </LinearLayout>
+
+                        <com.google.android.material.switchmaterial.SwitchMaterial
+                            android:id="@+id/switch_local_rule_override"
+                            style="@style/AiSwitch" />
+                    </LinearLayout>
+
+                    <View style="@style/AiDivider" />
+
+                    <LinearLayout
+                        android:id="@+id/btn_manage_ai_rules"
+                        style="@style/AiRow">
+
+                        <LinearLayout style="@style/AiRowText">
+
+                            <TextView
+                                style="@style/AiRowTitle"
+                                android:text="@string/ai_page_rules_manage_title" />
+
+                            <TextView
+                                style="@style/AiRowDesc"
+                                android:text="@string/ai_page_rules_manage_desc" />
+                        </LinearLayout>
+
+                        <ImageView style="@style/SettingsChevron" />
+                    </LinearLayout>
+                </LinearLayout>
+            </androidx.cardview.widget.CardView>
         </LinearLayout>
     </ScrollView>
 </LinearLayout>

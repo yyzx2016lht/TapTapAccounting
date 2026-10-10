@@ -3,7 +3,6 @@ package com.taostudio.tapaccounting
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.content.res.ColorStateList
 import android.graphics.Color
 import android.os.Build
 import android.os.Bundle
@@ -20,9 +19,14 @@ import com.taostudio.tapaccounting.ui.dialog.OverlayDialogs
 
 class AiFeatureSettingsActivity : AppCompatActivity() {
 
-    private lateinit var btnAiDetailConfig: com.google.android.material.button.MaterialButton
-    private lateinit var btnManageAiRules: com.google.android.material.button.MaterialButton
-    private lateinit var layoutAiKeyWarning: View
+    private lateinit var btnManageAiRules: View
+    private lateinit var layoutAiStatusCard: View
+    private lateinit var tvAiStatusProvider: TextView
+    private lateinit var tvAiStatusKey: TextView
+    private lateinit var tvAiStatusBadge: TextView
+    private lateinit var layoutAiStatusAction: View
+    private lateinit var layoutAiStatusCaps: LinearLayout
+    private lateinit var layoutAiSetupGuide: View
     private var pendingSetupDialog = false
     private var refreshProviderCapabilities: (() -> Unit)? = null
 
@@ -37,7 +41,7 @@ class AiFeatureSettingsActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-        updateAiDetailConfigButton()
+        refreshAiStatusCard()
         refreshProviderCapabilities?.invoke()
         if (pendingSetupDialog && !Prefs.isAiConfigured(this)) {
             pendingSetupDialog = false
@@ -47,13 +51,8 @@ class AiFeatureSettingsActivity : AppCompatActivity() {
 
     private fun setupAiFeatureSettings() {
         val layoutAiMain = findViewById<View>(R.id.layout_ai_main_entry)
-        val switchShowAi = findViewById<CompoundButton>(R.id.switch_show_ai)
         val switchAiChatMode = findViewById<CompoundButton>(R.id.switch_ai_chat_mode)
-        val switchShowAiChatEntry = findViewById<CompoundButton>(R.id.switch_show_ai_chat_entry)
-        val showAiChatEntryRow = switchShowAiChatEntry.parent as? View
         val layoutOpenAiChatPage = findViewById<View>(R.id.layout_open_ai_chat_page)
-        // AI 总开关由设置中心控制，这里只展示具体能力配置。
-        (switchShowAi.parent as? View)?.visibility = View.GONE
         layoutAiMain.visibility = View.VISIBLE
 
         (switchAiChatMode.parent as? View)?.visibility = View.VISIBLE
@@ -72,7 +71,6 @@ class AiFeatureSettingsActivity : AppCompatActivity() {
         }
 
         Prefs.setShowAiChatEntry(this, false)
-        showAiChatEntryRow?.visibility = View.GONE
         findViewById<CompoundButton>(R.id.switch_local_rule_override)?.apply {
             val unifiedLocalRuleEnabled =
                 Prefs.isAiPromptCorrectionEnabled(this@AiFeatureSettingsActivity) ||
@@ -93,52 +91,44 @@ class AiFeatureSettingsActivity : AppCompatActivity() {
                 Prefs.setInsightCardsEnabled(this@AiFeatureSettingsActivity, isChecked)
             }
         }
-        findViewById<View>(R.id.layout_insight_cards)?.setOnClickListener {
-            findViewById<CompoundButton>(R.id.switch_insight_cards)?.performClick()
-        }
 
         findViewById<CompoundButton>(R.id.switch_show_voice).apply {
             isChecked = Prefs.isShowAiVoice(this@AiFeatureSettingsActivity)
-            val ctx = this@AiFeatureSettingsActivity
-            val layoutAsrEngine = ctx.findViewById<View>(R.id.layout_asr_engine)
-            val layoutAsrModel = ctx.findViewById<View>(R.id.layout_asr_model)
-            layoutAsrEngine.visibility = if (isChecked) View.VISIBLE else View.GONE
-            layoutAsrModel.visibility = View.GONE
+            val layoutDetailVoice = this@AiFeatureSettingsActivity.findViewById<View>(R.id.layout_detail_voice)
+            layoutDetailVoice.visibility = if (isChecked) View.VISIBLE else View.GONE
             setOnCheckedChangeListener { _, isChecked ->
                 if (isChecked && ContextCompat.checkSelfPermission(this@AiFeatureSettingsActivity, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
                     requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), 101)
                 }
                 Prefs.setShowAiVoice(this@AiFeatureSettingsActivity, isChecked)
-                layoutAsrEngine.visibility = if (isChecked) View.VISIBLE else View.GONE
-                if (!isChecked) layoutAsrModel.visibility = View.GONE
+                layoutDetailVoice.visibility = if (isChecked) View.VISIBLE else View.GONE
             }
         }
 
-        val btnAsrOnline = findViewById<com.google.android.material.button.MaterialButton>(R.id.btn_asr_online)
-        val btnAsrOffline = findViewById<com.google.android.material.button.MaterialButton>(R.id.btn_asr_offline)
+        val btnAsrOnline = findViewById<TextView>(R.id.btn_asr_online)
+        val btnAsrOffline = findViewById<TextView>(R.id.btn_asr_offline)
         val tvAsrModelStatus = findViewById<TextView>(R.id.tv_asr_model_status)
         val btnAsrModelAction = findViewById<com.google.android.material.button.MaterialButton>(R.id.btn_asr_model_action)
         val layoutAsrModel = findViewById<View>(R.id.layout_asr_model)
 
+        fun styleAsrSegment(view: TextView, selected: Boolean) {
+            view.setBackgroundResource(
+                if (selected) R.drawable.bg_stats_segmented_selected else R.drawable.bg_stats_segmented_unselected
+            )
+            view.setTextColor(Color.parseColor(if (selected) "#1A2744" else "#8F98A6"))
+            view.paint.isFakeBoldText = selected
+            view.isSelected = selected
+        }
+
         fun updateAsrUi() {
             val mode = Prefs.getAsrMode(this@AiFeatureSettingsActivity)
             val isOnline = mode == Prefs.ASR_MODE_API
-            btnAsrOnline.apply {
-                setTextColor(if (isOnline) Color.parseColor("#FFFFFF") else Color.parseColor("#4E5A6A"))
-                setBackgroundColor(if (isOnline) Color.parseColor("#5C6BC0") else Color.parseColor("#FFFFFF"))
-                strokeColor = if (isOnline) null else ColorStateList.valueOf(Color.parseColor("#DCE2EA"))
-                isSelected = isOnline
-            }
-            btnAsrOffline.apply {
-                setTextColor(if (!isOnline) Color.parseColor("#FFFFFF") else Color.parseColor("#4E5A6A"))
-                setBackgroundColor(if (!isOnline) Color.parseColor("#5C6BC0") else Color.parseColor("#FFFFFF"))
-                strokeColor = if (!isOnline) null else ColorStateList.valueOf(Color.parseColor("#DCE2EA"))
-                isSelected = !isOnline
-            }
+            styleAsrSegment(btnAsrOnline, isOnline)
+            styleAsrSegment(btnAsrOffline, !isOnline)
             if (mode == Prefs.ASR_MODE_WHISPER) {
                 layoutAsrModel.visibility = View.VISIBLE
                 if (LocalAsrService.isModelReady(this@AiFeatureSettingsActivity)) {
-                    tvAsrModelStatus.text = getString(R.string.asr_model_installed)
+                    tvAsrModelStatus.text = getString(R.string.ai_page_asr_model_ready)
                     tvAsrModelStatus.setTextColor(Color.parseColor("#5C6BC0"))
                     btnAsrModelAction.text = getString(R.string.delete_model)
                     btnAsrModelAction.setOnClickListener {
@@ -166,8 +156,8 @@ class AiFeatureSettingsActivity : AppCompatActivity() {
                         )
                     }
                 } else {
-                    tvAsrModelStatus.text = getString(R.string.asr_model_not_installed)
-                    tvAsrModelStatus.setTextColor(Color.parseColor("#607D8B"))
+                    tvAsrModelStatus.text = getString(R.string.ai_page_asr_model_missing)
+                    tvAsrModelStatus.setTextColor(Color.parseColor("#9AA4B2"))
                     btnAsrModelAction.text = getString(R.string.download_model)
                     btnAsrModelAction.setOnClickListener {
                         val dialog = AlertDialog.Builder(this@AiFeatureSettingsActivity)
@@ -233,7 +223,7 @@ class AiFeatureSettingsActivity : AppCompatActivity() {
 
         // 截屏记账
         val switchScreenAccounting = findViewById<CompoundButton>(R.id.switch_screen_accounting)
-        val tvScreenAccountingHint = findViewById<TextView>(R.id.tv_screen_accounting_hint)
+        val tvScreenAccountingStatus = findViewById<TextView>(R.id.tv_screen_accounting_desc)
         val layoutScreenAccounting = findViewById<View>(R.id.layout_screen_accounting)
         val layoutScreenAccountingImageFlow = findViewById<View>(R.id.layout_screen_accounting_image_flow)
         val switchScreenAccountingImageFlow = findViewById<CompoundButton>(R.id.switch_screen_accounting_image_flow).apply {
@@ -245,15 +235,24 @@ class AiFeatureSettingsActivity : AppCompatActivity() {
         var ignoreScreenAccountingToggle = false
 
         fun updateScreenAccountingImageFlowVisibility() {
-            val show = layoutScreenAccounting.visibility == View.VISIBLE && switchScreenAccounting.isChecked
-            layoutScreenAccountingImageFlow.visibility = if (show) View.VISIBLE else View.GONE
+            layoutScreenAccountingImageFlow.visibility =
+                if (switchScreenAccounting.isChecked) View.VISIBLE else View.GONE
         }
 
         fun updateScreenAccountingVisibility() {
             val hasAccessibility = KeepAliveAccessibilityService.isServiceEnabled() && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
             val hasShizuku = Prefs.isShizukuModeEnabled(this) && ShizukuSafe.isReady(this)
-            layoutScreenAccounting.visibility = if (hasAccessibility || hasShizuku) View.VISIBLE else View.GONE
-            tvScreenAccountingHint.visibility = if (hasAccessibility || hasShizuku) View.GONE else View.VISIBLE
+            val available = hasAccessibility || hasShizuku
+            val supportsVision = AiProviderRegistry.resolvePreset(this).supportsVision
+            // 无权限时行常驻但置灰，副标题提示授权方式；点击开关时 toast 引导。
+            layoutScreenAccounting.alpha = if (available && supportsVision) 1f else 0.5f
+            if (available) {
+                tvScreenAccountingStatus.text = getString(R.string.ai_page_screen_desc)
+                tvScreenAccountingStatus.setTextColor(ContextCompat.getColor(this, R.color.settings_item_subtitle))
+            } else {
+                tvScreenAccountingStatus.text = getString(R.string.ai_tile_screen_need_permission)
+                tvScreenAccountingStatus.setTextColor(Color.parseColor("#B26A00"))
+            }
             updateScreenAccountingImageFlowVisibility()
         }
 
@@ -299,7 +298,6 @@ class AiFeatureSettingsActivity : AppCompatActivity() {
             layoutImageAccountingNaturalLanguage.alpha = if (preset.supportsVision) 1f else 0.45f
             switchImageAccountingNaturalLanguage.isEnabled = preset.supportsVision
             switchScreenAccounting.isEnabled = preset.supportsVision
-            layoutScreenAccounting.alpha = if (preset.supportsVision) 1f else 0.45f
             switchScreenAccountingImageFlow.isEnabled = preset.supportsVision
             layoutScreenAccountingImageFlow.alpha = if (preset.supportsVision) 1f else 0.45f
             if (!preset.supportsVision) {
@@ -308,27 +306,36 @@ class AiFeatureSettingsActivity : AppCompatActivity() {
             }
             updateScreenAccountingImageFlowVisibility()
             updateAsrUi()
+            updateScreenAccountingVisibility()
         }
         refreshProviderCapabilities?.invoke()
 
         btnManageAiRules = findViewById(R.id.btn_manage_ai_rules)
-        layoutAiKeyWarning = findViewById(R.id.layout_ai_key_warning)
+        layoutAiStatusCard = findViewById(R.id.layout_ai_status_card)
+        tvAiStatusProvider = findViewById(R.id.tv_ai_status_provider)
+        tvAiStatusKey = findViewById(R.id.tv_ai_status_key)
+        tvAiStatusBadge = findViewById(R.id.tv_ai_status_badge)
+        layoutAiStatusAction = findViewById(R.id.layout_ai_status_action)
+        layoutAiStatusCaps = findViewById(R.id.layout_ai_status_caps)
+        layoutAiSetupGuide = findViewById(R.id.layout_ai_setup_guide)
+        findViewById<View>(R.id.btn_ai_setup).setOnClickListener { showProviderSetupDialog(cancelable = true) }
         btnManageAiRules.setOnClickListener {
             startActivity(Intent(this, AiRuleManageActivity::class.java))
         }
-        layoutAiKeyWarning.setOnClickListener { showProviderSetupDialog(cancelable = true) }
-
-        btnAiDetailConfig = findViewById(R.id.btn_ai_detailed_config)
-        btnAiDetailConfig.setOnClickListener {
-            startActivity(Intent(this, AiConfigActivity::class.java))
+        layoutAiStatusCard.setOnClickListener {
+            if (Prefs.isAiConfigured(this)) {
+                startActivity(Intent(this, AiConfigActivity::class.java))
+            } else {
+                showProviderSetupDialog(cancelable = true)
+            }
         }
-        updateAiDetailConfigButton()
+        refreshAiStatusCard()
 
         try {
             val toggleIds = intArrayOf(
                 R.id.switch_ai_chat_mode,
-                R.id.switch_show_ai_chat_entry,
                 R.id.switch_local_rule_override,
+                R.id.switch_insight_cards,
                 R.id.switch_show_voice,
                 R.id.switch_show_ai_image,
                 R.id.switch_receipt_image_draft_confirm,
@@ -350,10 +357,65 @@ class AiFeatureSettingsActivity : AppCompatActivity() {
         }
     }
 
-    private fun updateAiDetailConfigButton() {
+    private fun refreshAiStatusCard() {
         val configured = Prefs.isAiConfigured(this)
-        layoutAiKeyWarning.visibility = if (configured) View.GONE else View.VISIBLE
-        btnAiDetailConfig.visibility = if (configured) View.VISIBLE else View.GONE
+        val preset = AiProviderRegistry.resolvePreset(this)
+        if (configured) {
+            val key = Prefs.getAiProviderKey(this, preset.id)
+            val masked = if (key.length <= 4) "••••" else "••••" + key.takeLast(4)
+            val model = AiModelSlots.resolveTextModel(this)
+            tvAiStatusProvider.text = preset.displayName
+            tvAiStatusKey.text = getString(R.string.ai_page_meta_fmt, model, masked)
+            tvAiStatusBadge.text = getString(R.string.ai_page_badge_ready)
+            tvAiStatusBadge.setBackgroundResource(R.drawable.bg_ai_pill_ok)
+            tvAiStatusBadge.setTextColor(Color.parseColor("#1E9A55"))
+            layoutAiStatusAction.visibility = View.VISIBLE
+            layoutAiSetupGuide.visibility = View.GONE
+            layoutAiStatusCaps.visibility = View.VISIBLE
+            renderCapabilityChips(
+                listOf(
+                    getString(R.string.ai_page_cap_text) to true,
+                    getString(R.string.ai_page_cap_vision) to preset.supportsVision,
+                    getString(R.string.ai_page_cap_speech) to preset.supportsCloudSpeech
+                )
+            )
+        } else {
+            tvAiStatusProvider.text = getString(R.string.ai_page_unconfigured_title)
+            tvAiStatusKey.text = getString(R.string.ai_page_unconfigured_desc)
+            tvAiStatusBadge.text = getString(R.string.ai_page_badge_unconfigured)
+            tvAiStatusBadge.setBackgroundResource(R.drawable.bg_ai_pill_warn)
+            tvAiStatusBadge.setTextColor(Color.parseColor("#C77700"))
+            layoutAiStatusAction.visibility = View.GONE
+            layoutAiStatusCaps.visibility = View.GONE
+            layoutAiSetupGuide.visibility = View.VISIBLE
+        }
+    }
+
+    /** 能力标签：支持的高亮，不支持的置灰加删除线，提示下方哪些开关会被禁用。 */
+    private fun renderCapabilityChips(caps: List<Pair<String, Boolean>>) {
+        layoutAiStatusCaps.removeAllViews()
+        val dp = resources.displayMetrics.density
+        caps.forEachIndexed { index, (label, supported) ->
+            val chip = TextView(this).apply {
+                text = label
+                textSize = 12f
+                setPadding((10 * dp).toInt(), (4 * dp).toInt(), (10 * dp).toInt(), (4 * dp).toInt())
+                if (supported) {
+                    setBackgroundResource(R.drawable.bg_ai_chip_on)
+                    setTextColor(ContextCompat.getColor(context, R.color.brand_primary))
+                } else {
+                    setBackgroundResource(R.drawable.bg_ai_chip_off)
+                    setTextColor(Color.parseColor("#B4BCC8"))
+                    paintFlags = paintFlags or android.graphics.Paint.STRIKE_THRU_TEXT_FLAG
+                }
+            }
+            val lp = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            )
+            if (index > 0) lp.marginStart = (8 * dp).toInt()
+            layoutAiStatusCaps.addView(chip, lp)
+        }
     }
 
     private fun showProviderSetupDialog(cancelable: Boolean) {
@@ -361,7 +423,7 @@ class AiFeatureSettingsActivity : AppCompatActivity() {
             activity = this,
             initialProviderId = Prefs.getAiProvider(this),
             cancelable = cancelable,
-            onFinished = { updateAiDetailConfigButton() }
+            onFinished = { refreshAiStatusCard() }
         )
     }
 
@@ -389,7 +451,7 @@ class AiFeatureSettingsActivity : AppCompatActivity() {
         builder.setPositiveButton(getString(R.string.confirm_btn)) { _, _ ->
             if (etPassword.text.toString().trim() == "1433223") {
                 Prefs.setAiDetailConfigUnlocked(this, true)
-                updateAiDetailConfigButton()
+                refreshAiStatusCard()
                 Utils.toast(this, getString(R.string.ai_config_unlocked))
             } else {
                 Utils.toast(this, getString(R.string.key_error))

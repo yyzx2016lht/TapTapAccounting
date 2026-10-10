@@ -183,6 +183,7 @@ object Prefs {
     fun getAiModelsCache(ctx: Context): List<String> = PrefsAiSupport.getAiModelsCache(ctx)
     fun setAiModelsCache(ctx: Context, models: List<String>) =
         PrefsAiSupport.setAiModelsCache(ctx, models)
+    fun getAiModelsCacheAt(ctx: Context): Long = PrefsAiSupport.getAiModelsCacheAt(ctx)
 
     fun getAiModelCatalog(ctx: Context): String = PrefsAiSupport.getAiModelCatalog(ctx)
     fun setAiModelCatalog(ctx: Context, raw: String) = PrefsAiSupport.setAiModelCatalog(ctx, raw)
@@ -201,8 +202,9 @@ object Prefs {
         ctx: Context,
         preset: AiProviderPreset,
         apiKey: String,
-        modelsCache: List<String>? = null
-    ) = PrefsAiSupport.applyAiProviderConfigSync(ctx, preset, apiKey, modelsCache)
+        modelsCache: List<String>? = null,
+        resolvedModels: AiModelDefaults.Resolved? = null
+    ) = PrefsAiSupport.applyAiProviderConfigSync(ctx, preset, apiKey, modelsCache, resolvedModels)
 
     fun getAiProvider(ctx: Context): String = PrefsAiSupport.getAiProvider(ctx)
     fun setAiProvider(ctx: Context, value: String) = PrefsAiSupport.setAiProvider(ctx, value)

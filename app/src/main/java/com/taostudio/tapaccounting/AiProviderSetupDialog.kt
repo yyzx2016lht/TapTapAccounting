@@ -200,6 +200,11 @@ object AiProviderSetupDialog {
 
         rebuildProviderRows()
         updateSelectionUi()
+        // 让当前已选提供商始终可见（列表较长时滚动到它的位置）。
+        scroll.post {
+            val target = rowRoots.getOrNull(selectedIndex)
+            if (target != null) scroll.scrollTo(0, target.top)
+        }
 
         layout.addView(tvHint)
         layout.addView(scroll)

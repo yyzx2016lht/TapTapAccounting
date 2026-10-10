@@ -22,6 +22,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import com.taostudio.tapaccounting.ui.dialog.OverlayDialogs
 
+/** 模型列表缓存静默刷新间隔：超过后打开 AI 设置页时自动重新拉取一次。 */
+private const val MODELS_CACHE_REFRESH_TTL_MS = 7L * 24 * 60 * 60 * 1000
+
 class AiConfigActivity : AppCompatActivity() {
 
     private lateinit var tvCurrentProvider: TextView
@@ -29,7 +32,10 @@ class AiConfigActivity : AppCompatActivity() {
     private lateinit var layoutProviderSelector: View
     private lateinit var switchManualModelSelection: SwitchMaterial
     private lateinit var tvDefaultModelReadonlyHint: TextView
-    private lateinit var btnRestoreDefaultModels: MaterialButton
+    private lateinit var btnRestoreDefaultModels: View
+    private lateinit var layoutRestoreDefaultModels: View
+    private lateinit var tvTestConnDesc: TextView
+    private lateinit var tvTestConnAction: TextView
     private lateinit var tvApiKeyState: TextView
     private lateinit var btnEditApiKey: TextView
     private lateinit var layoutApiKeyEditor: View
@@ -69,6 +75,9 @@ class AiConfigActivity : AppCompatActivity() {
         switchManualModelSelection = findViewById(R.id.switch_manual_model_selection)
         tvDefaultModelReadonlyHint = findViewById(R.id.tv_default_model_readonly_hint)
         btnRestoreDefaultModels = findViewById(R.id.btn_restore_default_models)
+        layoutRestoreDefaultModels = findViewById(R.id.layout_restore_default_models)
+        tvTestConnDesc = findViewById(R.id.tv_test_conn_desc)
+        tvTestConnAction = findViewById(R.id.tv_test_conn_action)
         tvApiKeyState = findViewById(R.id.tv_api_key_state)
         btnEditApiKey = findViewById(R.id.btn_edit_api_key)
         layoutApiKeyEditor = findViewById(R.id.layout_api_key_editor)
@@ -85,8 +94,7 @@ class AiConfigActivity : AppCompatActivity() {
         switchThinkingVision = findViewById(R.id.switch_thinking_vision)
         tvThinkingVisionHint = findViewById(R.id.tv_thinking_vision_hint)
 
-        val btnTest = findViewById<MaterialButton>(R.id.btn_test_conn)
-        val btnSave = findViewById<View>(R.id.btn_save_config)
+        val btnTest = findViewById<View>(R.id.btn_test_conn)
 
         modeModels = mutableMapOf(
             "text" to effectiveModelForMode("text"),
@@ -117,7 +125,9 @@ class AiConfigActivity : AppCompatActivity() {
 
         // ── API 密钥：默认只显示掩码摘要，点「更换密钥」才展开输入 ──
 
-        btnEditApiKey.setOnClickListener { showApiKeyEditor() }
+        findViewById<View>(R.id.btn_edit_api_key_row).setOnClickListener {
+            if (layoutApiKeyEditor.visibility == View.VISIBLE) hideApiKeyEditor() else showApiKeyEditor()
+        }
         btnCancelApiKey.setOnClickListener { hideApiKeyEditor() }
         btnToggleApiKey.setOnClickListener {
             keyVisible = !keyVisible
@@ -135,7 +145,10 @@ class AiConfigActivity : AppCompatActivity() {
         }
 
         rowTextModel.setOnClickListener {
-            if (!Prefs.isAiManualModelSelectionEnabled(this)) return@setOnClickListener
+            if (!Prefs.isAiManualModelSelectionEnabled(this)) {
+                Utils.toast(this, getString(R.string.ai_cfg_enable_manual_first))
+                return@setOnClickListener
+            }
             showModelSearchDialog("text")
         }
         rowVisionModel.setOnClickListener {
@@ -143,7 +156,10 @@ class AiConfigActivity : AppCompatActivity() {
                 showCapabilityNotSupportedToast("vision")
                 return@setOnClickListener
             }
-            if (!Prefs.isAiManualModelSelectionEnabled(this)) return@setOnClickListener
+            if (!Prefs.isAiManualModelSelectionEnabled(this)) {
+                Utils.toast(this, getString(R.string.ai_cfg_enable_manual_first))
+                return@setOnClickListener
+            }
             showModelSearchDialog("vision")
         }
         rowSpeechModel.setOnClickListener {
@@ -151,7 +167,10 @@ class AiConfigActivity : AppCompatActivity() {
                 showCapabilityNotSupportedToast("speech")
                 return@setOnClickListener
             }
-            if (!Prefs.isAiManualModelSelectionEnabled(this)) return@setOnClickListener
+            if (!Prefs.isAiManualModelSelectionEnabled(this)) {
+                Utils.toast(this, getString(R.string.ai_cfg_enable_manual_first))
+                return@setOnClickListener
+            }
             showModelSearchDialog("speech")
         }
 
@@ -164,6 +183,12 @@ class AiConfigActivity : AppCompatActivity() {
             if (updatingThinkingSwitches || !currentPreset.supportsVision) return@setOnCheckedChangeListener
             Prefs.setAiThinkingVisionEnabled(this, isChecked)
         }
+        findViewById<View>(R.id.layout_thinking_text).setOnClickListener { switchThinkingText.performClick() }
+        findViewById<View>(R.id.layout_thinking_vision).setOnClickListener {
+            if (currentPreset.supportsVision) switchThinkingVision.performClick()
+            else showCapabilityNotSupportedToast("vision")
+        }
+        (switchManualModelSelection.parent as View).setOnClickListener { switchManualModelSelection.performClick() }
 
         refreshProviderState = {
             currentPreset = AiProviderRegistry.resolvePreset(this)
@@ -207,7 +232,7 @@ class AiConfigActivity : AppCompatActivity() {
             }
 
             btnTest.isEnabled = false
-            btnTest.text = getString(R.string.ai_provider_testing)
+            tvTestConnAction.text = getString(R.string.ai_provider_testing)
 
             CoroutineScope(Dispatchers.IO).launch {
                 try {
@@ -216,7 +241,7 @@ class AiConfigActivity : AppCompatActivity() {
                     runCatching { AiModelCatalog.refreshFromNetwork(this@AiConfigActivity) }
                     withContext(Dispatchers.Main) {
                         btnTest.isEnabled = true
-                        btnTest.text = getString(R.string.refresh_test_model)
+                        tvTestConnAction.text = getString(R.string.ai_cfg_test_action)
                         if (models.isNotEmpty()) {
                             val cleanedModels = models.map { it.trim() }.filter { it.isNotEmpty() }
                             Prefs.setAiModelsCache(this@AiConfigActivity, cleanedModels)
@@ -236,7 +261,7 @@ class AiConfigActivity : AppCompatActivity() {
                 } catch (e: Exception) {
                     withContext(Dispatchers.Main) {
                         btnTest.isEnabled = true
-                        btnTest.text = getString(R.string.refresh_test_model)
+                        tvTestConnAction.text = getString(R.string.ai_cfg_test_action)
                         val msg = e.message.orEmpty()
                         Utils.toast(
                             this@AiConfigActivity,
@@ -251,76 +276,34 @@ class AiConfigActivity : AppCompatActivity() {
             }
         }
 
-        btnSave.setOnClickListener {
-            // 密钥编辑框未收起且已输入内容时，随全局保存一并落盘
-            if (layoutApiKeyEditor.visibility == View.VISIBLE) {
-                val typed = etKey.text?.toString()?.trim().orEmpty()
-                if (typed.isNotEmpty()) {
-                    Prefs.setAiProviderKey(this, currentPreset.id, typed)
-                }
-            }
+        refreshProviderState()
+        maybeRefreshModelsCache()
+    }
 
-            if (!Prefs.isAiManualModelSelectionEnabled(this)) {
-                AiProviderRegistry.applyDefaultModels(this, currentPreset)
-            } else {
-                val verifiedModels = allModelsList.toSet()
-                if (verifiedModels.isNotEmpty()) {
-                    modeModels.keys.toList().forEach { key ->
-                        val selected = modeModels[key].orEmpty()
-                        if (selected.isNotBlank() && selected !in verifiedModels) {
-                            modeModels[key] = ""
+    /** 已有 Key 但模型列表缓存过期时静默刷新一次，让默认模型自动跟随厂商换代。 */
+    private fun maybeRefreshModelsCache() {
+        if (!Prefs.isAiConfigured(this)) return
+        val age = System.currentTimeMillis() - Prefs.getAiModelsCacheAt(this)
+        if (age in 0 until MODELS_CACHE_REFRESH_TTL_MS) return
+        val presetSnapshot = currentPreset
+        val key = Prefs.getAiProviderKey(this, presetSnapshot.id)
+        if (key.isBlank()) return
+        CoroutineScope(Dispatchers.IO).launch {
+            runCatching {
+                val models = AIService.fetchModelsForProvider(this@AiConfigActivity, presetSnapshot, key)
+                    .map { it.trim() }.filter { it.isNotEmpty() }
+                if (models.isNotEmpty()) {
+                    Prefs.setAiModelsCache(this@AiConfigActivity, models)
+                    withContext(Dispatchers.Main) {
+                        if (currentPreset.id == presetSnapshot.id) {
+                            reloadModelsCache()
+                            syncModeModelsFromPrefs()
+                            updateUi()
                         }
                     }
                 }
-
-                // 能力目录可用时，视觉槽位不允许保存纯文本模型（清空后回落到预设默认）。
-                val catalogProviderId = currentPreset.catalogProviderId
-                if (AiModelCatalog.isProviderCatalogUsable(this, catalogProviderId, allModelsList)) {
-                    val selectedVision = modeModels["vision"].orEmpty()
-                    if (selectedVision.isNotBlank() &&
-                        selectedVision != currentPreset.defaultVisionModel &&
-                        AiModelCatalog.supportsImageInput(this, catalogProviderId, selectedVision) == false
-                    ) {
-                        modeModels["vision"] = ""
-                    }
-                }
-
-                val textModel = modeModels["text"].orEmpty().ifBlank { currentPreset.defaultTextModel }
-                val visionModel = if (currentPreset.supportsVision) {
-                    modeModels["vision"].orEmpty().ifBlank { currentPreset.defaultVisionModel }
-                } else {
-                    ""
-                }
-                val speechModel = if (currentPreset.supportsCloudSpeech) {
-                    modeModels["speech"].orEmpty().ifBlank { currentPreset.defaultSpeechModel }
-                } else {
-                    ""
-                }
-
-                Prefs.setAiModel(this, textModel)
-                Prefs.setAiMultiModel(this, textModel)
-                Prefs.setAiModifyModel(this, textModel)
-                Prefs.setAiCategoryRefineModel(this, textModel)
-                Prefs.setAiRouterModel(this, textModel)
-                Prefs.setAiRuleModel(this, textModel)
-                Prefs.setAiReceiptModel(this, textModel)
-                Prefs.setAiReceiptOcrRefineModel(this, textModel)
-                Prefs.setAiReceiptVisionModel(this, visionModel)
-                Prefs.setAiScreenModel(this, visionModel)
-                Prefs.setAiSpeechModel(this, speechModel)
             }
-
-            Prefs.setAiThinkingMultiBillEnabled(this, switchThinkingText.isChecked)
-            Prefs.setAiThinkingCategoryRefineEnabled(this, switchThinkingText.isChecked)
-            Prefs.setAiThinkingVisionEnabled(
-                this,
-                switchThinkingVision.isChecked && currentPreset.supportsVision
-            )
-            Utils.toast(this, getString(R.string.ai_config_saved))
-            finish()
         }
-
-        refreshProviderState()
     }
 
     override fun onResume() {
@@ -364,7 +347,7 @@ class AiConfigActivity : AppCompatActivity() {
             btnEditApiKey.text = getString(R.string.ai_key_action_add)
         } else {
             tvApiKeyState.text = getString(R.string.ai_key_state_saved_fmt, maskKey(key))
-            tvApiKeyState.setTextColor(Color.parseColor("#333333"))
+            tvApiKeyState.setTextColor(getColor(R.color.settings_item_subtitle))
             btnEditApiKey.text = getString(R.string.ai_key_action_replace)
         }
         hideApiKeyEditor()
@@ -380,30 +363,38 @@ class AiConfigActivity : AppCompatActivity() {
 
     private fun updateSlotRows() {
         val manual = Prefs.isAiManualModelSelectionEnabled(this)
-        fun render(row: View, valueView: TextView, slot: String, supported: Boolean) {
-            row.isEnabled = manual
-            row.alpha = if (manual) 1f else 0.55f
-            val value = if (!supported) {
-                getString(R.string.unsupported_provider_hint)
+        fun render(row: View, valueView: TextView, chevronId: Int, slot: String, supported: Boolean) {
+            val editable = manual && supported
+            row.alpha = if (supported) 1f else 0.5f
+            findViewById<View>(chevronId).visibility = if (editable) View.VISIBLE else View.GONE
+            valueView.text = if (!supported) {
+                getString(R.string.ai_cfg_unsupported)
             } else {
-                effectiveModelForMode(slot).ifBlank { getString(R.string.unsupported_provider_hint) }
+                modeModels[slot].orEmpty().ifBlank { effectiveModelForMode(slot) }
             }
-            valueView.text = value
             valueView.setTextColor(
-                if (supported) Color.parseColor("#333333") else Color.parseColor("#9AA4B2")
+                Color.parseColor(if (editable) "#1A2744" else "#9AA4B2")
             )
         }
-        render(rowTextModel, tvTextModelValue, "text", true)
-        render(rowVisionModel, tvVisionModelValue, "vision", currentPreset.supportsVision)
-        render(rowSpeechModel, tvSpeechModelValue, "speech", currentPreset.supportsCloudSpeech)
+        render(rowTextModel, tvTextModelValue, R.id.iv_text_model_chevron, "text", true)
+        render(rowVisionModel, tvVisionModelValue, R.id.iv_vision_model_chevron, "vision", currentPreset.supportsVision)
+        render(rowSpeechModel, tvSpeechModelValue, R.id.iv_speech_model_chevron, "speech", currentPreset.supportsCloudSpeech)
+        tvTestConnDesc.text = if (allModelsList.isEmpty()) {
+            getString(R.string.ai_cfg_test_desc_empty)
+        } else {
+            getString(R.string.ai_cfg_test_desc_fmt, allModelsList.size)
+        }
     }
 
     private fun updateThinkingSwitches() {
         updatingThinkingSwitches = true
         switchThinkingText.isChecked = Prefs.isAiThinkingMultiBillEnabled(this)
         switchThinkingVision.isEnabled = currentPreset.supportsVision
-        switchThinkingVision.alpha = if (currentPreset.supportsVision) 1f else 0.45f
-        tvThinkingVisionHint.alpha = if (currentPreset.supportsVision) 1f else 0.45f
+        (switchThinkingVision.parent as View).alpha = if (currentPreset.supportsVision) 1f else 0.5f
+        tvThinkingVisionHint.text = getString(
+            if (currentPreset.supportsVision) R.string.ai_cfg_thinking_vision_desc
+            else R.string.ai_cfg_thinking_vision_unsupported
+        )
         switchThinkingVision.isChecked =
             currentPreset.supportsVision && Prefs.isAiThinkingVisionEnabled(this)
         updatingThinkingSwitches = false
@@ -411,8 +402,10 @@ class AiConfigActivity : AppCompatActivity() {
 
     private fun updateModelSelectionUi() {
         val manual = Prefs.isAiManualModelSelectionEnabled(this)
-        tvDefaultModelReadonlyHint.visibility = if (manual) View.GONE else View.VISIBLE
-        btnRestoreDefaultModels.visibility = if (manual) View.VISIBLE else View.GONE
+        tvDefaultModelReadonlyHint.text = getString(
+            if (manual) R.string.ai_cfg_manual_desc_on else R.string.ai_cfg_manual_desc_off
+        )
+        layoutRestoreDefaultModels.visibility = if (manual) View.VISIBLE else View.GONE
     }
 
     private fun showModelSearchDialog(slot: String) {
@@ -422,8 +415,13 @@ class AiConfigActivity : AppCompatActivity() {
             return
         }
 
+        if (allModelsList.isEmpty()) {
+            Utils.toast(this, getString(R.string.ai_cfg_need_model_list))
+            return
+        }
         val catalogProviderId = currentPreset.catalogProviderId
         val catalogUsable = AiModelCatalog.isProviderCatalogUsable(this, catalogProviderId, allModelsList)
+        val currentModel = modeModels[slot].orEmpty()
         val baseModels: List<String> = when (slot) {
             "vision" -> AiModelCatalog.visionModelsForPicker(
                 this,
@@ -440,17 +438,20 @@ class AiConfigActivity : AppCompatActivity() {
         }
 
         fun displayLabel(model: String): String {
-            if (!catalogUsable) return model
+            if (!catalogUsable) {
+                return if (model == currentModel) "✓ $model" else model
+            }
             val imageCapable = AiModelCatalog.imageCapabilityBadge(
                 this,
                 catalogProviderId,
                 model,
                 currentPreset.defaultVisionModel
-            ) ?: return model
+            ) ?: return if (model == currentModel) "✓ $model" else model
             val label = getString(
                 if (imageCapable) R.string.ai_model_cap_image else R.string.ai_model_cap_text
             )
-            return "$model  ·  $label"
+            val prefix = if (model == currentModel) "✓ " else ""
+            return "$prefix$model  ·  $label"
         }
 
         val dialogLayout = LinearLayout(this).apply {
@@ -490,6 +491,11 @@ class AiConfigActivity : AppCompatActivity() {
             listAdapter.notifyDataSetChanged()
         }
         rebuild("")
+        // 让当前已选模型始终可见（长列表时滚动到它的位置）。
+        listView.post {
+            val index = shownModels.indexOf(currentModel)
+            if (index > 0) listView.setSelection(index)
+        }
 
         val dialog = AlertDialog.Builder(this)
             .setTitle(R.string.select_ai_model)
@@ -577,8 +583,12 @@ class AiConfigActivity : AppCompatActivity() {
         listView.setOnItemClickListener { _, _, position, _ ->
             val selected = shownModels.getOrNull(position) ?: return@setOnItemClickListener
             modeModels[slot] = selected
+            persistModelSlots()
             updateSlotRows()
             dialog.dismiss()
+            if (selected != currentModel) {
+                Utils.toast(this, getString(R.string.ai_cfg_model_switched_fmt, selected))
+            }
         }
         listView.setOnItemLongClickListener { _, _, position, _ ->
             shownModels.getOrNull(position)?.let(::showCapabilityEditor)
@@ -596,6 +606,33 @@ class AiConfigActivity : AppCompatActivity() {
                 height = targetHeight
             }
         }
+    }
+
+    /** 选模型即生效：把各槽位写回所有使用该槽位的业务配置。 */
+    private fun persistModelSlots() {
+        if (!Prefs.isAiManualModelSelectionEnabled(this)) return
+        val textModel = modeModels["text"].orEmpty().ifBlank { currentPreset.defaultTextModel }
+        val visionModel = if (currentPreset.supportsVision) {
+            modeModels["vision"].orEmpty().ifBlank { currentPreset.defaultVisionModel }
+        } else {
+            ""
+        }
+        val speechModel = if (currentPreset.supportsCloudSpeech) {
+            modeModels["speech"].orEmpty().ifBlank { currentPreset.defaultSpeechModel }
+        } else {
+            ""
+        }
+        Prefs.setAiModel(this, textModel)
+        Prefs.setAiMultiModel(this, textModel)
+        Prefs.setAiModifyModel(this, textModel)
+        Prefs.setAiCategoryRefineModel(this, textModel)
+        Prefs.setAiRouterModel(this, textModel)
+        Prefs.setAiRuleModel(this, textModel)
+        Prefs.setAiReceiptModel(this, textModel)
+        Prefs.setAiReceiptOcrRefineModel(this, textModel)
+        Prefs.setAiReceiptVisionModel(this, visionModel)
+        Prefs.setAiScreenModel(this, visionModel)
+        Prefs.setAiSpeechModel(this, speechModel)
     }
 
     private fun applyProviderSetupResult(result: AiProviderSetupResult) {
@@ -617,20 +654,11 @@ class AiConfigActivity : AppCompatActivity() {
         modeModels["speech"] = effectiveModelForMode("speech")
     }
 
-    private fun effectiveModelForMode(mode: String): String {
-        if (!Prefs.isAiManualModelSelectionEnabled(this)) {
-            return when (mode) {
-                "vision" -> if (currentPreset.supportsVision) currentPreset.defaultVisionModel else ""
-                "speech" -> if (currentPreset.supportsCloudSpeech) currentPreset.defaultSpeechModel else ""
-                else -> currentPreset.defaultTextModel
-            }
-        }
-        return when (mode) {
-            "text" -> Prefs.getAiMultiModel(this)
-            "vision" -> Prefs.getAiReceiptVisionModel(this)
-            "speech" -> Prefs.getAiSpeechModel(this)
-            else -> ""
-        }
+    private fun effectiveModelForMode(mode: String): String = when (mode) {
+        // 展示值与运行时解析保持一致：厂商换代后这里显示的是自动顶替后的模型。
+        "vision" -> if (currentPreset.supportsVision) AiModelSlots.resolveVisionModel(this) else ""
+        "speech" -> if (currentPreset.supportsCloudSpeech) AiModelSlots.resolveSpeechModel(this) else ""
+        else -> AiModelSlots.resolveTextModel(this)
     }
 
     private fun isModeSupported(mode: String): Boolean = when (mode) {

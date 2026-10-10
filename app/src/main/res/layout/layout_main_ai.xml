@@ -7,499 +7,420 @@
     android:background="@color/page_background"
     android:orientation="vertical">
 
-    <!-- Header Toolbar -->
-    <androidx.cardview.widget.CardView
+    <RelativeLayout
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        app:cardElevation="0dp">
-        <RelativeLayout
-            android:layout_width="match_parent"
-            android:layout_height="56dp"
-            android:background="@color/surface_card"
-            android:paddingHorizontal="12dp">
-            <ImageView
-                android:id="@+id/btn_back_to_settings"
-                android:layout_width="@dimen/icon_size_40"
-                android:layout_height="@dimen/icon_size_40"
-                android:layout_centerVertical="true"
-                android:padding="8dp"
-                android:src="@drawable/ic_chevron_left"
-                app:tint="@color/text_primary"
-                android:background="?attr/selectableItemBackgroundBorderless"/>
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/title_ai_config"
-                android:textSize="@dimen/text_size_18"
-                android:textStyle="bold"
-                android:textColor="@color/settings_item_title"
-                android:layout_centerInParent="true"/>
-        </RelativeLayout>
-    </androidx.cardview.widget.CardView>
+        android:layout_height="56dp"
+        android:background="@color/surface_card"
+        android:paddingHorizontal="12dp">
+
+        <ImageView
+            android:id="@+id/btn_back_to_settings"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:layout_centerVertical="true"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:padding="8dp"
+            android:src="@drawable/ic_chevron_left"
+            android:tint="#333333" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_centerInParent="true"
+            android:text="@string/title_ai_config"
+            android:textColor="@color/settings_item_title"
+            android:textSize="@dimen/text_size_18"
+            android:textStyle="bold" />
+    </RelativeLayout>
 
     <ScrollView
         android:id="@+id/root_scroll_view"
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
+        android:clipToPadding="false"
         android:fillViewport="true">
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:padding="16dp">
+            android:paddingHorizontal="16dp"
+            android:paddingTop="16dp"
+            android:paddingBottom="32dp">
 
-            <!-- 服务提供商 -->
+            <!-- 服务商 -->
             <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/ai_provider_current_label"
-                android:textColor="@color/brand_primary"
-                android:textSize="@dimen/settings_section_title_size"
-                android:textStyle="bold"
-                android:layout_marginBottom="12dp"
-                android:layout_marginStart="4dp"/>
+                style="@style/AiSectionLabel"
+                android:text="@string/ai_cfg_section_provider" />
 
-            <LinearLayout
-                android:id="@+id/layout_provider_selector"
+            <androidx.cardview.widget.CardView
+                style="@style/SettingsCard"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center_vertical"
-                android:background="@drawable/bg_ai_input_modern"
-                android:padding="@dimen/card_padding"
-                android:layout_marginBottom="@dimen/settings_card_margin_bottom"
-                android:clickable="true"
-                android:focusable="true">
+                android:layout_marginBottom="20dp">
 
                 <LinearLayout
-                    android:layout_width="0dp"
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_weight="1"
                     android:orientation="vertical">
 
-                    <TextView
-                        android:id="@+id/tv_current_provider"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:textColor="#333333"
-                        android:textSize="@dimen/text_size_16"
-                        android:textStyle="bold" />
-
-                    <TextView
-                        android:id="@+id/tv_provider_capabilities"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="4dp"
-                        android:textColor="#667085"
-                        android:textSize="@dimen/text_size_12" />
-                </LinearLayout>
-
-                <ImageView
-                    android:layout_width="18dp"
-                    android:layout_height="18dp"
-                    android:layout_marginStart="8dp"
-                    android:alpha="0.45"
-                    android:src="@drawable/ic_chevron_right"
-                    app:tint="#667085" />
-            </LinearLayout>
-
-            <!-- API 密钥 -->
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/ai_api_key_section"
-                android:textColor="@color/brand_primary"
-                android:textSize="@dimen/settings_section_title_size"
-                android:textStyle="bold"
-                android:layout_marginBottom="12dp"
-                android:layout_marginStart="4dp"/>
-
-            <LinearLayout
-                android:id="@+id/layout_api_key_card"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:background="@drawable/bg_ai_input_modern"
-                android:padding="@dimen/card_padding"
-                android:layout_marginBottom="@dimen/settings_card_margin_bottom">
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:gravity="center_vertical">
-
-                    <TextView
-                        android:id="@+id/tv_api_key_state"
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:ellipsize="end"
-                        android:maxLines="1"
-                        android:textColor="#333333"
-                        android:textSize="@dimen/text_size_14" />
-
-                    <TextView
-                        android:id="@+id/btn_edit_api_key"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:padding="6dp"
-                        android:text="@string/ai_key_action_replace"
-                        android:textColor="#5C6BC0"
-                        android:textSize="@dimen/text_size_13"
-                        android:textStyle="bold"
-                        android:background="?attr/selectableItemBackground"/>
-                </LinearLayout>
-
-                <LinearLayout
-                    android:id="@+id/layout_api_key_editor"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:layout_marginTop="10dp"
-                    android:visibility="gone">
-
                     <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:orientation="horizontal"
-                        android:gravity="center_vertical">
+                        android:id="@+id/layout_provider_selector"
+                        style="@style/AiRow">
 
-                        <EditText
-                            android:id="@+id/et_api_key"
-                            android:layout_width="0dp"
-                            android:layout_height="48dp"
-                            android:layout_weight="1"
-                            android:hint="@string/ai_key_replace_hint"
-                            android:inputType="textPassword"
-                            android:background="@drawable/bg_search_box"
-                            android:paddingHorizontal="12dp"
-                            android:textSize="@dimen/text_size_14"
-                            android:importantForAutofill="no" />
+                        <LinearLayout style="@style/AiRowText">
+
+                            <TextView
+                                android:id="@+id/tv_current_provider"
+                                style="@style/AiRowTitle"
+                                android:textSize="@dimen/text_size_16" />
+
+                            <TextView
+                                android:id="@+id/tv_provider_capabilities"
+                                style="@style/AiRowDesc" />
+                        </LinearLayout>
 
                         <TextView
-                            android:id="@+id/btn_toggle_api_key"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:padding="10dp"
-                            android:text="@string/ai_key_show"
-                            android:textColor="#5C6BC0"
-                            android:textSize="@dimen/text_size_12"
-                            android:background="?attr/selectableItemBackground"/>
+                            style="@style/AiRowValue"
+                            android:text="@string/ai_page_action_switch" />
+
+                        <ImageView style="@style/SettingsChevron" />
+                    </LinearLayout>
+
+                    <View style="@style/AiDivider" />
+
+                    <!-- API 密钥 -->
+                    <LinearLayout
+                        android:id="@+id/btn_edit_api_key_row"
+                        style="@style/AiRow">
+
+                        <LinearLayout style="@style/AiRowText">
+
+                            <TextView
+                                style="@style/AiRowTitle"
+                                android:text="@string/ai_cfg_key_title" />
+
+                            <TextView
+                                android:id="@+id/tv_api_key_state"
+                                style="@style/AiRowDesc"
+                                android:ellipsize="end"
+                                android:maxLines="1" />
+                        </LinearLayout>
+
+                        <TextView
+                            android:id="@+id/btn_edit_api_key"
+                            style="@style/AiRowValue"
+                            android:text="@string/ai_key_action_replace"
+                            android:textColor="@color/brand_primary" />
                     </LinearLayout>
 
                     <LinearLayout
+                        android:id="@+id/layout_api_key_editor"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:orientation="horizontal"
-                        android:gravity="end|center_vertical"
-                        android:layout_marginTop="8dp">
+                        android:orientation="vertical"
+                        android:paddingHorizontal="@dimen/settings_item_padding_h"
+                        android:paddingBottom="12dp"
+                        android:visibility="gone">
 
-                        <com.google.android.material.button.MaterialButton
-                            android:id="@+id/btn_cancel_api_key"
-                            android:layout_width="wrap_content"
-                            android:layout_height="36dp"
-                            android:text="@string/cancel_btn"
-                            android:textSize="@dimen/text_size_12"
-                            android:textColor="#757575"
-                            style="@style/Widget.MaterialComponents.Button.TextButton"/>
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="44dp"
+                            android:background="@drawable/bg_search_box"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal">
 
-                        <com.google.android.material.button.MaterialButton
-                            android:id="@+id/btn_save_api_key"
-                            android:layout_width="wrap_content"
-                            android:layout_height="36dp"
-                            android:layout_marginStart="8dp"
-                            android:text="@string/ai_key_save"
-                            android:textSize="@dimen/text_size_12"
-                            android:textAllCaps="false"
-                            app:cornerRadius="8dp"
-                            android:backgroundTint="@color/brand_primary"/>
+                            <EditText
+                                android:id="@+id/et_api_key"
+                                android:layout_width="0dp"
+                                android:layout_height="match_parent"
+                                android:layout_weight="1"
+                                android:background="@null"
+                                android:hint="@string/ai_key_replace_hint"
+                                android:importantForAutofill="no"
+                                android:inputType="textPassword"
+                                android:paddingHorizontal="12dp"
+                                android:singleLine="true"
+                                android:textSize="@dimen/text_size_14" />
+
+                            <TextView
+                                android:id="@+id/btn_toggle_api_key"
+                                android:layout_width="wrap_content"
+                                android:layout_height="match_parent"
+                                android:background="?attr/selectableItemBackground"
+                                android:gravity="center"
+                                android:paddingHorizontal="12dp"
+                                android:text="@string/ai_key_show"
+                                android:textColor="@color/settings_item_subtitle"
+                                android:textSize="@dimen/text_size_12" />
+                        </LinearLayout>
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="10dp"
+                            android:gravity="end|center_vertical"
+                            android:orientation="horizontal">
+
+                            <com.google.android.material.button.MaterialButton
+                                android:id="@+id/btn_cancel_api_key"
+                                style="@style/Widget.MaterialComponents.Button.TextButton"
+                                android:layout_width="wrap_content"
+                                android:layout_height="36dp"
+                                android:insetTop="0dp"
+                                android:insetBottom="0dp"
+                                android:text="@string/cancel_btn"
+                                android:textColor="@color/settings_item_subtitle"
+                                android:textSize="@dimen/text_size_13" />
+
+                            <com.google.android.material.button.MaterialButton
+                                android:id="@+id/btn_save_api_key"
+                                android:layout_width="wrap_content"
+                                android:layout_height="36dp"
+                                android:layout_marginStart="8dp"
+                                android:backgroundTint="@color/brand_primary"
+                                android:insetTop="0dp"
+                                android:insetBottom="0dp"
+                                android:text="@string/ai_key_save"
+                                android:textAllCaps="false"
+                                android:textSize="@dimen/text_size_13"
+                                app:cornerRadius="18dp" />
+                        </LinearLayout>
+                    </LinearLayout>
+
+                    <View style="@style/AiDivider" />
+
+                    <!-- 测试连接 -->
+                    <LinearLayout
+                        android:id="@+id/btn_test_conn"
+                        style="@style/AiRow">
+
+                        <LinearLayout style="@style/AiRowText">
+
+                            <TextView
+                                style="@style/AiRowTitle"
+                                android:text="@string/ai_cfg_test_title" />
+
+                            <TextView
+                                android:id="@+id/tv_test_conn_desc"
+                                style="@style/AiRowDesc"
+                                android:text="@string/ai_cfg_test_desc_empty" />
+                        </LinearLayout>
+
+                        <TextView
+                            android:id="@+id/tv_test_conn_action"
+                            style="@style/AiRowValue"
+                            android:text="@string/ai_cfg_test_action"
+                            android:textColor="@color/brand_primary" />
                     </LinearLayout>
                 </LinearLayout>
+            </androidx.cardview.widget.CardView>
 
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btn_test_conn"
-                    android:layout_width="match_parent"
-                    android:layout_height="50dp"
-                    android:layout_marginTop="12dp"
-                    android:text="@string/test_connection"
-                    android:textAllCaps="false"
-                    app:cornerRadius="10dp"
-                    android:backgroundTint="#E3F2FD"
-                    android:textColor="#1976D2"
-                    app:strokeWidth="1dp"
-                    app:strokeColor="#BBDEFB"
-                    style="@style/Widget.MaterialComponents.Button.UnelevatedButton"/>
-
-                <TextView
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="10dp"
-                    android:text="@string/test_connection_hint"
-                    android:textColor="#999999"
-                    android:textSize="@dimen/text_size_11" />
-            </LinearLayout>
-
-            <!-- 模型配置 -->
+            <!-- 模型 -->
             <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/ai_service_config_btn"
-                android:textColor="@color/brand_primary"
-                android:textSize="@dimen/settings_section_title_size"
-                android:textStyle="bold"
-                android:layout_marginBottom="12dp"
-                android:layout_marginStart="4dp"/>
+                style="@style/AiSectionLabel"
+                android:text="@string/ai_cfg_section_models" />
 
-            <LinearLayout
+            <androidx.cardview.widget.CardView
+                style="@style/SettingsCard"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:background="@drawable/bg_ai_input_modern"
-                android:padding="@dimen/card_padding"
-                android:layout_marginBottom="24dp">
-
-                <com.google.android.material.switchmaterial.SwitchMaterial
-                    android:id="@+id/switch_enable_receipt_ocr_refine"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="@string/enable_image_recognition"
-                    android:textColor="#333333"
-                    android:textSize="@dimen/text_size_13"
-                    android:layout_marginBottom="2dp" />
-
-                <TextView
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="@string/ocr_refine_desc"
-                    android:textColor="#999999"
-                    android:textSize="@dimen/text_size_11"
-                    android:layout_marginBottom="12dp" />
-
-                <com.google.android.material.switchmaterial.SwitchMaterial
-                    android:id="@+id/switch_manual_model_selection"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="@string/ai_manual_model_selection"
-                    android:textColor="#333333"
-                    android:textSize="@dimen/text_size_13"
-                    android:layout_marginBottom="2dp" />
-
-                <TextView
-                    android:id="@+id/tv_manual_model_hint"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="@string/ai_manual_model_selection_hint"
-                    android:textColor="#999999"
-                    android:textSize="@dimen/text_size_11"
-                    android:layout_marginBottom="8dp" />
-
-                <TextView
-                    android:id="@+id/tv_default_model_readonly_hint"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginBottom="8dp"
-                    android:text="@string/ai_default_model_readonly_hint"
-                    android:textColor="#999999"
-                    android:textSize="@dimen/text_size_11"
-                    android:visibility="gone" />
-
-                <TextView
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginBottom="8dp"
-                    android:text="@string/model_usage_desc"
-                    android:textColor="#999999"
-                    android:textSize="@dimen/text_size_11" />
-
-                <!-- 模型槽位：点击直接为该槽位选模型 -->
-                <LinearLayout
-                    android:id="@+id/layout_row_text_model"
-                    android:layout_width="match_parent"
-                    android:layout_height="48dp"
-                    android:orientation="horizontal"
-                    android:gravity="center_vertical"
-                    android:background="@drawable/bg_search_box"
-                    android:paddingHorizontal="12dp"
-                    android:layout_marginBottom="8dp"
-                    android:clickable="true"
-                    android:focusable="true">
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="@string/main_text_model"
-                        android:textColor="#666666"
-                        android:textSize="@dimen/text_size_12" />
-
-                    <TextView
-                        android:id="@+id/tv_text_model_value"
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:layout_marginStart="10dp"
-                        android:ellipsize="end"
-                        android:gravity="end"
-                        android:maxLines="1"
-                        android:textColor="#333333"
-                        android:textSize="@dimen/text_size_14" />
-
-                    <ImageView
-                        android:layout_width="16dp"
-                        android:layout_height="16dp"
-                        android:layout_marginStart="6dp"
-                        android:alpha="0.4"
-                        android:src="@drawable/ic_chevron_right"
-                        app:tint="#667085" />
-                </LinearLayout>
+                android:layout_marginBottom="20dp">
 
                 <LinearLayout
-                    android:id="@+id/layout_row_vision_model"
                     android:layout_width="match_parent"
-                    android:layout_height="48dp"
-                    android:orientation="horizontal"
-                    android:gravity="center_vertical"
-                    android:background="@drawable/bg_search_box"
-                    android:paddingHorizontal="12dp"
-                    android:layout_marginBottom="8dp"
-                    android:clickable="true"
-                    android:focusable="true">
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical">
 
-                    <TextView
-                        android:layout_width="wrap_content"
+                    <LinearLayout style="@style/AiRow">
+
+                        <LinearLayout style="@style/AiRowText">
+
+                            <TextView
+                                style="@style/AiRowTitle"
+                                android:text="@string/ai_cfg_manual_title" />
+
+                            <TextView
+                                android:id="@+id/tv_default_model_readonly_hint"
+                                style="@style/AiRowDesc"
+                                android:text="@string/ai_cfg_manual_desc_off" />
+                        </LinearLayout>
+
+                        <com.google.android.material.switchmaterial.SwitchMaterial
+                            android:id="@+id/switch_manual_model_selection"
+                            style="@style/AiSwitch" />
+                    </LinearLayout>
+
+                    <View style="@style/AiDivider" />
+
+                    <LinearLayout
+                        android:id="@+id/layout_row_text_model"
+                        style="@style/AiRow">
+
+                        <LinearLayout style="@style/AiRowText">
+
+                            <TextView
+                                style="@style/AiRowTitle"
+                                android:text="@string/ai_cfg_text_model" />
+
+                            <TextView
+                                style="@style/AiRowDesc"
+                                android:text="@string/ai_cfg_text_model_desc" />
+                        </LinearLayout>
+
+                        <TextView
+                            android:id="@+id/tv_text_model_value"
+                            style="@style/AiModelValue" />
+
+                        <ImageView
+                            android:id="@+id/iv_text_model_chevron"
+                            style="@style/SettingsChevron" />
+                    </LinearLayout>
+
+                    <View style="@style/AiDivider" />
+
+                    <LinearLayout
+                        android:id="@+id/layout_row_vision_model"
+                        style="@style/AiRow">
+
+                        <LinearLayout style="@style/AiRowText">
+
+                            <TextView
+                                style="@style/AiRowTitle"
+                                android:text="@string/ai_cfg_vision_model" />
+
+                            <TextView
+                                style="@style/AiRowDesc"
+                                android:text="@string/ai_cfg_vision_model_desc" />
+                        </LinearLayout>
+
+                        <TextView
+                            android:id="@+id/tv_vision_model_value"
+                            style="@style/AiModelValue" />
+
+                        <ImageView
+                            android:id="@+id/iv_vision_model_chevron"
+                            style="@style/SettingsChevron" />
+                    </LinearLayout>
+
+                    <View style="@style/AiDivider" />
+
+                    <LinearLayout
+                        android:id="@+id/layout_row_speech_model"
+                        style="@style/AiRow">
+
+                        <LinearLayout style="@style/AiRowText">
+
+                            <TextView
+                                style="@style/AiRowTitle"
+                                android:text="@string/ai_cfg_speech_model" />
+
+                            <TextView
+                                style="@style/AiRowDesc"
+                                android:text="@string/ai_cfg_speech_model_desc" />
+                        </LinearLayout>
+
+                        <TextView
+                            android:id="@+id/tv_speech_model_value"
+                            style="@style/AiModelValue" />
+
+                        <ImageView
+                            android:id="@+id/iv_speech_model_chevron"
+                            style="@style/SettingsChevron" />
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:id="@+id/layout_restore_default_models"
+                        android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:text="@string/vision_model"
-                        android:textColor="#666666"
-                        android:textSize="@dimen/text_size_12" />
+                        android:orientation="vertical"
+                        android:visibility="gone">
 
-                    <TextView
-                        android:id="@+id/tv_vision_model_value"
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:layout_marginStart="10dp"
-                        android:ellipsize="end"
-                        android:gravity="end"
-                        android:maxLines="1"
-                        android:textColor="#333333"
-                        android:textSize="@dimen/text_size_14" />
+                        <View style="@style/AiDivider" />
 
-                    <ImageView
-                        android:layout_width="16dp"
-                        android:layout_height="16dp"
-                        android:layout_marginStart="6dp"
-                        android:alpha="0.4"
-                        android:src="@drawable/ic_chevron_right"
-                        app:tint="#667085" />
+                        <TextView
+                            android:id="@+id/btn_restore_default_models"
+                            android:layout_width="match_parent"
+                            android:layout_height="52dp"
+                            android:background="?attr/selectableItemBackground"
+                            android:gravity="center"
+                            android:text="@string/ai_cfg_restore_defaults"
+                            android:textColor="@color/brand_primary"
+                            android:textSize="@dimen/text_size_14" />
+                    </LinearLayout>
                 </LinearLayout>
+            </androidx.cardview.widget.CardView>
 
-                <LinearLayout
-                    android:id="@+id/layout_row_speech_model"
-                    android:layout_width="match_parent"
-                    android:layout_height="48dp"
-                    android:orientation="horizontal"
-                    android:gravity="center_vertical"
-                    android:background="@drawable/bg_search_box"
-                    android:paddingHorizontal="12dp"
-                    android:layout_marginBottom="4dp"
-                    android:clickable="true"
-                    android:focusable="true">
+            <!-- 深度思考 -->
+            <TextView
+                style="@style/AiSectionLabel"
+                android:text="@string/ai_cfg_section_thinking" />
 
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="@string/voice_recognition"
-                        android:textColor="#666666"
-                        android:textSize="@dimen/text_size_12" />
-
-                    <TextView
-                        android:id="@+id/tv_speech_model_value"
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:layout_marginStart="10dp"
-                        android:ellipsize="end"
-                        android:gravity="end"
-                        android:maxLines="1"
-                        android:textColor="#333333"
-                        android:textSize="@dimen/text_size_14" />
-
-                    <ImageView
-                        android:layout_width="16dp"
-                        android:layout_height="16dp"
-                        android:layout_marginStart="6dp"
-                        android:alpha="0.4"
-                        android:src="@drawable/ic_chevron_right"
-                        app:tint="#667085" />
-                </LinearLayout>
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btn_restore_default_models"
-                    android:layout_width="wrap_content"
-                    android:layout_height="36dp"
-                    android:layout_gravity="end"
-                    android:text="@string/ai_restore_default_models"
-                    android:textSize="@dimen/text_size_11"
-                    android:textColor="#757575"
-                    app:strokeColor="#DDDDDD"
-                    android:visibility="gone"
-                    style="@style/Widget.MaterialComponents.Button.TextButton"/>
-
-                <View
-                    android:layout_width="match_parent"
-                    android:layout_height="1dp"
-                    android:background="#EEF0F4"
-                    android:layout_marginTop="14dp"
-                    android:layout_marginBottom="14dp"/>
-
-                <com.google.android.material.switchmaterial.SwitchMaterial
-                    android:id="@+id/switch_thinking_text"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="@string/ai_thinking_text_label"
-                    android:textColor="#333333"
-                    android:textSize="@dimen/text_size_13"
-                    android:layout_marginBottom="2dp" />
-
-                <TextView
-                    android:id="@+id/tv_thinking_text_hint"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="@string/thinking_scope_text"
-                    android:textColor="#999999"
-                    android:textSize="@dimen/text_size_11"
-                    android:layout_marginBottom="12dp" />
-
-                <com.google.android.material.switchmaterial.SwitchMaterial
-                    android:id="@+id/switch_thinking_vision"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="@string/ai_thinking_vision_label"
-                    android:textColor="#333333"
-                    android:textSize="@dimen/text_size_13"
-                    android:layout_marginBottom="2dp" />
-
-                <TextView
-                    android:id="@+id/tv_thinking_vision_hint"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="@string/thinking_scope_vision"
-                    android:textColor="#999999"
-                    android:textSize="@dimen/text_size_11" />
-            </LinearLayout>
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btn_save_config"
+            <androidx.cardview.widget.CardView
+                style="@style/SettingsCard"
                 android:layout_width="match_parent"
-                android:layout_height="56dp"
-                android:text="@string/save_all_config"
-                android:textSize="@dimen/text_size_16"
-                android:textStyle="bold"
-                app:cornerRadius="12dp"
-                android:backgroundTint="@color/brand_primary"
-                android:layout_marginBottom="40dp"/>
+                android:layout_height="wrap_content">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical">
+
+                    <LinearLayout
+                        android:id="@+id/layout_thinking_text"
+                        style="@style/AiRow">
+
+                        <LinearLayout style="@style/AiRowText">
+
+                            <TextView
+                                style="@style/AiRowTitle"
+                                android:text="@string/ai_cfg_thinking_text_title" />
+
+                            <TextView
+                                style="@style/AiRowDesc"
+                                android:text="@string/ai_cfg_thinking_text_desc" />
+                        </LinearLayout>
+
+                        <com.google.android.material.switchmaterial.SwitchMaterial
+                            android:id="@+id/switch_thinking_text"
+                            style="@style/AiSwitch" />
+                    </LinearLayout>
+
+                    <View style="@style/AiDivider" />
+
+                    <LinearLayout
+                        android:id="@+id/layout_thinking_vision"
+                        style="@style/AiRow">
+
+                        <LinearLayout style="@style/AiRowText">
+
+                            <TextView
+                                style="@style/AiRowTitle"
+                                android:text="@string/ai_cfg_thinking_vision_title" />
+
+                            <TextView
+                                android:id="@+id/tv_thinking_vision_hint"
+                                style="@style/AiRowDesc"
+                                android:text="@string/ai_cfg_thinking_vision_desc" />
+                        </LinearLayout>
+
+                        <com.google.android.material.switchmaterial.SwitchMaterial
+                            android:id="@+id/switch_thinking_vision"
+                            style="@style/AiSwitch" />
+                    </LinearLayout>
+                </LinearLayout>
+            </androidx.cardview.widget.CardView>
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginHorizontal="4dp"
+                android:layout_marginTop="10dp"
+                android:lineSpacingExtra="2dp"
+                android:text="@string/ai_cfg_thinking_footnote"
+                android:textColor="#9AA4B2"
+                android:textSize="@dimen/text_size_11" />
         </LinearLayout>
     </ScrollView>
 </LinearLayout>

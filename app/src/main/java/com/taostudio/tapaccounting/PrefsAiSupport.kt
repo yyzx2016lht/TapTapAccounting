@@ -24,6 +24,7 @@ object PrefsAiSupport {
     private const val KEY_AI_LLM_ROUTER_ENABLED = "ai_llm_router_enabled"
     private const val KEY_AI_RULE_MODEL = "ai_rule_model_id"
     private const val KEY_AI_MODELS_CACHE = "ai_models_cache"
+    private const val KEY_AI_MODELS_CACHE_AT = "ai_models_cache_fetched_at_v1"
     private const val KEY_AI_MODEL_CATALOG = "ai_model_catalog_v1"
     private const val KEY_AI_MODEL_CATALOG_AT = "ai_model_catalog_fetched_at_v1"
     private const val KEY_AI_MODEL_CAP_OVERRIDES = "ai_model_capability_overrides_v1"
@@ -316,7 +317,12 @@ object PrefsAiSupport {
     fun getAiModelsCache(ctx: Context): List<String> =
         (prefs(ctx).getStringSet(KEY_AI_MODELS_CACHE, null) ?: emptySet()).toList()
     fun setAiModelsCache(ctx: Context, models: List<String>) =
-        prefs(ctx).edit().putStringSet(KEY_AI_MODELS_CACHE, models.toSet()).apply()
+        prefs(ctx).edit()
+            .putStringSet(KEY_AI_MODELS_CACHE, models.toSet())
+            .putLong(KEY_AI_MODELS_CACHE_AT, System.currentTimeMillis())
+            .apply()
+    fun getAiModelsCacheAt(ctx: Context): Long =
+        prefs(ctx).getLong(KEY_AI_MODELS_CACHE_AT, 0L)
 
     // ── 模型能力目录（models.dev 裁剪结果，仅供输入模态标注） ──
 
@@ -380,16 +386,17 @@ object PrefsAiSupport {
         ctx: Context,
         preset: AiProviderPreset,
         apiKey: String,
-        modelsCache: List<String>? = null
+        modelsCache: List<String>? = null,
+        resolvedModels: AiModelDefaults.Resolved? = null
     ) {
-        val textModel = preset.defaultTextModel
+        val textModel = resolvedModels?.text?.ifBlank { preset.defaultTextModel } ?: preset.defaultTextModel
         val visionModel = if (preset.supportsVision && preset.defaultVisionModel.isNotBlank()) {
-            preset.defaultVisionModel
+            resolvedModels?.vision?.ifBlank { preset.defaultVisionModel } ?: preset.defaultVisionModel
         } else {
             ""
         }
         val speechModel = if (preset.supportsCloudSpeech && preset.defaultSpeechModel.isNotBlank()) {
-            preset.defaultSpeechModel
+            resolvedModels?.speech?.ifBlank { preset.defaultSpeechModel } ?: preset.defaultSpeechModel
         } else {
             ""
         }
@@ -414,6 +421,9 @@ object PrefsAiSupport {
             .putString(KEY_AI_SCREEN_MODEL, visionModel)
             .putString(KEY_AI_SPEECH_MODEL, speechModel)
         editor.putStringSet(KEY_AI_MODELS_CACHE, modelsCache.orEmpty().toSet())
+        if (modelsCache != null) {
+            editor.putLong(KEY_AI_MODELS_CACHE_AT, System.currentTimeMillis())
+        }
         editor.commit()
     }
 

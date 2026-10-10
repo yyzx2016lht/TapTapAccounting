@@ -73,4 +73,48 @@ class AIChatRequestBuilderTest {
         assertFalse(adapted.has("enable_thinking"))
         assertFalse(adapted.has("thinking"))
     }
+
+    @Test
+    fun qwenHybridModelReceivesExplicitThinkingOff() {
+        val request = buildTextChatRequest(
+            model = "qwen3.5-flash",
+            temperature = 0.3,
+            userText = "hello",
+            enableThinking = false
+        )
+
+        val adapted = adaptChatRequestForProvider(AiProviderRegistry.PROVIDER_QWEN, request)
+
+        assertFalse(adapted.get("enable_thinking").asBoolean)
+    }
+
+    @Test
+    fun siliconFlowHybridModelTogglesThinking() {
+        val off = adaptChatRequestForProvider(
+            AiProviderRegistry.PROVIDER_SILICONFLOW,
+            buildTextChatRequest(model = "Qwen/Qwen3-14B", temperature = 0.3, userText = "hi", enableThinking = false)
+        )
+        val on = adaptChatRequestForProvider(
+            AiProviderRegistry.PROVIDER_SILICONFLOW,
+            buildTextChatRequest(model = "Qwen/Qwen3-14B", temperature = 0.3, userText = "hi", enableThinking = true)
+        )
+
+        assertFalse(off.get("enable_thinking").asBoolean)
+        assertTrue(on.get("enable_thinking").asBoolean)
+    }
+
+    @Test
+    fun siliconFlowInstructModelDoesNotReceiveThinkingOff() {
+        val adapted = adaptChatRequestForProvider(
+            AiProviderRegistry.PROVIDER_SILICONFLOW,
+            buildTextChatRequest(
+                model = "Qwen/Qwen3-VL-30B-A3B-Instruct",
+                temperature = 0.3,
+                userText = "hi",
+                enableThinking = false
+            )
+        )
+
+        assertFalse(adapted.has("enable_thinking"))
+    }
 }

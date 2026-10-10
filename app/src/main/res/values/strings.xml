@@ -1605,6 +1605,79 @@
     <string name="ai_thinking_text_label">文本模型思考</string>
     <string name="ai_thinking_vision_label">视觉模型思考</string>
     <string name="ai_provider_configured">已配置</string>
+    <string name="ai_model_current_mark">当前</string>
+    <string name="ai_cfg_section_provider">服务商</string>
+    <string name="ai_cfg_section_models">模型</string>
+    <string name="ai_cfg_section_thinking">深度思考</string>
+    <string name="ai_cfg_key_title">API 密钥</string>
+    <string name="ai_cfg_test_title">测试连接</string>
+    <string name="ai_cfg_test_desc_empty">验证密钥是否可用，并获取可选模型</string>
+    <string name="ai_cfg_test_desc_fmt">已获取 %1$d 个可选模型，可重新测试</string>
+    <string name="ai_cfg_test_action">测试</string>
+    <string name="ai_cfg_manual_title">自定义模型</string>
+    <string name="ai_cfg_manual_desc_off">使用服务商推荐模型，开启后可自行挑选</string>
+    <string name="ai_cfg_manual_desc_on">已自定义，若识别异常可恢复推荐模型</string>
+    <string name="ai_cfg_text_model">文本模型</string>
+    <string name="ai_cfg_text_model_desc">文字、语音转写后的记账与分类</string>
+    <string name="ai_cfg_vision_model">视觉模型</string>
+    <string name="ai_cfg_vision_model_desc">小票、截图识别</string>
+    <string name="ai_cfg_speech_model">语音模型</string>
+    <string name="ai_cfg_speech_model_desc">云端语音转文字</string>
+    <string name="ai_cfg_unsupported">不支持</string>
+    <string name="ai_cfg_restore_defaults">恢复推荐模型</string>
+    <string name="ai_cfg_need_model_list">请先测试连接，获取可选模型</string>
+    <string name="ai_cfg_enable_manual_first">开启「自定义模型」后才能修改</string>
+    <string name="ai_cfg_model_switched_fmt">已切换为 %1$s</string>
+    <string name="ai_cfg_thinking_text_title">记账时深度思考</string>
+    <string name="ai_cfg_thinking_text_desc">解析文字、语音账单前先推理，更准但更慢</string>
+    <string name="ai_cfg_thinking_vision_title">识图时深度思考</string>
+    <string name="ai_cfg_thinking_vision_desc">识别小票、截图前先推理，更准但更慢</string>
+    <string name="ai_cfg_thinking_vision_unsupported">当前服务商不支持图片识别</string>
+    <string name="ai_cfg_thinking_footnote">AI 对话、意图识别等场景始终不开启思考；少数模型不支持开关思考，会按模型默认方式运行。</string>
+    <string name="ai_page_section_service">AI 服务</string>
+    <string name="ai_page_section_capture">记账方式</string>
+    <string name="ai_page_section_more">更多功能</string>
+    <string name="ai_page_section_rules">分类规则</string>
+    <string name="ai_page_unconfigured_title">还差一步，开启 AI 记账</string>
+    <string name="ai_page_unconfigured_desc">填好 API Key，就能一句话、拍照或截屏记账</string>
+    <string name="ai_page_badge_unconfigured">未配置</string>
+    <string name="ai_page_badge_ready">已配置</string>
+    <string name="ai_page_meta_fmt">模型 %1$s　·　密钥 %2$s</string>
+    <string name="ai_page_action_switch">切换</string>
+    <string name="ai_page_step_provider">选服务商</string>
+    <string name="ai_page_step_key">填写密钥</string>
+    <string name="ai_page_step_done">开始记账</string>
+    <string name="ai_page_setup_cta">立即配置</string>
+    <string name="ai_page_cap_text">文本记账</string>
+    <string name="ai_page_cap_vision">图片识别</string>
+    <string name="ai_page_cap_speech">云端语音</string>
+    <string name="ai_page_voice_title">语音记账</string>
+    <string name="ai_page_voice_desc">说一句话，自动整理成账单</string>
+    <string name="ai_page_asr_mode">识别方式</string>
+    <string name="ai_page_asr_cloud">云端</string>
+    <string name="ai_page_asr_local">本地</string>
+    <string name="ai_page_asr_model">离线语音模型</string>
+    <string name="ai_page_asr_model_ready">已下载 SenseVoice，约 140MB</string>
+    <string name="ai_page_asr_model_missing">未下载，约 140MB，需联网</string>
+    <string name="ai_page_image_title">图片记账</string>
+    <string name="ai_page_image_desc">拍小票或选图片，自动识别金额和商家</string>
+    <string name="ai_page_image_note_title">识别前补充说明</string>
+    <string name="ai_page_image_note_desc">发送图片前可补充文字，比如“和同事 AA”</string>
+    <string name="ai_page_image_review_title">先核对明细再记账</string>
+    <string name="ai_page_image_review_desc">识别结果先列成清单，确认后再生成账单</string>
+    <string name="ai_page_screen_title">截屏记账</string>
+    <string name="ai_page_screen_desc">敲击手机背面，截屏识别当前页面</string>
+    <string name="ai_page_screen_flow_title">截屏后进入图片记账</string>
+    <string name="ai_page_screen_flow_desc">与图片记账流程一致；关闭则直接生成账单</string>
+    <string name="ai_page_chat_title">AI 对话记账</string>
+    <string name="ai_page_chat_desc">点“+”进入对话式记账，关闭则使用传统表单</string>
+    <string name="ai_page_insight_title">消费洞察</string>
+    <string name="ai_page_insight_desc">在首页和统计页展示本月消费洞察</string>
+    <string name="ai_page_rules_title">本地规则优先</string>
+    <string name="ai_page_rules_desc">用你设置的关键词规则修正 AI 识别的分类</string>
+    <string name="ai_page_rules_manage_title">管理规则</string>
+    <string name="ai_page_rules_manage_desc">设置关键词与分类的对应关系</string>
+    <string name="ai_tile_screen_need_permission">需先开启无障碍服务或 Shizuku 授权</string>
 
     <!-- AiRuleManageActivity 硬编码抽取 -->
     <string name="cancel_select_all">取消全选</string>
@@ -1890,14 +1963,20 @@
     <string name="refund_deduct_formula_simple">退款%1$s，实际支出%2$s</string>
 
     <!-- OverlayService 通知文本 -->
-    <string name="notif_double_tap_running">双击检测运行中</string>
     <string name="notif_quick_gesture_running">快速手势运行中</string>
     <!-- 前台通知按检测状态显示，让用户知道现在敲下去会不会记账 -->
     <string name="notif_tap_standby">省电敲击 · 启发式检测中</string>
     <string name="notif_tap_he_test">省电敲击测试模式 · 只检测不记账</string>
     <string name="notif_tap_always_ml">全程 ML 识别中</string>
-    <string name="notif_tap_paused">敲击检测已暂停 · 亮屏后恢复</string>
+    <!-- 检测器被系统原因暂停（息屏/横屏屏蔽）；翻转和敲击会一起停，所以不特指某一种手势 -->
+    <string name="notif_detection_paused">检测已暂停 · 亮屏后恢复</string>
+    <string name="notif_detection_paused_landscape">横屏已暂停检测 · 转回竖屏后恢复</string>
+    <!-- 检测器没跑但也不在暂停窗口：服务启动或看门狗重启的间隙 -->
+    <string name="notif_detection_starting">检测启动中…</string>
+    <!-- 被 AI 面板/悬浮窗临时暂停；只影响敲击，翻转不受影响 -->
     <string name="notif_tap_paused_temp">敲击检测已暂停 · 关闭当前面板后恢复</string>
+    <!-- 手势全关、服务尚未退出的短暂兜底 -->
+    <string name="notif_service_running">记账助手服务运行中</string>
     <string name="notif_recording">录音中…</string>
 
     <!-- Balance Adjustment -->

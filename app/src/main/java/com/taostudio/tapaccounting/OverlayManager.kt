@@ -342,19 +342,11 @@ class OverlayManager(private val ctx: Context) {
         triggerBtn?.isEnabled = false
         triggerBtn?.animate()?.alpha(0.45f)?.setDuration(120L)?.start()
 
-        val screenModel = Prefs.getAiReceiptVisionModel(ctx).trim()
+        val screenModel = AiModelSlots.resolveVisionModel(ctx).trim()
         Logger.d(ctx, "OverlayManager", "Screen capture recognition clicked. model=$screenModel, isMulti=true")
         if (screenModel.isEmpty()) {
             Logger.e(ctx, "OverlayManager", "Screen capture aborted: no vision model configured")
             Utils.toast(ctx, ctx.getString(R.string.toast_select_vision_model))
-            finishScreenCaptureFlow(restoreOverlay = true)
-            return
-        }
-        val availableModels = Prefs.getAiModelsCache(ctx)
-        if (availableModels.isNotEmpty() && screenModel !in availableModels) {
-            Logger.e(ctx, "OverlayManager", "Screen capture aborted: model=$screenModel missing from current cache")
-            Prefs.setScreenModelVisionSupported(ctx, screenModel, false)
-            Utils.toast(ctx, ctx.getString(R.string.toast_vision_model_invalid))
             finishScreenCaptureFlow(restoreOverlay = true)
             return
         }
@@ -371,20 +363,32 @@ class OverlayManager(private val ctx: Context) {
 
         screenCaptureJob?.cancel()
         screenCaptureJob = CoroutineScope(Dispatchers.IO).launch {
-            val support = if (isProbeCachedSuccess) {
+            val modelToProbe = ensureVisionModelAvailable(screenModel)
+            if (modelToProbe == null) {
+                withContext(Dispatchers.Main) {
+                    Logger.e(ctx, "OverlayManager", "Screen capture aborted: model=$screenModel missing from current cache")
+                    Prefs.setScreenModelVisionSupported(ctx, screenModel, false)
+                    Utils.toast(ctx, ctx.getString(R.string.toast_vision_model_invalid))
+                    finishScreenCaptureFlow(restoreOverlay = true)
+                }
+                return@launch
+            }
+            // 刷新列表后解析结果可能换了型号，旧的探测结果不再沿用。
+            val probeCachedOk = modelToProbe == screenModel && isProbeCachedSuccess
+            val support = if (probeCachedOk) {
                 true
             } else {
-                runCatching { AIService.probeVisionInputSupport(ctx, screenModel) }
+                runCatching { AIService.probeVisionInputSupport(ctx, modelToProbe) }
                     .onSuccess { ok ->
-                        Prefs.setScreenModelVisionSupported(ctx, screenModel, ok)
+                        Prefs.setScreenModelVisionSupported(ctx, modelToProbe, ok)
                     }
                     .getOrElse {
-                        Prefs.setScreenModelVisionSupported(ctx, screenModel, false)
+                        Prefs.setScreenModelVisionSupported(ctx, modelToProbe, false)
                         false
                     }
             }
             withContext(Dispatchers.Main) {
-                Logger.d(ctx, "OverlayManager", "Screen capture vision support probe result: model=$screenModel, support=$support")
+                Logger.d(ctx, "OverlayManager", "Screen capture vision support probe result: model=$modelToProbe, support=$support")
                 if (!support) {
                     hideScreenCaptureLoadingOverlay()
                     setOverlayVisible(true)
@@ -405,6 +409,27 @@ class OverlayManager(private val ctx: Context) {
                 launchSystemScreenCaptureActivity()
             }
         }
+    }
+
+    /**
+     * 截图前确认解析出的视觉模型仍在实时列表缓存中。
+     * 厂商换代导致缓存过期时先刷新一次模型列表再解析；仍不可用则返回 null（沿用原有失效拦截）。
+     */
+    private suspend fun ensureVisionModelAvailable(current: String): String? {
+        val cache = Prefs.getAiModelsCache(ctx).map { it.trim() }.filter { it.isNotEmpty() }
+        if (cache.isEmpty() || current in cache) return current
+        runCatching {
+            val preset = AiProviderRegistry.resolvePreset(ctx)
+            val key = Prefs.getAiProviderKey(ctx, preset.id)
+            if (key.isNotBlank()) {
+                val models = AIService.fetchModelsForProvider(ctx, preset, key)
+                    .map { it.trim() }.filter { it.isNotEmpty() }
+                if (models.isNotEmpty()) Prefs.setAiModelsCache(ctx, models)
+            }
+        }
+        val refreshed = AiModelSlots.resolveVisionModel(ctx).trim()
+        val refreshedCache = Prefs.getAiModelsCache(ctx).map { it.trim() }.filter { it.isNotEmpty() }
+        return refreshed.takeIf { it.isNotEmpty() && (refreshedCache.isEmpty() || it in refreshedCache) }
     }
 
     private fun launchSystemScreenCaptureActivity() {

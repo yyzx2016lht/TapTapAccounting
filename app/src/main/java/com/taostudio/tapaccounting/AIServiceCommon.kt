@@ -152,6 +152,15 @@ internal fun adaptChatRequestForProvider(
             }
         }
 
+        AiProviderRegistry.PROVIDER_SILICONFLOW,
+        AiProviderRegistry.PROVIDER_QWEN -> when {
+            // 混合思考模型默认开启思考，必须显式传 false 才能关掉。
+            supportsEnableThinkingToggle(model) ->
+                adapted.addProperty("enable_thinking", thinkingEnabled)
+
+            thinkingEnabled -> adapted.addProperty("enable_thinking", true)
+        }
+
         else -> if (thinkingEnabled) {
             adapted.addProperty("enable_thinking", true)
         }
@@ -168,6 +177,24 @@ internal fun adaptChatRequestForProvider(
         })
     }
     return adapted
+}
+
+/**
+ * 硅基流动 / 通义千问上接受 enable_thinking=true/false 切换的混合思考模型。
+ * 纯思考（-thinking、qwq）与纯指令（-instruct）版本不接受 false，ASR 模型不涉及思考。
+ */
+internal fun supportsEnableThinkingToggle(model: String): Boolean {
+    val name = model.substringAfterLast('/').lowercase()
+    if (name.contains("thinking") || name.contains("instruct") ||
+        name.contains("asr") || name.startsWith("qwq")
+    ) return false
+    return name.startsWith("qwen3") ||
+        name.startsWith("qwen-plus") ||
+        name.startsWith("qwen-flash") ||
+        name.startsWith("qwen-turbo") ||
+        Regex("^deepseek-v3\\.[1-9]").containsMatchIn(name) ||
+        Regex("^glm-4\\.[5-9]").containsMatchIn(name) ||
+        name.startsWith("hunyuan-a13b")
 }
 
 internal fun extractFirstJsonObjectText(input: String): String? {

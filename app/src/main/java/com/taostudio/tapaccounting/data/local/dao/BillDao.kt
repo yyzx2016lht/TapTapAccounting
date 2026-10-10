@@ -652,4 +652,33 @@ interface BillDao {
         expenseType: Int = Bill.TYPE_EXPENSE,
         refundSubtype: Int = Bill.SUBTYPE_REFUND
     ): List<Bill>
+
+    /**
+     * 退款来源候选分页查询：限定账本（含默认账本旧别名）、支出（非退款）、未完全退款。
+     *
+     * - [keyword] 非空时按分类名/备注模糊匹配（调用方负责转义 LIKE 通配符），覆盖全部历史而非仅已加载项；
+     * - [localMemberId] 非空时共享账单仅保留自己创建的（与 SharedMutationHooks.requireOwner 同语义，避免选到退不了的账单）；
+     * - ORDER BY 对历史秒级时间戳统一 ×1000 后再排序，与展示层的归一化保持一致，避免翻页乱序。
+     */
+    @Query("""
+        SELECT * FROM bills
+        WHERE type = :expenseType
+          AND subType != :refundSubtype
+          AND bookName IN (:bookNames)
+          AND amount > 0.0
+          AND (:localMemberId IS NULL OR isShared = 0 OR memberId = :localMemberId)
+          AND (:keyword = '' OR categoryName LIKE '%' || :keyword || '%' ESCAPE '\'
+               OR remark LIKE '%' || :keyword || '%' ESCAPE '\')
+        ORDER BY (CASE WHEN time BETWEEN 1 AND 9999999999 THEN time * 1000 ELSE time END) DESC, id DESC
+        LIMIT :limit OFFSET :offset
+    """)
+    suspend fun getRefundCandidateBillsPage(
+        bookNames: List<String>,
+        keyword: String,
+        localMemberId: String?,
+        limit: Int,
+        offset: Int,
+        expenseType: Int = Bill.TYPE_EXPENSE,
+        refundSubtype: Int = Bill.SUBTYPE_REFUND
+    ): List<Bill>
 }

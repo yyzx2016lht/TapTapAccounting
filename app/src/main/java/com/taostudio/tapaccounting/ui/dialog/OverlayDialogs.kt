@@ -27,6 +27,8 @@ import com.bumptech.glide.load.engine.DiskCacheStrategy
 import com.bumptech.glide.load.resource.bitmap.CircleCrop
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import com.taostudio.tapaccounting.CategoryNode
@@ -1533,37 +1535,50 @@ object OverlayDialogs {
         }
     }
 
+    /** 转义 SQL LIKE 通配符（\ % _），保证关键字搜索与原来的字面量 contains 行为一致 */
+    private fun escapeLikeWildcards(raw: String): String =
+        raw.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
     /**
      * 弹出"选择退款来源账单"对话框。
-     * 读取最近的支出账单（非退款），以列表+复选框形式展示，用户选择一条后点击确认回调。
+     * 候选范围为 [bookNames] 指定的账本（含默认账本旧别名）内、未完全退款的支出账单；
+     * 分页加载（滚动到底自动加载下一页），搜索关键字直接查库，覆盖全部历史而非仅已加载项；
+     * 共享账本中仅保留自己创建的账单（别人的账单退款时会报"只能编辑自己创建的共享账单"）。
      *
      * @param ctx         上下文（Activity 或 Service）
+     * @param bookNames   记账表单当前账本的名称与别名（BookAccountManager.rawAliases(selectedFormBook)）
      * @param onConfirm   用户确认选择后的回调，参数为选中的支出账单
      */
-    fun showRefundBillPickerDialog(ctx: Context, onConfirm: (com.taostudio.tapaccounting.data.local.entity.Bill) -> Unit) {
+    fun showRefundBillPickerDialog(
+        ctx: Context,
+        bookNames: List<String>,
+        onConfirm: (com.taostudio.tapaccounting.data.local.entity.Bill) -> Unit
+    ) {
         val themeContext = android.view.ContextThemeWrapper(ctx, com.taostudio.tapaccounting.R.style.Theme_TapAccounting)
         val scope = CoroutineScope(Dispatchers.Main)
+        val pageSize = 60
 
-        // 加载最近 60 条支出账单（排除已退款完成的账单）
         scope.launch(Dispatchers.IO) {
             val db = com.taostudio.tapaccounting.data.local.AppDatabase.getDatabase(ctx)
-            val expenseBills = db.billDao().getRecentExpenseBills(60)
+            // 共享账本里别人创建的账单不允许退款（SharedMutationHooks.requireOwner），先取本机成员 id 供查询过滤
+            val localMemberId = bookNames.firstNotNullOfOrNull { name ->
+                db.sharedLedgerDao().getByBookName(name)?.localMemberId
+            }
+            val firstPage = db.billDao().getRefundCandidateBillsPage(
+                bookNames = bookNames,
+                keyword = "",
+                localMemberId = localMemberId,
+                limit = pageSize,
+                offset = 0
+            )
 
             withContext(Dispatchers.Main) {
                 fun normalizedTimeMillis(rawTime: Long): Long {
-                    // 兼容历史秒级时间戳，统一转成毫秒再排序/展示，避免列表看起来"乱序"。
+                    // 兼容历史秒级时间戳，统一转成毫秒再展示，避免列表看起来"乱序"。
                     return if (rawTime in 1..9_999_999_999L) rawTime * 1000L else rawTime
                 }
-                val sortedRefundCandidates = expenseBills
-                    .asSequence()
-                    .filter { it.amount > 0.0 } // 已完全退款的支出（amount<=0）不再作为退款来源候选
-                    .sortedWith(
-                        compareByDescending<com.taostudio.tapaccounting.data.local.entity.Bill> { normalizedTimeMillis(it.time) }
-                            .thenByDescending { it.id }
-                    )
-                    .toList()
 
-                if (sortedRefundCandidates.isEmpty()) {
+                if (firstPage.isEmpty()) {
                     android.widget.Toast.makeText(ctx, ctx.getString(R.string.no_refundable_bills), android.widget.Toast.LENGTH_SHORT).show()
                     return@withContext
                 }
@@ -1654,20 +1669,24 @@ object OverlayDialogs {
 
                 var selectedBill: com.taostudio.tapaccounting.data.local.entity.Bill? = null
 
-                // —— 构建/刷新列表函数 ——
-                fun renderList(filter: String) {
-                    listLayout.removeAllViews()
-                    val keyword = filter.trim().lowercase()
-                    val filtered = if (keyword.isEmpty()) sortedRefundCandidates else sortedRefundCandidates.filter { b ->
-                        b.categoryName.lowercase().contains(keyword) ||
-                        b.remark.lowercase().contains(keyword)
-                    }
+                // —— 分页/搜索状态 ——
+                val loadedBills = mutableListOf<com.taostudio.tapaccounting.data.local.entity.Bill>()
+                val loadedIds = HashSet<Long>()
+                var reachedEnd = firstPage.size < pageSize
+                var isQuerying = false
+                var queryGeneration = 0
+                var activeKeyword = ""
+                var searchJob: Job? = null
 
-                    if (selectedBill != null && filtered.none { it.id == selectedBill!!.id }) {
+                // —— 构建/刷新列表函数（关键字过滤已在 SQL 完成，这里只渲染已加载数据） ——
+                fun renderList() {
+                    listLayout.removeAllViews()
+
+                    if (selectedBill != null && loadedBills.none { it.id == selectedBill!!.id }) {
                         selectedBill = null
                     }
 
-                    if (filtered.isEmpty()) {
+                    if (loadedBills.isEmpty()) {
                         listLayout.addView(android.widget.TextView(themeContext).apply {
                             text = ctx.getString(R.string.no_matching_bill)
                             textSize = 13f
@@ -1684,7 +1703,7 @@ object OverlayDialogs {
 
                     val checkBoxes = mutableListOf<android.widget.CheckBox>()
 
-                    filtered.forEachIndexed { index, bill ->
+                    loadedBills.forEachIndexed { index, bill ->
                         val isSelected = (selectedBill?.id == bill.id)
 
                         // 选中高亮背景
@@ -1766,20 +1785,20 @@ object OverlayDialogs {
                             cb.isChecked = !wasChecked
                             selectedBill = if (cb.isChecked) bill else null
                             // 刷新高亮
-                            renderList(etSearch.text.toString())
+                            renderList()
                         }
                         itemLayout.setOnClickListener { clickAction() }
                         cb.setOnClickListener {
                             val isNowChecked = cb.isChecked
                             checkBoxes.filter { it != cb }.forEach { it.isChecked = false }
                             selectedBill = if (isNowChecked) bill else null
-                            renderList(etSearch.text.toString())
+                            renderList()
                         }
 
                         listLayout.addView(itemLayout)
 
                         // 分隔线（选中行不加，视觉上更整洁）
-                        if (index < filtered.size - 1 && !isSelected) {
+                        if (index < loadedBills.size - 1 && !isSelected) {
                             listLayout.addView(android.view.View(themeContext).apply {
                                 layoutParams = android.widget.LinearLayout.LayoutParams(
                                     android.widget.LinearLayout.LayoutParams.MATCH_PARENT, 1).also {
@@ -1792,15 +1811,66 @@ object OverlayDialogs {
                     }
                 }
 
-                // 初始渲染全部
-                renderList("")
+                // —— 分页加载：reset=true 从第一页重查（搜索），false 滚动加载下一页 ——
+                fun loadPage(reset: Boolean) {
+                    if (!reset) {
+                        if (isQuerying || reachedEnd) return
+                    }
+                    val generation = ++queryGeneration
+                    isQuerying = true
+                    val keyword = escapeLikeWildcards(activeKeyword)
+                    val offset = if (reset) 0 else loadedBills.size
+                    scope.launch(Dispatchers.IO) {
+                        val page = db.billDao().getRefundCandidateBillsPage(
+                            bookNames = bookNames,
+                            keyword = keyword,
+                            localMemberId = localMemberId,
+                            limit = pageSize,
+                            offset = offset
+                        )
+                        withContext(Dispatchers.Main) {
+                            // 过期响应（期间又触发了搜索/刷新）直接丢弃
+                            if (generation != queryGeneration) return@withContext
+                            isQuerying = false
+                            if (reset) {
+                                loadedBills.clear()
+                                loadedIds.clear()
+                            }
+                            for (b in page) {
+                                if (loadedIds.add(b.id)) loadedBills.add(b)
+                            }
+                            reachedEnd = page.size < pageSize
+                            renderList()
+                        }
+                    }
+                }
 
-                // 监听搜索框输入
+                // 初始渲染第一页
+                loadedBills.addAll(firstPage)
+                firstPage.forEach { loadedIds.add(it.id) }
+                renderList()
+
+                // 滚动到底部附近自动加载下一页
+                scrollView.setOnScrollChangeListener { _, _, scrollY, _, _ ->
+                    val child = scrollView.getChildAt(0) ?: return@setOnScrollChangeListener
+                    if (scrollY + scrollView.height >= child.height - (120 * dp).toInt()) {
+                        loadPage(reset = false)
+                    }
+                }
+
+                // 监听搜索框输入：debounce 后直接查库，命中整个账本历史
                 etSearch.addTextChangedListener(object : android.text.TextWatcher {
                     override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
                     override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
                     override fun afterTextChanged(s: android.text.Editable?) {
-                        renderList(s?.toString() ?: "")
+                        val keyword = s?.toString()?.trim().orEmpty()
+                        if (keyword == activeKeyword) return
+                        activeKeyword = keyword
+                        searchJob?.cancel()
+                        searchJob = scope.launch {
+                            delay(250)
+                            loadPage(reset = true)
+                        }
                     }
                 })
 

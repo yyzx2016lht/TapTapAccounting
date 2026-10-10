@@ -794,7 +794,7 @@ class AccountingFormController(
         // 退款来源账单行：整行点击弹出账单选择
         layoutRefundSource?.setOnClickListener {
             if (!isActivityAlive()) return@setOnClickListener
-            OverlayDialogs.showRefundBillPickerDialog(ctx) { chosenBill ->
+            OverlayDialogs.showRefundBillPickerDialog(ctx, BookAccountManager.rawAliases(selectedFormBook)) { chosenBill ->
                 selectedRefundSourceBill = chosenBill
                 val df = java.text.SimpleDateFormat("MM-dd HH:mm", java.util.Locale.getDefault())
                 val symbol = com.taostudio.tapaccounting.logic.CurrencyManager.getSymbol(chosenBill.currency)

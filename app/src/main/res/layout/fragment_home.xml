@@ -278,6 +278,163 @@
                                 android:src="@drawable/ic_home_calendar"
                                 app:tint="#FFFFFF" />
                         </RelativeLayout>
+
+                        <!--
+                            多选状态面板（COMFORT-REVIEW 第 14 条）：替换 layoutHeaderSummary 的位置，
+                            与它同一套排版（标签 / 大数字 / 底部两栏），背景透明以保留账本自定义色与封面图。
+                            文字颜色与阴影由 HomeUiListController 从原统计控件同步，跟随 banner 对比度逻辑。
+                            结构固定：转账/还款只追加第三栏计数，不替换金额。
+                        -->
+                        <LinearLayout
+                            android:id="@+id/layoutMultiSelectSummary"
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent"
+                            android:orientation="vertical"
+                            android:paddingStart="24dp"
+                            android:paddingTop="82dp"
+                            android:paddingEnd="24dp"
+                            android:paddingBottom="18dp"
+                            android:visibility="gone"
+                            tools:visibility="visible">
+
+                            <TextView
+                                android:id="@+id/tvMultiSelectSummaryLabel"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="12dp"
+                                android:fontFamily="sans-serif"
+                                android:includeFontPadding="false"
+                                android:text="@string/multi_select_summary_label"
+                                android:textColor="#CCFFFFFF"
+                                android:textSize="15sp" />
+
+                            <TextView
+                                android:id="@+id/tvMultiSelectSummaryTitle"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="4dp"
+                                android:fontFamily="sans-serif-medium"
+                                android:includeFontPadding="false"
+                                android:maxLines="1"
+                                android:textColor="#FFFFFF"
+                                android:textSize="30sp"
+                                android:textStyle="bold"
+                                tools:text="3 笔" />
+
+                            <Space
+                                android:layout_width="0dp"
+                                android:layout_height="0dp"
+                                android:layout_weight="1" />
+
+                            <LinearLayout
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:baselineAligned="false"
+                                android:orientation="horizontal">
+
+                                <LinearLayout
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginEnd="12dp"
+                                    android:layout_weight="1"
+                                    android:orientation="vertical">
+
+                                    <TextView
+                                        android:id="@+id/tvMsSummaryExpenseLabel"
+                                        android:layout_width="match_parent"
+                                        android:layout_height="wrap_content"
+                                        android:fontFamily="sans-serif"
+                                        android:includeFontPadding="false"
+                                        android:text="@string/multi_select_summary_expense"
+                                        android:textColor="#CCFFFFFF"
+                                        android:textSize="14sp" />
+
+                                    <TextView
+                                        android:id="@+id/tvMsSummaryExpense"
+                                        android:layout_width="match_parent"
+                                        android:layout_height="wrap_content"
+                                        android:layout_marginTop="4dp"
+                                        android:fontFamily="sans-serif-medium"
+                                        android:includeFontPadding="false"
+                                        android:maxLines="1"
+                                        android:textColor="#FFFFFF"
+                                        android:textSize="17sp"
+                                        app:autoSizeMaxTextSize="17sp"
+                                        app:autoSizeMinTextSize="12sp"
+                                        app:autoSizeStepGranularity="1sp"
+                                        app:autoSizeTextType="uniform"
+                                        tools:text="¥30.28" />
+                                </LinearLayout>
+
+                                <LinearLayout
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginStart="12dp"
+                                    android:layout_weight="1"
+                                    android:orientation="vertical">
+
+                                    <TextView
+                                        android:id="@+id/tvMsSummaryIncomeLabel"
+                                        android:layout_width="match_parent"
+                                        android:layout_height="wrap_content"
+                                        android:fontFamily="sans-serif"
+                                        android:includeFontPadding="false"
+                                        android:text="@string/multi_select_summary_income"
+                                        android:textColor="#CCFFFFFF"
+                                        android:textSize="14sp" />
+
+                                    <TextView
+                                        android:id="@+id/tvMsSummaryIncome"
+                                        android:layout_width="match_parent"
+                                        android:layout_height="wrap_content"
+                                        android:layout_marginTop="4dp"
+                                        android:fontFamily="sans-serif-medium"
+                                        android:includeFontPadding="false"
+                                        android:maxLines="1"
+                                        android:textColor="#FFFFFF"
+                                        android:textSize="17sp"
+                                        app:autoSizeMaxTextSize="17sp"
+                                        app:autoSizeMinTextSize="12sp"
+                                        app:autoSizeStepGranularity="1sp"
+                                        app:autoSizeTextType="uniform"
+                                        tools:text="¥0.00" />
+                                </LinearLayout>
+
+                                <LinearLayout
+                                    android:id="@+id/layoutMsSummaryOther"
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginStart="24dp"
+                                    android:layout_weight="1"
+                                    android:orientation="vertical"
+                                    android:visibility="gone"
+                                    tools:visibility="visible">
+
+                                    <TextView
+                                        android:id="@+id/tvMsSummaryOtherLabel"
+                                        android:layout_width="match_parent"
+                                        android:layout_height="wrap_content"
+                                        android:fontFamily="sans-serif"
+                                        android:includeFontPadding="false"
+                                        android:maxLines="1"
+                                        android:text="@string/multi_select_summary_other"
+                                        android:textColor="#CCFFFFFF"
+                                        android:textSize="14sp" />
+
+                                    <TextView
+                                        android:id="@+id/tvMsSummaryOther"
+                                        android:layout_width="match_parent"
+                                        android:layout_height="wrap_content"
+                                        android:layout_marginTop="4dp"
+                                        android:fontFamily="sans-serif-medium"
+                                        android:includeFontPadding="false"
+                                        android:maxLines="1"
+                                        android:textColor="#FFFFFF"
+                                        android:textSize="17sp"
+                                        tools:text="2 笔" />
+                                </LinearLayout>
+                            </LinearLayout>
+                        </LinearLayout>
                 </FrameLayout>
 
                 </com.google.android.material.appbar.AppBarLayout>
@@ -528,32 +685,6 @@
 
         <com.google.android.material.card.MaterialCardView
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginHorizontal="2dp"
-            android:layout_marginTop="10dp"
-            app:cardBackgroundColor="#FFFFFF"
-            app:cardCornerRadius="14dp"
-            app:cardElevation="0dp"
-            app:strokeColor="#DCE5F2"
-            app:strokeWidth="1dp">
-
-            <TextView
-                android:id="@+id/btnViewScope"
-                android:layout_width="match_parent"
-                android:layout_height="48dp"
-                android:drawableEnd="@drawable/ic_chevron_right"
-                android:drawablePadding="8dp"
-                android:gravity="center_vertical"
-                android:paddingStart="14dp"
-                android:paddingEnd="14dp"
-                android:text="查看范围：全部账本"
-                android:textColor="#365DA8"
-                android:textSize="14sp"
-                android:textStyle="bold" />
-        </com.google.android.material.card.MaterialCardView>
-
-        <com.google.android.material.card.MaterialCardView
-            android:layout_width="match_parent"
             android:layout_height="0dp"
             android:layout_marginHorizontal="2dp"
             android:layout_marginTop="10dp"
@@ -594,6 +725,33 @@
                     android:paddingBottom="2dp"
                     tools:listitem="@layout/item_book_account" />
             </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginHorizontal="2dp"
+            android:layout_marginBottom="10dp"
+            app:cardBackgroundColor="#FFFFFF"
+            app:cardCornerRadius="14dp"
+            app:cardElevation="0dp"
+            app:strokeColor="#DCE5F2"
+            app:strokeWidth="1dp">
+
+            <TextView
+                android:id="@+id/btnViewScope"
+                android:layout_width="match_parent"
+                android:layout_height="44dp"
+                android:drawableEnd="@drawable/ic_chevron_right"
+                android:drawablePadding="8dp"
+                android:ellipsize="end"
+                android:gravity="center_vertical"
+                android:maxLines="1"
+                android:paddingStart="14dp"
+                android:paddingEnd="14dp"
+                android:text="合并查看多个账本"
+                android:textColor="#6E7D94"
+                android:textSize="14sp" />
         </com.google.android.material.card.MaterialCardView>
 
         <com.google.android.material.card.MaterialCardView

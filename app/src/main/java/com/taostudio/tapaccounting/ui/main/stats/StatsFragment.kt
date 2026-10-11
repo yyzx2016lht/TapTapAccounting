@@ -55,9 +55,15 @@ import com.taostudio.tapaccounting.data.local.entity.Bill
 import com.taostudio.tapaccounting.data.local.entity.RecurringStatus
 import com.taostudio.tapaccounting.data.local.entity.SharedMember
 import com.taostudio.tapaccounting.data.sync.SharedSyncScheduler
+import com.taostudio.tapaccounting.logic.BudgetPeriodSummary
+import com.taostudio.tapaccounting.ui.budget.BudgetManageActivity
+import com.taostudio.tapaccounting.ui.budget.BudgetUi
+import com.taostudio.tapaccounting.ui.budget.BudgetYearActivity
 import com.taostudio.tapaccounting.logic.BudgetService
 import com.taostudio.tapaccounting.logic.MemberBudgetAllocation
-import com.taostudio.tapaccounting.ui.main.home.InsightCardAdapter
+import com.taostudio.tapaccounting.logic.insight.InsightAction
+import com.taostudio.tapaccounting.logic.insight.InsightCardModel
+import com.taostudio.tapaccounting.logic.insight.InsightReport
 import com.taostudio.tapaccounting.logic.CurrencyManager
 import com.taostudio.tapaccounting.ui.common.UiMotion
 import com.taostudio.tapaccounting.ui.common.UiMotion.crossfadeText
@@ -100,6 +106,8 @@ class StatsFragment : Fragment() {
     }
 
     private lateinit var pieChart: PieChart
+    private lateinit var cardInsights: View
+    private lateinit var tvInsightComparison: TextView
     private lateinit var rvInsightCards: RecyclerView
     private lateinit var tvInsightEmpty: TextView
     private lateinit var insightCardAdapter: InsightCardAdapter
@@ -118,6 +126,7 @@ class StatsFragment : Fragment() {
     private lateinit var tvTotalRepayment: TextView
     private lateinit var tvTotalRefund: TextView
     private lateinit var tvBudgetStatus: TextView
+    private lateinit var tvBudgetEntryTitle: TextView
     private lateinit var tvRecurringStatus: TextView
     private lateinit var tvDateSelector: TextView
     private lateinit var tvDailyAvgLabel: TextView
@@ -320,13 +329,13 @@ class StatsFragment : Fragment() {
 
         pieChart = root.findViewById(R.id.pie_chart)
 
-        rvInsightCards = root.findViewById(R.id.rvInsightCards)
+        cardInsights = root.findViewById(R.id.card_stats_insights)
+        tvInsightComparison = root.findViewById(R.id.tv_insight_comparison)
+        rvInsightCards = root.findViewById(R.id.rv_insight_cards)
         tvInsightEmpty = root.findViewById(R.id.tv_insight_empty)
         rvInsightCards.layoutManager = LinearLayoutManager(context)
-        rvInsightCards.isNestedScrollingEnabled = false
-        rvInsightCards.overScrollMode = View.OVER_SCROLL_NEVER
         rvInsightCards.itemAnimator = null
-        insightCardAdapter = InsightCardAdapter()
+        insightCardAdapter = InsightCardAdapter(::onInsightClick)
         rvInsightCards.adapter = insightCardAdapter
 
         tvTotalExpense = root.findViewById(R.id.tv_total_expense)
@@ -339,6 +348,7 @@ class StatsFragment : Fragment() {
         tvTotalRepayment = root.findViewById(R.id.tv_total_repayment)
         tvTotalRefund = root.findViewById(R.id.tv_total_refund)
         tvBudgetStatus = root.findViewById(R.id.tv_budget_status)
+        tvBudgetEntryTitle = root.findViewById(R.id.tv_budget_entry_title)
         tvRecurringStatus = root.findViewById(R.id.tv_recurring_status)
         tvDateSelector = root.findViewById(R.id.tv_date_selector)
         tvDailyAvgLabel = root.findViewById(R.id.tv_daily_avg_label)
@@ -475,7 +485,20 @@ class StatsFragment : Fragment() {
 
         // P0-1: 预算管理入口
         root.findViewById<View>(R.id.row_budget_entry)?.setOnClickListener {
-            startActivity(android.content.Intent(requireContext(), com.taostudio.tapaccounting.ui.budget.BudgetManageActivity::class.java))
+            val state = viewModel.uiState.value
+            val range = budgetStatsYearMonthRange(state)
+            val bookName = budgetBookNameOf(state)
+            startActivity(
+                if (range != null && range.first != range.second) {
+                    BudgetYearActivity.intent(requireContext(), range.second.take(4).toInt(), bookName)
+                } else {
+                    BudgetManageActivity.intent(
+                        requireContext(),
+                        yearMonth = range?.first,
+                        bookName = bookName
+                    )
+                }
+            )
         }
 
         // P0-4: 周期账单入口
@@ -550,24 +573,8 @@ class StatsFragment : Fragment() {
     private fun observeViewModel() {
         viewLifecycleOwner.lifecycleScope.launch {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
-                // 收集洞察卡片
                 launch {
-                    viewModel.insightCards.collect { cards: List<com.taostudio.tapaccounting.logic.insight.InsightCardModel> ->
-                        val enabled = Prefs.isInsightCardsEnabled(requireContext())
-                        if (enabled && cards.isNotEmpty()) {
-                            insightCardAdapter.submitList(cards)
-                            rvInsightCards.visibility = View.VISIBLE
-                            tvInsightEmpty.visibility = View.GONE
-                        } else if (enabled) {
-                            insightCardAdapter.submitList(emptyList())
-                            rvInsightCards.visibility = View.GONE
-                            tvInsightEmpty.visibility = View.VISIBLE
-                        } else {
-                            insightCardAdapter.submitList(emptyList())
-                            rvInsightCards.visibility = View.GONE
-                            tvInsightEmpty.visibility = View.GONE
-                        }
-                    }
+                    viewModel.insightReport.collect(::renderInsights)
                 }
                 viewModel.uiState.collect { state ->
                     if (state.isLoading && state.bills.isEmpty() && lastScreenRenderKey == null) {
@@ -708,11 +715,13 @@ class StatsFragment : Fragment() {
         tvDailyAvg.text = "—"
         tvDailyAvg.setTextColor(requireContext().getColor(R.color.stats_segmented_text_active))
         val range = budgetStatsYearMonthRange(state) ?: return
+        if (range.first != range.second) {
+            renderPeriodBudgetAmounts(state, symbol, range)
+            return
+        }
         budgetOverviewJob = viewLifecycleOwner.lifecycleScope.launch {
             val (totalBudget, spentAmount) = withContext(Dispatchers.IO) {
-                val budgetBookName = state.viewScope?.singleBookName
-                    ?: state.selectedBookName
-                    ?: ""
+                val budgetBookName = budgetBookNameOf(state)
                 val db = AppDatabase.getDatabase(requireContext())
                 val budgets = db.budgetDao().getTotalBudgetsBetween(
                         startYearMonth = range.first,
@@ -743,15 +752,69 @@ class StatsFragment : Fragment() {
             tvDailyAvg.text = "$symbol${AmountFormatHelper.formatAmount(remaining)}"
             // 按用量占比上色，而不是"还剩多少"：剩 79.81（已花 95%）涂绿色，
             // 语义上是"好"，用户完全看不出快超支了。三档与 BudgetAdapter 一致。
-            val usedPercent = if (totalBudget > 0.0) spentAmount / totalBudget else 0.0
-            tvDailyAvg.setTextColor(requireContext().getColor(
-                when {
-                    usedPercent >= 1.0 -> R.color.expense_color
-                    usedPercent >= 0.8 -> R.color.warning_color
-                    else -> R.color.income_color
-                }
-            ))
+            tvDailyAvg.setTextColor(budgetUsageColor(spentAmount, totalBudget))
         }
+    }
+
+    private fun budgetUsageColor(spent: Double, budget: Double): Int =
+        BudgetUi.usageColor(requireContext(), spent, budget)
+
+    private fun renderPeriodBudgetAmounts(state: StatsUiState, symbol: String, range: Pair<String, String>) {
+        budgetOverviewJob = viewLifecycleOwner.lifecycleScope.launch {
+            val summary = withContext(Dispatchers.IO) { loadPeriodBudgetSummary(state, range) }
+            if (!isStatsBudgetModeEnabled(state)) return@launch
+            when {
+                summary.mixedCurrency -> {
+                    tvTotalExpense.setText(R.string.budget_mixed_currency_short)
+                    tvDailyAvg.text = "—"
+                }
+                summary.budgetedMonths == 0 -> {
+                    tvTotalExpense.setText(R.string.budget_not_set_short)
+                    tvDailyAvg.text = "—"
+                }
+                else -> {
+                    val remaining = summary.remaining
+                    tvTotalExpenseLabel.text = getString(R.string.budget_amount_months_fmt, summary.budgetedMonths)
+                    tvTotalIncomeLabel.setText(R.string.budget_same_period_spent_short)
+                    tvDailyAvgLabel.setText(
+                        if (remaining >= 0.0) R.string.budget_surplus_short else R.string.budget_overspent_short
+                    )
+                    tvTotalExpense.text = "$symbol${AmountFormatHelper.formatAmount(summary.budget)}"
+                    tvTotalIncome.text = "$symbol${AmountFormatHelper.formatAmount(summary.spent)}"
+                    tvDailyAvg.text = "$symbol${AmountFormatHelper.formatAmount(kotlin.math.abs(remaining))}"
+                    tvDailyAvg.setTextColor(budgetUsageColor(summary.spent, summary.budget))
+                }
+            }
+        }
+    }
+
+    private fun budgetBookNameOf(state: StatsUiState): String =
+        state.viewScope?.singleBookName ?: state.selectedBookName ?: ""
+
+    private suspend fun loadPeriodBudgetSummary(
+        state: StatsUiState,
+        range: Pair<String, String>
+    ): BudgetPeriodSummary.Summary {
+        val budgetBookName = budgetBookNameOf(state)
+        val db = AppDatabase.getDatabase(requireContext())
+        val budgets = db.budgetDao()
+            .getTotalBudgetsBetween(range.first, range.second, budgetBookName)
+            .filter { state.selectedCurrency == null || state.selectedCurrency == it.currency }
+        val monthSpend = if (state.selectedCurrency == null) {
+            val budgetService = BudgetService(db.budgetDao(), db.billDao(), db.categoryDao())
+            budgets.map { it.yearMonth }.distinct().associateWith { yearMonth ->
+                budgetService.getMonthSpend(budgetBookName, categoryId = null, yearMonth)
+            }
+        } else {
+            state.timeReports
+                .groupBy { it.dateString.take(7) }
+                .mapValues { (_, reports) -> reports.sumOf { it.expense } }
+        }
+        val now = Calendar.getInstance()
+        val currentYearMonth = String.format(
+            Locale.US, "%04d-%02d", now.get(Calendar.YEAR), now.get(Calendar.MONTH) + 1
+        )
+        return BudgetPeriodSummary.summarize(budgets, monthSpend, currentYearMonth)
     }
 
     private fun yearMonthsBetween(range: Pair<String, String>): List<String> {
@@ -873,6 +936,8 @@ class StatsFragment : Fragment() {
                     if (member.isLocal) "我 · 本机成员" else "另一位成员"
                 card.findViewById<TextView>(R.id.tv_member_expense).text =
                     "$symbol${AmountFormatHelper.formatAmount(stat.expense)}"
+                card.findViewById<View>(R.id.row_member_budget_remaining).visibility =
+                    if (supportsMonthlyBudget) View.VISIBLE else View.GONE
                 card.findViewById<TextView>(R.id.tv_member_budget_remaining).apply {
                     val memberLimit = totalBudget?.let {
                         MemberBudgetAllocation.amountFor(it.amount, it.memberBudgetAllocations, member.memberId)
@@ -938,16 +1003,35 @@ class StatsFragment : Fragment() {
             .orEmpty()
         val daoBookName = if (normalizedBook == BookAccountManager.ALL_BOOK) "" else normalizedBook
         val supportsBudgetSummary = state.viewScope?.supportsBudgetSummary != false
-        val key = "$yearMonth|$daoBookName|${state.viewScope?.signature.orEmpty()}"
+        val periodRange = budgetStatsYearMonthRange(state)?.takeIf { it.first != it.second }
+        val key = if (periodRange != null) {
+            "${periodRange.first}~${periodRange.second}|${budgetBookNameOf(state)}|" +
+                "${state.selectedCurrency}|${state.totalExpense}|${state.viewScope?.signature.orEmpty()}"
+        } else {
+            "$yearMonth|$daoBookName|${state.viewScope?.signature.orEmpty()}"
+        }
         if (key == lastFeatureEntryStatusKey) return
         lastFeatureEntryStatusKey = key
+        tvBudgetEntryTitle.setText(
+            when {
+                periodRange == null -> R.string.budget_monthly_total
+                periodRange.first.endsWith("-01") &&
+                    periodRange.second == periodRange.first.take(4) + "-12" -> R.string.budget_yearly_title
+                else -> R.string.budget_period_title
+            }
+        )
         featureEntryStatusJob?.cancel()
         featureEntryStatusJob = viewLifecycleOwner.lifecycleScope.launch {
             val status = withContext(Dispatchers.IO) {
                 // P2-9: use application context
         val db = AppDatabase.getDatabase(requireNotNull(activity).application)
                 val budgetService = BudgetService(db.budgetDao(), db.billDao(), db.categoryDao())
-                val budgets = if (supportsBudgetSummary) {
+                val periodSummary = if (supportsBudgetSummary && periodRange != null) {
+                    loadPeriodBudgetSummary(state, periodRange)
+                } else {
+                    null
+                }
+                val budgets = if (supportsBudgetSummary && periodRange == null) {
                     budgetService.getMonthBudgetsWithProgress(daoBookName, yearMonth)
                 } else {
                     emptyList()
@@ -982,6 +1066,17 @@ class StatsFragment : Fragment() {
 
                 val budgetText = if (!supportsBudgetSummary) {
                     "当前查看范围不汇总预算"
+                } else if (periodSummary != null) {
+                    when {
+                        periodSummary.mixedCurrency -> getString(R.string.budget_period_mixed_currency)
+                        periodSummary.budgetedMonths == 0 -> getString(R.string.budget_entry_status_empty)
+                        periodSummary.overMonths > 0 -> getString(
+                            R.string.budget_period_over_fmt,
+                            periodSummary.overMonths,
+                            periodSummary.budgetedMonths
+                        )
+                        else -> getString(R.string.budget_period_ok_fmt, periodSummary.budgetedMonths)
+                    }
                 } else budgetProgress?.let {
                     val progress = it.progress
                     when {
@@ -994,11 +1089,16 @@ class StatsFragment : Fragment() {
                         progress.status == BudgetService.BudgetStatus.EXCEEDED ->
                             getString(R.string.budget_status_exceeded)
                         progress.remaining >= 0 ->
-                            getString(
-                                R.string.budget_entry_remaining_daily_fmt,
-                                progress.remaining,
-                                progress.dailyRemainingAllowance
-                            )
+                            if (progress.isMonthClosed) {
+                                // 月份已结束：不再显示"每天 ¥0"，改为说明状态（COMFORT-REVIEW 第 17 条）
+                                getString(R.string.budget_month_closed_remaining_fmt, progress.remaining)
+                            } else {
+                                getString(
+                                    R.string.budget_entry_remaining_daily_fmt,
+                                    progress.remaining,
+                                    progress.dailyRemainingAllowance
+                                )
+                            }
                         else -> getString(
                             R.string.budget_entry_status_fmt,
                             progress.percent * 100
@@ -1084,6 +1184,7 @@ class StatsFragment : Fragment() {
         pieChart.setExtraOffsets(22f, 18f, 22f, 18f)
         pieChart.setNoDataText("暂无图表数据")
         pieChart.setNoDataTextColor(Color.parseColor("#9AA0A6"))
+        pieChart.useSmallSliceLabelRenderer()
         pieChart.setOnChartValueSelectedListener(object : OnChartValueSelectedListener {
             override fun onValueSelected(e: Entry?, h: Highlight?) {
                 val label = (e as? PieEntry)?.label ?: return
@@ -1112,30 +1213,23 @@ class StatsFragment : Fragment() {
                 stat.categoryName to chartColors[i % chartColors.size]
             }.toMap()
 
-            // 不做 TopN 裁剪：尽量全部显示，仅隐藏占比 < 2% 的分类
-            val filteredStats = targetStats.filter { it.percentage >= 2f }.sortedBy { it.amount }
-            if (filteredStats.isEmpty()) {
-                pieChart.clear()
-                pieChart.setNoDataText("暂无占比超过 2% 的分类")
-                pieChart.invalidate()
-                categoryAdapter.setColorMap(colorByName)
-                return
-            }
-            val pieEntries = filteredStats.map { PieEntry(it.amount.toFloat(), it.categoryName) }
-            val sliceColors = filteredStats.map { colorByName[it.categoryName] ?: chartColors[0] }
+            val sortedStats = targetStats.sortedBy { it.amount }
+            val labeledCount = sortedStats.count { it.percentage >= PIE_MIN_LABEL_PERCENT }
+            val pieEntries = sortedStats.map { PieEntry(it.amount.toFloat(), it.categoryName) }
+            val sliceColors = sortedStats.map { colorByName[it.categoryName] ?: chartColors[0] }
             val labelSize = when {
-                filteredStats.size >= 12 -> 7.5f
-                filteredStats.size >= 9 -> 8.0f
+                labeledCount >= 12 -> 7.5f
+                labeledCount >= 9 -> 8.0f
                 else -> 9.0f
             }
 
-            val pieDataSet = PieDataSet(pieEntries, "").apply {
+            val pieDataSet = SmallSliceLabelPieDataSet(pieEntries, total).apply {
                 colors = sliceColors
                 xValuePosition = PieDataSet.ValuePosition.OUTSIDE_SLICE
                 yValuePosition = PieDataSet.ValuePosition.OUTSIDE_SLICE
                 valueLinePart1OffsetPercentage = 100f
-                valueLinePart1Length = if (filteredStats.size >= 10) 0.22f else 0.30f
-                valueLinePart2Length = if (filteredStats.size >= 10) 0.55f else 0.78f
+                valueLinePart1Length = if (labeledCount >= 10) 0.22f else 0.30f
+                valueLinePart2Length = if (labeledCount >= 10) 0.55f else 0.78f
                 selectionShift = 4f
                 setValueLineVariableLength(true)
                 setUsingSliceColorAsValueLineColor(true)
@@ -1144,6 +1238,7 @@ class StatsFragment : Fragment() {
                 valueFormatter = object : com.github.mikephil.charting.formatter.ValueFormatter() {
                     override fun getFormattedValue(value: Float): String = ""
                     override fun getPieLabel(value: Float, pieEntry: PieEntry): String {
+                        if (!shouldShowLabel(pieEntry)) return ""
                         val pct = if (total > 0) (pieEntry.value / total * 100f) else 0f
                         return "${pieEntry.label} ${String.format(java.util.Locale.getDefault(), "%.1f%%", pct)}"
                     }
@@ -1151,10 +1246,9 @@ class StatsFragment : Fragment() {
             }
 
             pieChart.data = PieData(pieDataSet)
-            val visibleTotal = filteredStats.sumOf { it.amount }
             val centerTitle = if (isCategoryExpense) "支出占比" else "收入占比"
             val symbol = state.selectedCurrency?.let { CurrencyManager.getSymbol(it) } ?: "¥"
-            pieChart.centerText = "$centerTitle\n$symbol${AmountFormatHelper.formatAmount(visibleTotal)}"
+            pieChart.centerText = "$centerTitle\n$symbol${AmountFormatHelper.formatAmount(total)}"
             pieChart.rotationAngle = findBestInitialRotation(pieEntries.map { it.value })
             pieChart.setCenterTextSize(12f)
             pieChart.setCenterTextColor(Color.parseColor("#374151"))
@@ -1959,10 +2053,34 @@ class StatsFragment : Fragment() {
         BillListBottomSheet(title, bills).show(childFragmentManager, "overview_bills")
     }
 
-    private fun showSubCategoryDetails(categoryName: String) {
-        val hasSubCategories = viewModel.hasSubCategories(categoryName, isCategoryExpense)
+    private fun renderInsights(report: InsightReport) {
+        val visible = Prefs.isInsightCardsEnabled(requireContext()) && report.comparisonLabel.isNotEmpty()
+        cardInsights.visibility = if (visible) View.VISIBLE else View.GONE
+        if (!visible) {
+            insightCardAdapter.submitList(emptyList())
+            return
+        }
+        tvInsightComparison.text = report.comparisonLabel
+        insightCardAdapter.submitList(report.cards)
+        rvInsightCards.visibility = if (report.cards.isEmpty()) View.GONE else View.VISIBLE
+        tvInsightEmpty.visibility = if (report.cards.isEmpty()) View.VISIBLE else View.GONE
+    }
+
+    private fun onInsightClick(card: InsightCardModel) {
+        when (val action = card.action) {
+            is InsightAction.OpenCategory -> showSubCategoryDetails(action.categoryName, isExpense = true)
+            is InsightAction.OpenBill -> {
+                val bill = viewModel.uiState.value.bills.firstOrNull { it.id == action.billId } ?: return
+                BillListBottomSheet(card.title, listOf(bill)).show(childFragmentManager, "insight_bill")
+            }
+            null -> Unit
+        }
+    }
+
+    private fun showSubCategoryDetails(categoryName: String, isExpense: Boolean = isCategoryExpense) {
+        val hasSubCategories = viewModel.hasSubCategories(categoryName, isExpense)
         if (!hasSubCategories) {
-            val bills = viewModel.getBillsForCategory(categoryName, isCategoryExpense)
+            val bills = viewModel.getBillsForCategory(categoryName, isExpense)
             if (bills.isEmpty()) {
                 Toast.makeText(requireContext(), "暂无该分类账单", Toast.LENGTH_SHORT).show()
             } else {
@@ -1971,9 +2089,9 @@ class StatsFragment : Fragment() {
             return
         }
 
-        val subStats = viewModel.getSubCategoryStats(categoryName, isCategoryExpense)
+        val subStats = viewModel.getSubCategoryStats(categoryName, isExpense)
         if (subStats.isEmpty()) {
-            val bills = viewModel.getBillsForCategory(categoryName, isCategoryExpense)
+            val bills = viewModel.getBillsForCategory(categoryName, isExpense)
             if (bills.isEmpty()) {
                 Toast.makeText(requireContext(), "暂无该分类账单", Toast.LENGTH_SHORT).show()
             } else {
@@ -1985,14 +2103,14 @@ class StatsFragment : Fragment() {
 
         val sheet = SubCategoryBottomSheet(
             title = categoryName,
-            isExpense = isCategoryExpense,
+            isExpense = isExpense,
             subStats = subStats,
             totalAmount = total,
             colors = chartColors,
             currencySymbol = viewModel.uiState.value.selectedCurrency
                 ?.let { CurrencyManager.getSymbol(it) } ?: "¥"
         ) { subCategory ->
-            val bills = viewModel.getBillsForSubCategory(categoryName, subCategory, isCategoryExpense)
+            val bills = viewModel.getBillsForSubCategory(categoryName, subCategory, isExpense)
             if (bills.isEmpty()) {
                 Toast.makeText(requireContext(), "\u6682\u65E0\u8BE5\u5206\u7C7B\u8D26\u5355", Toast.LENGTH_SHORT).show()
             } else {

@@ -239,13 +239,14 @@
                 android:background="@drawable/shape_tag_bg"
                 android:clickable="true"
                 android:focusable="true"
-                android:paddingStart="10dp"
-                android:paddingTop="3dp"
-                android:paddingEnd="10dp"
-                android:paddingBottom="3dp"
+                android:paddingStart="12dp"
+                android:paddingTop="5dp"
+                android:paddingEnd="12dp"
+                android:paddingBottom="5dp"
                 android:text="@string/bill_refund"
-                android:textColor="#E53935"
+                android:textColor="@color/brand_primary"
                 android:textSize="@dimen/text_size_13"
+                android:textStyle="bold"
                 android:visibility="gone" />
         </LinearLayout>
 
@@ -479,6 +480,17 @@
                 </LinearLayout>
             </LinearLayout>
         </LinearLayout>
+
+        <CheckBox
+            android:id="@+id/cb_queue_payment_group"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:checked="true"
+            android:text="@string/receipt_queue_payment_group"
+            android:textColor="@color/text_secondary"
+            android:textSize="@dimen/text_size_13"
+            android:visibility="gone" />
 
         <LinearLayout
             android:id="@+id/layout_form_actions"

@@ -309,7 +309,10 @@ object BillMutationService {
             }
             val normalizedBillForStorage = normalizeBillCategoryName(
                 db,
-                SharedMutationHooks.prepareLocalBill(db, sharedFields)
+                SharedMutationHooks.prepareLocalBill(
+                    db,
+                    sharedFields.copy(paymentGroupId = newBill.paymentGroupId ?: freshOldBill.paymentGroupId)
+                )
             )
 
             if (freshOldBill.subType == Bill.SUBTYPE_REFUND && freshOldBill.relatedBillId != null) {
@@ -507,6 +510,23 @@ object BillMutationService {
             }
         }
         notifyWidgetsChanged()
+    }
+
+    /** 批量设置（[groupId] 非空）或清除（null）扣款组；与 [setExcludeFromStatsBatch] 同样整批校验所有者。 */
+    suspend fun setPaymentGroupBatch(db: AppDatabase, bills: List<Bill>, groupId: String?) {
+        val targets = bills.distinctBy { it.id }
+            .filter { it.id > 0L }
+            .mapNotNull { db.billDao().getBillById(it.id) }
+            .filter { it.paymentGroupId != groupId }
+        if (targets.isEmpty()) return
+        targets.forEach { SharedMutationHooks.requireOwner(db, it) }
+        db.withTransaction {
+            targets.forEach { bill ->
+                val saved = SharedMutationHooks.prepareLocalBill(db, bill.copy(paymentGroupId = groupId))
+                db.billDao().updateBill(saved)
+                SharedMutationHooks.enqueueSaved(db, saved)
+            }
+        }
     }
 
     suspend fun validateRequiredRatesForBill(db: AppDatabase, bill: Bill) {

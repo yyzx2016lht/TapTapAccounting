@@ -87,6 +87,21 @@ object ExpenseWidgetRenderer {
         size: WidgetSize,
         snapshot: Snapshot
     ) {
+        val views = buildViews(context, size, snapshot, widgetWidthDp(appWidgetManager, appWidgetId))
+        val openApp = PendingIntent.getActivity(
+            context,
+            appWidgetId,
+            Intent(context, MainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            },
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        views.setOnClickPendingIntent(R.id.widget_root, openApp)
+        appWidgetManager.updateAppWidget(appWidgetId, views)
+    }
+
+    /** 桌面渲染与 App 内预览共用；不含点击跳转。 */
+    fun buildViews(context: Context, size: WidgetSize, snapshot: Snapshot, widgetWidthDp: Int): RemoteViews {
         val layoutRes = when (size) {
             WidgetSize.COMPACT -> R.layout.widget_expense_compact
             WidgetSize.STANDARD -> R.layout.widget_expense_standard
@@ -99,24 +114,13 @@ object ExpenseWidgetRenderer {
             views.setTextViewText(R.id.tv_widget_subtitle, "${snapshot.bookLabel} · ${snapshot.periodLabel}")
         }
 
-        val widgetWidthDp = widgetWidthDp(appWidgetManager, appWidgetId)
         when (size) {
             WidgetSize.COMPACT -> renderExpenseOnly(context, views, snapshot, widgetWidthDp)
             WidgetSize.STANDARD -> renderBudgetSummary(context, views, snapshot, widgetWidthDp)
             WidgetSize.TODAY_BUDGET -> renderTodayBudget(context, views, snapshot, widgetWidthDp)
             WidgetSize.DETAILED -> renderOverview(context, views, snapshot, widgetWidthDp)
         }
-
-        val openApp = PendingIntent.getActivity(
-            context,
-            appWidgetId,
-            Intent(context, MainActivity::class.java).apply {
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-            },
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-        views.setOnClickPendingIntent(R.id.widget_root, openApp)
-        appWidgetManager.updateAppWidget(appWidgetId, views)
+        return views
     }
 
     private fun renderExpenseOnly(

@@ -1,389 +1,349 @@
 package com.taostudio.tapaccounting.logic.insight
 
+import com.taostudio.tapaccounting.AmountFormatHelper
 import com.taostudio.tapaccounting.data.local.entity.Bill
+import com.taostudio.tapaccounting.logic.BillStatsContribution
+import com.taostudio.tapaccounting.logic.StatsAmountResolver
 import java.util.Calendar
+import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.roundToInt
+import kotlin.math.roundToLong
 
 /**
- * 本地洞察计算引擎。
- * 输入账单列表，输出排序后的洞察卡片。
- * 所有数字来自本地计算，不依赖 LLM。
+ * 统计页「消费洞察」的本地计算引擎，不依赖 LLM。
+ *
+ * 口径与统计页保持一致：金额由调用方的 [amountOf] 决定（含币种筛选），
+ * 退款按 [BillStatsContribution] 冲减支出，分类由 [categoryOf] 归并为一级分类。
+ *
+ * 当月未过完时与「上月同期」（上月 1 日至今天对应日）比较，避免月初总是显示支出下降。
  */
 object InsightEngine {
 
-    private const val MAX_HOME_CARDS = 2
-    private const val MAX_STATS_CARDS = 4
+    private const val MAX_CARDS = 4
+    private const val MIN_COMPARE_DAYS = 3
+    private const val MIN_PROJECTION_DAYS = 5
 
-    /**
-     * 生成洞察卡片列表。
-     * @param currentBills 当前月账单（含 excludeFromStats）
-     * @param previousBills 上月账单
-     * @param maxCards 最大卡片数
-     * @return 排序后的洞察卡片
-     */
     fun generate(
         currentBills: List<Bill>,
         previousBills: List<Bill>,
-        maxCards: Int = MAX_STATS_CARDS
-    ): List<InsightCardModel> {
-        if (currentBills.isEmpty()) return emptyList()
+        monthStart: Long,
+        now: Long = System.currentTimeMillis(),
+        currencySymbol: String = "¥",
+        amountOf: (Bill) -> Double = { StatsAmountResolver.resolve(it, null) },
+        categoryOf: (Bill) -> String = { it.categoryName.ifBlank { "未分类" } },
+        maxCards: Int = MAX_CARDS
+    ): InsightReport {
+        val period = Period.of(monthStart, now) ?: return InsightReport.EMPTY
 
-        val currentExpenses = currentBills.filter {
-            it.type == Bill.TYPE_EXPENSE && it.subType != Bill.SUBTYPE_REFUND && !it.excludeFromStats
-        }
-        val previousExpenses = previousBills.filter {
-            it.type == Bill.TYPE_EXPENSE && it.subType != Bill.SUBTYPE_REFUND && !it.excludeFromStats
-        }
+        fun toExpenses(bills: List<Bill>, from: Long, untilExclusive: Long) = bills
+            .filter { it.time >= from && it.time < untilExclusive }
+            .mapNotNull { bill ->
+                val expense = BillStatsContribution.from(bill, amountOf(bill)).expense
+                if (expense == 0.0) null else Expense(bill, expense, categoryOf(bill))
+            }
 
-        if (currentExpenses.isEmpty()) return emptyList()
+        val current = toExpenses(currentBills, period.start, period.endExclusive)
+        if (current.sumOf { it.amount } <= 0.0) return InsightReport(emptyList(), period.label)
+        val previous = toExpenses(previousBills, period.previousStart, period.previousCutoff)
 
-        val candidates = mutableListOf<InsightCardModel>()
+        val ctx = Ctx(period, currencySymbol, now, current, previous)
+        val headline = ctx.totalCard() ?: ctx.projectionCard()
+        val others = listOfNotNull(
+            ctx.categoryIncreaseCard(),
+            ctx.categoryDecreaseCard(),
+            ctx.largeExpenseCard(),
+            ctx.concentrationCard(),
+            ctx.weekendCard()
+        ).sortedWith(compareBy<InsightCardModel> { severityRank(it.severity) }.thenByDescending { it.impact })
 
-        // 1. 本月总支出环比
-        buildTotalDeltaInsight(currentExpenses, previousExpenses)?.let { candidates.add(it) }
-
-        // 2. 分类环比
-        candidates.addAll(buildCategoryDeltaInsights(currentExpenses, previousExpenses))
-
-        // 3. 大额消费
-        candidates.addAll(buildLargeExpenseInsights(currentExpenses))
-
-        // 4. 周末支出占比
-        buildWeekendSpendInsight(currentExpenses)?.let { candidates.add(it) }
-
-        // 5. 周期扣费提示
-        buildRecurringHintInsight(currentExpenses)?.let { candidates.add(it) }
-
-        // 6. 支出集中度
-        buildCategoryConcentrationInsight(currentExpenses)?.let { candidates.add(it) }
-
-        // 排序：WARN > POSITIVE > INFO，同级按影响金额降序
-        val severityOrder = mapOf(
-            InsightSeverity.WARN to 0,
-            InsightSeverity.POSITIVE to 1,
-            InsightSeverity.INFO to 2
-        )
-        return candidates
-            .sortedWith(compareBy<InsightCardModel> { severityOrder[it.severity] ?: 9 }
-                .thenByDescending { it.payload["amount"]?.toDoubleOrNull() ?: 0.0 })
-            .take(maxCards)
-    }
-
-    /**
-     * 生成首页洞察（最多 2 张）
-     */
-    fun generateForHome(
-        currentBills: List<Bill>,
-        previousBills: List<Bill>
-    ): List<InsightCardModel> = generate(currentBills, previousBills, MAX_HOME_CARDS)
-
-    /**
-     * 生成统计页洞察（最多 4 张）
-     */
-    fun generateForStats(
-        currentBills: List<Bill>,
-        previousBills: List<Bill>
-    ): List<InsightCardModel> = generate(currentBills, previousBills, MAX_STATS_CARDS)
-
-    // ── MONTH_TOTAL_DELTA ────────────────────────────────────────────────
-
-    private fun buildTotalDeltaInsight(
-        current: List<Bill>,
-        previous: List<Bill>
-    ): InsightCardModel? {
-        if (current.size < 3 || previous.size < 3) return null
-
-        val currentAmount = current.sumOf { amountInCny(it) }
-        val previousAmount = previous.sumOf { amountInCny(it) }
-        if (previousAmount <= 0) return null
-
-        val delta = (currentAmount - previousAmount) / previousAmount
-        val deltaAmount = currentAmount - previousAmount
-        if (abs(delta) < 0.15 || abs(deltaAmount) < 50.0) return null
-
-        val percent = abs(delta * 100).roundToInt()
-        val isIncrease = delta > 0
-        val title = if (isIncrease) "本月支出上升" else "本月支出下降"
-        val body = if (isIncrease) {
-            "比上月多 ${percent}%（¥${formatAmount(currentAmount)} vs ¥${formatAmount(previousAmount)}）"
-        } else {
-            "比上月少 ${percent}%，少花 ¥${formatAmount(-deltaAmount)}"
-        }
-        return InsightCardModel(
-            id = stableId(InsightType.MONTH_TOTAL_DELTA, if (isIncrease) "up" else "down"),
-            type = InsightType.MONTH_TOTAL_DELTA,
-            title = title,
-            body = body,
-            severity = if (isIncrease && delta >= 0.35) InsightSeverity.WARN else if (!isIncrease) InsightSeverity.POSITIVE else InsightSeverity.INFO,
-            payload = mapOf(
-                "amount" to formatAmount(abs(deltaAmount)),
-                "currentAmount" to formatAmount(currentAmount),
-                "previousAmount" to formatAmount(previousAmount),
-                "percent" to "${percent}%"
-            ),
-            action = InsightAction(type = InsightActionType.OPEN_STATS)
+        return InsightReport(
+            cards = (listOfNotNull(headline) + others).take(maxCards),
+            comparisonLabel = period.label
         )
     }
 
-    // ── MONTH_CATEGORY_DELTA ──────────────────────────────────────────────
+    private fun severityRank(severity: InsightSeverity) = when (severity) {
+        InsightSeverity.WARN -> 0
+        InsightSeverity.POSITIVE -> 1
+        InsightSeverity.INFO -> 2
+    }
 
-    private fun buildCategoryDeltaInsights(
-        current: List<Bill>,
-        previous: List<Bill>
-    ): List<InsightCardModel> {
-        val results = mutableListOf<InsightCardModel>()
+    private data class Expense(val bill: Bill, val amount: Double, val category: String)
 
-        val currentByCategory = current.groupBy { it.categoryName }
-            .mapValues { (_, bills) -> bills.sumOf { amountInCny(it) } }
-        val previousByCategory = previous.groupBy { it.categoryName }
-            .mapValues { (_, bills) -> bills.sumOf { amountInCny(it) } }
+    private class Period(
+        val start: Long,
+        val endExclusive: Long,
+        val previousStart: Long,
+        val previousCutoff: Long,
+        val previousCompareDays: Int,
+        val elapsedDays: Int,
+        val totalDays: Int,
+        val inProgress: Boolean
+    ) {
+        val previousName get() = if (inProgress) "上月同期" else "上月"
+        val currentName get() = if (inProgress) "截至今天" else "本月"
 
-        for ((category, currentAmount) in currentByCategory) {
-            if (category.isBlank()) continue
-            val previousAmount = previousByCategory[category] ?: continue
-            if (previousAmount <= 0) continue
+        val label: String
+            get() = when {
+                !inProgress -> "对比上月"
+                previousCompareDays <= 1 -> "对比上月 1 日"
+                else -> "对比上月 1–$previousCompareDays 日"
+            }
 
-            val delta = (currentAmount - previousAmount) / previousAmount
-            val deltaAmount = currentAmount - previousAmount
-            if (abs(delta) > 0.25 && abs(deltaAmount) >= 30.0) {
-                val isIncrease = delta > 0
-                val percentStr = "${abs(delta * 100).roundToInt()}%"
-                val title = if (isIncrease) "${category}支出增长" else "${category}支出减少"
-                val body = if (isIncrease) {
-                    "本月比上月高 $percentStr（¥${formatAmount(currentAmount)} vs ¥${formatAmount(previousAmount)}）"
+        companion object {
+            fun of(monthStart: Long, now: Long): Period? {
+                if (now < monthStart) return null
+                val startCal = Calendar.getInstance().apply { timeInMillis = monthStart }
+                val totalDays = startCal.getActualMaximum(Calendar.DAY_OF_MONTH)
+                val endExclusive = (startCal.clone() as Calendar).apply { add(Calendar.MONTH, 1) }.timeInMillis
+                val inProgress = now < endExclusive
+                val elapsedDays = if (inProgress) {
+                    Calendar.getInstance().apply { timeInMillis = now }.get(Calendar.DAY_OF_MONTH)
                 } else {
-                    "本月比上月低 $percentStr，少花 ¥${formatAmount(-deltaAmount)}"
+                    totalDays
                 }
-                results.add(
-                    InsightCardModel(
-                        id = stableId(InsightType.MONTH_CATEGORY_DELTA, category, if (isIncrease) "up" else "down"),
-                        type = InsightType.MONTH_CATEGORY_DELTA,
-                        title = title,
-                        body = body,
-                        severity = if (isIncrease && delta > 0.5) InsightSeverity.WARN else if (!isIncrease) InsightSeverity.POSITIVE else InsightSeverity.INFO,
-                        payload = mapOf(
-                            "category" to category,
-                            "amount" to formatAmount(abs(deltaAmount)),
-                            "percent" to percentStr
-                        ),
-                        action = InsightAction(
-                            type = InsightActionType.OPEN_CATEGORY,
-                            payload = mapOf("categoryName" to category)
-                        )
-                    )
+                val prevCal = (startCal.clone() as Calendar).apply { add(Calendar.MONTH, -1) }
+                val previousStart = prevCal.timeInMillis
+                val previousCompareDays = if (inProgress) {
+                    minOf(elapsedDays, prevCal.getActualMaximum(Calendar.DAY_OF_MONTH))
+                } else {
+                    prevCal.getActualMaximum(Calendar.DAY_OF_MONTH)
+                }
+                val previousCutoff = (prevCal.clone() as Calendar)
+                    .apply { add(Calendar.DAY_OF_MONTH, previousCompareDays) }
+                    .timeInMillis
+                return Period(
+                    monthStart, endExclusive, previousStart, previousCutoff,
+                    previousCompareDays, elapsedDays, totalDays, inProgress
                 )
             }
         }
-
-        return results
     }
 
-    // ── LARGE_EXPENSE ─────────────────────────────────────────────────────
+    private class Ctx(
+        val period: Period,
+        val symbol: String,
+        val now: Long,
+        val current: List<Expense>,
+        val previous: List<Expense>
+    ) {
+        val currentTotal = current.sumOf { it.amount }
+        val previousTotal = previous.sumOf { it.amount }
+        val currentByCategory = current.groupBy { it.category }.mapValues { (_, list) -> list.sumOf { it.amount } }
+        val previousByCategory = previous.groupBy { it.category }.mapValues { (_, list) -> list.sumOf { it.amount } }
+        val normalExpenses = current.filter { it.bill.type == Bill.TYPE_EXPENSE && it.amount > 0 }
 
-    private fun buildLargeExpenseInsights(expenses: List<Bill>): List<InsightCardModel> {
-        if (expenses.size < 3) return emptyList()
+        // ── 总支出 vs 上月（同期） ─────────────────────────────────────
 
-        val results = mutableListOf<InsightCardModel>()
-        val amounts = expenses.map { amountInCny(it) }.sorted()
-        val p90Index = (amounts.size * 0.9).toInt().coerceIn(0, amounts.size - 1)
-        val p90 = amounts[p90Index]
-        val avg = amounts.average()
-        val threshold = maxOf(p90, avg * 2.5, 100.0)
+        fun totalCard(): InsightCardModel? {
+            if (previousTotal <= 0.0) return null
+            if (period.inProgress && period.elapsedDays < MIN_COMPARE_DAYS) return null
 
-        // 找当前数据范围末尾 7 天内的大额消费，支持查看历史月份。
-        val anchorTime = expenses.maxOf { it.time }
-        val sevenDaysAgo = anchorTime - 7L * 24 * 60 * 60 * 1000
-        val recentLarge = expenses
-            .filter { amountInCny(it) >= threshold && it.time >= sevenDaysAgo }
-            .sortedByDescending { it.time }
-
-        for (bill in recentLarge.take(1)) { // 最多 1 条
-            val calendar = Calendar.getInstance().apply { timeInMillis = bill.time }
-            val dayStr = when {
-                isToday(calendar) -> "今天"
-                isYesterday(calendar) -> "昨天"
-                else -> "${calendar.get(Calendar.MONTH) + 1}月${calendar.get(Calendar.DAY_OF_MONTH)}日"
+            val diff = currentTotal - previousTotal
+            val ratio = diff / previousTotal
+            val flat = abs(ratio) < 0.05 || abs(diff) < 20.0
+            val title = when {
+                flat -> "支出与${period.previousName}基本持平"
+                diff > 0 -> "比${period.previousName}多花 ${money(diff)}"
+                else -> "比${period.previousName}少花 ${money(-diff)}"
             }
-            results.add(
-                InsightCardModel(
-                    id = stableId(InsightType.LARGE_EXPENSE, bill.id.toString()),
-                    type = InsightType.LARGE_EXPENSE,
-                    title = "大额消费提醒",
-                    body = "${dayStr}有一笔 ¥${formatAmount(bill.amount)} 的${bill.categoryName.ifBlank { "消费" }}支出",
-                    severity = InsightSeverity.WARN,
-                    payload = mapOf(
-                        "amount" to formatAmount(bill.amount),
-                        "category" to bill.categoryName,
-                        "billId" to bill.id.toString()
-                    )
-                )
+            val body = buildString {
+                append("${period.currentName} ${money(currentTotal)}，${period.previousName} ${money(previousTotal)}")
+                projection()?.let { append("；按此节奏月底约 ${money(it)}") }
+            }
+            val severity = when {
+                flat -> InsightSeverity.INFO
+                ratio >= 0.2 && diff >= 50.0 -> InsightSeverity.WARN
+                diff < 0 -> InsightSeverity.POSITIVE
+                else -> InsightSeverity.INFO
+            }
+            return InsightCardModel(
+                id = "${InsightType.MONTH_TOTAL_DELTA}",
+                type = InsightType.MONTH_TOTAL_DELTA,
+                title = title,
+                body = body,
+                severity = severity,
+                highlight = if (flat) null else percent(ratio),
+                impact = abs(diff)
             )
         }
 
-        return results
-    }
-
-    // ── WEEKEND_SPEND ─────────────────────────────────────────────────────
-
-    private fun buildWeekendSpendInsight(expenses: List<Bill>): InsightCardModel? {
-        if (expenses.size < 8) return null
-
-        val calendar = Calendar.getInstance()
-        var weekendAmount = 0.0
-        var totalAmount = 0.0
-
-        for (bill in expenses) {
-            val cny = amountInCny(bill)
-            totalAmount += cny
-            calendar.timeInMillis = bill.time
-            val dayOfWeek = calendar.get(Calendar.DAY_OF_WEEK)
-            if (dayOfWeek == Calendar.SATURDAY || dayOfWeek == Calendar.SUNDAY) {
-                weekendAmount += cny
-            }
+        /** 上月没有可比数据时，退而给出月底预估。 */
+        fun projectionCard(): InsightCardModel? {
+            val projected = projection() ?: return null
+            return InsightCardModel(
+                id = "${InsightType.MONTH_PROJECTION}",
+                type = InsightType.MONTH_PROJECTION,
+                title = "按此节奏，本月预计支出 ${money(projected)}",
+                body = "截至今天已支出 ${money(currentTotal)}，上月暂无可对比的数据",
+                severity = InsightSeverity.INFO,
+                impact = projected
+            )
         }
 
-        if (totalAmount <= 0) return null
-        val ratio = weekendAmount / totalAmount
+        /** 大额一次性支出（如房租）不按天外推，否则月初的预估会被放大数十倍。 */
+        private fun projection(): Double? {
+            if (!period.inProgress || period.elapsedDays < MIN_PROJECTION_DAYS) return null
+            if (period.elapsedDays >= period.totalDays) return null
+            val avgBill = normalExpenses.map { it.amount }.average().takeIf { !it.isNaN() } ?: return null
+            val oneOff = normalExpenses.filter { it.amount >= 200.0 && it.amount >= avgBill * 3 }.sumOf { it.amount }
+            val daily = (currentTotal - oneOff) / period.elapsedDays
+            return (oneOff + daily * period.totalDays).coerceAtLeast(currentTotal)
+        }
 
-        return if (ratio > 0.6 && weekendAmount >= 100.0) {
-            InsightCardModel(
-                id = stableId(InsightType.WEEKEND_SPEND),
+        // ── 分类变化 ────────────────────────────────────────────────
+
+        private val minCategoryDiff get() = maxOf(50.0, currentTotal * 0.05)
+
+        fun categoryIncreaseCard(): InsightCardModel? {
+            if (previousTotal <= 0.0 || period.inProgress && period.elapsedDays < MIN_COMPARE_DAYS) return null
+            val (category, cur, prev) = currentByCategory
+                .map { (name, cur) -> Triple(name, cur, previousByCategory[name] ?: 0.0) }
+                .filter { (_, cur, prev) -> cur - prev >= minCategoryDiff && (prev <= 0.0 || (cur - prev) / prev >= 0.3) }
+                .maxByOrNull { (_, cur, prev) -> cur - prev } ?: return null
+            val diff = cur - prev
+            val isNew = prev <= 0.0
+            return InsightCardModel(
+                id = "${InsightType.MONTH_CATEGORY_DELTA}:$category:up",
+                type = InsightType.MONTH_CATEGORY_DELTA,
+                title = "${category}比${period.previousName}多花 ${money(diff)}",
+                body = if (isNew) {
+                    "${period.currentName} ${money(cur)}，${period.previousName}没有这类支出"
+                } else {
+                    "${period.currentName} ${money(cur)}，${period.previousName} ${money(prev)}"
+                },
+                severity = if (!isNew && diff / prev >= 0.5) InsightSeverity.WARN else InsightSeverity.INFO,
+                highlight = if (isNew) "新增" else percent(diff / prev),
+                action = InsightAction.OpenCategory(category),
+                impact = diff
+            )
+        }
+
+        fun categoryDecreaseCard(): InsightCardModel? {
+            if (period.inProgress && period.elapsedDays < MIN_COMPARE_DAYS) return null
+            val (category, cur, prev) = previousByCategory
+                .map { (name, prev) -> Triple(name, (currentByCategory[name] ?: 0.0).coerceAtLeast(0.0), prev) }
+                .filter { (_, cur, prev) -> prev > 0.0 && prev - cur >= minCategoryDiff && (prev - cur) / prev >= 0.3 }
+                .maxByOrNull { (_, cur, prev) -> prev - cur } ?: return null
+            val diff = prev - cur
+            return InsightCardModel(
+                id = "${InsightType.MONTH_CATEGORY_DELTA}:$category:down",
+                type = InsightType.MONTH_CATEGORY_DELTA,
+                title = "${category}比${period.previousName}少花 ${money(diff)}",
+                body = if (cur <= 0.0) {
+                    "${period.currentName}还没有这类支出，${period.previousName} ${money(prev)}"
+                } else {
+                    "${period.currentName} ${money(cur)}，${period.previousName} ${money(prev)}"
+                },
+                severity = InsightSeverity.POSITIVE,
+                highlight = percent(-diff / prev),
+                action = if (cur > 0.0) InsightAction.OpenCategory(category) else null,
+                impact = diff
+            )
+        }
+
+        // ── 单笔大额 ────────────────────────────────────────────────
+
+        fun largeExpenseCard(): InsightCardModel? {
+            if (normalExpenses.size < 5) return null
+            val sorted = normalExpenses.sortedBy { it.amount }
+            val median = sorted[sorted.size / 2].amount
+            val top = sorted.last()
+            if (top.amount < 100.0 || top.amount < median * 5 || top.amount < currentTotal * 0.15) return null
+
+            val details = listOf(formatDay(top.bill.time), top.category, top.bill.remark.trim().take(12))
+                .filter { it.isNotBlank() }
+            return InsightCardModel(
+                id = "${InsightType.LARGE_EXPENSE}:${top.bill.id}",
+                type = InsightType.LARGE_EXPENSE,
+                title = "最大一笔支出 ${money(top.amount)}",
+                body = details.joinToString(" · "),
+                severity = InsightSeverity.INFO,
+                highlight = "占 ${(top.amount / currentTotal * 100).roundToInt()}%",
+                action = InsightAction.OpenBill(top.bill.id),
+                impact = top.amount
+            )
+        }
+
+        // ── 分类集中度 ──────────────────────────────────────────────
+
+        fun concentrationCard(): InsightCardModel? {
+            if (current.size < 5 || currentTotal < 300.0) return null
+            val positive = currentByCategory.filterValues { it > 0.0 }
+            if (positive.size < 2) return null
+            val (category, amount) = positive.maxByOrNull { it.value } ?: return null
+            val ratio = amount / currentTotal
+            if (ratio < 0.5) return null
+            return InsightCardModel(
+                id = "${InsightType.CATEGORY_CONCENTRATION}:$category",
+                type = InsightType.CATEGORY_CONCENTRATION,
+                title = "超过一半的钱花在了$category",
+                body = "$category ${money(amount)}，本月共 ${money(currentTotal)}",
+                severity = InsightSeverity.INFO,
+                highlight = "${(ratio * 100).roundToInt()}%",
+                action = InsightAction.OpenCategory(category),
+                impact = amount
+            )
+        }
+
+        // ── 周末 vs 工作日 ──────────────────────────────────────────
+
+        fun weekendCard(): InsightCardModel? {
+            val cal = Calendar.getInstance().apply { timeInMillis = period.start }
+            var weekendDays = 0
+            repeat(period.elapsedDays) {
+                if (isWeekend(cal)) weekendDays++
+                cal.add(Calendar.DAY_OF_MONTH, 1)
+            }
+            val weekdayDays = period.elapsedDays - weekendDays
+            if (weekendDays < 2 || weekdayDays < 3) return null
+
+            var weekendSpend = 0.0
+            var weekdaySpend = 0.0
+            current.forEach {
+                cal.timeInMillis = it.bill.time
+                if (isWeekend(cal)) weekendSpend += it.amount else weekdaySpend += it.amount
+            }
+            val weekendAvg = weekendSpend / weekendDays
+            val weekdayAvg = weekdaySpend / weekdayDays
+            if (weekdayAvg <= 0.0 || weekendSpend < 100.0 || weekendAvg < weekdayAvg * 1.8) return null
+
+            val times = String.format(Locale.getDefault(), "%.1f", weekendAvg / weekdayAvg)
+            return InsightCardModel(
+                id = "${InsightType.WEEKEND_SPEND}",
                 type = InsightType.WEEKEND_SPEND,
-                title = "周末消费较高",
-                body = "周末支出占本月 ${(ratio * 100).roundToInt()}%（¥${formatAmount(weekendAmount)}）",
+                title = "周末日均花费是工作日的 $times 倍",
+                body = "周末日均 ${money(weekendAvg)}，工作日日均 ${money(weekdayAvg)}",
                 severity = InsightSeverity.INFO,
-                payload = mapOf(
-                    "ratio" to "${(ratio * 100).roundToInt()}%",
-                    "amount" to formatAmount(weekendAmount)
-                )
+                impact = weekendSpend
             )
-        } else null
-    }
-
-    // ── RECURRING_HINT ────────────────────────────────────────────────────
-
-    private fun buildRecurringHintInsight(expenses: List<Bill>): InsightCardModel? {
-        if (expenses.size < 3) return null
-
-        // 按 remark + category 归一化分组
-        data class GroupKey(val normalizedRemark: String, val category: String)
-
-        fun normalize(text: String): String =
-            text.trim().lowercase().replace("\\s+".toRegex(), "")
-
-        val groups = expenses.filter { it.remark.isNotBlank() }
-            .groupBy { GroupKey(normalize(it.remark), it.categoryName) }
-
-        var bestCandidate: InsightCardModel? = null
-
-        for ((key, bills) in groups) {
-            if (bills.size < 3) continue
-
-            // 金额波动 ±15%
-            val amounts = bills.map { amountInCny(it) }
-            val median = amounts.sorted()[amounts.size / 2]
-            val toleranceOk = amounts.all { abs(it - median) / median <= 0.15 }
-            if (!toleranceOk) continue
-
-            // 间隔检查
-            val times = bills.map { it.time }.sorted()
-            val intervals = (1 until times.size).map { (times[it] - times[it - 1]) / (24.0 * 3600_000) }
-            if (intervals.isEmpty()) continue
-            val avgInterval = intervals.average()
-
-            val frequency = when {
-                avgInterval in 6.0..8.0 -> "每周"
-                avgInterval in 27.0..33.0 -> "每月"
-                avgInterval in 358.0..372.0 -> "每年"
-                else -> continue
-            }
-
-            bestCandidate = InsightCardModel(
-                id = stableId(InsightType.RECURRING_HINT, key.normalizedRemark),
-                type = InsightType.RECURRING_HINT,
-                title = "疑似周期扣费",
-                body = "检测到 ${bills.size} 笔相近金额的${frequency}扣费（${key.normalizedRemark}）",
-                severity = InsightSeverity.INFO,
-                payload = mapOf(
-                    "count" to bills.size.toString(),
-                    "amount" to formatAmount(median),
-                    "frequency" to frequency
-                )
-            )
-            break // 只取第一个
         }
 
-        return bestCandidate
-    }
+        // ── helpers ────────────────────────────────────────────────
 
-    // ── CATEGORY_CONCENTRATION ───────────────────────────────────────────
-
-    private fun buildCategoryConcentrationInsight(expenses: List<Bill>): InsightCardModel? {
-        if (expenses.size < 5) return null
-        val total = expenses.sumOf { amountInCny(it) }
-        if (total < 300.0) return null
-
-        val top = expenses
-            .groupBy { it.categoryName.ifBlank { "未分类" } }
-            .mapValues { (_, bills) -> bills.sumOf { amountInCny(it) } }
-            .maxByOrNull { it.value } ?: return null
-        val ratio = top.value / total
-        if (ratio < 0.45 || top.value < 200.0) return null
-
-        return InsightCardModel(
-            id = stableId(InsightType.CATEGORY_CONCENTRATION, top.key),
-            type = InsightType.CATEGORY_CONCENTRATION,
-            title = "${top.key}占比较高",
-            body = "本月${top.key}占总支出 ${(ratio * 100).roundToInt()}%（¥${formatAmount(top.value)} / ¥${formatAmount(total)}）",
-            severity = if (ratio >= 0.65) InsightSeverity.WARN else InsightSeverity.INFO,
-            payload = mapOf(
-                "category" to top.key,
-                "amount" to formatAmount(top.value),
-                "ratio" to "${(ratio * 100).roundToInt()}%"
-            ),
-            action = InsightAction(
-                type = InsightActionType.OPEN_CATEGORY,
-                payload = mapOf("categoryName" to top.key)
-            )
-        )
-    }
-
-    // ── helpers ───────────────────────────────────────────────────────────
-
-    private fun stableId(type: InsightType, vararg parts: String): String =
-        (listOf(type.name) + parts).joinToString(":")
-
-    fun formatAmount(amount: Double): String {
-        return if (amount == amount.toLong().toDouble()) {
-            amount.toLong().toString()
-        } else {
-            String.format("%.2f", amount)
+        private fun isWeekend(cal: Calendar): Boolean {
+            val dow = cal.get(Calendar.DAY_OF_WEEK)
+            return dow == Calendar.SATURDAY || dow == Calendar.SUNDAY
         }
-    }
 
-    /** P1-6: 多币种账单折算到 CNY 再汇总，优先记账时汇率。 */
-    private fun amountInCny(bill: Bill): Double {
-        if (bill.currency.isBlank() || bill.currency.equals("CNY", ignoreCase = true)) {
-            return bill.amount
+        private fun money(amount: Double): String =
+            symbol + AmountFormatHelper.formatCompact(abs(amount).roundToLong().toDouble())
+
+        private fun percent(ratio: Double): String {
+            val sign = if (ratio > 0) "+" else "-"
+            return "$sign${abs(ratio * 100).roundToInt()}%"
         }
-        if (bill.exchangeRate > 0.0) {
-            return bill.amount * bill.exchangeRate
+
+        private fun formatDay(time: Long): String {
+            val target = Calendar.getInstance().apply { timeInMillis = time }
+            val today = Calendar.getInstance().apply { timeInMillis = now }
+            fun sameDay(a: Calendar, b: Calendar) =
+                a.get(Calendar.YEAR) == b.get(Calendar.YEAR) && a.get(Calendar.DAY_OF_YEAR) == b.get(Calendar.DAY_OF_YEAR)
+            if (sameDay(target, today)) return "今天"
+            today.add(Calendar.DAY_OF_YEAR, -1)
+            if (sameDay(target, today)) return "昨天"
+            return "${target.get(Calendar.MONTH) + 1}月${target.get(Calendar.DAY_OF_MONTH)}日"
         }
-        return com.taostudio.tapaccounting.logic.BillAssetImpactService
-            .convertAmountBetweenCurrencies(bill.amount, bill.currency, "CNY")
-    }
-
-    private fun isToday(cal: Calendar): Boolean {
-        val now = Calendar.getInstance()
-        return cal.get(Calendar.YEAR) == now.get(Calendar.YEAR)
-                && cal.get(Calendar.DAY_OF_YEAR) == now.get(Calendar.DAY_OF_YEAR)
-    }
-
-    private fun isYesterday(cal: Calendar): Boolean {
-        val now = Calendar.getInstance()
-        now.add(Calendar.DAY_OF_YEAR, -1)
-        return cal.get(Calendar.YEAR) == now.get(Calendar.YEAR)
-                && cal.get(Calendar.DAY_OF_YEAR) == now.get(Calendar.DAY_OF_YEAR)
     }
 }

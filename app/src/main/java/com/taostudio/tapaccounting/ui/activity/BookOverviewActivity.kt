@@ -19,7 +19,6 @@ import com.taostudio.tapaccounting.data.local.entity.Bill
 import com.taostudio.tapaccounting.logic.BillStatsContribution
 import com.taostudio.tapaccounting.ui.main.SharedYearMonthSession
 import com.taostudio.tapaccounting.ui.main.YearMonthPickerDialog
-import com.taostudio.tapaccounting.ui.widget.SecondaryPageHeaderView
 import java.util.Calendar
 import java.util.Locale
 
@@ -45,6 +44,8 @@ class BookOverviewActivity : AppCompatActivity() {
     private lateinit var layoutCurrentPeriodTrigger: android.view.View
     private lateinit var btnViewMonth: TextView
     private lateinit var btnViewYear: TextView
+    private lateinit var indicatorViewMonth: android.view.View
+    private lateinit var indicatorViewYear: android.view.View
     private lateinit var rvBookOverview: RecyclerView
 
     private lateinit var adapter: BookOverviewAdapter
@@ -77,10 +78,10 @@ class BookOverviewActivity : AppCompatActivity() {
         btnPeriodPrev = findViewById(R.id.btnPeriodPrev)
         btnPeriodNext = findViewById(R.id.btnPeriodNext)
         layoutCurrentPeriodTrigger = findViewById(R.id.layoutCurrentPeriodTrigger)
-        val header: SecondaryPageHeaderView = findViewById(R.id.secondary_header)
-        header.viewModeSwitch.visibility = android.view.View.VISIBLE
-        btnViewMonth = header.viewModeMonthBtn
-        btnViewYear = header.viewModeYearBtn
+        btnViewMonth = findViewById(R.id.btnModeMonth)
+        btnViewYear = findViewById(R.id.btnModeYear)
+        indicatorViewMonth = findViewById(R.id.indicatorModeMonth)
+        indicatorViewYear = findViewById(R.id.indicatorModeYear)
         rvBookOverview = findViewById(R.id.rvBookOverview)
     }
 
@@ -241,18 +242,13 @@ class BookOverviewActivity : AppCompatActivity() {
     }
 
     private fun updateViewModeStyle() {
-        val activeColor = android.graphics.Color.parseColor("#4080FF")
-        val inactiveColor = android.graphics.Color.parseColor("#888888")
-        btnViewMonth.apply {
-            setTextColor(if (!isYearMode) activeColor else inactiveColor)
-            setBackgroundResource(if (!isYearMode) R.drawable.bg_segmented_selected else android.R.color.transparent)
-            setTypeface(null, if (!isYearMode) android.graphics.Typeface.BOLD else android.graphics.Typeface.NORMAL)
-        }
-        btnViewYear.apply {
-            setTextColor(if (isYearMode) activeColor else inactiveColor)
-            setBackgroundResource(if (isYearMode) R.drawable.bg_segmented_selected else android.R.color.transparent)
-            setTypeface(null, if (isYearMode) android.graphics.Typeface.BOLD else android.graphics.Typeface.NORMAL)
-        }
+        val activeColor = getColor(R.color.stats_segmented_text_active)
+        val inactiveColor = getColor(R.color.stats_segmented_text_inactive)
+        val transparent = android.graphics.Color.TRANSPARENT
+        btnViewMonth.setTextColor(if (!isYearMode) activeColor else inactiveColor)
+        btnViewYear.setTextColor(if (isYearMode) activeColor else inactiveColor)
+        indicatorViewMonth.setBackgroundColor(if (!isYearMode) activeColor else transparent)
+        indicatorViewYear.setBackgroundColor(if (isYearMode) activeColor else transparent)
     }
 
     private fun loadData() {
@@ -260,16 +256,26 @@ class BookOverviewActivity : AppCompatActivity() {
             val items = withContext(Dispatchers.IO) { buildOverviewItems() }
             val totalExpense = items.sumOf { it.expense }
             val totalIncome = items.sumOf { it.income }
-            val totalBalance = totalIncome - totalExpense
+            val totalBalance = Math.round((totalIncome - totalExpense) * 100) / 100.0
 
             adapter.submitList(items)
 
             tvTotalExpense.text = "¥${AmountFormatHelper.formatAmount(totalExpense)}"
             tvTotalIncome.text = "¥${AmountFormatHelper.formatAmount(totalIncome)}"
-            val balanceSign = if (totalBalance >= 0) "+" else ""
-            tvTotalBalance.text = "${balanceSign}¥${AmountFormatHelper.formatAmount(totalBalance)}"
+            tvTotalExpense.setTextColor(amountColor(totalExpense))
+            tvTotalIncome.setTextColor(amountColor(totalIncome))
+            val balanceSign = when {
+                totalBalance > 0 -> "+"
+                totalBalance < 0 -> "-"
+                else -> ""
+            }
+            tvTotalBalance.text = "${balanceSign}¥${AmountFormatHelper.formatAmount(kotlin.math.abs(totalBalance))}"
             tvTotalBalance.setTextColor(
-                android.graphics.Color.parseColor(if (totalBalance >= 0) "#2FA36B" else "#E05A5A")
+                when {
+                    totalBalance > 0 -> android.graphics.Color.parseColor("#2FA36B")
+                    totalBalance < 0 -> android.graphics.Color.parseColor("#E05A5A")
+                    else -> amountColor(0.0)
+                }
             )
         }
     }

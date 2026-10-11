@@ -10,6 +10,7 @@ import android.widget.CheckBox
 import android.widget.EditText
 import android.widget.ImageView
 import android.widget.TextView
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -44,6 +45,15 @@ class CurrencyManagerActivity : AppCompatActivity() {
     private fun openExchangeRatePage() {
         val intent = android.content.Intent(this, ExchangeRateActivity::class.java)
         startActivity(intent)
+    }
+
+    /** 点击主币种尝试取消时给出明确提示，而不是让复选框静默翻转。 */
+    private fun showPrimaryCurrencyLockedHint(item: CurrencyInfo) {
+        Toast.makeText(
+            this,
+            getString(R.string.currency_primary_locked_hint, item.nameZh),
+            Toast.LENGTH_SHORT
+        ).show()
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -193,8 +203,15 @@ class CurrencyManagerActivity : AppCompatActivity() {
                 // 由「主币种」徽章解释它为什么点不动（勾本身不挂监听，XML 里也是 clickable=false）。
                 cbSelect.isEnabled = true
                 if (item.code == PRIMARY_CURRENCY) {
+                    // 必须显式把 isClickable 复位为 false：ViewHolder 复用后，
+                    // 上一次绑定其他币种时已把 CheckBox 置为 clickable=true，
+                    // 仅 setOnClickListener(null) 无法撤销，CheckBox 仍会自行翻转动效，
+                    // 看起来像被取消（实际未保存，重进页面又勾上）。
                     cbSelect.setOnClickListener(null)
-                    itemView.setOnClickListener(null)
+                    cbSelect.isClickable = false
+                    itemView.setOnClickListener {
+                        showPrimaryCurrencyLockedHint(item)
+                    }
                 } else {
                     itemView.setOnClickListener {
                         toggleSelection(item)
@@ -207,6 +224,12 @@ class CurrencyManagerActivity : AppCompatActivity() {
             }
 
             private fun toggleSelection(item: CurrencyInfo) {
+                // 双保险：任何路径都不允许取消主币种。
+                if (item.code == PRIMARY_CURRENCY) {
+                    cbSelect.isChecked = true
+                    showPrimaryCurrencyLockedHint(item)
+                    return
+                }
                 if (enabledSet.contains(item.code)) {
                     enabledSet.remove(item.code)
                 } else {

@@ -4,14 +4,14 @@ import android.content.Context
 import java.util.Calendar
 
 /**
- * 桌面小组件支持的三种尺寸。每种尺寸对应一个独立的 AppWidgetProvider，
- * 这样用户在系统"添加小组件"选择器里能直接看到三个不同大小的条目。
+ * 桌面小组件支持的四种样式。每种样式对应一个独立的 AppWidgetProvider，
+ * 这样用户在系统"添加小组件"选择器里能直接看到四个不同的条目。
  */
-enum class WidgetSize {
-    COMPACT,       // 支出金额 2x1
-    STANDARD,      // 预算金额 2x1
-    TODAY_BUDGET,  // 今日花费与预算剩余 2x1
-    DETAILED       // 财务概览 4x2
+enum class WidgetSize(val label: String, val description: String) {
+    COMPACT("支出金额 · 2×1", "只看支出，周期可选今日 / 本周 / 本月 / 近 7 日"),
+    STANDARD("预算金额 · 2×1", "本月预算还剩多少，附使用进度"),
+    TODAY_BUDGET("今日花费与预算 · 2×1", "今天花了多少，本月预算还剩多少"),
+    DETAILED("财务概览 · 4×2", "支出、本月预算、预算剩余一眼看全")
 }
 
 /** 小组件展示的统计周期。 */

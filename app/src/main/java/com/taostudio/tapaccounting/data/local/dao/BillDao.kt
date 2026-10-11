@@ -311,6 +311,16 @@ interface BillDao {
     suspend fun updateDeletedBillCategoryNameByCategoryId(categoryId: Long, newName: String)
 
     /**
+     * 同步分类图标：分类换图标后，把该分类下账单的 cateIcon 快照刷成新图标。
+     *
+     * 图标已打包进 App，展示时会实时按分类解析；刷快照有两个作用：
+     * 1. 首页列表监听 bills 表变化后会重绑，改完图标切回来立即生效；
+     * 2. 快照是共享账单等场景的展示兜底（见 HomeAdapter），跟着分类走才不会过期。
+     */
+    @Query("UPDATE bills SET cateIcon = :icon WHERE categoryId = :categoryId")
+    suspend fun syncCateIconByCategoryId(categoryId: Long, icon: String)
+
+    /**
      * 同步展示名称：无外键但分类名匹配旧叶子名的账单也一并更新。
      *
      * 除了「自己改名」（旧叶子在路径末尾），还要覆盖「祖先改名」——一级分类改名后，

@@ -17,30 +17,25 @@
         android:layout_height="wrap_content"
         android:orientation="vertical">
 
-        <!-- 封面区（图片 or 纯色） -->
+        <!-- 封面区（仅设置了封面图时显示） -->
         <FrameLayout
             android:id="@+id/flBookCover"
             android:layout_width="match_parent"
-            android:layout_height="132dp"
-            android:background="#4080FF">
+            android:layout_height="96dp"
+            android:visibility="gone">
 
-            <!-- 背景封面图（有图时显示） -->
             <ImageView
                 android:id="@+id/ivBookCover"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
-                android:scaleType="centerCrop"
-                android:visibility="gone" />
+                android:scaleType="centerCrop" />
 
-            <!-- 底部渐变遮罩（有封面图时才生效） -->
+            <!-- 底部渐变遮罩，保证白字账本名在浅色图上可读 -->
             <View
-                android:id="@+id/vCoverGradient"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
-                android:background="@drawable/bg_banner_gradient"
-                android:visibility="gone" />
+                android:background="@drawable/bg_banner_gradient" />
 
-            <!-- 账本名 + 当前选中标记（左下角） -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -49,38 +44,82 @@
                 android:orientation="horizontal"
                 android:paddingStart="16dp"
                 android:paddingEnd="16dp"
-                android:paddingBottom="14dp">
+                android:paddingBottom="12dp">
 
                 <TextView
-                    android:id="@+id/tvBookName"
+                    android:id="@+id/tvCoverBookName"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
                     android:ellipsize="end"
                     android:maxLines="1"
-                    android:text="@string/daily_book"
                     android:textColor="#FFFFFF"
                     android:textSize="17sp"
                     android:textStyle="bold" />
 
-                <!-- 当前账本标签 -->
                 <TextView
-                    android:id="@+id/tvActiveTag"
+                    android:id="@+id/tvCoverActiveTag"
                     android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:background="@drawable/bg_book_overview_tag"
+                    android:layout_height="22dp"
+                    android:background="@drawable/bg_book_selected_badge"
+                    android:gravity="center"
                     android:paddingStart="8dp"
                     android:paddingEnd="8dp"
-                    android:paddingTop="3dp"
-                    android:paddingBottom="3dp"
                     android:text="@string/current"
-                    android:textColor="#FFFFFF"
+                    android:textColor="@color/brand_primary"
                     android:textSize="11sp"
                     android:textStyle="bold"
                     android:visibility="gone" />
-
             </LinearLayout>
         </FrameLayout>
+
+        <!-- 紧凑卡头（无封面图时显示） -->
+        <LinearLayout
+            android:id="@+id/layoutCompactHeader"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingStart="16dp"
+            android:paddingTop="14dp"
+            android:paddingEnd="16dp">
+
+            <TextView
+                android:id="@+id/tvBookAvatar"
+                android:layout_width="28dp"
+                android:layout_height="28dp"
+                android:background="@drawable/bg_book_overview_avatar"
+                android:gravity="center"
+                android:textColor="#FFFFFF"
+                android:textSize="14sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/tvBookName"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="10dp"
+                android:layout_weight="1"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:textColor="#1F2733"
+                android:textSize="16sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/tvActiveTag"
+                android:layout_width="wrap_content"
+                android:layout_height="22dp"
+                android:background="@drawable/bg_book_selected_badge"
+                android:gravity="center"
+                android:paddingStart="8dp"
+                android:paddingEnd="8dp"
+                android:text="@string/current"
+                android:textColor="@color/brand_primary"
+                android:textSize="11sp"
+                android:textStyle="bold"
+                android:visibility="gone" />
+        </LinearLayout>
 
         <!-- 数据区 -->
         <LinearLayout
@@ -91,7 +130,7 @@
             android:paddingStart="16dp"
             android:paddingEnd="16dp"
             android:paddingTop="12dp"
-            android:paddingBottom="12dp">
+            android:paddingBottom="14dp">
 
             <!-- 支出 -->
             <LinearLayout
@@ -114,15 +153,15 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="4dp"
                     android:text="¥0.00"
-                    android:textColor="#E05A5A"
-                    android:textSize="19sp"
+                    android:textColor="#1F2733"
+                    android:textSize="18sp"
                     android:textStyle="bold" />
             </LinearLayout>
 
             <!-- 分隔线 -->
             <View
                 android:layout_width="1dp"
-                android:layout_height="40dp"
+                android:layout_height="36dp"
                 android:background="#EEF1F5" />
 
             <!-- 收入 -->
@@ -147,8 +186,8 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="4dp"
                     android:text="¥0.00"
-                    android:textColor="#2FA36B"
-                    android:textSize="19sp"
+                    android:textColor="#1F2733"
+                    android:textSize="18sp"
                     android:textStyle="bold" />
             </LinearLayout>
 

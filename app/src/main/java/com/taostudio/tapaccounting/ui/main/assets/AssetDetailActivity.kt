@@ -3,6 +3,7 @@ package com.taostudio.tapaccounting.ui.main.assets
 import com.taostudio.tapaccounting.BillColors
 import android.content.Intent
 import android.graphics.Color
+import android.graphics.drawable.ColorDrawable
 import android.os.Build
 import android.os.Bundle
 import android.text.Editable
@@ -17,6 +18,7 @@ import android.widget.CheckBox
 import android.widget.EditText
 import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.PopupWindow
 import android.widget.TextView
 import android.widget.Toast
 import com.google.android.material.switchmaterial.SwitchMaterial
@@ -31,9 +33,11 @@ import com.google.android.material.bottomsheet.BottomSheetBehavior
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.bumptech.glide.Glide
 import com.google.android.material.floatingactionbutton.FloatingActionButton
+import com.google.android.material.snackbar.Snackbar
 import org.json.JSONObject
 import com.taostudio.tapaccounting.AmountFormatHelper
 import com.taostudio.tapaccounting.logic.AccountingFormController
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.collectLatest
@@ -56,10 +60,14 @@ import com.taostudio.tapaccounting.logic.BillDisplayFormatter
 import com.taostudio.tapaccounting.ui.dialog.ElegantDatePickerSheet
 import com.taostudio.tapaccounting.ui.dialog.OverlayDialogs
 import com.taostudio.tapaccounting.logic.BillDeleteHelper
+import com.taostudio.tapaccounting.logic.BillMutationService
+import com.taostudio.tapaccounting.logic.PaymentGroups
 import com.taostudio.tapaccounting.logic.CurrencyManager
 import com.taostudio.tapaccounting.logic.CurrencyUtils
 import com.taostudio.tapaccounting.ui.activity.EditBillActivity
 import com.taostudio.tapaccounting.ui.common.AddBillEntrySheetLauncher
+import com.taostudio.tapaccounting.ui.common.BillStatsMultiSelect
+import com.taostudio.tapaccounting.ui.common.MultiSelectMoreTip
 import com.taostudio.tapaccounting.ui.common.UiMotion.FabScrollBehavior
 import com.taostudio.tapaccounting.logic.InvestmentLotDraftStorage
 import com.taostudio.tapaccounting.logic.InvestmentLotEntryHelper
@@ -94,12 +102,15 @@ class AssetDetailActivity : AppCompatActivity() {
     private lateinit var btnMsSelectAll: TextView
     private lateinit var btnMsMove: TextView
     private lateinit var btnMsDelete: TextView
-    private lateinit var btnMsExcludeStats: TextView
+    private lateinit var btnMsMore: TextView
+    private lateinit var viewMsMoreDot: View
+    private lateinit var tvMsSummary: TextView
+    private var moreTipPopup: PopupWindow? = null
+    private var moreMenuPopup: PopupWindow? = null
     private lateinit var toolbar: androidx.appcompat.widget.Toolbar
     private lateinit var layoutBalancePanelTap: View
     private lateinit var tvAssetBalance: TextView
-    private lateinit var tvActionReconcile: TextView
-    private lateinit var tvActionArchive: TextView
+    private lateinit var layoutArchivedStatus: View
     private lateinit var tvExcludeHint: TextView
     private lateinit var toolbarDoubleTapDetector: GestureDetector
     /** FAB 显隐规则与账单首页、资产页共用同一份（见 [FabScrollBehavior]）。 */
@@ -145,7 +156,9 @@ class AssetDetailActivity : AppCompatActivity() {
 
     object DetailActionHeaderRow
 
-    data class BillRow(val bill: Bill)
+    data class BillRow(val bill: Bill, val inGroup: Boolean = false)
+
+    data class GroupRow(val groupId: String, val bills: List<Bill>)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -173,7 +186,9 @@ class AssetDetailActivity : AppCompatActivity() {
         btnMsSelectAll = findViewById(R.id.btn_ms_select_all)
         btnMsMove = findViewById(R.id.btn_ms_move)
         btnMsDelete = findViewById(R.id.btn_ms_delete)
-        btnMsExcludeStats = findViewById(R.id.btn_ms_exclude_stats)
+        btnMsMore = findViewById(R.id.btn_ms_more)
+        viewMsMoreDot = findViewById(R.id.view_ms_more_dot)
+        tvMsSummary = findViewById(R.id.tv_ms_summary)
 
         toolbar = findViewById(R.id.toolbar)
         toolbar.setNavigationOnClickListener { finish() }
@@ -199,24 +214,17 @@ class AssetDetailActivity : AppCompatActivity() {
             startActivity(intent)
         }
 
-        findViewById<View>(R.id.tv_btn_delete).setOnClickListener {
-            showDeleteConfirmDialog()
+        findViewById<View>(R.id.tv_btn_manage).setOnClickListener {
+            showAssetManageDialog()
         }
 
         layoutBalancePanelTap = findViewById(R.id.layout_balance_panel_tap)
         tvAssetBalance = findViewById(R.id.tv_asset_balance)
         layoutBalancePanelTap.setOnClickListener { showBillBalanceDisplaySheet() }
 
-        tvActionReconcile = findViewById(R.id.tv_action_reconcile)
-        tvActionArchive = findViewById(R.id.tv_action_archive)
+        layoutArchivedStatus = findViewById(R.id.layout_archived_status)
         tvExcludeHint = findViewById(R.id.tv_exclude_hint)
-        tvActionReconcile.setOnClickListener {
-            startActivity(
-                Intent(this, com.taostudio.tapaccounting.ui.activity.AssetReconcileActivity::class.java)
-                    .putExtra(com.taostudio.tapaccounting.ui.activity.AssetReconcileActivity.EXTRA_ASSET_ID, assetId)
-            )
-        }
-        tvActionArchive.setOnClickListener { toggleArchiveCurrentAsset() }
+        findViewById<View>(R.id.tv_action_unarchive).setOnClickListener { setCurrentAssetArchived(false) }
 
         rvTransactions.layoutManager = LinearLayoutManager(this)
         adapter = TransactionAdapter().apply {
@@ -364,39 +372,247 @@ class AssetDetailActivity : AppCompatActivity() {
                 }
             }
         }
-        btnMsExcludeStats.setOnClickListener {
-            val targets = adapter.getSelectedBills()
-            if (targets.isEmpty()) return@setOnClickListener
-            com.taostudio.tapaccounting.ui.common.BillStatsMultiSelect.apply(
-                context = this,
-                scope = lifecycleScope,
-                bills = targets
-            ) {
-                // 保留多选模式，只清空勾选，方便连续处理多批。
-                adapter.deselectAll()
-                applyBillSearch()
+        btnMsMore.setOnClickListener { onMoreClicked() }
+        updateDetailMultiSelectUi(0)
+    }
+
+    override fun onStop() {
+        hideMoreTipPopup()
+        dismissMoreMenu()
+        super.onStop()
+    }
+
+    private fun onMoreClicked() {
+        dismissMoreTipPermanently()
+        showMoreMenu()
+    }
+
+    private fun applyPaymentGroupAction() {
+        val targets = adapter.getSelectedBills()
+        val action = PaymentGroups.resolveAction(targets)
+        if (action == PaymentGroups.Action.MERGE) {
+            val block = PaymentGroups.mergeBlock(targets, assetId)
+            if (block != null) {
+                Toast.makeText(this, mergeBlockReason(block), Toast.LENGTH_SHORT).show()
+                return
             }
         }
-        updateDetailMultiSelectUi(0)
+        val groupId = if (action == PaymentGroups.Action.MERGE) PaymentGroups.newGroupId() else null
+        lifecycleScope.launch {
+            val saved = withContext(Dispatchers.IO) {
+                try {
+                    BillMutationService.setPaymentGroupBatch(db, targets, groupId)
+                    true
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    false
+                }
+            }
+            if (!saved) {
+                Toast.makeText(this@AssetDetailActivity, R.string.payment_group_not_owner, Toast.LENGTH_SHORT).show()
+                return@launch
+            }
+            adapter.clearSelection()
+            val message = if (groupId != null) R.string.toast_payment_merged_fmt else R.string.toast_payment_split_fmt
+            Toast.makeText(this@AssetDetailActivity, getString(message, targets.size), Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun buildSelectionSummary(selected: List<Bill>): String {
+        val currency = currentAsset?.currency ?: selected.firstOrNull()?.currency ?: "CNY"
+        var inflow = 0.0
+        var outflow = 0.0
+        selected.forEach { bill ->
+            val (billInflow, billOutflow) = assetFlow(bill)
+            inflow += billInflow
+            outflow += billOutflow
+        }
+        return getString(
+            R.string.asset_selection_summary_fmt,
+            selected.size,
+            formatMoney(outflow, currency),
+            formatMoney(inflow, currency)
+        )
     }
 
     private fun updateDetailMultiSelectUi(selectedCount: Int) {
         val active = adapter.isMultiSelectMode
+        val becameActive = active && layoutMultiSelectActions.visibility != View.VISIBLE
         layoutMultiSelectActions.visibility = if (active) View.VISIBLE else View.GONE
         val hasSelection = selectedCount > 0
         btnMsDelete.text = if (selectedCount > 0) "删除($selectedCount)" else "删除"
         btnMsDelete.isEnabled = hasSelection
         btnMsMove.isEnabled = hasSelection
-        com.taostudio.tapaccounting.ui.common.BillStatsMultiSelect.refreshButton(
-            btnMsExcludeStats,
-            adapter.selectedBills.toList()
-        )
         btnMsDelete.alpha = if (hasSelection) 1f else 0.45f
         btnMsMove.alpha = if (hasSelection) 1f else 0.45f
+        tvMsSummary.text = buildSelectionSummary(adapter.getSelectedBills())
         if (active) {
             hideAssetDetailFab()
+            if (becameActive) {
+                showMoreTipIfNeeded()
+            } else {
+                viewMsMoreDot.visibility =
+                    if (MultiSelectMoreTip.shouldShow(this)) View.VISIBLE else View.GONE
+            }
         } else {
             showAssetDetailFab()
+            hideMoreTipPopup()
+            dismissMoreMenu()
+            viewMsMoreDot.visibility = View.GONE
+        }
+    }
+
+    private fun mergeBlockReason(block: PaymentGroups.MergeBlock): Int = when (block) {
+        PaymentGroups.MergeBlock.TOO_FEW -> R.string.payment_merge_too_few
+        PaymentGroups.MergeBlock.NOT_INCOME_EXPENSE -> R.string.payment_merge_not_income_expense
+        PaymentGroups.MergeBlock.OTHER_ASSET -> R.string.payment_merge_other_asset
+    }
+
+    private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
+
+    private fun showMoreTipIfNeeded() {
+        val show = MultiSelectMoreTip.shouldShow(this)
+        viewMsMoreDot.visibility = if (show) View.VISIBLE else View.GONE
+        if (!show) {
+            hideMoreTipPopup()
+            return
+        }
+        MultiSelectMoreTip.onEnteredMultiSelect(this)
+        btnMsMore.post {
+            if (!adapter.isMultiSelectMode || isFinishing || isDestroyed) return@post
+            showMoreTipPopup()
+        }
+    }
+
+    private fun showMoreTipPopup() {
+        hideMoreTipPopup()
+        val tip = TextView(this).apply {
+            text = getString(R.string.multi_select_more_tip)
+            setTextColor(Color.WHITE)
+            textSize = 13f
+            setBackgroundResource(R.drawable.bg_ms_more_tip)
+            setPadding(dp(10), dp(7), dp(10), dp(7))
+        }
+        tip.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED)
+        val popup = PopupWindow(tip, tip.measuredWidth, tip.measuredHeight, false).apply {
+            setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+            isOutsideTouchable = false
+            isTouchable = false
+            elevation = dp(6).toFloat()
+        }
+        moreTipPopup = popup
+        val xOff = (btnMsMore.width - tip.measuredWidth) / 2
+        val yOff = -(btnMsMore.height + tip.measuredHeight + dp(6))
+        try {
+            if (btnMsMore.isAttachedToWindow) {
+                popup.showAsDropDown(btnMsMore, xOff, yOff)
+            }
+        } catch (_: android.view.WindowManager.BadTokenException) {
+            hideMoreTipPopup()
+        } catch (_: IllegalStateException) {
+            hideMoreTipPopup()
+        }
+    }
+
+    private fun hideMoreTipPopup() {
+        moreTipPopup?.dismiss()
+        moreTipPopup = null
+    }
+
+    private fun dismissMoreTipPermanently() {
+        MultiSelectMoreTip.dismiss(this)
+        viewMsMoreDot.visibility = View.GONE
+        hideMoreTipPopup()
+    }
+
+    private fun dismissMoreMenu() {
+        moreMenuPopup?.dismiss()
+        moreMenuPopup = null
+    }
+
+    private fun showMoreMenu() {
+        dismissMoreMenu()
+        hideMoreTipPopup()
+        val selected = adapter.getSelectedBills()
+        val themeContext = ContextThemeWrapper(this, R.style.Theme_TapAccounting)
+        val content = LayoutInflater.from(themeContext).inflate(R.layout.popup_asset_ms_more, null, false)
+
+        val groupAction = PaymentGroups.resolveAction(selected)
+        val mergeBlock = if (groupAction == PaymentGroups.Action.SPLIT) {
+            null
+        } else {
+            PaymentGroups.mergeBlock(selected, assetId)
+        }
+        val mergeEnabled = selected.isNotEmpty() &&
+            (groupAction == PaymentGroups.Action.SPLIT || mergeBlock == null)
+        val tvMergeTitle = content.findViewById<TextView>(R.id.tv_ms_merge_title)
+        val tvMergeHint = content.findViewById<TextView>(R.id.tv_ms_merge_hint)
+        tvMergeTitle.setText(
+            if (groupAction == PaymentGroups.Action.SPLIT) R.string.payment_split else R.string.payment_merge
+        )
+        tvMergeHint.setText(
+            when {
+                groupAction == PaymentGroups.Action.SPLIT -> R.string.payment_split_hint
+                mergeBlock != null -> mergeBlockReason(mergeBlock)
+                else -> R.string.payment_merge_hint
+            }
+        )
+        tvMergeTitle.alpha = if (mergeEnabled) 1f else 0.45f
+        tvMergeHint.alpha = if (mergeEnabled) 1f else 0.45f
+        content.findViewById<View>(R.id.item_ms_merge).setOnClickListener {
+            dismissMoreMenu()
+            applyPaymentGroupAction()
+        }
+
+        val excludeInclude = selected.isNotEmpty() &&
+            BillStatsMultiSelect.resolveAction(selected) == BillStatsMultiSelect.Action.INCLUDE
+        val tvExcludeTitle = content.findViewById<TextView>(R.id.tv_ms_exclude_title)
+        val tvExcludeHint = content.findViewById<TextView>(R.id.tv_ms_exclude_hint)
+        tvExcludeTitle.setText(if (excludeInclude) R.string.include else R.string.exclude)
+        tvExcludeHint.setText(
+            when {
+                selected.isEmpty() -> R.string.multi_select_pick_bills_first
+                excludeInclude -> R.string.include_stats_hint
+                else -> R.string.exclude_stats_hint
+            }
+        )
+        tvExcludeTitle.alpha = if (selected.isNotEmpty()) 1f else 0.45f
+        tvExcludeHint.alpha = if (selected.isNotEmpty()) 1f else 0.45f
+        content.findViewById<View>(R.id.item_ms_exclude).setOnClickListener {
+            dismissMoreMenu()
+            if (selected.isEmpty()) {
+                Toast.makeText(this, R.string.multi_select_pick_bills_first, Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            BillStatsMultiSelect.apply(
+                context = this,
+                scope = lifecycleScope,
+                bills = selected
+            ) {
+                adapter.deselectAll()
+                applyBillSearch()
+            }
+        }
+
+        content.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED)
+        val popup = PopupWindow(content, content.measuredWidth, content.measuredHeight, true).apply {
+            setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+            isOutsideTouchable = true
+            elevation = dp(8).toFloat()
+            setOnDismissListener { moreMenuPopup = null }
+        }
+        moreMenuPopup = popup
+        val xOff = (btnMsMore.width - content.measuredWidth) / 2
+        val yOff = -(btnMsMore.height + content.measuredHeight + dp(8))
+        try {
+            if (btnMsMore.isAttachedToWindow) {
+                popup.showAsDropDown(btnMsMore, xOff, yOff)
+            }
+        } catch (_: android.view.WindowManager.BadTokenException) {
+            dismissMoreMenu()
+        } catch (_: IllegalStateException) {
+            dismissMoreMenu()
         }
     }
 
@@ -562,8 +778,8 @@ class AssetDetailActivity : AppCompatActivity() {
         creditCycleSummaryText = null
 
         // 收纳会临时把 includeInNetAsset 置 false；取消收纳时从 includeInNetBeforeArchive 恢复
-        tvActionArchive.text = if (asset.isArchived) "不收纳" else "收纳"
-        tvExcludeHint.visibility = if (!asset.includeInNetAsset) View.VISIBLE else View.GONE
+        layoutArchivedStatus.visibility = if (asset.isArchived) View.VISIBLE else View.GONE
+        tvExcludeHint.visibility = if (!asset.isArchived && !asset.includeInNetAsset) View.VISIBLE else View.GONE
 
         // 理财资产自动弹窗补录本金批次
         checkAndPromptInvestmentLotDraft(asset)
@@ -770,19 +986,85 @@ class AssetDetailActivity : AppCompatActivity() {
         }
     }
 
-    private fun toggleArchiveCurrentAsset() {
+    private fun setCurrentAssetArchived(archived: Boolean, offerUndo: Boolean = true) {
         val asset = currentAsset ?: return
-        val nextArchived = !asset.isArchived
-        lifecycleScope.launch(Dispatchers.IO) {
-            db.assetDao().updateArchived(asset.id, nextArchived)
-            withContext(Dispatchers.Main) {
-                Toast.makeText(
-                    this@AssetDetailActivity,
-                    if (nextArchived) "已将「${asset.name}」移入收纳资产" else "已将「${asset.name}」移出收纳资产",
-                    Toast.LENGTH_SHORT
-                ).show()
+        if (asset.isArchived == archived) return
+        lifecycleScope.launch {
+            withContext(Dispatchers.IO) { db.assetDao().updateArchived(asset.id, archived) }
+            val message = getString(
+                if (archived) R.string.asset_archived_toast else R.string.asset_unarchived_toast,
+                asset.name
+            )
+            val snackbar = Snackbar.make(rvTransactions, message, Snackbar.LENGTH_LONG)
+            if (offerUndo) {
+                snackbar.setAction(R.string.undo) { setCurrentAssetArchived(!archived, offerUndo = false) }
             }
+            snackbar.show()
         }
+    }
+
+    private fun showAssetManageDialog() {
+        val asset = currentAsset ?: return
+        data class ManageOption(
+            val title: String,
+            val desc: String,
+            val highRisk: Boolean = false,
+            val onClick: () -> Unit
+        )
+
+        val options = listOf(
+            if (asset.isArchived) {
+                ManageOption(
+                    title = getString(R.string.asset_action_unarchive),
+                    desc = getString(R.string.asset_action_unarchive_desc),
+                    onClick = { setCurrentAssetArchived(false) }
+                )
+            } else {
+                ManageOption(
+                    title = getString(R.string.asset_action_archive),
+                    desc = getString(R.string.asset_action_archive_desc),
+                    onClick = { setCurrentAssetArchived(true) }
+                )
+            },
+            ManageOption(
+                title = getString(R.string.asset_action_delete),
+                desc = getString(R.string.asset_action_delete_desc),
+                highRisk = true,
+                onClick = { showDeleteConfirmDialog() }
+            )
+        )
+
+        val panel = LayoutInflater.from(this).inflate(R.layout.dialog_book_delete_options, null, false)
+        panel.findViewById<TextView>(R.id.tv_delete_book_title).text =
+            getString(R.string.asset_manage_title, asset.name)
+        panel.findViewById<TextView>(R.id.tv_delete_book_desc).text = getString(
+            if (asset.isArchived) R.string.asset_manage_desc_archived else R.string.asset_manage_desc
+        )
+        val optionsContainer = panel.findViewById<LinearLayout>(R.id.layout_delete_book_options)
+        val dialog = AlertDialog.Builder(ContextThemeWrapper(this, R.style.Theme_TapAccounting))
+            .setView(panel)
+            .create()
+        options.forEach { opt ->
+            val item = LayoutInflater.from(this).inflate(R.layout.item_book_delete_option, optionsContainer, false)
+            item.findViewById<TextView>(R.id.tv_delete_option_title).text = opt.title
+            item.findViewById<TextView>(R.id.tv_delete_option_desc).text = opt.desc
+            item.findViewById<TextView>(R.id.tv_delete_option_risk).visibility =
+                if (opt.highRisk) View.VISIBLE else View.GONE
+            item.setOnClickListener {
+                dialog.dismiss()
+                opt.onClick()
+            }
+            optionsContainer.addView(item)
+        }
+        panel.findViewById<TextView>(R.id.btn_delete_book_cancel).setOnClickListener { dialog.dismiss() }
+
+        OverlayDialogs.showPageCenterDialog(
+            dialog,
+            this,
+            widthRatio = 0.86f,
+            cancelOnTouchOutside = true,
+            useSolidPanelBackground = true
+        )
     }
 
     private fun applyBillBalanceDisplayLocally(show: Boolean, fromTimeMillis: Long) {
@@ -933,6 +1215,9 @@ class AssetDetailActivity : AppCompatActivity() {
         private val typeDetailActionHeader = 0
         private val typeMonthHeader = 1
         private val typeBillItem = 2
+        private val typeGroupItem = 3
+        private val expandedGroupIds = mutableSetOf<String>()
+        private var lastSubmittedBills: List<Bill> = emptyList()
 
         private val rows = mutableListOf<Any>()
         private val monthKeyFormat = SimpleDateFormat("yyyy-MM", Locale.getDefault())
@@ -974,34 +1259,28 @@ class AssetDetailActivity : AppCompatActivity() {
                     var monthlyOutflow = 0.0
 
                     monthBills.forEach { bill ->
-                        when {
-                            bill.subType == Bill.SUBTYPE_REFUND -> {
-                                monthlyInflow += amountInAssetCurrency(bill, assetId, isInflow = true)
-                            }
-
-                            bill.type == Bill.TYPE_EXPENSE -> {
-                                monthlyOutflow += amountInAssetCurrency(bill, assetId, isInflow = false)
-                            }
-
-                            bill.type == Bill.TYPE_INCOME -> {
-                                monthlyInflow += amountInAssetCurrency(bill, assetId, isInflow = true)
-                            }
-
-                            bill.type == Bill.TYPE_TRANSFER -> {
-                                val isTransferOut = bill.accountId == assetId && bill.toAccountId != assetId
-                                val isTransferIn = bill.toAccountId == assetId && bill.accountId != assetId
-                                if (isTransferOut) monthlyOutflow += amountInAssetCurrency(bill, assetId, isInflow = false)
-                                if (isTransferIn) monthlyInflow += amountInAssetCurrency(bill, assetId, isInflow = true)
-                            }
-                        }
+                        val (inflow, outflow) = assetFlow(bill)
+                        monthlyInflow += inflow
+                        monthlyOutflow += outflow
                     }
 
                     val monthLabel = formatMonthHeaderLabel(Date(monthBills.first().time))
                     rows.add(MonthHeaderRow(monthLabel, monthlyInflow, monthlyOutflow))
-                    monthBills.forEach { rows.add(BillRow(it)) }
+                    PaymentGroups.arrange(monthBills).forEach { item ->
+                        when (item) {
+                            is PaymentGroups.Item.Single -> rows.add(BillRow(item.bill))
+                            is PaymentGroups.Item.Group -> {
+                                rows.add(GroupRow(item.groupId, item.bills))
+                                if (item.groupId in expandedGroupIds) {
+                                    item.bills.forEach { rows.add(BillRow(it, inGroup = true)) }
+                                }
+                            }
+                        }
+                    }
                 }
             }
-            val availableIds = rows.mapNotNull { (it as? BillRow)?.bill?.id }.toSet()
+            lastSubmittedBills = newList
+            val availableIds = getSelectableBills().map { it.id }.toSet()
             selectedBills.removeAll { it.id !in availableIds }
             if (getSelectableBills().isEmpty()) {
                 isMultiSelectMode = false
@@ -1018,7 +1297,43 @@ class AssetDetailActivity : AppCompatActivity() {
             }
         }
 
-        fun getSelectableBills(): List<Bill> = rows.mapNotNull { (it as? BillRow)?.bill }
+        fun getSelectableBills(): List<Bill> = billsInRows(rows)
+
+        private fun billsInRows(source: Iterable<Any>): List<Bill> = source.flatMap { row ->
+            when (row) {
+                is BillRow -> listOf(row.bill)
+                is GroupRow -> row.bills
+                else -> emptyList()
+            }
+        }.distinctBy { it.id }
+
+        private fun toggleGroupExpanded(groupId: String) {
+            if (!expandedGroupIds.add(groupId)) expandedGroupIds.remove(groupId)
+            submitList(lastSubmittedBills)
+        }
+
+        private fun notifySelectionChanged() {
+            notifyItemRangeChanged(0, itemCount, PAYLOAD_SELECTION_CHANGE)
+            onSelectionChanged?.invoke(selectedBills.size)
+        }
+
+        private fun isListItem(row: Any?): Boolean = row is BillRow || row is GroupRow
+
+        private fun bindRowBackground(itemView: View, position: Int) {
+            val hasMonthHeaderAbove = rows.getOrNull(position - 1) is MonthHeaderRow
+            val isGroupStart = !isListItem(rows.getOrNull(position - 1))
+            val isGroupEnd = !isListItem(rows.getOrNull(position + 1))
+            itemView.setBackgroundResource(
+                when {
+                    isGroupStart && isGroupEnd ->
+                        if (hasMonthHeaderAbove) R.drawable.bg_bill_group_bottom else R.drawable.bg_bill_group_single
+                    isGroupStart ->
+                        if (hasMonthHeaderAbove) R.drawable.bg_bill_group_middle else R.drawable.bg_bill_group_top
+                    isGroupEnd -> R.drawable.bg_bill_group_bottom
+                    else -> R.drawable.bg_bill_group_middle
+                }
+            )
+        }
 
         fun getSelectedBills(): List<Bill> = selectedBills.toList()
 
@@ -1045,11 +1360,12 @@ class AssetDetailActivity : AppCompatActivity() {
         }
 
         private fun selectableBillsForSection(headerPosition: Int): List<Bill> {
-            return rows.asSequence()
-                .drop(headerPosition + 1)
-                .takeWhile { it !is MonthHeaderRow }
-                .mapNotNull { (it as? BillRow)?.bill }
-                .toList()
+            return billsInRows(
+                rows.asSequence()
+                    .drop(headerPosition + 1)
+                    .takeWhile { it !is MonthHeaderRow }
+                    .asIterable()
+            )
         }
 
         private fun sectionSelectionState(headerPosition: Int): Pair<Boolean, Boolean> {
@@ -1057,11 +1373,6 @@ class AssetDetailActivity : AppCompatActivity() {
             if (bills.isEmpty()) return false to false
             val selectedCount = bills.count { selectedBills.contains(it) }
             return (selectedCount == bills.size) to (selectedCount in 1 until bills.size)
-        }
-
-        private fun updateSectionHeaderNear(position: Int) {
-            val headerPosition = (position downTo 0).firstOrNull { rows.getOrNull(it) is MonthHeaderRow } ?: return
-            notifyItemChanged(headerPosition, PAYLOAD_HEADER_SELECTION_CHANGE)
         }
 
         private fun setSectionSelection(headerPosition: Int, checked: Boolean) {
@@ -1085,6 +1396,7 @@ class AssetDetailActivity : AppCompatActivity() {
                 is DetailActionHeaderRow -> typeDetailActionHeader
                 is MonthHeaderRow -> typeMonthHeader
                 is BillRow -> typeBillItem
+                is GroupRow -> typeGroupItem
                 else -> typeBillItem
             }
         }
@@ -1098,6 +1410,7 @@ class AssetDetailActivity : AppCompatActivity() {
                 typeMonthHeader -> MonthHeaderViewHolder(
                     inflater.inflate(R.layout.item_asset_month_header, parent, false)
                 )
+                typeGroupItem -> GroupViewHolder(inflater.inflate(R.layout.item_home_transaction, parent, false))
                 else -> BillViewHolder(inflater.inflate(R.layout.item_home_transaction, parent, false))
             }
         }
@@ -1106,7 +1419,8 @@ class AssetDetailActivity : AppCompatActivity() {
             when (val row = rows[position]) {
                 is DetailActionHeaderRow -> (holder as DetailActionHeaderViewHolder).bind()
                 is MonthHeaderRow -> (holder as MonthHeaderViewHolder).bind(row, position)
-                is BillRow -> (holder as BillViewHolder).bind(row.bill, position)
+                is BillRow -> (holder as BillViewHolder).bind(row, position)
+                is GroupRow -> (holder as GroupViewHolder).bind(row, position)
             }
         }
 
@@ -1128,6 +1442,19 @@ class AssetDetailActivity : AppCompatActivity() {
                     }
                     if (payloads.contains(PAYLOAD_BALANCE_DISPLAY_CHANGE)) {
                         holder.updateBalanceAfter(row.bill)
+                        return
+                    }
+                }
+            }
+            if (payloads.isNotEmpty() && holder is GroupViewHolder) {
+                val row = rows.getOrNull(position) as? GroupRow
+                if (row != null) {
+                    if (payloads.contains(PAYLOAD_MODE_CHANGE) || payloads.contains(PAYLOAD_SELECTION_CHANGE)) {
+                        holder.updateMode(row)
+                        return
+                    }
+                    if (payloads.contains(PAYLOAD_BALANCE_DISPLAY_CHANGE)) {
+                        holder.updateBalanceAfter(row)
                         return
                     }
                 }
@@ -1286,7 +1613,8 @@ class AssetDetailActivity : AppCompatActivity() {
                 tvAsset.visibility = View.VISIBLE
             }
 
-            fun bind(bill: Bill, position: Int) {
+            fun bind(row: BillRow, position: Int) {
+                val bill = row.bill
                 boundBillId = bill.id
                 cancelIconLoad()
                 val isTransfer = bill.type == Bill.TYPE_TRANSFER
@@ -1300,20 +1628,13 @@ class AssetDetailActivity : AppCompatActivity() {
                 val symbol = CurrencyManager.getSymbol(displayCurrency)
                 val displayAmount = amountForAssetRow(bill, assetId)
 
-                val hasMonthHeaderAbove = rows.getOrNull(position - 1) is MonthHeaderRow
-                val prevIsBill = rows.getOrNull(position - 1) is BillRow
-                val nextIsBill = rows.getOrNull(position + 1) is BillRow
-                val isGroupStart = !prevIsBill
-                val isGroupEnd = !nextIsBill
-                itemView.setBackgroundResource(
-                    when {
-                        isGroupStart && isGroupEnd ->
-                            if (hasMonthHeaderAbove) R.drawable.bg_bill_group_bottom else R.drawable.bg_bill_group_single
-                        isGroupStart ->
-                            if (hasMonthHeaderAbove) R.drawable.bg_bill_group_middle else R.drawable.bg_bill_group_top
-                        isGroupEnd -> R.drawable.bg_bill_group_bottom
-                        else -> R.drawable.bg_bill_group_middle
-                    }
+                bindRowBackground(itemView, position)
+                val density = itemView.resources.displayMetrics.density
+                itemView.setPaddingRelative(
+                    ((if (row.inGroup) 38 else 14) * density).toInt(),
+                    itemView.paddingTop,
+                    itemView.paddingEnd,
+                    itemView.paddingBottom
                 )
                 iconContainer.setBackgroundResource(
                     when {
@@ -1444,31 +1765,138 @@ class AssetDetailActivity : AppCompatActivity() {
                         } else {
                             selectedBills.add(bill)
                         }
-                        val pos = adapterPosition
-                        if (pos != RecyclerView.NO_POSITION) {
-                            notifyItemChanged(pos, PAYLOAD_SELECTION_CHANGE)
-                            updateSectionHeaderNear(pos)
-                        }
-                        onSelectionChanged?.invoke(selectedBills.size)
+                        notifySelectionChanged()
                     } else {
                         onBillItemClick?.invoke(bill)
                     }
                 }
                 itemView.setOnLongClickListener {
-                    if (!isMultiSelectMode) {
-                        isMultiSelectMode = true
-                        selectedBills.clear()
-                        selectedBills.add(bill)
-                        notifyItemRangeChanged(0, itemCount, PAYLOAD_MODE_CHANGE)
-                    } else {
-                        selectedBills.add(bill)
-                        val pos = adapterPosition
-                        if (pos != RecyclerView.NO_POSITION) {
-                            notifyItemChanged(pos, PAYLOAD_SELECTION_CHANGE)
-                            updateSectionHeaderNear(pos)
-                        }
+                    enterOrExtendSelection(listOf(bill))
+                    true
+                }
+            }
+        }
+
+        private fun enterOrExtendSelection(bills: List<Bill>) {
+            if (!isMultiSelectMode) {
+                isMultiSelectMode = true
+                selectedBills.clear()
+                selectedBills.addAll(bills)
+                notifyItemRangeChanged(0, itemCount, PAYLOAD_MODE_CHANGE)
+                onSelectionChanged?.invoke(selectedBills.size)
+            } else {
+                selectedBills.addAll(bills)
+                notifySelectionChanged()
+            }
+        }
+
+        inner class GroupViewHolder(v: View) : RecyclerView.ViewHolder(v) {
+            private val tvCategory = v.findViewById<TextView>(R.id.tv_bill_category)
+            private val tvDetail = v.findViewById<TextView>(R.id.tv_bill_detail)
+            private val tvAmount = v.findViewById<TextView>(R.id.tv_bill_amount)
+            private val tvAsset = v.findViewById<TextView>(R.id.tv_bill_asset)
+            private val ivIcon = v.findViewById<ImageView>(R.id.iv_bill_category_icon)
+            private val iconContainer = v.findViewById<View>(R.id.layout_icon_container)
+            private val cbSelect = v.findViewById<CheckBox>(R.id.cb_bill_select)
+
+            fun updateMode(row: GroupRow) {
+                cbSelect.visibility = if (isMultiSelectMode) View.VISIBLE else View.GONE
+                cbSelect.isChecked = row.bills.all { selectedBills.contains(it) }
+            }
+
+            /** 对账看的是这一笔扣款后的余额，即组内最晚入账那一条之后的余额。 */
+            fun updateBalanceAfter(row: GroupRow) {
+                val asset = currentAsset
+                val latest = row.bills.first()
+                val label = if (
+                    asset != null && AssetBillBalanceDisplay.shouldShowBalanceForBill(
+                        asset,
+                        latest.time,
+                        allAssetBills,
+                        assetId,
+                        asset.name
+                    )
+                ) {
+                    balanceAfterByBillId[latest.id]?.let {
+                        AssetBillBalanceHistory.formatBalanceAfterLabel(it, asset.currency)
                     }
-                    onSelectionChanged?.invoke(selectedBills.size)
+                } else {
+                    null
+                }
+                tvAsset.text = label.orEmpty()
+                tvAsset.visibility = if (label == null) View.GONE else View.VISIBLE
+            }
+
+            fun bind(row: GroupRow, position: Int) {
+                bindRowBackground(itemView, position)
+                val density = itemView.resources.displayMetrics.density
+                itemView.setPaddingRelative(
+                    (14 * density).toInt(),
+                    itemView.paddingTop,
+                    itemView.paddingEnd,
+                    itemView.paddingBottom
+                )
+                var inflow = 0.0
+                var outflow = 0.0
+                row.bills.forEach { bill ->
+                    val (billInflow, billOutflow) = assetFlow(bill)
+                    inflow += billInflow
+                    outflow += billOutflow
+                }
+                val net = inflow - outflow
+                val isOutflow = net < 0
+                val currency = currentAsset?.currency ?: row.bills.first().currency
+                tvAmount.text = (if (isOutflow) "-" else "+") +
+                    CurrencyManager.getSymbol(currency) +
+                    String.format(Locale.getDefault(), "%.2f", kotlin.math.abs(net))
+                tvAmount.setTextColor(if (isOutflow) BillColors.expense else BillColors.income)
+
+                val categories = row.bills
+                    .map { BillDisplayFormatter.formatCategoryByPreference(it.categoryName, false) }
+                    .filter { it.isNotBlank() }
+                    .distinct()
+                tvCategory.text = categories.take(3).joinToString("、") + if (categories.size > 3) "等" else ""
+                tvCategory.setTextColor(Color.parseColor("#333333"))
+
+                val expanded = row.groupId in expandedGroupIds
+                tvDetail.text = getString(
+                    R.string.payment_group_detail_fmt,
+                    row.bills.size,
+                    dateFormat.format(Date(row.bills.first().time))
+                ) + if (expanded) " ▴" else " ▾"
+                tvDetail.visibility = View.VISIBLE
+
+                iconContainer.setBackgroundResource(
+                    if (isOutflow) R.drawable.bg_circle_expense_soft else R.drawable.bg_circle_income_soft
+                )
+                iconContainer.layoutParams = iconContainer.layoutParams.apply {
+                    width = (44 * density).toInt()
+                    height = (44 * density).toInt()
+                }
+                ivIcon.layoutParams = ivIcon.layoutParams.apply {
+                    width = (21 * density).toInt()
+                    height = (21 * density).toInt()
+                }
+                ivIcon.setImageResource(R.drawable.ic_insight_receipt)
+                ivIcon.setColorFilter(if (isOutflow) BillColors.expense else BillColors.income)
+
+                updateMode(row)
+                updateBalanceAfter(row)
+
+                itemView.setOnClickListener {
+                    if (isMultiSelectMode) {
+                        if (row.bills.all { selectedBills.contains(it) }) {
+                            selectedBills.removeAll(row.bills.toSet())
+                        } else {
+                            selectedBills.addAll(row.bills)
+                        }
+                        notifySelectionChanged()
+                    } else {
+                        toggleGroupExpanded(row.groupId)
+                    }
+                }
+                itemView.setOnLongClickListener {
+                    enterOrExtendSelection(row.bills)
                     true
                 }
             }
@@ -1519,6 +1947,21 @@ class AssetDetailActivity : AppCompatActivity() {
             else -> false
         }
         return amountInAssetCurrency(bill, ownerAssetId, isInflow)
+    }
+
+    /** 一条账单对本资产造成的（流入, 流出），资产币种；月度小计、多选合计、扣款组合计共用。 */
+    private fun assetFlow(bill: Bill): Pair<Double, Double> = when {
+        bill.subType == Bill.SUBTYPE_REFUND -> amountInAssetCurrency(bill, assetId, isInflow = true) to 0.0
+        bill.type == Bill.TYPE_EXPENSE -> 0.0 to amountInAssetCurrency(bill, assetId, isInflow = false)
+        bill.type == Bill.TYPE_INCOME -> amountInAssetCurrency(bill, assetId, isInflow = true) to 0.0
+        bill.type == Bill.TYPE_TRANSFER -> {
+            val isTransferOut = bill.accountId == assetId && bill.toAccountId != assetId
+            val isTransferIn = bill.toAccountId == assetId && bill.accountId != assetId
+            val inflow = if (isTransferIn) amountInAssetCurrency(bill, assetId, isInflow = true) else 0.0
+            val outflow = if (isTransferOut) amountInAssetCurrency(bill, assetId, isInflow = false) else 0.0
+            inflow to outflow
+        }
+        else -> 0.0 to 0.0
     }
 
     private fun baseOriginalAmount(bill: Bill): Double {

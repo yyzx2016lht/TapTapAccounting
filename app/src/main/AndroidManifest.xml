@@ -191,8 +191,8 @@
     <activity android:name=".ui.import.ImportOnboardingActivity" android:label="@string/import_onboarding_title" />
     <activity android:name=".ui.import.ImportReviewActivity" android:label="@string/import_review_title" />
     <activity android:name=".ui.budget.BudgetManageActivity" android:label="@string/budget_manage_title" />
+    <activity android:name=".ui.budget.BudgetYearActivity" android:label="@string/budget_yearly_title" />
     <activity android:name=".ui.recurring.RecurringBillsActivity" android:label="@string/recurring_bills_title" />
-    <activity android:name=".ui.activity.AssetReconcileActivity" android:label="@string/reconcile_title" />
 <!-- AiPromptEditorActivity removed: custom prompt editing is no longer supported -->
         <activity
             android:name=".ChatActivity"

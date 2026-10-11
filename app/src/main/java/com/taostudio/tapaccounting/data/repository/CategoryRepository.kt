@@ -109,6 +109,12 @@ class CategoryRepository(
     suspend fun updateCategory(category: Category) {
         val old = categoryDao.getCategoryById(category.id)
         categoryDao.updateCategory(category)
+        // 换了图标：刷该分类下账单的图标快照（首页监听 bills 变化后会重绑，切回来立即生效），
+        // 并递增版本号让各列表页的内存图标缓存失效。
+        if (old != null && old.iconId != category.iconId) {
+            billDao?.syncCateIconByCategoryId(category.id, category.iconId)
+            CategoryIcons.bumpRevision()
+        }
         if (old == null || old.name == category.name) return
         // 无外键的历史账单：按旧叶子名就地替换（含「祖先改名」时旧叶子出现在路径开头的情形）
         billDao?.syncCategoryNameByOldName(old.name, category.name)
@@ -194,6 +200,8 @@ class CategoryRepository(
         val children = categoryDao.getAllCategoriesList().filter { it.parentId == id }
         children.forEach { categoryDao.deleteById(it.id) }
         categoryDao.deleteById(id)
+        // 删除后这些分类的图标解析结果会变（退回首字/空），缓存不能沿用
+        CategoryIcons.bumpRevision()
     }
 
     /**

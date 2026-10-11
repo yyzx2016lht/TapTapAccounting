@@ -20,6 +20,7 @@ object AddBillEntrySheetLauncher {
     fun show(
         activity: AppCompatActivity,
         prefillData: JSONObject? = null,
+        defaultTimeMillis: Long? = null,
         onShow: (() -> Unit)? = null,
         onDismiss: (() -> Unit)? = null
     ) {
@@ -31,7 +32,8 @@ object AddBillEntrySheetLauncher {
         val formController = AccountingFormController(
             ctx = activity,
             rootView = view,
-            onCloseRequest = { _ -> bottomSheet.dismiss() }
+            onCloseRequest = { _ -> bottomSheet.dismiss() },
+            defaultTimeMillis = defaultTimeMillis
         )
         prefillData?.let { formController.fillDataToUi(it, showToast = false) }
 

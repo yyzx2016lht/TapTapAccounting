@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-8"?>
+<com.google.android.material.card.MaterialCardView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/card_stats_insights"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginHorizontal="@dimen/stats_card_margin_h"
+    android:layout_marginTop="@dimen/stats_card_margin_top"
+    android:visibility="gone"
+    app:cardBackgroundColor="@color/stats_card_bg"
+    app:cardCornerRadius="@dimen/stats_card_radius"
+    app:cardElevation="0dp"
+    app:strokeColor="@color/stats_card_stroke"
+    app:strokeWidth="0.5dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="@dimen/stats_card_padding">
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:text="@string/ai_page_insight_title"
+            android:textColor="@color/stats_segmented_text_active"
+            android:textSize="@dimen/text_size_16"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/tv_insight_comparison"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/space_4"
+            android:gravity="center"
+            android:textColor="@color/text_tertiary"
+            android:textSize="@dimen/text_size_12" />
+
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/rv_insight_cards"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/space_8"
+            android:nestedScrollingEnabled="false"
+            android:overScrollMode="never" />
+
+        <TextView
+            android:id="@+id/tv_insight_empty"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/space_12"
+            android:gravity="center"
+            android:paddingBottom="@dimen/space_4"
+            android:text="@string/insight_empty_hint"
+            android:textColor="@color/stats_empty_text"
+            android:textSize="@dimen/text_size_13"
+            android:visibility="gone" />
+    </LinearLayout>
+</com.google.android.material.card.MaterialCardView>

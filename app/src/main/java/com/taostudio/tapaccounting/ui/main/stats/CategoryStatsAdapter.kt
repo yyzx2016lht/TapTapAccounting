@@ -20,6 +20,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import com.taostudio.tapaccounting.AmountFormatHelper
+import com.taostudio.tapaccounting.CategoryIcons
 import com.taostudio.tapaccounting.CategoryIconHelper
 import com.taostudio.tapaccounting.R
 import java.util.Locale
@@ -44,6 +45,8 @@ class CategoryStatsAdapter(
     private var listRenderSeq = 0L
     private val iconUrlCache = mutableMapOf<String, String>()
     private val loadingIconKeys = mutableSetOf<String>()
+    // 缓存对应的分类版本号；分类换图标/被删除后版本号会变，届时整表清空重查。
+    private var iconCacheRevision = -1
     private val adapterScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
     fun setColors(colors: List<Int>) {
@@ -204,6 +207,13 @@ class CategoryStatsAdapter(
         imageView.imageTintList = null
         imageView.setImageDrawable(null)
 
+        // 分类换过图标/被删除后，缓存里按名字存的旧图标要整表作废，重新解析
+        if (iconCacheRevision != CategoryIcons.revision) {
+            iconCacheRevision = CategoryIcons.revision
+            iconUrlCache.clear()
+            loadingIconKeys.clear()
+        }
+
         val cachedIconUrl = iconUrlCache[iconKey]
         if (cachedIconUrl != null) {
             if (cachedIconUrl.isNotEmpty()) {
@@ -242,6 +252,12 @@ class CategoryStatsAdapter(
         val type = if (isExpense) 0 else 1
         val names = newItems.map { it.categoryName }.distinct()
         if (names.isEmpty()) return
+        // 分类版本号变了：先清缓存再预热，否则下面的 containsKey 会把旧图标当成已缓存跳过
+        if (iconCacheRevision != CategoryIcons.revision) {
+            iconCacheRevision = CategoryIcons.revision
+            iconUrlCache.clear()
+            loadingIconKeys.clear()
+        }
         adapterScope.launch(Dispatchers.IO) {
             val context = lastBoundContext ?: return@launch
             val updates = mutableMapOf<String, String>()

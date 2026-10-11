@@ -463,6 +463,7 @@
                                 android:checked="true"/>
                         </RelativeLayout>
                         <TextView
+                            android:id="@+id/tv_include_net_hint"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:layout_marginStart="16dp"

@@ -38,6 +38,7 @@ import androidx.fragment.app.Fragment
 import com.google.android.material.bottomnavigation.BottomNavigationView
 import com.google.android.material.floatingactionbutton.FloatingActionButton
 import com.google.android.material.snackbar.Snackbar
+import com.taostudio.tapaccounting.logic.BillEntryDefaults
 import com.taostudio.tapaccounting.ui.main.SharedYearMonthSession
 import com.taostudio.tapaccounting.ui.common.AddBillEntrySheetLauncher
 import com.taostudio.tapaccounting.ui.common.UiMotion
@@ -1165,8 +1166,15 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showAddBillBottomSheet() {
+        // 默认日期跟随正在浏览的月份：在 9 月列表里记的一笔，不应该掉进 10 月而"消失"。
+        val (viewedYear, viewedMonth) = SharedYearMonthSession.getYearMonth()
         AddBillEntrySheetLauncher.show(
             activity = this,
+            defaultTimeMillis = BillEntryDefaults.defaultTimeForViewedMonth(
+                nowMillis = System.currentTimeMillis(),
+                viewedYear = viewedYear,
+                viewedMonth = viewedMonth
+            ),
             onShow = { fabApp?.hide() },
             onDismiss = { updateFabVisibility() }
         )

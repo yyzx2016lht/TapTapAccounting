@@ -211,6 +211,7 @@ class HomeFragment : Fragment() {
     private var hasPlayedInitialStagger: Boolean = false
 
     private lateinit var layoutMultiSelectActions: View
+    private lateinit var layoutMultiSelectSummary: View
     private lateinit var btnMsCancel: View
     private lateinit var btnMsSelectAll: View
     private lateinit var btnMsDelete: View
@@ -369,6 +370,7 @@ class HomeFragment : Fragment() {
         btnMsDelete = view.findViewById(R.id.btn_ms_delete)
         btnMsMoveBook = view.findViewById(R.id.btn_ms_move_book)
         btnMsExcludeStats = view.findViewById(R.id.btn_ms_exclude_stats)
+        layoutMultiSelectSummary = view.findViewById(R.id.layoutMultiSelectSummary)
         multiSelectActionsBaseBottomMargin =
             (layoutMultiSelectActions.layoutParams as? ViewGroup.MarginLayoutParams)?.bottomMargin ?: 0
         multiSelectController = HomeMultiSelectController(
@@ -447,6 +449,8 @@ class HomeFragment : Fragment() {
             rvTransactions = rvTransactions,
             layoutEmptyView = layoutEmptyView,
             layoutMultiSelectActions = layoutMultiSelectActions,
+            multiSelectSummaryLayout = layoutMultiSelectSummary,
+            setBannerPinnedForMultiSelect = { setHomeBannerPinnedForMultiSelect(it) },
             btnMsDelete = btnMsDelete,
             btnMsExcludeStats = btnMsExcludeStats,
             swipeRefreshLayout = swipeRefreshLayout,
@@ -1049,6 +1053,28 @@ class HomeFragment : Fragment() {
 
     private fun setupMultiSelectActionsBottomOffset() {
         multiSelectController.setupMultiSelectActionsBottomOffset()
+    }
+
+    /**
+     * 多选期间固定 banner（暂停随滚动折叠），让"已选 N 笔"状态条始终可见；
+     * 退出多选后恢复原有滚动折叠行为。
+     */
+    private fun setHomeBannerPinnedForMultiSelect(pinned: Boolean) {
+        val appBar = homeAppBar ?: return
+        val lp = headerBannerLayout.layoutParams
+            as? com.google.android.material.appbar.AppBarLayout.LayoutParams ?: return
+        val flags = if (pinned) {
+            0
+        } else {
+            com.google.android.material.appbar.AppBarLayout.LayoutParams.SCROLL_FLAG_SCROLL or
+                com.google.android.material.appbar.AppBarLayout.LayoutParams.SCROLL_FLAG_EXIT_UNTIL_COLLAPSED
+        }
+        if (lp.scrollFlags != flags) {
+            lp.scrollFlags = flags
+            headerBannerLayout.layoutParams = lp
+            // 首次进入多选时如果 banner 正处于折叠态，展开它；后续勾选变化不再重播动画。
+            if (pinned) appBar.setExpanded(true, true)
+        }
     }
 
     private fun setupRecyclerView() {

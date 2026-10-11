@@ -31,6 +31,7 @@ class BookAccountAdapter(
     private var selectedBook: String = ""
     private var defaultBook: String = BookAccountManager.DEFAULT_BOOK
     private val collapsedBooks = mutableSetOf<String>()
+    private var summaries: Map<String, String> = emptyMap()
     private var openedPosition: Int = RecyclerView.NO_POSITION
     private var editingPosition: Int = RecyclerView.NO_POSITION
     private var recyclerView: RecyclerView? = null
@@ -75,6 +76,13 @@ class BookAccountAdapter(
         openedPosition = items.indexOf(openedName).takeIf { it >= 0 } ?: RecyclerView.NO_POSITION
         editingPosition = items.indexOf(editingName).takeIf { it >= 0 } ?: RecyclerView.NO_POSITION
         notifyDataSetChanged()
+    }
+
+    /** 账本名（规范化后）到摘要行文字，例如「本月支出 ¥1,280 · 23 笔」。 */
+    fun submitSummaries(next: Map<String, String>) {
+        if (summaries == next) return
+        summaries = next
+        notifyItemRangeChanged(0, items.size)
     }
 
     fun onItemMove(fromPos: Int, toPos: Int): Boolean {
@@ -165,8 +173,11 @@ class BookAccountAdapter(
 
     inner class BookViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
         private val foreground: View = itemView.findViewById(R.id.layout_foreground)
+        private val layoutText: View = itemView.findViewById(R.id.layout_book_text)
         private val tvName: TextView = itemView.findViewById(R.id.tv_book_name)
+        private val tvSummary: TextView = itemView.findViewById(R.id.tv_book_summary)
         private val etName: EditText = itemView.findViewById(R.id.et_book_name)
+        private val tvDefaultTag: TextView = itemView.findViewById(R.id.tv_book_default_tag)
         private val ivSelected: TextView = itemView.findViewById(R.id.iv_book_selected)
         private val btnSetDefaultInline: TextView = itemView.findViewById(R.id.btn_book_set_default_inline)
         private val btnManage: ImageView = itemView.findViewById(R.id.btn_book_manage)
@@ -425,10 +436,6 @@ class BookAccountAdapter(
                 tvName.setTextColor(android.graphics.Color.parseColor("#8E9CAF"))
                 btnManage.isEnabled = false
                 btnManage.alpha = 0.35f
-            } else if (isDefaultBook) {
-                tvName.setTextColor(android.graphics.Color.parseColor("#1A73E8"))
-                btnManage.isEnabled = true
-                btnManage.alpha = 1f
             } else {
                 tvName.setTextColor(android.graphics.Color.parseColor(if (isCollapsedBook) "#6E7D94" else "#333333"))
                 btnManage.isEnabled = true
@@ -436,8 +443,13 @@ class BookAccountAdapter(
             }
             btnManage.contentDescription = "manage"
 
+            val summary = summaries[normalized]
+            tvSummary.text = summary
+            tvSummary.visibility = if (summary.isNullOrEmpty()) View.GONE else View.VISIBLE
+            tvDefaultTag.visibility = if (isDefaultBook && !editing) View.VISIBLE else View.GONE
+
             if (editing) {
-                tvName.visibility = View.GONE
+                layoutText.visibility = View.GONE
                 etName.visibility = View.VISIBLE
                 if (!isAllBook && !isCollapsedGroup) {
                     btnSetDefaultInline.visibility = View.VISIBLE
@@ -459,7 +471,7 @@ class BookAccountAdapter(
                     }
                 }
             } else {
-                tvName.visibility = View.VISIBLE
+                layoutText.visibility = View.VISIBLE
                 etName.visibility = View.GONE
                 btnSetDefaultInline.visibility = View.GONE
             }

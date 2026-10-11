@@ -63,7 +63,14 @@ class BudgetService(
         val pace: BudgetPace,
         val riskReason: BudgetRiskReason,
         val riskScore: Double
-    )
+    ) {
+        /**
+         * 已结束的月份（剩余天数为 0）。
+         * 此时"每天可用"没有意义（dailyRemainingAllowance 恒为 0），
+         * 各界面应改用"本月已结束"类文案，避免显示成"每天 ¥0"。
+         */
+        val isMonthClosed: Boolean get() = remainingDays <= 0
+    }
 
     data class BudgetOverview(
         val budget: Budget,

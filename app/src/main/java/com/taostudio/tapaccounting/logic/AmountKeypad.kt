@@ -15,12 +15,17 @@ import com.taostudio.tapaccounting.R
  *
  * 主表单（[AccountingFormController]）与金额编辑弹窗（[AmountKeypadDialog]）都使用本类，
  * 规则只维护一份。宿主负责“确定”键的行为（[confirmButton]）以及键盘容器的显隐。
+ *
+ * @param requireValidInputForConfirm 确定键是否要求输入可求值：
+ *   金额弹窗需要在有效值时才可提交（默认 true）；主表单的确定键只负责收起键盘、
+ *   不提交账单，因此允许空/半成品输入时直接收起（传 false），免得用户想先改别的信息却被卡住。
  */
 class AmountKeypad(
     private val container: View,
     private val editText: EditText,
     private val maxDecimals: () -> Int = { AmountInputEditor.DEFAULT_MAX_DECIMALS },
     private val hapticsEnabled: () -> Boolean = { true },
+    private val requireValidInputForConfirm: Boolean = true,
     private val previewView: TextView? = container.findViewById(R.id.tv_amount_preview)
 ) {
 
@@ -132,7 +137,7 @@ class AmountKeypad(
 
     /** 刷新确定键可用态与表达式预览。 */
     fun refresh() {
-        val enabled = isValid()
+        val enabled = !requireValidInputForConfirm || isValid()
         confirmButton?.isEnabled = enabled
         confirmButton?.alpha = if (enabled) 1f else 0.45f
         updatePreview()

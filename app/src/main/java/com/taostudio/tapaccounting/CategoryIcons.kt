@@ -19,6 +19,22 @@ object CategoryIcons {
     const val PLACEHOLDER_URL = "http://res3.qianjiapp.com/cateic_other.png"
 
     /**
+     * 分类图标/结构的变更版本号。
+     *
+     * 各列表页把「分类名+类型 → 图标 URL」缓存在内存里（如 HomeAdapter.iconUrlCache）。
+     * 分类改名会改变缓存键、自然失效，但**换图标不会**；这里由 CategoryRepository 在
+     * 分类变更时递增版本号，显示层比对后清缓存，保证改完图标能实时刷出来。
+     */
+    @Volatile
+    private var revisionCounter = 0
+
+    val revision: Int get() = revisionCounter
+
+    fun bumpRevision() {
+        revisionCounter++
+    }
+
+    /**
      * 「其他 / 其它」没选手动图标时使用的四格图标。
      * 图形与添加分类编辑区的默认预览 `ic_profile_category` 相同，
      * 由 [SquareGridIcon] 按同一比例画出来，这样能跟其他分类图标一起染色。

@@ -80,6 +80,9 @@ object ExpenseWidgetUpdater {
         return providerClasses.firstOrNull { (_, clazz) -> clazz.name == provider }?.first
     }
 
+    fun providerOf(context: Context, size: WidgetSize): ComponentName =
+        ComponentName(context.applicationContext, providerClasses.first { it.first == size }.second)
+
     /** App 内"桌面小组件"设置页需要枚举当前所有已放置的 widgetId。 */
     fun allPlacedWidgetIds(context: Context): List<Pair<Int, WidgetSize>> {
         val manager = AppWidgetManager.getInstance(context.applicationContext)

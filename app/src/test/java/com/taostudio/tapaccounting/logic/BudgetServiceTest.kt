@@ -1,6 +1,8 @@
 package com.taostudio.tapaccounting.logic
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.util.Calendar
 
@@ -67,6 +69,47 @@ class BudgetServiceTest {
         assertEquals(-200.0, progress.remaining, 0.0001)
         assertEquals(0.0, progress.dailyRemainingAllowance, 0.0001)
         assertEquals(BudgetService.BudgetRiskReason.EXCEEDED, progress.riskReason)
+    }
+
+    @Test
+    fun buildProgress_marksPastMonthClosedAndKeepsRemaining() {
+        // 10 月查看 9 月预算：月份已结束、还有剩余。
+        // 此时每日额度恒为 0，界面据 isMonthClosed 换成"本月已结束"，不再显示"每天 ¥0"。
+        val progress = BudgetService.buildProgress(
+            budgetAmount = 1500.0,
+            usedAmount = 1420.19,
+            alertThreshold = 0.8,
+            yearMonth = "2026-09",
+            nowMillis = millis(2026, 10, 10)
+        )
+
+        assertEquals(0, progress.remainingDays)
+        assertTrue(progress.isMonthClosed)
+        assertEquals(79.81, progress.remaining, 0.0001)
+        assertEquals(0.0, progress.dailyRemainingAllowance, 0.0001)
+    }
+
+    @Test
+    fun buildProgress_currentAndFutureMonthsAreNotClosed() {
+        val current = BudgetService.buildProgress(
+            budgetAmount = 1000.0,
+            usedAmount = 200.0,
+            alertThreshold = 0.8,
+            yearMonth = "2026-10",
+            nowMillis = millis(2026, 10, 10)
+        )
+        val future = BudgetService.buildProgress(
+            budgetAmount = 1000.0,
+            usedAmount = 0.0,
+            alertThreshold = 0.8,
+            yearMonth = "2026-11",
+            nowMillis = millis(2026, 10, 10)
+        )
+
+        assertFalse(current.isMonthClosed)
+        assertFalse(future.isMonthClosed)
+        assertTrue(current.dailyRemainingAllowance > 0.0)
+        assertTrue(future.dailyRemainingAllowance > 0.0)
     }
 
     private fun millis(year: Int, month: Int, day: Int): Long {

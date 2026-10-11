@@ -131,6 +131,7 @@ class SubCategoryBottomSheet(
         pieChart.setExtraOffsets(22f, 12f, 22f, 12f)
         pieChart.setNoDataText("暂无图表数据")
         pieChart.setNoDataTextColor(Color.parseColor("#9AA0A6"))
+        pieChart.useSmallSliceLabelRenderer()
         pieChart.setOnChartValueSelectedListener(object : OnChartValueSelectedListener {
             override fun onValueSelected(e: Entry?, h: Highlight?) {
                 val label = (e as? PieEntry)?.label ?: return
@@ -153,39 +154,35 @@ class SubCategoryBottomSheet(
         }.toMap()
         categoryAdapter.setColorMap(colorByName)
 
-        val filteredNames = sortedCategoryNames.filter { name ->
-            val amount = subStats[name] ?: 0.0
-            val pct = if (totalAmount > 0.0) (amount / totalAmount * 100.0) else 0.0
-            pct >= 2.0
-        }
-        if (filteredNames.isEmpty()) {
+        val chartNames = sortedCategoryNames.filter { (subStats[it] ?: 0.0) > 0.0 }
+        if (chartNames.isEmpty() || totalAmount <= 0.0) {
             pieChart.clear()
-            pieChart.setNoDataText("暂无占比超过 2% 的子分类")
             pieChart.invalidate()
             return
         }
 
         // build entries in the same order as the list
-        val entries = filteredNames.map { name ->
+        val entries = chartNames.map { name ->
             val amount = subStats[name] ?: 0.0
             PieEntry(amount.toFloat(), name)
         }
-        val dataSet = PieDataSet(entries, "")
+        val dataSet = SmallSliceLabelPieDataSet(entries, totalAmount)
+        val labeledCount = entries.count { dataSet.shouldShowLabel(it) }
 
-        val sliceColors = filteredNames.map { colorByName[it] ?: colors[0] }
+        val sliceColors = chartNames.map { colorByName[it] ?: colors[0] }
         dataSet.colors = sliceColors
         dataSet.xValuePosition = PieDataSet.ValuePosition.OUTSIDE_SLICE
         dataSet.yValuePosition = PieDataSet.ValuePosition.OUTSIDE_SLICE
         dataSet.valueLinePart1OffsetPercentage = 100f
-        dataSet.valueLinePart1Length = if (filteredNames.size >= 10) 0.22f else 0.30f
-        dataSet.valueLinePart2Length = if (filteredNames.size >= 10) 0.55f else 0.78f
+        dataSet.valueLinePart1Length = if (labeledCount >= 10) 0.22f else 0.30f
+        dataSet.valueLinePart2Length = if (labeledCount >= 10) 0.55f else 0.78f
         dataSet.selectionShift = 4f
         dataSet.setValueLineVariableLength(true)
         dataSet.setUsingSliceColorAsValueLineColor(true)
 
         dataSet.valueTextSize = when {
-            filteredNames.size >= 12 -> 7.5f
-            filteredNames.size >= 9 -> 8.0f
+            labeledCount >= 12 -> 7.5f
+            labeledCount >= 9 -> 8.0f
             else -> 9.0f
         }
         dataSet.setValueTextColors(sliceColors)
@@ -193,6 +190,7 @@ class SubCategoryBottomSheet(
         dataSet.valueFormatter = object : ValueFormatter() {
             override fun getFormattedValue(value: Float): String = ""
             override fun getPieLabel(value: Float, pieEntry: PieEntry): String {
+                if (!dataSet.shouldShowLabel(pieEntry)) return ""
                 val pct = if (totalAmount > 0) (pieEntry.value / totalAmount * 100f) else 0f
                 return "${pieEntry.label} ${String.format(Locale.getDefault(), "%.1f%%", pct)}"
             }
@@ -200,9 +198,8 @@ class SubCategoryBottomSheet(
 
         pieChart.data = PieData(dataSet)
         pieChart.setDrawEntryLabels(false)
-        val visibleTotal = filteredNames.sumOf { subStats[it] ?: 0.0 }
         val centerSubtitle = if (isExpense) "子分类支出" else "子分类收入"
-        pieChart.centerText = "${String.format(Locale.getDefault(), "%s%.2f", currencySymbol, visibleTotal)}\n$centerSubtitle"
+        pieChart.centerText = "${String.format(Locale.getDefault(), "%s%.2f", currencySymbol, totalAmount)}\n$centerSubtitle"
         pieChart.rotationAngle = findBestInitialRotation(entries.map { it.value })
         pieChart.setCenterTextSize(12f)
         pieChart.setCenterTextColor(Color.parseColor("#374151"))

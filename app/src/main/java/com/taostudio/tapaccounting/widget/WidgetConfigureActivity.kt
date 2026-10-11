@@ -80,13 +80,7 @@ class WidgetConfigureActivity : AppCompatActivity() {
     }
 
     private fun showSizeOptions() {
-        findViewById<TextView>(R.id.tv_widget_size_hint).text = when (widgetSize) {
-            WidgetSize.COMPACT -> "支出金额 · 2×1"
-            WidgetSize.STANDARD -> "预算金额 · 2×1"
-            WidgetSize.TODAY_BUDGET -> "今日花费与预算 · 2×1"
-            WidgetSize.DETAILED -> "财务概览 · 4×2"
-            null -> "选择小组件要显示的内容"
-        }
+        findViewById<TextView>(R.id.tv_widget_size_hint).text = widgetSize?.label ?: "选择小组件要显示的内容"
         findViewById<View>(R.id.card_widget_period).visibility =
             if (widgetSize == WidgetSize.STANDARD || widgetSize == WidgetSize.TODAY_BUDGET) View.GONE else View.VISIBLE
     }

@@ -1,5 +1,7 @@
 package com.taostudio.tapaccounting.ui.budget
 
+import android.content.Context
+import android.content.Intent
 import android.content.res.ColorStateList
 import android.graphics.Color
 import android.os.Bundle
@@ -39,7 +41,10 @@ import com.taostudio.tapaccounting.logic.BudgetCategoryOptions
 import com.taostudio.tapaccounting.logic.MemberBudgetAllocation
 import com.taostudio.tapaccounting.logic.SharedBudgetDisplayDefaultPolicy
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
@@ -52,19 +57,43 @@ import java.util.Locale
  */
 class BudgetManageActivity : AppCompatActivity() {
 
+    companion object {
+        const val EXTRA_YEAR_MONTH = "extra_year_month"
+        const val EXTRA_BOOK_NAME = "extra_book_name"
+        const val EXTRA_FROM_YEAR_VIEW = "extra_from_year_view"
+
+        fun intent(
+            context: Context,
+            yearMonth: String? = null,
+            bookName: String? = null,
+            fromYearView: Boolean = false
+        ): Intent = Intent(context, BudgetManageActivity::class.java)
+            .putExtra(EXTRA_YEAR_MONTH, yearMonth)
+            .putExtra(EXTRA_BOOK_NAME, bookName)
+            .putExtra(EXTRA_FROM_YEAR_VIEW, fromYearView)
+    }
+
     private lateinit var budgetService: BudgetService
     private lateinit var currentBook: String
     private lateinit var preferenceBook: String
-    private lateinit var yearMonth: String
+    private val yearMonthFlow = MutableStateFlow("")
+    private val yearMonth: String get() = yearMonthFlow.value
+    private var totalBudget: Budget? = null
     private lateinit var adapter: BudgetAdapter
     private lateinit var rvBudgets: RecyclerView
     private lateinit var tvEmpty: TextView
+    private lateinit var tvMonth: TextView
     private lateinit var layoutSummary: View
-    private lateinit var tvSummaryTitle: TextView
+    private lateinit var layoutSummaryEmpty: View
     private lateinit var tvSummaryStatus: TextView
+    private lateinit var tvSummaryAmount: TextView
+    private lateinit var tvSummaryUsed: TextView
+    private lateinit var tvSummaryRemainingLabel: TextView
+    private lateinit var tvSummaryRemaining: TextView
     private lateinit var tvSummaryDetail: TextView
     private lateinit var progressSummary: ProgressBar
 
+    @OptIn(ExperimentalCoroutinesApi::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_budget_manage)
@@ -74,25 +103,55 @@ class BudgetManageActivity : AppCompatActivity() {
         val db = AppDatabase.getDatabase(this)
         budgetService = BudgetService(db.budgetDao(), db.billDao(), db.categoryDao())
         preferenceBook = BookAccountManager.getSelectedBook(this)
-        currentBook = preferenceBook.let { selectedBook ->
-            if (selectedBook == BookAccountManager.ALL_BOOK) "" else selectedBook
+        currentBook = (intent.getStringExtra(EXTRA_BOOK_NAME) ?: preferenceBook).let { book ->
+            if (book == BookAccountManager.ALL_BOOK) "" else book
         }
-        yearMonth = SimpleDateFormat("yyyy-MM", Locale.getDefault()).format(
-            Calendar.getInstance().time
-        )
+        yearMonthFlow.value = intent.getStringExtra(EXTRA_YEAR_MONTH)
+            ?: SimpleDateFormat("yyyy-MM", Locale.US).format(Calendar.getInstance().time)
 
         rvBudgets = findViewById(R.id.rv_budgets)
         rvBudgets.layoutManager = LinearLayoutManager(this)
         tvEmpty = findViewById(R.id.tv_budget_empty)
+        tvMonth = findViewById(R.id.tv_budget_month)
         layoutSummary = findViewById(R.id.layout_budget_summary)
-        tvSummaryTitle = findViewById(R.id.tv_budget_summary_title)
+        layoutSummaryEmpty = findViewById(R.id.layout_budget_summary_empty)
         tvSummaryStatus = findViewById(R.id.tv_budget_summary_status)
+        tvSummaryAmount = findViewById(R.id.tv_budget_summary_amount)
+        tvSummaryUsed = findViewById(R.id.tv_budget_summary_used)
+        tvSummaryRemainingLabel = findViewById(R.id.tv_budget_summary_remaining_label)
+        tvSummaryRemaining = findViewById(R.id.tv_budget_summary_remaining)
         tvSummaryDetail = findViewById(R.id.tv_budget_summary_detail)
         progressSummary = findViewById(R.id.progress_budget_summary)
         val btnSuggest = findViewById<View>(R.id.btn_suggest_budget)
         val btnCopyPrevious = findViewById<View>(R.id.btn_copy_previous_budget)
         val btnAiBudget = findViewById<View>(R.id.btn_ai_budget)
         val btnAdd = findViewById<View>(R.id.btn_add_budget)
+
+        tvMonth.text = yearMonth
+        findViewById<View>(R.id.btn_prev_month).setOnClickListener { shiftMonth(-1) }
+        findViewById<View>(R.id.btn_next_month).setOnClickListener { shiftMonth(1) }
+        findViewById<View>(R.id.btn_budget_year).apply {
+            if (intent.getBooleanExtra(EXTRA_FROM_YEAR_VIEW, false)) {
+                visibility = View.GONE
+            } else {
+                setOnClickListener {
+                    startActivity(
+                        BudgetYearActivity.intent(
+                            this@BudgetManageActivity,
+                            year = yearMonth.take(4).toInt(),
+                            bookName = currentBook
+                        )
+                    )
+                }
+            }
+        }
+        findViewById<View>(R.id.card_budget_summary).apply {
+            setOnClickListener { totalBudget?.let(::showEditDialog) }
+            setOnLongClickListener { totalBudget?.let(::showDeleteDialog); totalBudget != null }
+        }
+        findViewById<View>(R.id.btn_add_total_budget).setOnClickListener {
+            showAddBudgetDialog(forceTotalBudget = true)
+        }
         val rowHomeBudgetSummary = findViewById<View>(R.id.row_home_budget_summary)
         val switchHomeBudgetSummary = findViewById<SwitchMaterial>(R.id.switch_home_budget_summary)
         val rowStatsBudgetMode = findViewById<View>(R.id.row_stats_budget_mode)
@@ -119,7 +178,9 @@ class BudgetManageActivity : AppCompatActivity() {
         loadBudgets()
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
-                db.budgetDao().observeBudgetsByMonthAndBook(yearMonth, currentBook).collectLatest {
+                yearMonthFlow.flatMapLatest { month ->
+                    db.budgetDao().observeBudgetsByMonthAndBook(month, currentBook)
+                }.collectLatest {
                     val (isSharedLedger, hasBudget) = withContext(Dispatchers.IO) {
                         if (currentBook.isBlank()) {
                             false to false
@@ -205,61 +266,76 @@ class BudgetManageActivity : AppCompatActivity() {
         SharedSyncScheduler.enqueueFullNow(this)
     }
 
+    private fun shiftMonth(delta: Int) {
+        val parts = yearMonth.split('-')
+        val calendar = Calendar.getInstance().apply {
+            clear()
+            set(parts[0].toInt(), parts[1].toInt() - 1, 1)
+            add(Calendar.MONTH, delta)
+        }
+        yearMonthFlow.value = String.format(
+            Locale.US, "%04d-%02d", calendar.get(Calendar.YEAR), calendar.get(Calendar.MONTH) + 1
+        )
+        tvMonth.text = yearMonth
+    }
+
     private fun loadBudgets() {
+        val requestedMonth = yearMonth
         lifecycleScope.launch {
             val budgetsWithProgress = withContext(Dispatchers.IO) {
-                budgetService.getMonthBudgetsWithProgress(currentBook, yearMonth)
+                budgetService.getMonthBudgetsWithProgress(currentBook, requestedMonth)
             }
+            if (requestedMonth != yearMonth) return@launch
 
-            if (budgetsWithProgress.isEmpty()) {
-                layoutSummary.visibility = View.GONE
-                tvEmpty.visibility = View.VISIBLE
-                tvEmpty.text = getString(R.string.budget_empty_hint)
-                rvBudgets.visibility = View.GONE
-            } else {
-                tvEmpty.visibility = View.GONE
-                rvBudgets.visibility = View.VISIBLE
-                bindSummary(budgetsWithProgress)
-                adapter.submitList(budgetsWithProgress)
-            }
+            val total = budgetsWithProgress.firstOrNull { it.budget.categoryId == null }
+            val categories = budgetsWithProgress.filter { it.budget.categoryId != null }
+            totalBudget = total?.budget
+            bindSummary(total)
+            adapter.submitList(categories)
+            rvBudgets.visibility = if (categories.isEmpty()) View.GONE else View.VISIBLE
+            tvEmpty.visibility = if (categories.isEmpty()) View.VISIBLE else View.GONE
         }
     }
 
-    private fun bindSummary(items: List<BudgetService.BudgetOverview>) {
-        val total = items.firstOrNull { it.budget.categoryId == null } ?: items.firstOrNull() ?: return
+    private fun bindSummary(total: BudgetService.BudgetOverview?) {
+        if (total == null) {
+            layoutSummary.visibility = View.GONE
+            layoutSummaryEmpty.visibility = View.VISIBLE
+            BudgetUi.bindPill(tvSummaryStatus, getString(R.string.budget_not_set_short), BudgetUi.neutralColor(this))
+            return
+        }
         val budget = total.budget
         val progress = total.progress
-        val statusColor = when (progress.status) {
-            BudgetService.BudgetStatus.EXCEEDED -> Color.parseColor("#FF5252")
-            BudgetService.BudgetStatus.WARNING -> Color.parseColor("#FF9800")
-            BudgetService.BudgetStatus.NORMAL -> Color.parseColor("#4CAF50")
-        }
+        val statusColor = BudgetUi.statusColor(this, progress.status)
         layoutSummary.visibility = View.VISIBLE
-        tvSummaryTitle.text = getString(
-            R.string.budget_summary_title_fmt,
-            yearMonth,
-            budget.categoryName ?: getString(R.string.budget_monthly_total)
+        layoutSummaryEmpty.visibility = View.GONE
+        BudgetUi.bindPill(
+            tvSummaryStatus,
+            when (progress.status) {
+                BudgetService.BudgetStatus.EXCEEDED -> getString(R.string.budget_status_exceeded)
+                BudgetService.BudgetStatus.WARNING -> getString(R.string.budget_status_warning)
+                BudgetService.BudgetStatus.NORMAL -> getString(R.string.budget_status_normal)
+            },
+            statusColor
         )
-        tvSummaryStatus.text = when (progress.status) {
-            BudgetService.BudgetStatus.EXCEEDED -> getString(R.string.budget_status_exceeded)
-            BudgetService.BudgetStatus.WARNING -> getString(R.string.budget_status_warning)
-            BudgetService.BudgetStatus.NORMAL -> getString(R.string.budget_status_normal)
+        tvSummaryAmount.text = BudgetUi.money(budget.amount)
+        tvSummaryUsed.text = BudgetUi.money(progress.usedAmount)
+        tvSummaryRemainingLabel.setText(
+            if (progress.remaining >= 0) R.string.budget_remaining_short else R.string.budget_overspent_short
+        )
+        tvSummaryRemaining.text = BudgetUi.money(kotlin.math.abs(progress.remaining))
+        tvSummaryRemaining.setTextColor(statusColor)
+        tvSummaryDetail.text = when {
+            progress.isMonthClosed -> getString(R.string.budget_month_closed)
+            progress.remaining < 0 -> getString(R.string.budget_reason_exceeded)
+            else -> getString(
+                R.string.budget_summary_pace_fmt,
+                progress.remainingDays,
+                progress.dailyRemainingAllowance,
+                progress.timeProgress * 100
+            )
         }
-        tvSummaryStatus.setTextColor(statusColor)
-        tvSummaryDetail.text = if (progress.remaining >= 0) {
-            getString(R.string.budget_summary_detail_fmt, budget.amount, progress.usedAmount, progress.remaining) +
-                "\n" +
-                getString(
-                    R.string.budget_summary_pace_fmt,
-                    progress.remainingDays,
-                    progress.dailyRemainingAllowance,
-                    progress.timeProgress * 100
-                )
-        } else {
-            getString(R.string.budget_over_budget_fmt, budget.amount, progress.usedAmount, -progress.remaining)
-        }
-        progressSummary.progress = (progress.percent * 100).toInt().coerceAtMost(100)
-        progressSummary.progressTintList = ColorStateList.valueOf(statusColor)
+        BudgetUi.bindProgress(progressSummary, progress.usedAmount, budget.amount, statusColor)
     }
 
     private fun showBudgetSuggestions() {
@@ -313,7 +389,7 @@ class BudgetManageActivity : AppCompatActivity() {
         val row = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(14), dp(12), dp(14), dp(12))
-            setBackgroundResource(R.drawable.bg_bill_item_chat)
+            setBackgroundResource(R.drawable.bg_stats_metric_tile)
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT
@@ -352,7 +428,7 @@ class BudgetManageActivity : AppCompatActivity() {
             text = getString(R.string.budget_suggestion_apply_normal)
             textSize = 13f
             setTextColor(Color.WHITE)
-            backgroundTintList = ColorStateList.valueOf(Color.parseColor("#4F6BFF"))
+            backgroundTintList = ColorStateList.valueOf(getColor(R.color.brand_primary))
             cornerRadius = dp(10)
             setPadding(0, 0, 0, 0)
             layoutParams = LinearLayout.LayoutParams(
@@ -583,13 +659,16 @@ ${suggestionLines.ifBlank { "无" }}
                 android.R.layout.simple_spinner_dropdown_item,
                 labels
             )
-            preselectCategoryId?.let { categoryId ->
-                val index = options.indexOfFirst { it.categoryId == categoryId }
+            if (preselectCategoryId != null) {
+                val index = options.indexOfFirst { it.categoryId == preselectCategoryId }
+                if (index >= 0) spinner.setSelection(index)
+            } else if (!forceTotalBudget && totalBudget != null) {
+                val index = options.indexOfFirst { it.categoryId != null }
                 if (index >= 0) spinner.setSelection(index)
             }
             spinner.isEnabled = !forceTotalBudget
             dialogView.findViewById<TextView>(R.id.tv_budget_dialog_title).text = getString(R.string.budget_set)
-            if (forceTotalBudget) {
+            if (forceTotalBudget && prefillAmount != null) {
                 Toast.makeText(
                     this@BudgetManageActivity,
                     getString(R.string.budget_suggest_apply_fmt, prefillAmount ?: 0.0),

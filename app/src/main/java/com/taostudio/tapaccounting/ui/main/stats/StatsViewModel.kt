@@ -22,8 +22,9 @@ import kotlinx.coroutines.FlowPreview
 import com.taostudio.tapaccounting.BookAccountManager
 import com.taostudio.tapaccounting.data.local.dao.BillDao
 import com.taostudio.tapaccounting.data.local.entity.Bill
-import com.taostudio.tapaccounting.logic.insight.InsightCardModel
+import com.taostudio.tapaccounting.logic.CurrencyManager
 import com.taostudio.tapaccounting.logic.insight.InsightEngine
+import com.taostudio.tapaccounting.logic.insight.InsightReport
 import com.taostudio.tapaccounting.logic.BillStatsContribution
 import com.taostudio.tapaccounting.viewscope.ResolvedLedgerViewScope
 import java.text.SimpleDateFormat
@@ -97,9 +98,9 @@ class StatsViewModel(private val billDao: BillDao, private val localMemberIdForB
     private val _uiState = MutableStateFlow(StatsUiState())
     val uiState = _uiState.asStateFlow()
 
-    /** 统计页洞察卡片（最多 4 张） */
-    private val _insightCards = MutableStateFlow<List<InsightCardModel>>(emptyList())
-    val insightCards: StateFlow<List<InsightCardModel>> = _insightCards.asStateFlow()
+    /** 统计页消费洞察；仅自然月视图有内容。 */
+    private val _insightReport = MutableStateFlow(InsightReport.EMPTY)
+    val insightReport: StateFlow<InsightReport> = _insightReport.asStateFlow()
 
     private var loadJob: Job? = null
     private val dfMonthLabel = SimpleDateFormat("yyyy-MM", Locale.getDefault())
@@ -434,7 +435,7 @@ class StatsViewModel(private val billDao: BillDao, private val localMemberIdForB
         loadJob = viewModelScope.launch {
             val snapshot = _uiState.value
             val (start, end, label) = resolveRange(snapshot)
-            val (prevStart, prevEnd) = resolvePreviousRange(start, end)
+            val (prevStart, prevEnd) = resolvePreviousRange(snapshot, start, end)
             val cacheKey = buildCacheKey(snapshot, start, end, prevStart, prevEnd)
 
             _uiState.update { it.copy(dateLabel = label, isLoading = true) }
@@ -472,7 +473,7 @@ class StatsViewModel(private val billDao: BillDao, private val localMemberIdForB
                 .collectLatest { (currentBillsRaw, prevBillsRaw) ->
                     val stateNow = _uiState.value
                     val calcStart = SystemClock.elapsedRealtime()
-                    val (currentBills, prevBills, newState, filterCost, processCost) = withContext(Dispatchers.Default) {
+                    val (currentBills, prevBills, newState, filterCost, processCost, insights) = withContext(Dispatchers.Default) {
                         val filterStart = SystemClock.elapsedRealtime()
                         val filteredCurrent = applyExtraFilters(currentBillsRaw, stateNow)
                         val filteredPrev = applyExtraFilters(prevBillsRaw, stateNow)
@@ -480,8 +481,13 @@ class StatsViewModel(private val billDao: BillDao, private val localMemberIdForB
                         val processStart = SystemClock.elapsedRealtime()
                         val processed = processData(filteredCurrent, filteredPrev, stateNow, start, end)
                         val processDuration = SystemClock.elapsedRealtime() - processStart
-                        CalcPayload(filteredCurrent, filteredPrev, processed, filterDuration, processDuration)
+                        CalcPayload(
+                            filteredCurrent, filteredPrev, processed, filterDuration, processDuration,
+                            buildInsights(filteredCurrent, filteredPrev, stateNow, start)
+                        )
                     }
+                    // 缓存命中时统计数据可能"无变化"而被跳过，洞察必须在此之前更新，否则会残留上一个月的内容。
+                    _insightReport.value = insights
                     if (!hasMeaningfulStatsChange(stateNow, newState, currentBills)) {
                         Log.d(
                             TAG,
@@ -492,13 +498,6 @@ class StatsViewModel(private val billDao: BillDao, private val localMemberIdForB
                     }
                     _uiState.value = newState
                     putStatsCache(cacheKey, newState)
-
-                    // 计算洞察卡片（仅月模式）
-                    if (newState.isMonthMode) {
-                        _insightCards.value = InsightEngine.generateForStats(currentBills, prevBills)
-                    } else {
-                        _insightCards.value = emptyList()
-                    }
 
                     val cost = SystemClock.elapsedRealtime() - calcStart
                     Log.d(
@@ -627,8 +626,15 @@ class StatsViewModel(private val billDao: BillDao, private val localMemberIdForB
         }
     }
 
-    private fun resolvePreviousRange(start: Long, end: Long): Pair<Long, Long> {
+    private fun resolvePreviousRange(state: StatsUiState, start: Long, end: Long): Pair<Long, Long> {
         if (end == Long.MAX_VALUE) return Pair(1L, 0L)
+        if (state.forcedStartTime == null) {
+            val prevStart = Calendar.getInstance().apply {
+                timeInMillis = start
+                add(if (state.isMonthMode) Calendar.MONTH else Calendar.YEAR, -1)
+            }.timeInMillis
+            return Pair(prevStart, start - 1L)
+        }
         val duration = (end - start + 1L).coerceAtLeast(1L)
         val prevEnd = (start - 1L).coerceAtLeast(0L)
         val prevStart = (prevEnd - duration + 1L).coerceAtLeast(0L)
@@ -945,8 +951,26 @@ class StatsViewModel(private val billDao: BillDao, private val localMemberIdForB
         val prevBills: List<Bill>,
         val state: StatsUiState,
         val filterCostMs: Long,
-        val processCostMs: Long
+        val processCostMs: Long,
+        val insights: InsightReport
     )
+
+    private fun buildInsights(
+        currentBills: List<Bill>,
+        prevBills: List<Bill>,
+        state: StatsUiState,
+        monthStart: Long
+    ): InsightReport {
+        if (!state.isMonthMode || state.forcedStartTime != null) return InsightReport.EMPTY
+        return InsightEngine.generate(
+            currentBills = currentBills,
+            previousBills = prevBills,
+            monthStart = monthStart,
+            currencySymbol = state.selectedCurrency?.let { CurrencyManager.getSymbol(it) } ?: "¥",
+            amountOf = { statsAmountOf(it, state.selectedCurrency) },
+            categoryOf = { topLevelCategory(it.categoryName) }
+        )
+    }
 
     fun getBillsForCategory(categoryName: String, isExpense: Boolean): List<Bill> {
         return _uiState.value.bills.filter { bill ->

@@ -1,7 +1,5 @@
 package com.taostudio.tapaccounting.ui.budget
 
-import android.graphics.Color
-import android.content.res.ColorStateList
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -32,7 +30,7 @@ class BudgetAdapter(
     }
 
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
-        holder.bind(items[position])
+        holder.bind(items[position], isLast = position == items.lastIndex)
     }
 
     override fun getItemCount() = items.size
@@ -44,48 +42,48 @@ class BudgetAdapter(
         private val tvUsed: TextView = itemView.findViewById(R.id.tv_budget_used)
         private val tvPercent: TextView = itemView.findViewById(R.id.tv_budget_percent)
         private val tvStatus: TextView = itemView.findViewById(R.id.tv_budget_status)
-        private val tvRemaining: TextView = itemView.findViewById(R.id.tv_budget_remaining)
         private val tvPace: TextView = itemView.findViewById(R.id.tv_budget_pace)
         private val btnDelete: TextView = itemView.findViewById(R.id.btn_budget_delete)
+        private val divider: View = itemView.findViewById(R.id.view_budget_divider)
 
-        fun bind(item: BudgetService.BudgetOverview) {
+        fun bind(item: BudgetService.BudgetOverview, isLast: Boolean) {
             val budget = item.budget
             val progress = item.progress
             val context = itemView.context
-            val statusColor = when (progress.status) {
-                BudgetService.BudgetStatus.EXCEEDED -> Color.parseColor("#FF5252")
-                BudgetService.BudgetStatus.WARNING -> Color.parseColor("#FF9800")
-                BudgetService.BudgetStatus.NORMAL -> Color.parseColor("#4CAF50")
-            }
+            val statusColor = BudgetUi.statusColor(context, progress.status)
 
-            tvCategory.text = budget.categoryName ?: itemView.context.getString(R.string.budget_monthly_total)
-            tvAmount.text = context.getString(R.string.budget_amount_display_fmt, budget.amount)
-            tvUsed.text = context.getString(R.string.budget_used_fmt, progress.usedAmount)
+            tvCategory.text = budget.categoryName ?: context.getString(R.string.budget_monthly_total)
+            tvAmount.text = BudgetUi.money(budget.amount)
+            BudgetUi.bindPill(
+                tvStatus,
+                when (progress.status) {
+                    BudgetService.BudgetStatus.EXCEEDED -> context.getString(R.string.budget_status_exceeded)
+                    BudgetService.BudgetStatus.WARNING -> context.getString(R.string.budget_status_warning)
+                    BudgetService.BudgetStatus.NORMAL -> context.getString(R.string.budget_status_normal)
+                },
+                statusColor
+            )
+            BudgetUi.bindProgress(progressBar, progress.usedAmount, budget.amount, statusColor)
             tvPercent.text = context.getString(R.string.budget_percent_fmt, progress.percent * 100)
-            tvStatus.text = when (progress.status) {
-                BudgetService.BudgetStatus.EXCEEDED -> context.getString(R.string.budget_status_exceeded)
-                BudgetService.BudgetStatus.WARNING -> context.getString(R.string.budget_status_warning)
-                BudgetService.BudgetStatus.NORMAL -> context.getString(R.string.budget_status_normal)
+            tvPercent.setTextColor(statusColor)
+            tvUsed.text = context.getString(
+                R.string.budget_month_spent_fmt,
+                BudgetUi.money(progress.usedAmount)
+            ) + " · " + if (progress.remaining >= 0) {
+                context.getString(R.string.budget_month_left_fmt, BudgetUi.money(progress.remaining))
+            } else {
+                context.getString(R.string.budget_month_over_fmt, BudgetUi.money(-progress.remaining))
             }
-            tvStatus.setTextColor(statusColor)
-            tvRemaining.text = if (progress.remaining >= 0) {
-                context.getString(
+            tvPace.text = when {
+                progress.isMonthClosed -> context.getString(R.string.budget_month_closed)
+                progress.remaining < 0 -> reasonLabel(progress.riskReason)
+                else -> context.getString(
                     R.string.budget_daily_remaining_fmt,
                     progress.remainingDays,
                     progress.dailyRemainingAllowance
-                )
-            } else {
-                context.getString(R.string.budget_over_budget_fmt, budget.amount, progress.usedAmount, -progress.remaining)
+                ) + " · " + paceLabel(progress.pace)
             }
-            tvPace.text = context.getString(
-                R.string.budget_pace_detail_fmt,
-                paceLabel(progress.pace),
-                reasonLabel(progress.riskReason),
-                progress.timeProgress * 100
-            )
-
-            progressBar.progress = (progress.percent * 100).toInt().coerceAtMost(100)
-            progressBar.progressTintList = ColorStateList.valueOf(statusColor)
+            divider.visibility = if (isLast) View.GONE else View.VISIBLE
 
             itemView.setOnClickListener { onItemClick(budget) }
             itemView.setOnLongClickListener { onItemLongClick(budget); true }

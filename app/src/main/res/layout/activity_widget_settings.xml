@@ -44,29 +44,55 @@
             android:padding="16dp">
 
             <TextView
+                android:id="@+id/tv_widget_placed_title"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="长按桌面空白处 → 添加小组件 → 搜索本应用即可添加。已添加到桌面的小组件会显示在下面，可以直接编辑显示内容。"
-                android:textColor="@color/settings_item_subtitle"
-                android:textSize="@dimen/text_size_11"
-                android:layout_marginBottom="14dp" />
-
-            <TextView
-                android:id="@+id/tv_widget_settings_empty"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="24dp"
-                android:gravity="center"
-                android:text="暂无已添加到桌面的小组件"
-                android:textColor="@color/settings_item_subtitle"
-                android:textSize="@dimen/text_size_13"
+                android:layout_marginBottom="8dp"
+                android:text="已添加到桌面"
+                android:textColor="@color/settings_section_title"
+                android:textSize="@dimen/text_size_15"
+                android:textStyle="bold"
                 android:visibility="gone" />
 
             <LinearLayout
                 android:id="@+id/ll_widget_list"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:layout_marginBottom="12dp"
+                android:orientation="vertical"
+                android:visibility="gone" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="选择样式添加"
+                android:textColor="@color/settings_section_title"
+                android:textSize="@dimen/text_size_15"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/tv_widget_catalog_hint"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:layout_marginBottom="12dp"
+                android:textColor="@color/settings_item_subtitle"
+                android:textSize="@dimen/text_size_13" />
+
+            <LinearLayout
+                android:id="@+id/ll_widget_catalog"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
                 android:orientation="vertical" />
+
+            <TextView
+                android:id="@+id/tv_widget_manual_hint"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:lineSpacingExtra="2dp"
+                android:textColor="@color/settings_item_subtitle"
+                android:textSize="@dimen/text_size_12" />
         </LinearLayout>
     </androidx.core.widget.NestedScrollView>
 </LinearLayout>

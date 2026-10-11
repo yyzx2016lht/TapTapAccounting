@@ -1,12 +1,16 @@
 package com.taostudio.tapaccounting.ui.dialog
 
+import android.annotation.SuppressLint
 import android.app.Dialog
 import android.content.Context
 import android.graphics.Color
 import android.graphics.drawable.ColorDrawable
 import android.view.Gravity
 import android.view.LayoutInflater
+import android.view.MotionEvent
+import android.view.VelocityTracker
 import android.view.View
+import android.view.ViewConfiguration
 import android.view.ViewGroup
 import android.view.Window
 import android.view.WindowManager.BadTokenException
@@ -28,6 +32,7 @@ import com.taostudio.tapaccounting.viewscope.ViewBookOption
  * 查看范围。普通对话框，不用 BottomSheet。
  * 窗口贴在屏幕底部，高度接近统计筛选面板，不超过可用区域的大约七成。
  * 重置 / 应用范围固定在窗口底部，账本列表在中间滚动。
+ * 默认单选：点账本或快捷范围直接生效并关闭；长按账本或点「多选」进入多选，由「应用范围」提交。
  */
 object LedgerViewScopeDialog {
 
@@ -43,6 +48,7 @@ object LedgerViewScopeDialog {
             onConfirm(scope)
             dialog.dismiss()
         }.bind(onClose = { dialog.dismiss() })
+        attachDragToDismiss(view.findViewById(R.id.layout_scope_drag_header), view) { dialog.dismiss() }
         dialog.setContentView(
             view,
             android.widget.FrameLayout.LayoutParams(
@@ -75,6 +81,57 @@ object LedgerViewScopeDialog {
         val id = context.resources.getIdentifier(name, "dimen", "android")
         return if (id > 0) context.resources.getDimensionPixelSize(id) else 0
     }
+
+    /** 普通 Dialog 没有 BottomSheet 的拖拽行为，这里只让顶部把手区域可下拉关闭，列表滚动不受影响。 */
+    @SuppressLint("ClickableViewAccessibility")
+    private fun attachDragToDismiss(handle: View, sheet: View, onDismiss: () -> Unit) {
+        val touchSlop = ViewConfiguration.get(sheet.context).scaledTouchSlop
+        val flingVelocity = 1000f * sheet.resources.displayMetrics.density
+        var downRawY = 0f
+        var dragging = false
+        var tracker: VelocityTracker? = null
+
+        handle.setOnTouchListener { _, event ->
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    sheet.animate().cancel()
+                    downRawY = event.rawY
+                    dragging = false
+                    tracker?.recycle()
+                    tracker = VelocityTracker.obtain().also { it.addMovement(event) }
+                    true
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    tracker?.addMovement(event)
+                    val dy = event.rawY - downRawY
+                    if (!dragging && dy > touchSlop) dragging = true
+                    if (dragging) sheet.translationY = dy.coerceAtLeast(0f)
+                    true
+                }
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    tracker?.addMovement(event)
+                    tracker?.computeCurrentVelocity(1000)
+                    val velocityY = tracker?.yVelocity ?: 0f
+                    tracker?.recycle()
+                    tracker = null
+                    val shouldDismiss = event.actionMasked == MotionEvent.ACTION_UP && dragging &&
+                        (sheet.translationY > sheet.height * 0.25f || velocityY > flingVelocity)
+                    if (shouldDismiss) {
+                        sheet.animate()
+                            .translationY(sheet.height.toFloat())
+                            .setDuration(180L)
+                            .withEndAction(onDismiss)
+                            .start()
+                    } else {
+                        sheet.animate().translationY(0f).setDuration(180L).start()
+                    }
+                    dragging = false
+                    true
+                }
+                else -> false
+            }
+        }
+    }
 }
 
 private class ScopeController(
@@ -88,10 +145,12 @@ private class ScopeController(
     private val selectedIds = current.selectedBooks.mapTo(linkedSetOf()) { it.id }
     private var memberScope = current.scope.members
     private var collapsedExpanded = false
+    private var multiSelect = current.selectedBooks.size > 1
 
     fun bind(onClose: () -> Unit) {
         val rvBooks = view.findViewById<RecyclerView>(R.id.rv_scope_books)
         val summary = view.findViewById<TextView>(R.id.tv_scope_selection_summary)
+        val btnMulti = view.findViewById<TextView>(R.id.btn_scope_multi)
         val btnMine = view.findViewById<MaterialButton>(R.id.btn_scope_mine)
         val btnPersonal = view.findViewById<MaterialButton>(R.id.btn_scope_personal)
         val btnAll = view.findViewById<MaterialButton>(R.id.btn_scope_all)
@@ -109,11 +168,27 @@ private class ScopeController(
         }
 
         fun rows(): List<BookRow> = buildList {
-            activeBooks.forEach { add(BookRow.Book(it, it.id in selectedIds)) }
+            activeBooks.forEach { add(BookRow.Book(it, it.id in selectedIds, multiSelect)) }
             if (collapsedBooks.isNotEmpty()) {
                 add(BookRow.CollapsedToggle(collapsedBooks.size, collapsedExpanded))
-                if (collapsedExpanded) collapsedBooks.forEach { add(BookRow.Book(it, it.id in selectedIds)) }
+                if (collapsedExpanded) {
+                    collapsedBooks.forEach { add(BookRow.Book(it, it.id in selectedIds, multiSelect)) }
+                }
             }
+        }
+
+        fun confirm(chosen: Set<Long>) {
+            if (chosen.isEmpty()) {
+                Toast.makeText(context, "请至少选择一个账本", Toast.LENGTH_SHORT).show()
+                return
+            }
+            val defaultIds = activeBooks.mapTo(hashSetOf()) { it.id }
+            val books = if (chosen == defaultIds) {
+                LedgerBookSelection.All
+            } else {
+                LedgerBookSelection.Selected(chosen)
+            }
+            onConfirm(LedgerViewScope(books, memberScope))
         }
 
         fun paintMemberToggle() {
@@ -147,7 +222,12 @@ private class ScopeController(
             btnPersonal.isChecked = !btnMine.isChecked && personalIds.isNotEmpty() &&
                 effective == personalIds && memberScope == LedgerMemberScope.MINE
             val memberLabel = if (memberScope == LedgerMemberScope.MINE) "仅我" else "全部成员"
-            summary.text = "已选 ${effective.size} 个 · $memberLabel"
+            summary.text = if (multiSelect) {
+                "已选 ${effective.size} 个 · $memberLabel"
+            } else {
+                "点击切换 · 长按多选 · $memberLabel"
+            }
+            btnMulti.text = if (multiSelect) "完成多选" else "多选"
             paintMemberToggle()
             adapter.submit(rows())
         }
@@ -156,7 +236,11 @@ private class ScopeController(
             selectedIds.clear()
             selectedIds.addAll(bookIds)
             memberScope = members
-            paint()
+            if (multiSelect) paint() else confirm(effectiveSelectedIds())
+        }
+
+        fun toggle(book: ViewBookOption) {
+            if (!selectedIds.add(book.id)) selectedIds.remove(book.id)
         }
 
         adapter = BookAdapter(
@@ -164,11 +248,28 @@ private class ScopeController(
                 collapsedExpanded = !collapsedExpanded
                 paint()
             },
-            onToggleBook = { book ->
-                if (!selectedIds.add(book.id)) selectedIds.remove(book.id)
+            onTapBook = { book ->
+                if (multiSelect) {
+                    toggle(book)
+                    paint()
+                } else {
+                    confirm(setOf(book.id))
+                }
+            },
+            onLongPressBook = { book ->
+                if (multiSelect) {
+                    toggle(book)
+                } else {
+                    multiSelect = true
+                    selectedIds.add(book.id)
+                }
                 paint()
             }
         )
+        btnMulti.setOnClickListener {
+            multiSelect = !multiSelect
+            paint()
+        }
         rvBooks.layoutManager = LinearLayoutManager(context)
         rvBooks.adapter = adapter
         rvBooks.itemAnimator = null
@@ -198,21 +299,11 @@ private class ScopeController(
         view.findViewById<View>(R.id.btn_scope_close).setOnClickListener { onClose() }
         view.findViewById<View>(R.id.btn_scope_reset).setOnClickListener {
             collapsedExpanded = false
+            multiSelect = true
             select(emptySet(), LedgerMemberScope.EVERYONE)
         }
         view.findViewById<View>(R.id.btn_scope_confirm).setOnClickListener {
-            val chosen = effectiveSelectedIds()
-            if (chosen.isEmpty()) {
-                Toast.makeText(context, "请至少选择一个账本", Toast.LENGTH_SHORT).show()
-                return@setOnClickListener
-            }
-            val defaultIds = activeBooks.mapTo(hashSetOf()) { it.id }
-            val books = if (chosen == defaultIds) {
-                LedgerBookSelection.All
-            } else {
-                LedgerBookSelection.Selected(chosen)
-            }
-            onConfirm(LedgerViewScope(books, memberScope))
+            confirm(effectiveSelectedIds())
         }
 
         paint()
@@ -220,13 +311,14 @@ private class ScopeController(
 }
 
 private sealed interface BookRow {
-    data class Book(val book: ViewBookOption, val selected: Boolean) : BookRow
+    data class Book(val book: ViewBookOption, val selected: Boolean, val multiSelect: Boolean) : BookRow
     data class CollapsedToggle(val count: Int, val expanded: Boolean) : BookRow
 }
 
 private class BookAdapter(
     private val onToggleCollapsed: () -> Unit,
-    private val onToggleBook: (ViewBookOption) -> Unit
+    private val onTapBook: (ViewBookOption) -> Unit,
+    private val onLongPressBook: (ViewBookOption) -> Unit
 ) : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
     private var rows: List<BookRow> = emptyList()
 
@@ -260,14 +352,19 @@ private class BookAdapter(
                 itemView.setBackgroundResource(R.drawable.bg_book_item_normal)
                 itemView.contentDescription = if (row.expanded) "收起已收纳账本" else "展开已收纳账本"
                 itemView.setOnClickListener { onToggleCollapsed() }
+                itemView.setOnLongClickListener(null)
+                itemView.isLongClickable = false
             }
             is BookRow.Book -> {
                 name.text = if (row.book.isShared) "${row.book.name}  · 共享" else row.book.name
                 icon.setImageResource(R.drawable.ic_switch_book)
-                mark.setImageResource(R.drawable.ic_book_selected_check)
                 mark.rotation = 0f
-                bindSelected(itemView, name, icon, mark, row.selected, row.book)
-                itemView.setOnClickListener { onToggleBook(row.book) }
+                bindSelected(itemView, name, icon, mark, row)
+                itemView.setOnClickListener { onTapBook(row.book) }
+                itemView.setOnLongClickListener {
+                    onLongPressBook(row.book)
+                    true
+                }
             }
         }
     }
@@ -277,18 +374,24 @@ private class BookAdapter(
         name: TextView,
         icon: ImageView,
         mark: ImageView,
-        selected: Boolean,
-        book: ViewBookOption
+        row: BookRow.Book
     ) {
         val context = itemView.context
+        val selected = row.selected
         name.setTextColor(context.getColor(
             if (selected) R.color.brand_primary else R.color.text_primary
         ))
         icon.alpha = if (selected) 1f else 0.75f
-        mark.visibility = if (selected) View.VISIBLE else View.GONE
+        mark.setImageResource(
+            if (selected) R.drawable.ic_book_selected_check else R.drawable.ic_book_unselected_box
+        )
+        mark.visibility = if (selected || row.multiSelect) View.VISIBLE else View.GONE
         itemView.setBackgroundResource(
             if (selected) R.drawable.bg_book_item_selected else R.drawable.bg_book_item_normal
         )
-        itemView.contentDescription = "${book.name}，${if (selected) "已选择" else "未选择"}"
+        itemView.contentDescription = when {
+            !row.multiSelect -> "${row.book.name}，${if (selected) "当前账本" else "点击切换"}"
+            else -> "${row.book.name}，${if (selected) "已选择" else "未选择"}"
+        }
     }
 }

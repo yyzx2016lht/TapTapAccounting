@@ -1,6 +1,7 @@
 package com.taostudio.tapaccounting.ui.main.assets
 
 import com.taostudio.tapaccounting.BillColors
+import com.taostudio.tapaccounting.CategoryIcons
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.ColorDrawable
@@ -2216,6 +2217,8 @@ class AssetStatsActivity : AppCompatActivity() {
         private val typeBill = 1
         private val rows = mutableListOf<Any>()
         private val iconUrlCache = mutableMapOf<String, String>()
+        // 缓存对应的分类版本号；分类换图标/被删除后版本号会变，届时整表清空重查。
+        private var iconCacheRevision = -1
         var isMultiSelectMode: Boolean = false
         val selectedBills = mutableSetOf<Bill>()
         var onBillItemClick: ((Bill) -> Unit)? = null
@@ -2561,6 +2564,11 @@ class AssetStatsActivity : AppCompatActivity() {
                     val iconLookupType = if (isRefund) Bill.TYPE_EXPENSE else bill.type
                     val iconCacheKey = buildIconCacheKey(iconLookupName, iconLookupType)
                     ivIcon.tag = iconCacheKey
+                    // 分类换过图标/被删除后，缓存里按名字存的旧图标要整表作废，重新解析
+                    if (iconCacheRevision != CategoryIcons.revision) {
+                        iconCacheRevision = CategoryIcons.revision
+                        synchronized(iconUrlCache) { iconUrlCache.clear() }
+                    }
                     val cachedIconUrl = getCachedIconUrl(iconCacheKey)
                     if (cachedIconUrl != null) {
                         if (cachedIconUrl.isNotEmpty()) {

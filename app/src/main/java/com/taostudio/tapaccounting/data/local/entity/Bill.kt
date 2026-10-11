@@ -73,7 +73,9 @@ data class Bill(
     val cateIcon: String? = null,
     val sharedRevision: Long = 0,
     val sharedDeviceId: String? = null,
-    val relatedSharedId: String? = null
+    val relatedSharedId: String? = null,
+    /** 同一笔实际扣款拆成的多条账单共用的 UUID；仅影响资产详情的合并显示，不影响分类统计。 */
+    val paymentGroupId: String? = null
 ) {
     companion object {
         const val TYPE_EXPENSE = 0

@@ -13,6 +13,70 @@
         android:layout_height="wrap_content"
         app:headerTitle="账本总览" />
 
+    <!-- 月/年 tab + 下划线（与统计页一致） -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="16dp"
+        android:layout_marginTop="4dp"
+        android:layout_marginEnd="16dp"
+        android:orientation="vertical">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <TextView
+                android:id="@+id/btnModeMonth"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:gravity="center"
+                android:paddingVertical="8dp"
+                android:text="@string/month_view"
+                android:textColor="@color/stats_segmented_text_active"
+                android:textSize="@dimen/text_size_13"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/btnModeYear"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:gravity="center"
+                android:paddingVertical="8dp"
+                android:text="@string/year_view"
+                android:textColor="@color/stats_segmented_text_inactive"
+                android:textSize="@dimen/text_size_13"
+                android:textStyle="bold" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <View
+                android:id="@+id/indicatorModeMonth"
+                android:layout_width="0dp"
+                android:layout_height="2dp"
+                android:layout_weight="1"
+                android:background="@color/stats_segmented_text_active" />
+
+            <View
+                android:layout_width="14dp"
+                android:layout_height="2dp" />
+
+            <View
+                android:id="@+id/indicatorModeYear"
+                android:layout_width="0dp"
+                android:layout_height="2dp"
+                android:layout_weight="1"
+                android:background="@android:color/transparent" />
+        </LinearLayout>
+    </LinearLayout>
+
     <!-- 年月选择栏 -->
     <RelativeLayout
         android:id="@+id/layoutPeriodSelector"
@@ -117,7 +181,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="2dp"
                 android:text="¥0.00"
-                android:textColor="#E05A5A"
+                android:textColor="#1F2733"
                 android:textSize="17sp"
                 android:textStyle="bold" />
         </LinearLayout>
@@ -147,7 +211,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="2dp"
                 android:text="¥0.00"
-                android:textColor="#2FA36B"
+                android:textColor="#1F2733"
                 android:textSize="17sp"
                 android:textStyle="bold" />
         </LinearLayout>

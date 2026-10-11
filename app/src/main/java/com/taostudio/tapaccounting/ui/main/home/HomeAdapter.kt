@@ -24,8 +24,11 @@ import kotlinx.coroutines.withContext
 import com.taostudio.tapaccounting.AmountFormatHelper
 import com.taostudio.tapaccounting.BookAccountManager
 import com.taostudio.tapaccounting.CategoryIconHelper
+import com.taostudio.tapaccounting.CategoryIcons
 import com.taostudio.tapaccounting.Prefs
 import com.taostudio.tapaccounting.R
+import com.taostudio.tapaccounting.TapApplication
+import com.taostudio.tapaccounting.TextIconRenderer
 import com.taostudio.tapaccounting.data.local.entity.Bill
 import com.taostudio.tapaccounting.logic.BillDisplayFormatter
 import com.taostudio.tapaccounting.logic.CurrencyManager
@@ -50,6 +53,8 @@ class HomeAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
     private var submitGeneration: Long = 0L
     // 图标 URL 缓存，key 形如 "type|categoryName"。
     private val iconUrlCache = mutableMapOf<String, String>()
+    // 缓存对应的分类版本号；分类换图标/被删除后版本号会变，届时整表清空重查。
+    private var iconCacheRevision = -1
     private val itemTimeFormatter = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault())
 
     companion object {
@@ -168,6 +173,40 @@ class HomeAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
         }
     }
 
+    /**
+     * 预热「分类名+类型 → 图标 URL」缓存。
+     *
+     * 绑定阶段命中缓存后只需要发一次 Glide 请求；不预热的话，刚进入列表时
+     * 每行都要先异步查库解析再加载，整列图标会有一段可见的加载空窗。
+     * 解析规则与 [ItemViewHolder.bind] 一致（含共享账单的快照兜底）。
+     */
+    private fun preloadIconUrls(bills: List<DisplayBill>) {
+        if (bills.isEmpty()) return
+        adapterScope.launch {
+            val revision = CategoryIcons.revision
+            val seen = mutableSetOf<String>()
+            for (displayBill in bills) {
+                if (revision != CategoryIcons.revision) return@launch  // 预热期间分类变了：结果已过期
+                val bill = displayBill.bill
+                val isRefund = isRefundBill(bill)
+                val lookupName = if (isRefund) stripRefundPrefix(bill.categoryName) else bill.categoryName
+                val lookupType = if (isRefund) Bill.TYPE_EXPENSE else bill.type
+                val key = buildIconCacheKey(lookupName, lookupType)
+                if (!seen.add(key)) continue
+                if (getCachedIconUrl(key) != null) continue
+                var iconUrl = CategoryIconHelper.findCategoryIcon(TapApplication.app(), lookupName, lookupType)
+                val snapshot = bill.cateIcon
+                if (!snapshot.isNullOrBlank() &&
+                    !CategoryIcons.isAutoAssigned(snapshot) &&
+                    (iconUrl.isEmpty() || TextIconRenderer.isTextIcon(iconUrl))
+                ) {
+                    iconUrl = snapshot
+                }
+                putCachedIconUrl(key, iconUrl)
+            }
+        }
+    }
+
     fun submitList(newBills: List<Bill>, deprecatedBills: List<Bill> = emptyList()) {
         val activeIds = newBills.map { it.id }.toSet()
         val combinedBills = buildList {
@@ -186,6 +225,9 @@ class HomeAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
             Log.d("HomePerf", "submitList: skip (list unchanged)")
             return
         }
+
+        // 预热图标缓存：绑定阶段直接命中，避免刚进入时整列图标逐个异步解析
+        preloadIconUrls(combinedBills)
 
         submitJob?.cancel()
         val generation = ++submitGeneration
@@ -431,6 +473,7 @@ class HomeAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
             holder.iconJob?.cancel()
             holder.iconJob = null
             Glide.with(holder.ivIcon.context).clear(holder.ivIcon)
+            holder.boundIconUrl = null
             // 入场动画（UiMotion.staggerFirstLoadAnimation）直接往行上写 translationY/alpha，
             // RecyclerView 回收时不会重置它们。行若在半路被回收再复用给别的位置，
             // 上一次的偏移会跟着走，所以回收点统一清干净。
@@ -554,6 +597,8 @@ class HomeAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
 
         // 当前 ViewHolder 的图标加载任务，复用/回收时可取消。
         var iconJob: Job? = null
+        // 当前已绑定的图标 URL；重绑时 URL 不变就跳过清空/重载，避免多选切换等场景闪一下。
+        var boundIconUrl: String? = null
         private var boundBill: Bill? = null
         private var boundDeprecated: Boolean = false
         private var boundSelectable: Boolean = true
@@ -843,6 +888,8 @@ class HomeAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
                     else -> R.drawable.bg_bill_dot_neutral
                 }
                 ivIcon.setImageResource(dotRes)
+                // 点模式与图标模式互切时强制重载
+                boundIconUrl = null
             } else {
                 iconContainer?.setBackgroundResource(
                     when {
@@ -853,37 +900,47 @@ class HomeAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
                 )
                 setIconContainerSizeDp(44, 44)
                 setIconSizeDp(21)
-                ivIcon.setImageDrawable(null)
-                if (!bill.cateIcon.isNullOrBlank()) {
-                    Glide.with(itemView.context)
-                        .load(bill.cateIcon)
-                        .diskCacheStrategy(com.bumptech.glide.load.engine.DiskCacheStrategy.ALL)
-                        .into(ivIcon)
-                    updateMode(!isDeprecated && selectedBills.contains(bill), animate = false)
-                    return
+                // 分类换过图标/被删除后，缓存里按名字存的旧图标要整表作废，重新解析
+                if (iconCacheRevision != CategoryIcons.revision) {
+                    iconCacheRevision = CategoryIcons.revision
+                    synchronized(iconUrlCache) { iconUrlCache.clear() }
                 }
                 val cachedIconUrl = getCachedIconUrl(iconCacheKey)
                 if (cachedIconUrl != null) {
-                    if (cachedIconUrl.isNotEmpty()) {
-                        Glide.with(itemView.context)
-                            .load(cachedIconUrl)
-                            .diskCacheStrategy(com.bumptech.glide.load.engine.DiskCacheStrategy.ALL)
-                            .into(ivIcon)
-                    } else {
+                    // 图标没变（多选切换、局部刷新等重绑）时不清空不重载，避免闪一下
+                    if (cachedIconUrl != boundIconUrl) {
+                        boundIconUrl = cachedIconUrl
                         ivIcon.setImageDrawable(null)
+                        if (cachedIconUrl.isNotEmpty()) {
+                            Glide.with(itemView.context)
+                                .load(cachedIconUrl)
+                                .diskCacheStrategy(com.bumptech.glide.load.engine.DiskCacheStrategy.ALL)
+                                .into(ivIcon)
+                        }
                     }
                 } else {
                     iconJob = adapterScope.launch {
-                        val iconUrl = com.taostudio.tapaccounting.CategoryIconHelper.findCategoryIcon(itemView.context, iconLookupName, iconLookupType)
+                        // 图标已打包进 App：优先按分类实时解析，分类换图标后列表能跟着变。
+                        // 解析不出真实图标时（如共享账本里别人的分类），退回账单自带的图标快照。
+                        var iconUrl = CategoryIconHelper.findCategoryIcon(itemView.context, iconLookupName, iconLookupType)
+                        val snapshot = bill.cateIcon
+                        if (!snapshot.isNullOrBlank() &&
+                            !CategoryIcons.isAutoAssigned(snapshot) &&
+                            (iconUrl.isEmpty() || TextIconRenderer.isTextIcon(iconUrl))
+                        ) {
+                            iconUrl = snapshot
+                        }
                         putCachedIconUrl(iconCacheKey, iconUrl)
                         withContext(Dispatchers.Main) {
-                            if (iconUrl.isNotEmpty()) {
-                                Glide.with(itemView.context)
-                                    .load(iconUrl)
-                                    .diskCacheStrategy(com.bumptech.glide.load.engine.DiskCacheStrategy.ALL)
-                                    .into(ivIcon)
-                            } else {
+                            if (iconUrl != boundIconUrl) {
+                                boundIconUrl = iconUrl
                                 ivIcon.setImageDrawable(null)
+                                if (iconUrl.isNotEmpty()) {
+                                    Glide.with(itemView.context)
+                                        .load(iconUrl)
+                                        .diskCacheStrategy(com.bumptech.glide.load.engine.DiskCacheStrategy.ALL)
+                                        .into(ivIcon)
+                                }
                             }
                         }
                     }

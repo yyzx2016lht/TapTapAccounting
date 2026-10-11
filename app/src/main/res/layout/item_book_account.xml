@@ -37,16 +37,34 @@
         android:paddingStart="16dp"
         android:paddingEnd="14dp">
 
-        <TextView
-            android:id="@+id/tv_book_name"
+        <LinearLayout
+            android:id="@+id/layout_book_text"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:maxLines="1"
-            android:ellipsize="end"
-            android:textColor="#1C2E4A"
-            android:textSize="15sp"
-            android:textStyle="bold" />
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/tv_book_name"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:maxLines="1"
+                android:ellipsize="end"
+                android:textColor="#1C2E4A"
+                android:textSize="15sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/tv_book_summary"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:maxLines="1"
+                android:ellipsize="end"
+                android:textColor="#8E9CAF"
+                android:textSize="12sp"
+                android:visibility="gone" />
+        </LinearLayout>
 
         <EditText
             android:id="@+id/et_book_name"
@@ -76,6 +94,20 @@
             android:textColor="@color/brand_primary"
             android:textSize="12sp"
             android:textStyle="bold"
+            android:visibility="gone" />
+
+        <TextView
+            android:id="@+id/tv_book_default_tag"
+            android:layout_width="wrap_content"
+            android:layout_height="24dp"
+            android:layout_marginStart="8dp"
+            android:background="@drawable/bg_badge_default"
+            android:gravity="center"
+            android:paddingStart="7dp"
+            android:paddingEnd="7dp"
+            android:text="默认"
+            android:textColor="#8E9CAF"
+            android:textSize="11sp"
             android:visibility="gone" />
 
         <TextView

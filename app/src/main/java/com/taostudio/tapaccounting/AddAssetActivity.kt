@@ -348,6 +348,9 @@ class AddAssetActivity : AppCompatActivity() {
                 selectedCurrency = it.currency
                 refreshCurrencyDisplay()
                 swIncludeNet.isChecked = if (it.isArchived) it.includeInNetBeforeArchive else it.includeInNetAsset
+                if (it.isArchived) {
+                    findViewById<TextView>(R.id.tv_include_net_hint).setText(R.string.include_total_asset_hint_archived)
+                }
                 selectedAssetCategory = it.assetCategory
                 originalSortOrder = it.sortOrder
                 originalPickerSortOrder = it.pickerSortOrder

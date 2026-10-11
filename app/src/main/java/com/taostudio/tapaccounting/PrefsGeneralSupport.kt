@@ -55,6 +55,7 @@ object PrefsGeneralSupport {
     private const val KEY_RECURRING_AUTO_DETECT_ENABLED = "recurring_auto_detect_enabled_v1"
     private const val KEY_RECURRING_DETECT_AMOUNT_TOLERANCE = "recurring_detect_amount_tolerance_v1"
     private const val KEY_RECURRING_AUTO_DETECT_GUIDE_SEEN = "recurring_auto_detect_guide_seen_v1"
+    private const val KEY_MULTI_SELECT_MORE_TIP_COUNT = "multi_select_more_tip_count_v1"
 
     private fun prefs(ctx: Context) = ctx.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
@@ -133,6 +134,12 @@ object PrefsGeneralSupport {
 
     fun setRecurringAutoDetectGuideSeen(ctx: Context) =
         prefs(ctx).edit().putBoolean(KEY_RECURRING_AUTO_DETECT_GUIDE_SEEN, true).apply()
+
+    fun getMultiSelectMoreTipCount(ctx: Context): Int =
+        prefs(ctx).getInt(KEY_MULTI_SELECT_MORE_TIP_COUNT, 0)
+
+    fun setMultiSelectMoreTipCount(ctx: Context, count: Int) =
+        prefs(ctx).edit().putInt(KEY_MULTI_SELECT_MORE_TIP_COUNT, count).apply()
 
     fun getRecurringDetectAmountTolerance(ctx: Context): Double =
         prefs(ctx).getFloat(KEY_RECURRING_DETECT_AMOUNT_TOLERANCE, 1.0f).toDouble()

@@ -44,7 +44,12 @@ import com.taostudio.tapaccounting.data.sync.SharedSyncScheduler
 import com.taostudio.tapaccounting.ui.activity.BookOverviewActivity
 import com.taostudio.tapaccounting.ui.dialog.OverlayDialogs
 import com.taostudio.tapaccounting.ui.dialog.LedgerViewScopeDialog
+import com.taostudio.tapaccounting.viewscope.LedgerMemberScope
 import com.taostudio.tapaccounting.viewscope.LedgerViewScopeStore
+import com.taostudio.tapaccounting.viewscope.ResolvedLedgerViewScope
+import com.taostudio.tapaccounting.AmountFormatHelper
+import com.taostudio.tapaccounting.logic.BookPeriodTotals
+import java.util.Calendar
 import kotlin.math.max
 
 internal class HomeBookDrawerController(
@@ -86,6 +91,8 @@ internal class HomeBookDrawerController(
     private var isBookNameEditing: Boolean = false
     private var collapsedBooksExpanded: Boolean = false
     private var drawerDisplayBooks: List<String> = emptyList()
+    private var viewScopeSpansMultipleBooks: Boolean = false
+    private var bookSummariesRefreshedThisOpen: Boolean = false
 
     private enum class BookDeleteMode {
         MOVE_TO_OTHER_BOOK,
@@ -193,10 +200,10 @@ internal class HomeBookDrawerController(
                         val legacyBook = next.legacyBookName
                         setSelectedBookName(legacyBook)
                         BookAccountManager.setSelectedBook(fragment.requireContext(), legacyBook)
-                        btnViewScope.text = "查看范围：${next.displayLabel}"
+                        applyViewScopeRow(next)
                         bookAccountAdapter.submitList(
                             books = drawerDisplayBooks,
-                            selected = legacyBook,
+                            selected = drawerSelectedBook(),
                             defaultBookName = BookAccountManager.getDefaultBook(fragment.requireContext()),
                             collapsedBookNames = BookAccountManager.getCollapsedBookAccounts(fragment.requireContext())
                         )
@@ -211,6 +218,10 @@ internal class HomeBookDrawerController(
 
         drawerBooks.addDrawerListener(object : DrawerLayout.SimpleDrawerListener() {
             override fun onDrawerSlide(drawerView: View, slideOffset: Float) {
+                if (slideOffset > 0f && !bookSummariesRefreshedThisOpen) {
+                    bookSummariesRefreshedThisOpen = true
+                    refreshBookSummaries()
+                }
                 if (slideOffset > 0f) {
                     drawerBooks.getChildAt(0)?.let { content ->
                         val cancel = android.view.MotionEvent.obtain(
@@ -231,6 +242,7 @@ internal class HomeBookDrawerController(
             }
 
             override fun onDrawerClosed(drawerView: View) {
+                bookSummariesRefreshedThisOpen = false
                 hideInlineAddBookInput(clearText = true)
                 bookAccountAdapter.closeSwipeActions()
                 updateHomeFabVisibilityByDrawerState()
@@ -362,13 +374,14 @@ internal class HomeBookDrawerController(
                 BookAccountManager.setSelectedBook(fragment.requireContext(), resolvedSelected)
                 setAvailableBookNames(booksWithAll)
                 drawerDisplayBooks = buildDrawerDisplayBooks(booksWithAll, defaultBook)
+                applyViewScopeRow(resolvedScope)
                 bookAccountAdapter.submitList(
                     books = drawerDisplayBooks,
-                    selected = getSelectedBookName(),
+                    selected = drawerSelectedBook(),
                     defaultBookName = defaultBook,
                     collapsedBookNames = collapsedBooks
                 )
-                btnViewScope.text = "查看范围：${resolvedScope.displayLabel}"
+                refreshBookSummaries()
                 if (drawerBooks.isDrawerOpen(GravityCompat.START)) {
                     scrollBookListToSelected(animate = false)
                 }
@@ -548,7 +561,7 @@ internal class HomeBookDrawerController(
             drawerDisplayBooks = buildDrawerDisplayBooks(getAvailableBookNames(), defaultBook)
             bookAccountAdapter.submitList(
                 books = drawerDisplayBooks,
-                selected = getSelectedBookName(),
+                selected = drawerSelectedBook(),
                 defaultBookName = defaultBook,
                 collapsedBookNames = BookAccountManager.getCollapsedBookAccounts(fragment.requireContext())
             )
@@ -564,10 +577,10 @@ internal class HomeBookDrawerController(
             setSelectedBookName(target)
             setAnimateNextBookDataReveal(true)
             BookAccountManager.setSelectedBook(fragment.requireContext(), target)
-            btnViewScope.text = "查看范围：${resolved.displayLabel}"
+            applyViewScopeRow(resolved)
             bookAccountAdapter.submitList(
                 books = drawerDisplayBooks,
-                selected = target,
+                selected = drawerSelectedBook(),
                 defaultBookName = BookAccountManager.getDefaultBook(fragment.requireContext()),
                 collapsedBookNames = BookAccountManager.getCollapsedBookAccounts(fragment.requireContext())
             )
@@ -708,6 +721,77 @@ internal class HomeBookDrawerController(
     private fun startInlineRenameBook(bookName: String) {
         hideInlineAddBookInput(clearText = true)
         bookAccountAdapter.startInlineRename(bookName)
+    }
+
+    /**
+     * 列表里的「当前」只能落在一行上；合并查看多个账本时没有哪一行能代表当前范围，
+     * 这时由下方的查看行写明范围，列表不再标「当前」。
+     */
+    private fun drawerSelectedBook(): String =
+        if (viewScopeSpansMultipleBooks) "" else getSelectedBookName()
+
+    private fun applyViewScopeRow(resolved: ResolvedLedgerViewScope) {
+        viewScopeSpansMultipleBooks = !resolved.isAllBooks && resolved.singleBook == null
+        val plainAllBooks = resolved.isAllBooks && resolved.scope.members == LedgerMemberScope.EVERYONE
+        val plainSingleBook = resolved.singleBook?.let { book ->
+            !(book.isShared && resolved.scope.members == LedgerMemberScope.MINE)
+        } == true
+        if (plainAllBooks || plainSingleBook) {
+            btnViewScope.text = "合并查看多个账本"
+            btnViewScope.setTextColor(android.graphics.Color.parseColor("#6E7D94"))
+            btnViewScope.setTypeface(null, android.graphics.Typeface.NORMAL)
+        } else {
+            btnViewScope.text = "正在查看：${resolved.displayLabel}"
+            btnViewScope.setTextColor(fragment.requireContext().getColor(R.color.brand_primary))
+            btnViewScope.setTypeface(null, android.graphics.Typeface.BOLD)
+        }
+    }
+
+    private fun refreshBookSummaries() {
+        if (!fragment.isAdded) return
+        val context = fragment.requireContext().applicationContext
+        val rows = drawerDisplayBooks.map(BookAccountManager::normalizeBookName)
+        val allBooks = getAvailableBookNames()
+            .map(BookAccountManager::normalizeBookName)
+            .filter { it != BookAccountManager.ALL_BOOK && it != BookAccountManager.COLLAPSED_BOOK_GROUP }
+            .toSet()
+        val collapsed = BookAccountManager.getCollapsedBookAccounts(context)
+            .mapTo(hashSetOf(), BookAccountManager::normalizeBookName)
+        fragment.lifecycleScope.launch {
+            val summaries = withContext(Dispatchers.IO) {
+                val (start, end) = currentMonthRange()
+                val bills = AppDatabase.getDatabase(context).billDao().getBillsBetweenTimesList(start, end)
+                rows.associateWith { row ->
+                    val targets = when (row) {
+                        BookAccountManager.ALL_BOOK -> allBooks - collapsed
+                        BookAccountManager.COLLAPSED_BOOK_GROUP -> collapsed
+                        else -> setOf(row)
+                    }
+                    formatBookSummary(BookPeriodTotals.of(bills, targets))
+                }
+            }
+            if (!fragment.isAdded) return@launch
+            bookAccountAdapter.submitSummaries(summaries)
+        }
+    }
+
+    private fun formatBookSummary(totals: BookPeriodTotals): String = when {
+        totals.count == 0 -> "本月暂无记账"
+        totals.expense == 0.0 && totals.income > 0.0 ->
+            "本月收入 ¥${AmountFormatHelper.formatAmount(totals.income)} · ${totals.count} 笔"
+        else -> "本月支出 ¥${AmountFormatHelper.formatAmount(totals.expense)} · ${totals.count} 笔"
+    }
+
+    private fun currentMonthRange(): Pair<Long, Long> {
+        val cal = Calendar.getInstance()
+        cal.set(Calendar.DAY_OF_MONTH, 1)
+        cal.set(Calendar.HOUR_OF_DAY, 0)
+        cal.set(Calendar.MINUTE, 0)
+        cal.set(Calendar.SECOND, 0)
+        cal.set(Calendar.MILLISECOND, 0)
+        val start = cal.timeInMillis
+        cal.add(Calendar.MONTH, 1)
+        return start to cal.timeInMillis - 1
     }
 
     private fun buildDrawerDisplayBooks(books: List<String>, defaultBook: String): List<String> {

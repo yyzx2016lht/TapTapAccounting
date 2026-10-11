@@ -1,70 +1,80 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 洞察卡片 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:orientation="horizontal"
-    android:layout_marginBottom="8dp"
-    android:background="@drawable/bg_bill_item_chat"
-    android:elevation="1dp">
+    android:orientation="vertical">
 
-    <!-- 左侧 severity 色条 -->
     <View
-        android:id="@+id/viewSeverityBar"
-        android:layout_width="4dp"
-        android:layout_height="match_parent"
-        android:background="#FF9800" />
+        android:id="@+id/view_insight_divider"
+        android:layout_width="match_parent"
+        android:layout_height="0.5dp"
+        android:layout_marginStart="48dp"
+        android:background="@color/stats_card_stroke" />
 
     <LinearLayout
-        android:layout_width="0dp"
+        android:id="@+id/layout_insight_row"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_weight="1"
-        android:orientation="vertical"
-        android:padding="12dp">
+        android:background="?attr/selectableItemBackground"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingVertical="@dimen/space_12">
+
+        <FrameLayout
+            android:id="@+id/layout_insight_icon"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:background="@drawable/bg_insight_icon_circle">
+
+            <ImageView
+                android:id="@+id/iv_insight_icon"
+                android:layout_width="18dp"
+                android:layout_height="18dp"
+                android:layout_gravity="center"
+                android:importantForAccessibility="no" />
+        </FrameLayout>
 
         <LinearLayout
-            android:layout_width="match_parent"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:gravity="center_vertical"
-            android:orientation="horizontal"
-            android:layout_marginBottom="4dp">
+            android:layout_marginStart="@dimen/space_12"
+            android:layout_weight="1"
+            android:orientation="vertical">
 
             <TextView
-                android:id="@+id/tvInsightTitle"
-                android:layout_width="0dp"
+                android:id="@+id/tv_insight_title"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:textSize="14sp"
-                android:textColor="#333333"
+                android:textColor="@color/stats_segmented_text_active"
+                android:textSize="@dimen/text_size_14"
                 android:textStyle="bold" />
 
             <TextView
-                android:id="@+id/tvInsightAmount"
-                android:layout_width="wrap_content"
+                android:id="@+id/tv_insight_body"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:textSize="12sp"
-                android:textColor="#666666"
-                android:textStyle="bold" />
+                android:layout_marginTop="2dp"
+                android:lineSpacingExtra="2dp"
+                android:textColor="@color/stats_segmented_text_inactive"
+                android:textSize="@dimen/text_size_12" />
         </LinearLayout>
 
         <TextView
-            android:id="@+id/tvInsightType"
-            android:layout_width="wrap_content"
-            android:layout_height="24dp"
-            android:layout_marginBottom="6dp"
-            android:background="@drawable/bg_insight_type_chip"
-            android:gravity="center"
-            android:minWidth="52dp"
-            android:paddingHorizontal="8dp"
-            android:textColor="#6B7280"
-            android:textSize="11sp" />
-
-        <TextView
-            android:id="@+id/tvInsightBody"
+            android:id="@+id/tv_insight_highlight"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:textSize="13sp"
-            android:textColor="#666666"
-            android:lineSpacingExtra="2dp" />
+            android:layout_marginStart="@dimen/space_8"
+            android:textSize="@dimen/text_size_14"
+            android:textStyle="bold" />
+
+        <ImageView
+            android:id="@+id/iv_insight_chevron"
+            android:layout_width="16dp"
+            android:layout_height="16dp"
+            android:layout_marginStart="2dp"
+            android:importantForAccessibility="no"
+            android:src="@drawable/ic_chevron_right"
+            app:tint="@color/text_tertiary" />
     </LinearLayout>
 </LinearLayout>

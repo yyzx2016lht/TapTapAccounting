@@ -330,7 +330,31 @@
     <string name="edit">编辑</string>
     <string name="search">搜索</string>
     <string name="select_all">全选</string>
+    <string name="multi_select_summary_label">已选择 · 点按账单可增选或取消</string>
+    <string name="multi_select_summary_count_unit">笔</string>
+    <string name="multi_select_summary_expense">支出合计</string>
+    <string name="multi_select_summary_income">收入合计</string>
+    <string name="multi_select_summary_other">转账/还款</string>
+    <string name="multi_select_summary_mixed_currency">多币种</string>
     <string name="move">移动</string>
+    <string name="multi_select_more">更多</string>
+    <string name="multi_select_more_tip">计入统计、合并对账在这里</string>
+    <string name="payment_merge">合并</string>
+    <string name="payment_split">拆开</string>
+    <string name="asset_selection_summary_fmt">已选 %1$d 笔 · 流出 %2$s · 流入 %3$s</string>
+    <string name="payment_group_detail_fmt">%1$d 笔合并 · %2$s</string>
+    <string name="payment_merge_too_few">至少选择 2 笔才能合并</string>
+    <string name="payment_merge_not_income_expense">只能合并普通支出/收入，转账、还款和退款不能合并</string>
+    <string name="payment_merge_other_asset">只能合并扣款资产是本资产的账单</string>
+    <string name="payment_group_not_owner">包含其他成员的共享账单，无法修改合并</string>
+    <string name="toast_payment_merged_fmt">已合并 %1$d 笔，资产详情按一笔显示合计</string>
+    <string name="toast_payment_split_fmt">已拆开 %1$d 笔</string>
+    <string name="payment_merge_hint">合并后资产页显示总额，方便和银行流水对账</string>
+    <string name="payment_split_hint">拆开后各自独立显示</string>
+    <string name="exclude_stats_hint">这几笔不计入收支统计</string>
+    <string name="include_stats_hint">恢复计入收支统计</string>
+    <string name="multi_select_pick_bills_first">先选择账单</string>
+    <string name="receipt_queue_payment_group">合并为一笔扣款（资产详情按总额对账）</string>
     <string name="back">返回</string>
     <string name="overwrite">覆盖</string>
     <string name="restore">恢复</string>
@@ -561,6 +585,7 @@
     <string name="income">收入</string>
     <string name="pie_chart_hint">可手指旋转饼图查看，小于2%不会显示</string>
     <string name="tap_category_hint">点击分类可查看对应账单明细</string>
+    <string name="stats_category_chart_hint">点击扇区或分类查看明细，占比小于 2% 不显示标签</string>
     <string name="asset_overview">资产总览</string>
     <string name="no_asset">暂无资产</string>
     <string name="add_first_asset_hint">点击右下角按钮添加你的第一个资产</string>
@@ -609,7 +634,7 @@
     <string name="transfer">转账</string>
     <string name="repayment">还款</string>
     <string name="select_category">选择分类</string>
-    <string name="bill_refund">账单退款</string>
+    <string name="bill_refund">关联退款</string>
     <string name="refund_source_bill">退款来源账单</string>
     <string name="select_bill">选择账单</string>
     <string name="cancel_refund">取消退款</string>
@@ -1022,6 +1047,7 @@
     <string name="enabled_currency_count">已启用 %1$d 种货币</string>
     <string name="hint_search_currency">搜索币种、代码或国家</string>
     <string name="currency_default_hint">人民币默认启用，其他币种可按需勾选</string>
+    <string name="currency_primary_locked_hint">「%1$s」是默认主币种，无法取消。该应用还不支持切换默认币种</string>
     <string name="loading_currencies">正在整理全球币种…</string>
     <string name="no_currency_found">没有找到匹配的币种</string>
     <string name="try_currency_hint">试试输入货币代码或中文名</string>
@@ -2057,20 +2083,6 @@
 
     <string name="chat_unsupported_write">AI 对话目前只支持新增记账；修改、删除或设置操作请到对应页面完成。</string>
 
-    <!-- 消费洞察 -->
-    <string name="insight_category_delta_title">%1$s支出增长</string>
-    <string name="insight_category_delta_body">本月%1$s比上月高 %2$s（¥%3$s vs ¥%4$s）</string>
-    <string name="insight_large_expense_title">大额消费提醒</string>
-    <string name="insight_large_expense_body">%1$s有一笔 ¥%2$s 的%3$s支出</string>
-    <string name="insight_weekend_spend_title">周末消费较高</string>
-    <string name="insight_weekend_spend_body">周末支出占本月 %1$s（¥%2$s）</string>
-    <string name="insight_recurring_hint_title">疑似周期扣费</string>
-    <string name="insight_recurring_hint_body">检测到 %1$s 笔相近金额的%2$s扣费（%3$s）</string>
-    <string name="insight_no_insights">暂无洞察</string>
-    <string name="insight_today">今天</string>
-    <string name="insight_yesterday">昨天</string>
-    <string name="insight_section_title">本月洞察</string>
-
     <!-- 预算管理 -->
     <string name="budget_manage_title">预算管理</string>
     <string name="budget_replace_home_income">替换账本首页收入显示</string>
@@ -2081,6 +2093,44 @@
     <string name="budget_amount_short">预算</string>
     <string name="budget_spent_short">已支出</string>
     <string name="budget_remaining_short">剩余</string>
+    <string name="budget_amount_months_fmt">预算 · %1$d个月</string>
+    <string name="budget_same_period_spent_short">同期支出</string>
+    <string name="budget_surplus_short">结余</string>
+    <string name="budget_overspent_short">超支</string>
+    <string name="budget_mixed_currency_short">多币种</string>
+    <string name="budget_yearly_title">年度预算</string>
+    <string name="budget_period_title">区间预算</string>
+    <string name="budget_period_over_fmt">%2$d个月中超支%1$d个月</string>
+    <string name="budget_period_ok_fmt">%1$d个月均未超支</string>
+    <string name="budget_period_mixed_currency">多币种预算，请先选币种</string>
+    <string name="budget_total_title">总预算</string>
+    <string name="budget_total_empty">这个月还没有设置总预算</string>
+    <string name="budget_set_total">设置总预算</string>
+    <string name="budget_category_section">分类预算</string>
+    <string name="budget_add_category">＋ 添加</string>
+    <string name="budget_category_empty">还没有分类预算，可以给常花的分类单独设个上限</string>
+    <string name="budget_tools_title">预算工具</string>
+    <string name="budget_tool_copy_desc">沿用上月金额</string>
+    <string name="budget_tool_suggest_desc">参考历史支出</string>
+    <string name="budget_tool_ai_desc">节奏与建议</string>
+    <string name="budget_display_settings_title">显示设置</string>
+    <string name="budget_year_entry">年度</string>
+    <string name="budget_year_title_fmt">%1$d 年</string>
+    <string name="budget_year_hint_fmt">只统计已设预算且已开始的 %1$d 个月，点月份可单独设置</string>
+    <string name="budget_year_hint_empty">已开始的月份还没有设置预算，点下方月份去设置</string>
+    <string name="budget_year_all_ok">均未超支</string>
+    <string name="budget_year_over_fmt">超支 %1$d 个月</string>
+    <string name="budget_month_name_fmt">%1$d月</string>
+    <string name="budget_month_status_upcoming">未开始</string>
+    <string name="budget_month_status_in_progress">进行中</string>
+    <string name="budget_month_status_ok">达标</string>
+    <string name="budget_month_no_budget">未设预算</string>
+    <string name="budget_month_spent_fmt">已花 %1$s</string>
+    <string name="budget_month_expense_fmt">支出 %1$s</string>
+    <string name="budget_month_left_fmt">剩 %1$s</string>
+    <string name="budget_month_over_fmt">超 %1$s</string>
+    <string name="budget_month_tap_to_set">点击设置</string>
+    <string name="budget_month_not_started">尚未开始</string>
     <string name="expense_category_analysis">支出分类</string>
     <string name="home_month_expense">本月总支出</string>
     <string name="home_month_income">本月收入</string>
@@ -2133,7 +2183,9 @@
     <string name="budget_reason_none">当前节奏稳定</string>
     <string name="budget_entry_status_empty">去设置</string>
     <string name="budget_entry_status_fmt">已用 %1$.0f%%</string>
-    <string name="budget_entry_remaining_daily_fmt">剩 ¥%1$.0f · 每天 ¥%2$.0f</string>
+    <string name="budget_entry_remaining_daily_fmt">剩 ¥%1$.2f · 每天 ¥%2$.2f</string>
+    <string name="budget_month_closed_remaining_fmt">剩 ¥%1$.2f · 本月已结束</string>
+    <string name="budget_month_closed">本月已结束</string>
     <string name="budget_entry_over_category_fmt">%1$s超支 ¥%2$.0f</string>
     <string name="budget_summary_title_fmt">%1$s · %2$s</string>
     <string name="budget_summary_detail_fmt">预算 ¥%1$.0f · 已用 ¥%2$.2f · 剩余 ¥%3$.2f</string>
@@ -2285,22 +2337,22 @@
     <string name="credit_cycle_not_configured">请在编辑资产中设置账单日和还款日</string>
     <string name="credit_day_of_month">%1$d 号</string>
 
-    <!-- 资产对账 -->
-    <string name="reconcile_title">资产对账</string>
-    <string name="reconcile_entry">余额对账 ›</string>
-    <string name="reconcile_ledger_balance">账本余额</string>
-    <string name="reconcile_actual_balance">实际余额</string>
-    <string name="reconcile_diff">差额</string>
-    <string name="reconcile_aligned">已对齐</string>
-    <string name="reconcile_possible_causes">可能原因</string>
-    <string name="reconcile_recent_bills">最近相关账单</string>
-    <string name="reconcile_action_adjust">余额调整</string>
-    <string name="reconcile_action_add_bill">补记账单</string>
-    <string name="reconcile_action_later">稍后处理</string>
-    <string name="reconcile_cause_transfer">最近有大额转账</string>
-    <string name="reconcile_cause_refund">最近有退款</string>
-    <string name="reconcile_cause_interest">投资资产利息结算</string>
-    <string name="reconcile_cause_adjustment">最近余额调整记录</string>
+    <!-- 资产收纳 -->
+    <string name="asset_manage_entry">管理</string>
+    <string name="asset_manage_title">管理资产「%1$s」</string>
+    <string name="asset_manage_desc">选择要执行的操作</string>
+    <string name="asset_manage_desc_archived">这个资产当前已收纳，不计入总资产</string>
+    <string name="asset_action_archive">收纳资产</string>
+    <string name="asset_action_archive_desc">适合不再使用的账户：不计入总资产，并从资产列表和记账账户中收起。流水保留，可随时恢复</string>
+    <string name="asset_action_unarchive">恢复为日常资产</string>
+    <string name="asset_action_unarchive_desc">重新显示在资产列表和记账账户中，按编辑页设置计入总资产</string>
+    <string name="asset_action_delete">删除资产</string>
+    <string name="asset_action_delete_desc">相关账单会失去账户关联</string>
+    <string name="asset_archived_status">已收纳 · 不计入总资产</string>
+    <string name="asset_unarchive_short">恢复</string>
+    <string name="asset_archived_toast">已收纳「%1$s」，不再计入总资产</string>
+    <string name="asset_unarchived_toast">已恢复「%1$s」为日常资产</string>
+    <string name="include_total_asset_hint_archived">已收纳，暂不计入；恢复后按此开关计入</string>
 
     <!-- 导入迁移 -->
     <string name="import_onboarding_title">从其他记账 App 迁移</string>
@@ -2315,7 +2367,7 @@
     <string name="import_review_done">完成审查</string>
     <string name="import_stats_fmt">新建了 %1$d 个资产、%2$d 个分类、%3$d 笔账单</string>
 
-    <string name="insight_empty_hint">消费洞察已开启。当前月份暂无异常消费提示，有环比变化或大额支出时会显示在这里。</string>
+    <string name="insight_empty_hint">本月支出平稳，暂无需要留意的变化</string>
 
     <!-- 规则学习 -->
     <string name="rule_learn_prompt_title">记住这条记账习惯？</string>

@@ -105,6 +105,10 @@ object Prefs {
         PrefsGeneralSupport.hasSeenRecurringAutoDetectGuide(ctx)
     fun setRecurringAutoDetectGuideSeen(ctx: Context) =
         PrefsGeneralSupport.setRecurringAutoDetectGuideSeen(ctx)
+    fun getMultiSelectMoreTipCount(ctx: Context): Int =
+        PrefsGeneralSupport.getMultiSelectMoreTipCount(ctx)
+    fun setMultiSelectMoreTipCount(ctx: Context, count: Int) =
+        PrefsGeneralSupport.setMultiSelectMoreTipCount(ctx, count)
 
     // --- AI settings ---
     fun getAiKey(ctx: Context): String = PrefsAiSupport.getAiKey(ctx)

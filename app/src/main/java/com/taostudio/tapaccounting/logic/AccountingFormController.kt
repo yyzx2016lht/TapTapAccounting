@@ -8,6 +8,7 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.graphics.Color
+import android.graphics.Typeface
 import android.os.Build
 import android.text.Editable
 import android.text.TextWatcher
@@ -46,7 +47,9 @@ class AccountingFormController(
     private val rootView: View,
     private val onCloseRequest: (isSaved: Boolean) -> Unit,
     /** 当容器高度锁定后回调（悬浮窗需要同步更新 WindowManager params 高度，防止跳动） */
-    val onHeightLocked: ((lockedHeight: Int) -> Unit)? = null
+    val onHeightLocked: ((lockedHeight: Int) -> Unit)? = null,
+    /** 「记一笔」的默认时间；null 表示用当前时间（见 BillEntryDefaults） */
+    private val defaultTimeMillis: Long? = null
 ) {
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
@@ -87,6 +90,7 @@ class AccountingFormController(
     private val btnSave: Button = rootView.findViewById(R.id.btn_save)
     private val btnCancel: Button = rootView.findViewById(R.id.btn_cancel)
     private val tvTitle: TextView? = rootView.findViewById(R.id.tv_title)
+    private val cbQueuePaymentGroup: android.widget.CheckBox? = rootView.findViewById(R.id.cb_queue_payment_group)
     val btnVoice: ImageView = rootView.findViewById(R.id.btn_ai_voice)
     val layoutAiEntry: LinearLayout = rootView.findViewById(R.id.layout_ai_entry)
     val layoutAiTextEntry: LinearLayout = rootView.findViewById(R.id.layout_ai_text_entry)
@@ -179,10 +183,16 @@ class AccountingFormController(
         return "$symbol$amount"
     }
 
-    private fun resetCategoryIconToEmoji() {
-        ivCategoryIcon?.visibility = View.GONE
-        tvCategoryIconEmoji?.visibility = View.VISIBLE
-        ivCategoryIcon?.clearColorFilter()
+    /** 未选中分类（或分类解析不到图标）时的占位：显示「其他」分类的四格图标。 */
+    private fun showDefaultCategoryIcon() {
+        tvCategoryIconEmoji?.visibility = View.GONE
+        ivCategoryIcon?.visibility = View.VISIBLE
+        ivCategoryIcon?.let {
+            Glide.with(ctx)
+                .load(CategoryIcons.OTHER_ICON)
+                .into(it)
+            it.setColorFilter(Color.parseColor("#90A4AE"))
+        }
     }
 
     private fun refreshAccountIconForName(name: String) {
@@ -219,7 +229,7 @@ class AccountingFormController(
     private fun refreshCategoryIconForSelection(selection: String) {
         val normalized = selection.trim()
         if (normalized.isBlank() || normalized.contains(ctx.getString(R.string.select_asset).take(2))) {
-            resetCategoryIconToEmoji()
+            showDefaultCategoryIcon()
             return
         }
         val pathParts = normalized
@@ -229,7 +239,7 @@ class AccountingFormController(
             .filter { it.isNotEmpty() }
         val leafName = pathParts.lastOrNull().orEmpty()
         if (leafName.isBlank()) {
-            resetCategoryIconToEmoji()
+            showDefaultCategoryIcon()
             return
         }
         scope.launch {
@@ -264,7 +274,7 @@ class AccountingFormController(
             val category = resolved.first
             val icon = resolved.second
             if (category == null || icon.isBlank()) {
-                resetCategoryIconToEmoji()
+                showDefaultCategoryIcon()
                 return@launch
             }
             tvCategoryIconEmoji?.visibility = View.GONE
@@ -328,6 +338,11 @@ class AccountingFormController(
                 val v = super.getDropDownView(position, convertView, parent) as TextView
                 v.textSize = 16f
                 v.setPadding(32, 32, 32, 32)
+                // 标出当前类型：品牌色 + 加粗 + 浅品牌底（全 App 的"选中态=品牌色"约定）
+                val isCurrent = position == spType.selectedItemPosition
+                v.setTextColor(if (isCurrent) ctx.getColor(R.color.brand_primary) else Color.parseColor("#333333"))
+                v.setBackgroundColor(if (isCurrent) ctx.getColor(R.color.brand_primary_soft) else Color.TRANSPARENT)
+                v.setTypeface(null, if (isCurrent) Typeface.BOLD else Typeface.NORMAL)
                 return v
             }
         }
@@ -501,7 +516,8 @@ class AccountingFormController(
     }
 
     private fun setupDefaults() {
-        tvTime.text = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())
+        tvTime.text = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
+            .format(Date(defaultTimeMillis ?: System.currentTimeMillis()))
         if (BookAccountManager.isBookCollapsed(ctx, selectedFormBook)) {
             selectedFormBook = BookAccountManager.getDefaultBook(ctx)
         }
@@ -714,7 +730,7 @@ class AccountingFormController(
                     OverlayDialogs.showGridCategoryPicker(ctx, tvCategory.text.toString(), currentType) {
                         if (it.isBlank()) {
                             tvCategory.text = ctx.getString(R.string.select_category)
-                            resetCategoryIconToEmoji()
+                            showDefaultCategoryIcon()
                         } else {
                             tvCategory.text = it.replace(" > ", " - ")
                             refreshCategoryIconForSelection(it)
@@ -912,7 +928,9 @@ class AccountingFormController(
         val keypad = AmountKeypad(
             container = keypadView,
             editText = etMoney,
-            hapticsEnabled = { Prefs.isVibrateFeedbackEnabled(ctx) }
+            hapticsEnabled = { Prefs.isVibrateFeedbackEnabled(ctx) },
+            // 金额为空/半成品时也允许点确定收起键盘，方便先去改账本、分类等其他信息（确定键不提交账单）
+            requireValidInputForConfirm = false
         )
         keypad.confirmButton?.setOnClickListener { confirmAmountInput() }
         keypad.refresh()
@@ -1831,7 +1849,11 @@ class AccountingFormController(
                 exchangeRate = finalRate,
                 fee = feeVal,
                 bookName = writableBook,
-                excludeFromStats = oldBill?.excludeFromStats ?: false
+                excludeFromStats = oldBill?.excludeFromStats ?: false,
+                paymentGroupId = pendingQueuePaymentGroupId?.takeIf {
+                    isProcessingPendingBillQueue && cbQueuePaymentGroup?.isChecked == true &&
+                        (type == Bill.TYPE_EXPENSE || type == Bill.TYPE_INCOME) && subType == Bill.SUBTYPE_NORMAL
+                }
             )
 
             var didReplaceExisting = false
@@ -2306,8 +2328,12 @@ class AccountingFormController(
     private val pendingBills = mutableListOf<JSONObject>()
     private var isProcessingPendingBillQueue: Boolean = false
     private var totalPendingBillCount: Int = 0
+    /** 图片识别出多笔时，同一队列共用的扣款组 ID（见 [PaymentGroups]）。 */
+    private var pendingQueuePaymentGroupId: String? = null
 
     private fun updateQueueActionUi() {
+        cbQueuePaymentGroup?.visibility =
+            if (isProcessingPendingBillQueue && pendingQueuePaymentGroupId != null) View.VISIBLE else View.GONE
         if (isProcessingPendingBillQueue) {
             val currentIndex = (totalPendingBillCount - pendingBills.size).coerceAtLeast(1)
             tvTitle?.text = ctx.getString(R.string.accounting_progress, currentIndex, totalPendingBillCount)
@@ -2522,6 +2548,10 @@ class AccountingFormController(
                     pendingBills.add(billsArray.getJSONObject(i))
                 }
                 totalPendingBillCount = pendingBills.size
+                val isImageReceipt = sourceKind == "receipt_image" || sourceKind == "chat_image"
+                pendingQueuePaymentGroupId =
+                    if (isImageReceipt && totalPendingBillCount >= 2) PaymentGroups.newGroupId() else null
+                cbQueuePaymentGroup?.isChecked = true
                 processNextPendingBill()
             }
             return

@@ -1,5 +1,7 @@
 package com.taostudio.tapaccounting.ui.activity
 
+import android.content.res.ColorStateList
+import android.graphics.Color
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -69,7 +71,10 @@ class BookOverviewAdapter(
     inner class ViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
         private val flCover: View = itemView.findViewById(R.id.flBookCover)
         private val ivCover: ImageView = itemView.findViewById(R.id.ivBookCover)
-        private val vGradient: View = itemView.findViewById(R.id.vCoverGradient)
+        private val tvCoverName: TextView = itemView.findViewById(R.id.tvCoverBookName)
+        private val tvCoverTag: TextView = itemView.findViewById(R.id.tvCoverActiveTag)
+        private val layoutCompactHeader: View = itemView.findViewById(R.id.layoutCompactHeader)
+        private val tvAvatar: TextView = itemView.findViewById(R.id.tvBookAvatar)
         private val tvName: TextView = itemView.findViewById(R.id.tvBookName)
         private val tvTag: TextView = itemView.findViewById(R.id.tvActiveTag)
         private val tvExpenseLabel: TextView = itemView.findViewById(R.id.tvBookExpenseLabel)
@@ -78,15 +83,14 @@ class BookOverviewAdapter(
         private val tvIncome: TextView = itemView.findViewById(R.id.tvBookIncome)
 
         fun bind(item: BookOverviewItem) {
-            tvName.text = item.bookName
-            tvTag.visibility = if (item.isCurrentBook) View.VISIBLE else View.GONE
-
-            // 封面：图片优先，否则纯色
+            val tagVisibility = if (item.isCurrentBook) View.VISIBLE else View.GONE
             val bannerFile = item.bannerPath?.let { File(it) }
             if (bannerFile != null && bannerFile.exists()) {
-                ivCover.visibility = View.VISIBLE
-                vGradient.visibility = View.GONE
+                flCover.visibility = View.VISIBLE
+                layoutCompactHeader.visibility = View.GONE
                 flCover.setBackgroundColor(item.themeColor)
+                tvCoverName.text = item.bookName
+                tvCoverTag.visibility = tagVisibility
                 Glide.with(itemView.context)
                     .load(bannerFile)
                     .centerCrop()
@@ -95,13 +99,19 @@ class BookOverviewAdapter(
                     .diskCacheStrategy(com.bumptech.glide.load.engine.DiskCacheStrategy.DATA)
                     .into(ivCover)
             } else {
-                ivCover.visibility = View.GONE
-                vGradient.visibility = View.GONE
-                flCover.setBackgroundColor(item.themeColor)
+                Glide.with(itemView.context).clear(ivCover)
+                flCover.visibility = View.GONE
+                layoutCompactHeader.visibility = View.VISIBLE
+                tvAvatar.text = item.bookName.trim().take(1)
+                tvAvatar.backgroundTintList = ColorStateList.valueOf(item.themeColor)
+                tvName.text = item.bookName
+                tvTag.visibility = tagVisibility
             }
 
             tvExpense.text = "¥${AmountFormatHelper.formatAmount(item.expense)}"
             tvIncome.text = "¥${AmountFormatHelper.formatAmount(item.income)}"
+            tvExpense.setTextColor(amountColor(item.expense))
+            tvIncome.setTextColor(amountColor(item.income))
             tvExpenseLabel.text = if (isYearMode) "年支出" else "月支出"
             tvIncomeLabel.text = if (isYearMode) "年收入" else "月收入"
 
@@ -109,4 +119,10 @@ class BookOverviewAdapter(
         }
     }
 }
+
+private val AMOUNT_COLOR = Color.parseColor("#1F2733")
+private val ZERO_AMOUNT_COLOR = Color.parseColor("#8E98A6")
+
+internal fun amountColor(value: Double): Int =
+    if (kotlin.math.abs(value) < 0.005) ZERO_AMOUNT_COLOR else AMOUNT_COLOR
 

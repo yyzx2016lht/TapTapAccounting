@@ -3,7 +3,7 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/page_background"
+    android:background="@color/stats_empty_bg"
     android:orientation="vertical">
 
     <RelativeLayout
@@ -18,249 +18,586 @@
             android:layout_height="40dp"
             android:layout_centerVertical="true"
             android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/back"
             android:padding="8dp"
             android:src="@drawable/ic_chevron_left"
-            android:tint="#333333" />
+            app:tint="@color/stats_segmented_text_active" />
 
-        <TextView
+        <LinearLayout
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_centerInParent="true"
-            android:text="@string/budget_manage_title"
-            android:textColor="@color/settings_item_title"
-            android:textSize="@dimen/text_size_18"
-            android:textStyle="bold" />
-    </RelativeLayout>
-
-    <LinearLayout
-        android:id="@+id/row_home_budget_summary"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginHorizontal="16dp"
-        android:layout_marginTop="12dp"
-        android:background="@drawable/bg_bill_item_chat"
-        android:clickable="true"
-        android:focusable="true"
-        android:gravity="center_vertical"
-        android:minHeight="68dp"
-        android:orientation="horizontal"
-        android:paddingHorizontal="14dp"
-        android:paddingVertical="10dp">
-
-        <LinearLayout
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:orientation="vertical">
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/budget_replace_home_income"
-                android:textColor="#333333"
-                android:textSize="@dimen/text_size_14"
-                android:textStyle="bold" />
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="3dp"
-                android:text="@string/budget_replace_home_income_summary"
-                android:textColor="#777777"
-                android:textSize="@dimen/text_size_12" />
-        </LinearLayout>
-
-        <com.google.android.material.switchmaterial.SwitchMaterial
-            android:id="@+id/switch_home_budget_summary"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="12dp"
-            app:thumbTint="@color/switch_thumb_tint"
-            app:trackTint="@color/switch_track_tint" />
-    </LinearLayout>
-
-    <LinearLayout
-        android:id="@+id/row_stats_budget_mode"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginHorizontal="16dp"
-        android:layout_marginTop="8dp"
-        android:background="@drawable/bg_bill_item_chat"
-        android:clickable="true"
-        android:focusable="true"
-        android:gravity="center_vertical"
-        android:minHeight="68dp"
-        android:orientation="horizontal"
-        android:paddingHorizontal="14dp"
-        android:paddingVertical="10dp">
-
-        <LinearLayout
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:orientation="vertical">
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/budget_stats_mode"
-                android:textColor="#333333"
-                android:textSize="@dimen/text_size_14"
-                android:textStyle="bold" />
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="3dp"
-                android:text="@string/budget_stats_mode_summary"
-                android:textColor="#777777"
-                android:textSize="@dimen/text_size_12" />
-        </LinearLayout>
-
-        <com.google.android.material.switchmaterial.SwitchMaterial
-            android:id="@+id/switch_stats_budget_mode"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="12dp"
-            app:thumbTint="@color/switch_thumb_tint"
-            app:trackTint="@color/switch_track_tint" />
-    </LinearLayout>
-
-    <LinearLayout
-        android:id="@+id/layout_budget_summary"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginHorizontal="16dp"
-        android:layout_marginTop="12dp"
-        android:background="@drawable/bg_bill_item_chat"
-        android:orientation="vertical"
-        android:padding="14dp"
-        android:visibility="gone">
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
             android:gravity="center_vertical"
             android:orientation="horizontal">
 
-            <TextView
-                android:id="@+id/tv_budget_summary_title"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:textColor="#333333"
-                android:textSize="@dimen/text_size_15"
-                android:textStyle="bold" />
+            <ImageView
+                android:id="@+id/btn_prev_month"
+                android:layout_width="34dp"
+                android:layout_height="34dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="上个月"
+                android:padding="9dp"
+                android:src="@drawable/ic_chevron_left"
+                app:tint="@color/stats_segmented_text_inactive" />
 
             <TextView
-                android:id="@+id/tv_budget_summary_status"
+                android:id="@+id/tv_budget_month"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:textColor="#666666"
-                android:textSize="@dimen/text_size_12"
+                android:layout_marginHorizontal="6dp"
+                android:textColor="@color/stats_segmented_text_active"
+                android:textSize="@dimen/text_size_16"
                 android:textStyle="bold" />
+
+            <ImageView
+                android:id="@+id/btn_next_month"
+                android:layout_width="34dp"
+                android:layout_height="34dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="下个月"
+                android:padding="9dp"
+                android:src="@drawable/ic_chevron_right"
+                app:tint="@color/stats_segmented_text_inactive" />
         </LinearLayout>
 
-        <ProgressBar
-            android:id="@+id/progress_budget_summary"
-            style="@android:style/Widget.ProgressBar.Horizontal"
-            android:layout_width="match_parent"
-            android:layout_height="6dp"
-            android:layout_marginTop="10dp"
-            android:max="100"
-            android:progress="0" />
-
         <TextView
-            android:id="@+id/tv_budget_summary_detail"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="6dp"
-            android:textColor="#777777"
-            android:textSize="@dimen/text_size_12" />
-    </LinearLayout>
+            android:id="@+id/btn_budget_year"
+            android:layout_width="wrap_content"
+            android:layout_height="40dp"
+            android:layout_alignParentEnd="true"
+            android:layout_centerVertical="true"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:gravity="center"
+            android:minWidth="48dp"
+            android:paddingHorizontal="8dp"
+            android:text="@string/budget_year_entry"
+            android:textColor="@color/brand_primary"
+            android:textSize="@dimen/text_size_14"
+            android:textStyle="bold" />
+    </RelativeLayout>
 
-    <FrameLayout
+    <androidx.core.widget.NestedScrollView
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_weight="1">
+        android:layout_weight="1"
+        android:clipToPadding="false"
+        android:paddingBottom="@dimen/space_16">
 
-        <androidx.recyclerview.widget.RecyclerView
-            android:id="@+id/rv_budgets"
+        <LinearLayout
             android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:clipToPadding="false"
-            android:padding="16dp" />
-
-        <TextView
-            android:id="@+id/tv_budget_empty"
-            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_gravity="center"
-            android:text="@string/budget_not_set"
-            android:textColor="#999999"
-            android:textSize="@dimen/text_size_14"
-            android:visibility="gone" />
-    </FrameLayout>
+            android:orientation="vertical">
 
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginHorizontal="16dp"
-        android:layout_marginTop="12dp"
-        android:orientation="horizontal">
+            <!-- 总预算 -->
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/card_budget_summary"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginHorizontal="@dimen/stats_card_margin_h"
+                android:layout_marginTop="@dimen/stats_card_margin_top"
+                android:clickable="true"
+                android:focusable="true"
+                app:cardBackgroundColor="@color/stats_card_bg"
+                app:cardCornerRadius="@dimen/stats_card_radius"
+                app:cardElevation="0dp"
+                app:strokeColor="@color/stats_card_stroke"
+                app:strokeWidth="0.5dp">
 
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/btn_add_budget"
-            style="@style/Widget.MaterialComponents.Button"
-            android:layout_width="0dp"
-            android:layout_height="48dp"
-            android:layout_weight="1"
-            android:text="@string/budget_set"
-            android:textColor="#FFFFFF"
-            android:textSize="@dimen/text_size_14"
-            app:backgroundTint="@color/brand_primary"
-            app:cornerRadius="12dp" />
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="@dimen/stats_card_padding">
 
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/btn_copy_previous_budget"
-            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-            android:layout_width="0dp"
-            android:layout_height="48dp"
-            android:layout_marginStart="10dp"
-            android:layout_weight="1"
-            android:text="@string/budget_copy_previous"
-            android:textColor="#4E5A6A"
-            android:textSize="@dimen/text_size_14"
-            app:backgroundTint="#FFFFFF"
-            app:cornerRadius="12dp"
-            app:strokeColor="#DCE2EA" />
-    </LinearLayout>
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
 
-    <com.google.android.material.button.MaterialButton
-        android:id="@+id/btn_suggest_budget"
-        style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-        android:layout_width="match_parent"
-        android:layout_height="48dp"
-        android:layout_marginHorizontal="16dp"
-        android:layout_marginTop="10dp"
-        android:text="@string/budget_suggest_advanced"
-        android:textColor="#4E5A6A"
-        android:textSize="@dimen/text_size_14"
-        app:backgroundTint="#FFFFFF"
-        app:cornerRadius="12dp"
-        app:strokeColor="#DCE2EA" />
+                        <TextView
+                            android:id="@+id/tv_budget_summary_title"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="@string/budget_total_title"
+                            android:textColor="@color/stats_segmented_text_active"
+                            android:textSize="@dimen/text_size_16"
+                            android:textStyle="bold" />
 
-    <com.google.android.material.button.MaterialButton
-        android:id="@+id/btn_ai_budget"
-        style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-        android:layout_width="match_parent"
-        android:layout_height="48dp"
-        android:layout_margin="16dp"
-        android:layout_marginTop="10dp"
-        android:text="@string/budget_ai_analyze"
-        android:textColor="#4E5A6A"
-        android:textSize="@dimen/text_size_14"
-        app:backgroundTint="#FFFFFF"
-        app:cornerRadius="12dp"
-        app:strokeColor="#DCE2EA" />
+                        <TextView
+                            android:id="@+id/tv_budget_summary_status"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:paddingHorizontal="8dp"
+                            android:paddingVertical="2dp"
+                            android:textSize="@dimen/text_size_11"
+                            android:textStyle="bold" />
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:id="@+id/layout_budget_summary"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical">
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="@dimen/space_12"
+                            android:orientation="horizontal"
+                            android:paddingVertical="@dimen/space_4">
+
+                            <LinearLayout
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:gravity="center"
+                                android:orientation="vertical">
+
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="@string/budget_amount_short"
+                                    android:textColor="@color/stats_header_label"
+                                    android:textSize="@dimen/text_size_11" />
+
+                                <TextView
+                                    android:id="@+id/tv_budget_summary_amount"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginTop="4dp"
+                                    android:maxLines="1"
+                                    android:textColor="@color/stats_segmented_text_active"
+                                    android:textSize="@dimen/text_size_16"
+                                    android:textStyle="bold" />
+                            </LinearLayout>
+
+                            <View
+                                android:layout_width="0.5dp"
+                                android:layout_height="match_parent"
+                                android:background="@color/stats_card_stroke" />
+
+                            <LinearLayout
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:gravity="center"
+                                android:orientation="vertical">
+
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="@string/budget_spent_short"
+                                    android:textColor="@color/stats_header_label"
+                                    android:textSize="@dimen/text_size_11" />
+
+                                <TextView
+                                    android:id="@+id/tv_budget_summary_used"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginTop="4dp"
+                                    android:maxLines="1"
+                                    android:textColor="@color/expense_color"
+                                    android:textSize="@dimen/text_size_16"
+                                    android:textStyle="bold" />
+                            </LinearLayout>
+
+                            <View
+                                android:layout_width="0.5dp"
+                                android:layout_height="match_parent"
+                                android:background="@color/stats_card_stroke" />
+
+                            <LinearLayout
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:gravity="center"
+                                android:orientation="vertical">
+
+                                <TextView
+                                    android:id="@+id/tv_budget_summary_remaining_label"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="@string/budget_remaining_short"
+                                    android:textColor="@color/stats_header_label"
+                                    android:textSize="@dimen/text_size_11" />
+
+                                <TextView
+                                    android:id="@+id/tv_budget_summary_remaining"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginTop="4dp"
+                                    android:maxLines="1"
+                                    android:textColor="@color/stats_segmented_text_active"
+                                    android:textSize="@dimen/text_size_16"
+                                    android:textStyle="bold" />
+                            </LinearLayout>
+                        </LinearLayout>
+
+                        <ProgressBar
+                            android:id="@+id/progress_budget_summary"
+                            style="@android:style/Widget.ProgressBar.Horizontal"
+                            android:layout_width="match_parent"
+                            android:layout_height="6dp"
+                            android:layout_marginTop="@dimen/space_12"
+                            android:max="100"
+                            android:progress="0"
+                            android:progressDrawable="@drawable/bg_stats_progress" />
+
+                        <TextView
+                            android:id="@+id/tv_budget_summary_detail"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="@dimen/space_8"
+                            android:textColor="@color/stats_daily_header_text"
+                            android:textSize="@dimen/text_size_12" />
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:id="@+id/layout_budget_summary_empty"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="center_horizontal"
+                        android:orientation="vertical"
+                        android:paddingTop="@dimen/space_12"
+                        android:visibility="gone">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="@string/budget_total_empty"
+                            android:textColor="@color/stats_empty_text"
+                            android:textSize="@dimen/text_size_13" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btn_add_total_budget"
+                            style="@style/Widget.MaterialComponents.Button.UnelevatedButton"
+                            android:layout_width="wrap_content"
+                            android:layout_height="40dp"
+                            android:layout_marginTop="@dimen/space_12"
+                            android:insetTop="0dp"
+                            android:insetBottom="0dp"
+                            android:paddingHorizontal="20dp"
+                            android:text="@string/budget_set_total"
+                            android:textColor="#FFFFFF"
+                            android:textSize="@dimen/text_size_13"
+                            app:backgroundTint="@color/brand_primary"
+                            app:cornerRadius="20dp" />
+                    </LinearLayout>
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- 分类预算 -->
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginHorizontal="@dimen/stats_card_margin_h"
+                android:layout_marginTop="@dimen/stats_card_margin_top"
+                app:cardBackgroundColor="@color/stats_card_bg"
+                app:cardCornerRadius="@dimen/stats_card_radius"
+                app:cardElevation="0dp"
+                app:strokeColor="@color/stats_card_stroke"
+                app:strokeWidth="0.5dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:paddingHorizontal="@dimen/stats_card_padding"
+                    android:paddingTop="@dimen/stats_card_padding"
+                    android:paddingBottom="6dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+
+                        <TextView
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="@string/budget_category_section"
+                            android:textColor="@color/stats_segmented_text_active"
+                            android:textSize="@dimen/text_size_15"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:id="@+id/btn_add_budget"
+                            android:layout_width="wrap_content"
+                            android:layout_height="32dp"
+                            android:background="?attr/selectableItemBackgroundBorderless"
+                            android:gravity="center"
+                            android:paddingHorizontal="6dp"
+                            android:text="@string/budget_add_category"
+                            android:textColor="@color/brand_primary"
+                            android:textSize="@dimen/text_size_13"
+                            android:textStyle="bold" />
+                    </LinearLayout>
+
+                    <androidx.recyclerview.widget.RecyclerView
+                        android:id="@+id/rv_budgets"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:nestedScrollingEnabled="false"
+                        android:overScrollMode="never" />
+
+                    <TextView
+                        android:id="@+id/tv_budget_empty"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="center"
+                        android:paddingVertical="@dimen/space_16"
+                        android:text="@string/budget_category_empty"
+                        android:textColor="@color/stats_empty_text"
+                        android:textSize="@dimen/text_size_12"
+                        android:visibility="gone" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- 预算工具 -->
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginHorizontal="@dimen/stats_card_margin_h"
+                android:layout_marginTop="@dimen/stats_card_margin_top"
+                app:cardBackgroundColor="@color/stats_card_bg"
+                app:cardCornerRadius="@dimen/stats_card_radius"
+                app:cardElevation="0dp"
+                app:strokeColor="@color/stats_card_stroke"
+                app:strokeWidth="0.5dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="@dimen/stats_card_padding">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/budget_tools_title"
+                        android:textColor="@color/stats_segmented_text_active"
+                        android:textSize="@dimen/text_size_15"
+                        android:textStyle="bold" />
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/space_12"
+                        android:orientation="horizontal">
+
+                        <LinearLayout
+                            android:id="@+id/btn_copy_previous_budget"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:background="@drawable/bg_stats_metric_tile"
+                            android:clickable="true"
+                            android:focusable="true"
+                            android:foreground="?attr/selectableItemBackground"
+                            android:orientation="vertical"
+                            android:padding="10dp">
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="@string/budget_copy_previous"
+                                android:textColor="@color/stats_segmented_text_active"
+                                android:textSize="@dimen/text_size_13"
+                                android:textStyle="bold" />
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="2dp"
+                                android:text="@string/budget_tool_copy_desc"
+                                android:textColor="@color/stats_header_label"
+                                android:textSize="@dimen/text_size_11" />
+                        </LinearLayout>
+
+                        <LinearLayout
+                            android:id="@+id/btn_suggest_budget"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_marginHorizontal="8dp"
+                            android:layout_weight="1"
+                            android:background="@drawable/bg_stats_metric_tile"
+                            android:clickable="true"
+                            android:focusable="true"
+                            android:foreground="?attr/selectableItemBackground"
+                            android:orientation="vertical"
+                            android:padding="10dp">
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="@string/budget_suggest_advanced"
+                                android:textColor="@color/stats_segmented_text_active"
+                                android:textSize="@dimen/text_size_13"
+                                android:textStyle="bold" />
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="2dp"
+                                android:text="@string/budget_tool_suggest_desc"
+                                android:textColor="@color/stats_header_label"
+                                android:textSize="@dimen/text_size_11" />
+                        </LinearLayout>
+
+                        <LinearLayout
+                            android:id="@+id/btn_ai_budget"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:background="@drawable/bg_stats_metric_tile"
+                            android:clickable="true"
+                            android:focusable="true"
+                            android:foreground="?attr/selectableItemBackground"
+                            android:orientation="vertical"
+                            android:padding="10dp">
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="@string/budget_ai_analyze"
+                                android:textColor="@color/stats_segmented_text_active"
+                                android:textSize="@dimen/text_size_13"
+                                android:textStyle="bold" />
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="2dp"
+                                android:text="@string/budget_tool_ai_desc"
+                                android:textColor="@color/stats_header_label"
+                                android:textSize="@dimen/text_size_11" />
+                        </LinearLayout>
+                    </LinearLayout>
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- 显示设置 -->
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginHorizontal="@dimen/stats_card_margin_h"
+                android:layout_marginTop="@dimen/stats_card_margin_top"
+                app:cardBackgroundColor="@color/stats_card_bg"
+                app:cardCornerRadius="@dimen/stats_card_radius"
+                app:cardElevation="0dp"
+                app:strokeColor="@color/stats_card_stroke"
+                app:strokeWidth="0.5dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:paddingHorizontal="@dimen/stats_card_padding"
+                    android:paddingTop="@dimen/stats_card_padding">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/budget_display_settings_title"
+                        android:textColor="@color/stats_segmented_text_active"
+                        android:textSize="@dimen/text_size_15"
+                        android:textStyle="bold" />
+
+                    <LinearLayout
+                        android:id="@+id/row_home_budget_summary"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:background="?attr/selectableItemBackground"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:gravity="center_vertical"
+                        android:minHeight="60dp"
+                        android:orientation="horizontal"
+                        android:paddingVertical="10dp">
+
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:orientation="vertical">
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="@string/budget_replace_home_income"
+                                android:textColor="@color/stats_segmented_text_active"
+                                android:textSize="@dimen/text_size_14" />
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="2dp"
+                                android:text="@string/budget_replace_home_income_summary"
+                                android:textColor="@color/stats_header_label"
+                                android:textSize="@dimen/text_size_12" />
+                        </LinearLayout>
+
+                        <com.google.android.material.switchmaterial.SwitchMaterial
+                            android:id="@+id/switch_home_budget_summary"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="12dp"
+                            app:thumbTint="@color/switch_thumb_tint"
+                            app:trackTint="@color/switch_track_tint" />
+                    </LinearLayout>
+
+                    <View
+                        android:layout_width="match_parent"
+                        android:layout_height="0.5dp"
+                        android:background="@color/stats_card_stroke" />
+
+                    <LinearLayout
+                        android:id="@+id/row_stats_budget_mode"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:background="?attr/selectableItemBackground"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:gravity="center_vertical"
+                        android:minHeight="60dp"
+                        android:orientation="horizontal"
+                        android:paddingVertical="10dp">
+
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:orientation="vertical">
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="@string/budget_stats_mode"
+                                android:textColor="@color/stats_segmented_text_active"
+                                android:textSize="@dimen/text_size_14" />
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="2dp"
+                                android:text="@string/budget_stats_mode_summary"
+                                android:textColor="@color/stats_header_label"
+                                android:textSize="@dimen/text_size_12" />
+                        </LinearLayout>
+
+                        <com.google.android.material.switchmaterial.SwitchMaterial
+                            android:id="@+id/switch_stats_budget_mode"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="12dp"
+                            app:thumbTint="@color/switch_thumb_tint"
+                            app:trackTint="@color/switch_track_tint" />
+                    </LinearLayout>
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+        </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
 </LinearLayout>

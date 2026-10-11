@@ -131,6 +131,7 @@
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
+                android:background="@color/stats_empty_bg"
                 android:gravity="center"
                 android:paddingVertical="8dp"
                 android:text="@string/month_view"
@@ -143,6 +144,7 @@
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
+                android:background="@color/stats_empty_bg"
                 android:gravity="center"
                 android:paddingVertical="8dp"
                 android:text="@string/year_view"
@@ -233,31 +235,9 @@
                 android:orientation="vertical">
 
                 <include layout="@layout/card_stats_category_report" />
+
+                <include layout="@layout/card_stats_insights" />
             </LinearLayout>
-
-            <!-- 洞察卡片区域：作为统计页的补充解释，放在核心图表和排行之后。 -->
-            <androidx.recyclerview.widget.RecyclerView
-                android:id="@+id/rvInsightCards"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginHorizontal="14dp"
-                android:layout_marginTop="12dp"
-                android:nestedScrollingEnabled="false"
-                android:overScrollMode="never"
-                android:visibility="gone" />
-
-            <TextView
-                android:id="@+id/tv_insight_empty"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginHorizontal="14dp"
-                android:layout_marginTop="12dp"
-                android:background="@drawable/bg_bill_group_single"
-                android:padding="12dp"
-                android:text="@string/insight_empty_hint"
-                android:textColor="#9AA3AF"
-                android:textSize="13sp"
-                android:visibility="gone" />
         </LinearLayout>
     </androidx.core.widget.NestedScrollView>
 

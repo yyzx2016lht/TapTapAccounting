@@ -24,6 +24,8 @@ import com.taostudio.tapaccounting.data.local.AppDatabase
 import com.taostudio.tapaccounting.data.local.entity.Bill
 import com.taostudio.tapaccounting.logic.BillDisplayFormatter
 import com.taostudio.tapaccounting.logic.BillMoveTargetResolver
+import com.taostudio.tapaccounting.ui.common.MultiSelectBarSummary
+import com.taostudio.tapaccounting.ui.common.MultiSelectMotion
 import com.taostudio.tapaccounting.ui.dialog.BillMoveDialog
 import com.taostudio.tapaccounting.viewscope.LedgerMemberScope
 import com.taostudio.tapaccounting.viewscope.LedgerViewScopeStore
@@ -41,6 +43,7 @@ class BillSearchActivity : AppCompatActivity() {
     private lateinit var tvEmpty: TextView
     private lateinit var tvScope: TextView
     private lateinit var layoutMultiSelectActions: View
+    private lateinit var tvMsSummary: TextView
     private lateinit var btnMsDelete: TextView
     private lateinit var btnMsExcludeStats: TextView
 
@@ -66,6 +69,7 @@ class BillSearchActivity : AppCompatActivity() {
         tvEmpty = findViewById(R.id.tv_bill_search_empty)
         tvScope = findViewById(R.id.tv_bill_search_scope)
         layoutMultiSelectActions = findViewById(R.id.layout_multi_select_actions)
+        tvMsSummary = findViewById(R.id.tv_ms_summary)
         btnMsDelete = findViewById(R.id.btn_ms_delete)
         btnMsExcludeStats = findViewById(R.id.btn_ms_exclude_stats)
 
@@ -133,8 +137,10 @@ class BillSearchActivity : AppCompatActivity() {
 
     private fun setupMultiSelectActions() {
         adapter.onSelectionChanged = { count ->
-            layoutMultiSelectActions.visibility = if (adapter.isMultiSelectMode) View.VISIBLE else View.GONE
-            btnMsDelete.text = if (count > 0) "删除($count)" else "删除"
+            if (adapter.isMultiSelectMode) MultiSelectMotion.animateIn(layoutMultiSelectActions)
+            else MultiSelectMotion.animateOut(layoutMultiSelectActions)
+            tvMsSummary.text = MultiSelectBarSummary.build(this, adapter.selectedBills.toList())
+            btnMsDelete.text = getString(R.string.delete_label)
             com.taostudio.tapaccounting.ui.common.BillStatsMultiSelect.refreshButton(
                 btnMsExcludeStats,
                 adapter.selectedBills.toList()

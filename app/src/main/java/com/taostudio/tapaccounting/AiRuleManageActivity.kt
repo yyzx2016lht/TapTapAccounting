@@ -28,6 +28,7 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import com.taostudio.tapaccounting.data.local.AppDatabase
 import com.taostudio.tapaccounting.data.local.entity.AiRule
+import com.taostudio.tapaccounting.ui.common.MultiSelectMotion
 import com.taostudio.tapaccounting.ui.dialog.OverlayDialogs
 import kotlin.coroutines.resume
 
@@ -195,7 +196,8 @@ class AiRuleManageActivity : AppCompatActivity() {
     }
 
     private fun updateMultiSelectUi() {
-        layoutRuleMultiActions.visibility = if (isMultiSelectMode) View.VISIBLE else View.GONE
+        if (isMultiSelectMode) MultiSelectMotion.animateIn(layoutRuleMultiActions)
+        else MultiSelectMotion.animateOut(layoutRuleMultiActions)
         tvRuleSelectedCount.text = getString(R.string.selected_count, selectedRuleIds.size)
 
         val visibleIds = adapter.currentItems.map { it.id }.toSet()

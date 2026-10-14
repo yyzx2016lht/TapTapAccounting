@@ -82,14 +82,32 @@
     <LinearLayout
         android:id="@+id/layout_multi_select_actions"
         android:layout_width="match_parent"
-        android:layout_height="72dp"
+        android:layout_height="wrap_content"
         android:layout_gravity="bottom"
         android:background="#FFFFFF"
         android:elevation="16dp"
-        android:gravity="center_vertical"
-        android:orientation="horizontal"
+        android:orientation="vertical"
         android:paddingHorizontal="16dp"
+        android:paddingTop="10dp"
+        android:paddingBottom="12dp"
         android:visibility="gone">
+
+        <TextView
+            android:id="@+id/tv_ms_summary"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="8dp"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:textColor="@color/text_primary"
+            android:textSize="@dimen/text_size_14"
+            android:textStyle="bold" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
 
         <TextView
             android:id="@+id/btn_ms_cancel"
@@ -148,5 +166,6 @@
             android:text="@string/delete"
             android:textColor="@color/danger_color"
             android:textSize="@dimen/text_size_16" />
+        </LinearLayout>
     </LinearLayout>
 </FrameLayout>

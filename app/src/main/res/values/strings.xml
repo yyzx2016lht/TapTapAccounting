@@ -336,6 +336,8 @@
     <string name="multi_select_summary_income">收入合计</string>
     <string name="multi_select_summary_other">转账/还款</string>
     <string name="multi_select_summary_mixed_currency">多币种</string>
+    <string name="multi_select_bar_summary_fmt">已选 %1$d 笔 · 支出 %2$s · 收入 %3$s</string>
+    <string name="multi_select_bar_summary_other_suffix_fmt"> · 其他 %1$d 笔</string>
     <string name="move">移动</string>
     <string name="multi_select_more">更多</string>
     <string name="multi_select_more_tip">计入统计、合并对账在这里</string>

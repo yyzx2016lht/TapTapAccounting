@@ -68,6 +68,7 @@ import com.taostudio.tapaccounting.ui.activity.EditBillActivity
 import com.taostudio.tapaccounting.ui.common.AddBillEntrySheetLauncher
 import com.taostudio.tapaccounting.ui.common.BillStatsMultiSelect
 import com.taostudio.tapaccounting.ui.common.MultiSelectMoreTip
+import com.taostudio.tapaccounting.ui.common.MultiSelectMotion
 import com.taostudio.tapaccounting.ui.common.UiMotion.FabScrollBehavior
 import com.taostudio.tapaccounting.logic.InvestmentLotDraftStorage
 import com.taostudio.tapaccounting.logic.InvestmentLotEntryHelper
@@ -439,9 +440,10 @@ class AssetDetailActivity : AppCompatActivity() {
     private fun updateDetailMultiSelectUi(selectedCount: Int) {
         val active = adapter.isMultiSelectMode
         val becameActive = active && layoutMultiSelectActions.visibility != View.VISIBLE
-        layoutMultiSelectActions.visibility = if (active) View.VISIBLE else View.GONE
+        if (active) MultiSelectMotion.animateIn(layoutMultiSelectActions)
+        else MultiSelectMotion.animateOut(layoutMultiSelectActions)
         val hasSelection = selectedCount > 0
-        btnMsDelete.text = if (selectedCount > 0) "删除($selectedCount)" else "删除"
+        btnMsDelete.text = getString(R.string.delete_label)
         btnMsDelete.isEnabled = hasSelection
         btnMsMove.isEnabled = hasSelection
         btnMsDelete.alpha = if (hasSelection) 1f else 0.45f

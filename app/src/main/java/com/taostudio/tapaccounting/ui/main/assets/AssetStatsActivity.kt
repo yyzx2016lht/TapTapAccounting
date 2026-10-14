@@ -60,6 +60,8 @@ import com.taostudio.tapaccounting.data.local.AppDatabase
 import com.taostudio.tapaccounting.data.local.entity.Asset
 import com.taostudio.tapaccounting.data.local.entity.Bill
 import com.taostudio.tapaccounting.logic.BillAssetImpactService
+import com.taostudio.tapaccounting.ui.common.MultiSelectBarSummary
+import com.taostudio.tapaccounting.ui.common.MultiSelectMotion
 import com.taostudio.tapaccounting.logic.BillDisplayFormatter
 import com.taostudio.tapaccounting.logic.CurrencyManager
 import com.taostudio.tapaccounting.logic.BillDeleteHelper
@@ -135,6 +137,7 @@ class AssetStatsActivity : AppCompatActivity() {
     private lateinit var btnPieExpense: TextView
     private lateinit var btnPieIncome: TextView
     private lateinit var layoutMultiSelectActions: View
+    private lateinit var tvMsSummary: TextView
     private lateinit var btnMsCancel: TextView
     private lateinit var btnMsSelectAll: TextView
     private lateinit var btnMsMove: TextView
@@ -295,6 +298,7 @@ class AssetStatsActivity : AppCompatActivity() {
         btnPieExpense = findViewById(R.id.btn_pie_expense)
         btnPieIncome = findViewById(R.id.btn_pie_income)
         layoutMultiSelectActions = findViewById(R.id.layout_multi_select_actions)
+        tvMsSummary = findViewById(R.id.tv_ms_summary)
         btnMsCancel = findViewById(R.id.btn_ms_cancel)
         btnMsSelectAll = findViewById(R.id.btn_ms_select_all)
         btnMsMove = findViewById(R.id.btn_ms_move)
@@ -505,9 +509,11 @@ class AssetStatsActivity : AppCompatActivity() {
 
     private fun updateStatsMultiSelectUi(selectedCount: Int) {
         val active = billAdapter.isMultiSelectMode
-        layoutMultiSelectActions.visibility = if (active) View.VISIBLE else View.GONE
+        if (active) MultiSelectMotion.animateIn(layoutMultiSelectActions)
+        else MultiSelectMotion.animateOut(layoutMultiSelectActions)
+        tvMsSummary.text = MultiSelectBarSummary.build(this, billAdapter.selectedBills.toList())
         val hasSelection = selectedCount > 0
-        btnMsDelete.text = if (selectedCount > 0) getString(R.string.delete_fmt, selectedCount) else getString(R.string.delete_label)
+        btnMsDelete.text = getString(R.string.delete_label)
         btnMsDelete.isEnabled = hasSelection
         btnMsMove.isEnabled = hasSelection
         com.taostudio.tapaccounting.ui.common.BillStatsMultiSelect.refreshButton(

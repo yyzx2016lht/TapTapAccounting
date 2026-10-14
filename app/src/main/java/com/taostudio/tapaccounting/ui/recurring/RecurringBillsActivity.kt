@@ -27,6 +27,7 @@ import com.taostudio.tapaccounting.data.local.entity.RecurringPattern
 import com.taostudio.tapaccounting.data.local.entity.RecurringStatus
 import com.taostudio.tapaccounting.data.repository.CategoryRepository
 import com.taostudio.tapaccounting.logic.RecurringBillingService
+import com.taostudio.tapaccounting.ui.common.MultiSelectMotion
 import com.taostudio.tapaccounting.ui.dialog.OverlayDialogs
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -124,7 +125,10 @@ class RecurringBillsActivity : AppCompatActivity() {
             wasVisible && !shouldBeVisible -> bulkActionOffsetPx()
             else -> 0
         }
-        layoutBulkActions.visibility = if (shouldBeVisible) View.VISIBLE else View.GONE
+        if (wasVisible != shouldBeVisible) {
+            if (shouldBeVisible) MultiSelectMotion.animateIn(layoutBulkActions)
+            else MultiSelectMotion.animateOut(layoutBulkActions)
+        }
         if (count > 0) {
             tvBulkSelected.text = getString(R.string.recurring_bulk_selected_fmt, count)
         }

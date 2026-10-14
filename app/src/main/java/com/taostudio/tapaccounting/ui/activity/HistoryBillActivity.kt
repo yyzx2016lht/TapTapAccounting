@@ -339,7 +339,7 @@ class HistoryBillActivity : AppCompatActivity() {
             layoutBottomActions.visibility = View.VISIBLE
             val hasSelection = selectedDeletedBillIds.isNotEmpty()
             btnRestore.text = getString(R.string.restore_count_fmt, selectedDeletedBillIds.size)
-            btnPermanentDelete.text = getString(R.string.permanent_delete_count_fmt, selectedDeletedBillIds.size)
+            btnPermanentDelete.text = getString(R.string.permanent_delete)
             btnRestore.isEnabled = hasSelection
             btnPermanentDelete.isEnabled = hasSelection
             btnRestore.alpha = if (hasSelection) 1f else 0.45f

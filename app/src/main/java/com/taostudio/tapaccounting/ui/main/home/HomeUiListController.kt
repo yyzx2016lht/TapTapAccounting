@@ -1,8 +1,5 @@
 package com.taostudio.tapaccounting.ui.main.home
 
-import android.text.SpannableStringBuilder
-import android.text.Spanned
-import android.text.style.AbsoluteSizeSpan
 import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
@@ -12,14 +9,13 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import com.google.android.material.floatingactionbutton.FloatingActionButton
-import com.taostudio.tapaccounting.AmountFormatHelper
 import com.taostudio.tapaccounting.MainActivity
 import com.taostudio.tapaccounting.R
 import com.taostudio.tapaccounting.data.local.entity.Bill
-import com.taostudio.tapaccounting.logic.BillSelectionSummary
-import com.taostudio.tapaccounting.logic.CurrencyManager
+import com.taostudio.tapaccounting.ui.common.MultiSelectBarSummary
 import com.taostudio.tapaccounting.ui.common.StatusBarStyle
 import com.taostudio.tapaccounting.ui.common.BillStatsMultiSelect
+import com.taostudio.tapaccounting.ui.common.MultiSelectMotion
 import com.taostudio.tapaccounting.ui.common.UiMotion.FabScrollBehavior
 
 internal class HomeUiListController(
@@ -27,8 +23,7 @@ internal class HomeUiListController(
     private val rvTransactions: RecyclerView,
     private val layoutEmptyView: View,
     private val layoutMultiSelectActions: View,
-    private val multiSelectSummaryLayout: View,
-    private val setBannerPinnedForMultiSelect: (Boolean) -> Unit,
+    private val tvMsSummary: TextView,
     private val btnMsDelete: View,
     private val btnMsExcludeStats: View,
     private val swipeRefreshLayout: SwipeRefreshLayout,
@@ -86,22 +81,20 @@ internal class HomeUiListController(
         homeAdapter.onSelectionChanged = { count ->
             if (homeAdapter.isMultiSelectMode) {
                 setIsMultiSelectModeActive(true)
-                layoutMultiSelectActions.visibility = View.VISIBLE
-                // 原月度统计必须隐藏：面板是不透明覆盖层，但仍避免折叠动画等边缘情况下叠字。
-                layoutHeaderSummary.visibility = View.GONE
-                updateMultiSelectSummary(count, homeAdapter.selectedBills.toList())
-                setBannerPinnedForMultiSelect(true)
-                (btnMsDelete as TextView).text = if (count > 0) "删除($count)" else "删除"
+                MultiSelectMotion.animateIn(layoutMultiSelectActions)
+                // 摘要行放在操作栏里（对齐资产详情页）：不依赖顶部 banner，滚动位置不影响展示
+                tvMsSummary.text = MultiSelectBarSummary.build(
+                    fragment.requireContext(),
+                    homeAdapter.selectedBills.toList()
+                )
+                (btnMsDelete as TextView).text = fragment.getString(R.string.delete_label)
                 BillStatsMultiSelect.refreshButton(
                     btnMsExcludeStats as TextView,
                     homeAdapter.selectedBills.toList()
                 )
             } else {
                 setIsMultiSelectModeActive(false)
-                layoutMultiSelectActions.visibility = View.GONE
-                multiSelectSummaryLayout.visibility = View.GONE
-                layoutHeaderSummary.visibility = View.VISIBLE
-                setBannerPinnedForMultiSelect(false)
+                MultiSelectMotion.animateOut(layoutMultiSelectActions)
             }
             fabScrollBehavior.syncVisible()
         }
@@ -130,67 +123,6 @@ internal class HomeUiListController(
             if (getAppBarVerticalOffset() != 0) return@setOnChildScrollUpCallback true
             false
         }
-    }
-
-    /** 多选状态面板：沿用 banner 统计的排版与配色，只换内容（已选笔数 / 支出合计 / 收入合计）。 */
-    private fun updateMultiSelectSummary(count: Int, bills: List<Bill>) {
-        val panel = multiSelectSummaryLayout
-        if (panel.visibility != View.VISIBLE) {
-            panel.setPadding(
-                layoutHeaderSummary.paddingLeft,
-                layoutHeaderSummary.paddingTop,
-                layoutHeaderSummary.paddingRight,
-                layoutHeaderSummary.paddingBottom
-            )
-            syncMultiSelectSummaryStyle()
-            panel.visibility = View.VISIBLE
-        }
-
-        val unit = fragment.getString(R.string.multi_select_summary_count_unit)
-        panel.findViewById<TextView>(R.id.tvMultiSelectSummaryTitle).text =
-            SpannableStringBuilder("$count ").apply {
-                val start = length
-                append(unit)
-                setSpan(AbsoluteSizeSpan(18, true), start, length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-            }
-
-        val summary = BillSelectionSummary.summarize(bills)
-        panel.findViewById<TextView>(R.id.tvMsSummaryExpense).text = formatSelectionTotal(summary.expense)
-        panel.findViewById<TextView>(R.id.tvMsSummaryIncome).text = formatSelectionTotal(summary.income)
-        panel.findViewById<View>(R.id.layoutMsSummaryOther).visibility =
-            if (summary.otherCount > 0) View.VISIBLE else View.GONE
-        panel.findViewById<TextView>(R.id.tvMsSummaryOther).text = "${summary.otherCount} $unit"
-    }
-
-    private fun formatSelectionTotal(total: BillSelectionSummary.Total): String =
-        if (total.mixedCurrency) {
-            fragment.getString(R.string.multi_select_summary_mixed_currency)
-        } else {
-            AmountFormatHelper.formatCurrency(CurrencyManager.getSymbol(total.currency), total.amount)
-        }
-
-    /** 文字颜色/阴影跟随 banner 当前的明暗与封面图对比度处理（由 HomeBannerController 写在原统计控件上）。 */
-    private fun syncMultiSelectSummaryStyle() {
-        val primary = layoutHeaderSummary.findViewById<TextView>(R.id.tvMonthExpense)
-        val label = layoutHeaderSummary.findViewById<TextView>(R.id.tvMonthExpenseLabel)
-        val value = layoutHeaderSummary.findViewById<TextView>(R.id.tvMonthIncome)
-        fun TextView.copyStyleFrom(src: TextView) {
-            setTextColor(src.currentTextColor)
-            setShadowLayer(src.shadowRadius, src.shadowDx, src.shadowDy, src.shadowColor)
-        }
-        val panel = multiSelectSummaryLayout
-        panel.findViewById<TextView>(R.id.tvMultiSelectSummaryTitle).copyStyleFrom(primary)
-        listOf(
-            R.id.tvMultiSelectSummaryLabel,
-            R.id.tvMsSummaryExpenseLabel,
-            R.id.tvMsSummaryIncomeLabel,
-            R.id.tvMsSummaryOtherLabel,
-        ).forEach { panel.findViewById<TextView>(it).copyStyleFrom(label) }
-        listOf(
-            R.id.tvMsSummaryExpense,
-            R.id.tvMsSummaryIncome,
-            R.id.tvMsSummaryOther,
-        ).forEach { panel.findViewById<TextView>(it).copyStyleFrom(value) }
     }
 
     fun setupTopBarDoubleTapToTop() {

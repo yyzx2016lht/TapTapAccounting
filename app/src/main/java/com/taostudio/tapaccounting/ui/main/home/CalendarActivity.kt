@@ -56,6 +56,8 @@ import com.taostudio.tapaccounting.ui.dialog.OverlayDialogs
 import com.taostudio.tapaccounting.ui.main.SharedYearMonthSession
 import com.taostudio.tapaccounting.ui.main.YearMonthPickerDialog
 import com.taostudio.tapaccounting.ui.common.BillDetailStatsToggle
+import com.taostudio.tapaccounting.ui.common.MultiSelectBarSummary
+import com.taostudio.tapaccounting.ui.common.MultiSelectMotion
 import com.taostudio.tapaccounting.viewscope.LedgerMemberScope
 import com.taostudio.tapaccounting.viewscope.LedgerViewScopeStore
 import com.taostudio.tapaccounting.viewscope.ResolvedLedgerViewScope
@@ -94,6 +96,7 @@ class CalendarActivity : AppCompatActivity() {
 
     // Multi-select UI elements
     private lateinit var layoutMultiSelectActions: View
+    private lateinit var tvMsSummary: TextView
     private lateinit var btnMsCancel: TextView
     private lateinit var btnMsSelectAll: TextView
     private lateinit var btnMsDelete: TextView
@@ -238,6 +241,7 @@ class CalendarActivity : AppCompatActivity() {
         modesContainer = findViewById(R.id.modesContainer)
 
         layoutMultiSelectActions = findViewById(R.id.layout_multi_select_actions)
+        tvMsSummary = findViewById(R.id.tv_ms_summary)
         btnMsCancel = findViewById(R.id.btn_ms_cancel)
         btnMsSelectAll = findViewById(R.id.btn_ms_select_all)
         btnMsDelete = findViewById(R.id.btn_ms_delete)
@@ -460,15 +464,16 @@ class CalendarActivity : AppCompatActivity() {
         dailyAdapter.onSelectionChanged = { count ->
             if (dailyAdapter.isMultiSelectMode) {
                 isMultiSelectModeActive = true
-                layoutMultiSelectActions.visibility = View.VISIBLE
-                btnMsDelete.text = if (count > 0) "删除($count)" else "删除"
+                MultiSelectMotion.animateIn(layoutMultiSelectActions)
+                tvMsSummary.text = MultiSelectBarSummary.build(this, dailyAdapter.selectedBills.toList())
+                btnMsDelete.text = getString(R.string.delete_label)
                 com.taostudio.tapaccounting.ui.common.BillStatsMultiSelect.refreshButton(
                     btnMsExcludeStats,
                     dailyAdapter.selectedBills.toList()
                 )
             } else {
                 isMultiSelectModeActive = false
-                layoutMultiSelectActions.visibility = View.GONE
+                MultiSelectMotion.animateOut(layoutMultiSelectActions)
             }
         }
         rvDailyBills.adapter = dailyAdapter

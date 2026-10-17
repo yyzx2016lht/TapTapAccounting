@@ -438,7 +438,7 @@ class AssetStatsActivity : AppCompatActivity() {
             val targets = billAdapter.getSelectedBills()
             if (targets.isEmpty()) return@setOnClickListener
             lifecycleScope.launch(Dispatchers.IO) {
-                BillDeleteHelper.deleteBillsAndRevertBalance(db, targets)
+                if (!com.taostudio.tapaccounting.logic.deleteBillsAndRevertBalanceSafe(db, targets)) return@launch
                 withContext(Dispatchers.Main) {
                     billAdapter.clearSelection()
                     filteredBillsCache.clear()

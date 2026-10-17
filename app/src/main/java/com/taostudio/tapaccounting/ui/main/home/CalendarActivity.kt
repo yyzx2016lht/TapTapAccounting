@@ -300,7 +300,7 @@ class CalendarActivity : AppCompatActivity() {
 
             val db = AppDatabase.getDatabase(this)
             lifecycleScope.launch {
-                com.taostudio.tapaccounting.logic.BillDeleteHelper.deleteBillsAndRevertBalance(db, billsToDelete)
+                if (!com.taostudio.tapaccounting.logic.deleteBillsAndRevertBalanceSafe(db, billsToDelete)) return@launch
 
                 dailyAdapter.clearSelection()
                 loadDataForMonth()
@@ -906,7 +906,7 @@ class CalendarActivity : AppCompatActivity() {
             bottomSheet.dismiss()
             lifecycleScope.launch(Dispatchers.IO) {
                 val db = AppDatabase.getDatabase(this@CalendarActivity)
-                com.taostudio.tapaccounting.logic.BillDeleteHelper.deleteBillAndRevertBalance(db, bill)
+                if (!com.taostudio.tapaccounting.logic.deleteBillAndRevertBalanceSafe(db, bill)) return@launch
 
                 withContext(Dispatchers.Main) {
                     loadDataForMonth()

@@ -1104,8 +1104,9 @@ internal class HomeBookDrawerController(
                 }
                 BookDeleteMode.DELETE_BILLS_AND_REVERT_ASSETS -> {
                     db.billDao().backfillAssetLinksByName()
-                    db.billDao().getBillsByBookNamesList(aliases.toList())
-                        .forEach { com.taostudio.tapaccounting.logic.BillDeleteHelper.deleteBillAndRevertBalance(db, it) }
+                    for (bill in db.billDao().getBillsByBookNamesList(aliases.toList())) {
+                        if (!com.taostudio.tapaccounting.logic.deleteBillAndRevertBalanceSafe(db, bill)) return@launch
+                    }
                     aliases.forEach { alias ->
                         db.chatMessageDao().deleteAllByBookName(alias)
                     }

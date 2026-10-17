@@ -224,3 +224,43 @@ object BillDeleteHelper {
         }
     }
 }
+
+/** 删除失败时展示给用户的原因（区分"缺汇率"和"越权"，其余归为通用失败）。 */
+fun deleteFailureMessage(error: Throwable): String = when (error) {
+    is MissingCurrencyRateException -> "删除失败：缺少汇率，请先在「汇率」页更新后重试"
+    is IllegalArgumentException -> "只能删除自己创建的共享账单"
+    else -> "删除失败，请稍后重试"
+}
+
+private fun toastDeleteFailure(error: Throwable) {
+    val ctx = runCatching { TapApplication.app() }.getOrNull() ?: return
+    com.taostudio.tapaccounting.Utils.toast(ctx, deleteFailureMessage(error))
+}
+
+/**
+ * [BillDeleteHelper.deleteBillAndRevertBalance] 的安全版：捕获"缺汇率/越权"等业务异常并提示用户，
+ * 返回 false 表示删除未完成。**UI 层的 fire-and-forget 协程必须用这个版本**——
+ * 直接调用原版时，一旦抛异常会逃进未捕获异常处理器，直接让进程崩溃。
+ */
+suspend fun deleteBillAndRevertBalanceSafe(db: AppDatabase, bill: Bill): Boolean =
+    try {
+        BillDeleteHelper.deleteBillAndRevertBalance(db, bill)
+        true
+    } catch (e: kotlinx.coroutines.CancellationException) {
+        throw e
+    } catch (e: Throwable) {
+        toastDeleteFailure(e)
+        false
+    }
+
+/** [deleteBillAndRevertBalanceSafe] 的批量版本。 */
+suspend fun deleteBillsAndRevertBalanceSafe(db: AppDatabase, bills: List<Bill>): Boolean =
+    try {
+        BillDeleteHelper.deleteBillsAndRevertBalance(db, bills)
+        true
+    } catch (e: kotlinx.coroutines.CancellationException) {
+        throw e
+    } catch (e: Throwable) {
+        toastDeleteFailure(e)
+        false
+    }

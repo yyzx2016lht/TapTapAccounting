@@ -28,14 +28,19 @@ object ChatBillMessageActions {
         if (msgIdx < 0) return null
 
         val deletedIds = mutableListOf<Long>()
+        var deleteFailed = false
         withContext(Dispatchers.IO) {
-            billsToDelete.forEach { bill ->
+            for (bill in billsToDelete) {
                 if (bill.id > 0L) {
-                    BillDeleteHelper.deleteBillAndRevertBalance(db, bill)
+                    if (!com.taostudio.tapaccounting.logic.deleteBillAndRevertBalanceSafe(db, bill)) {
+                        deleteFailed = true
+                        return@withContext
+                    }
                     deletedIds += bill.id
                 }
             }
         }
+        if (deleteFailed) return null
 
         return markBillsDeletedFromMessage(
             db = db,

@@ -510,7 +510,7 @@ internal class AssetBillDetailSheetController(
                 .setMessage(activity.getString(R.string.confirm_delete_message))
                 .setPositiveButton(activity.getString(R.string.delete)) { _, _ ->
                     scope.launch(Dispatchers.IO) {
-                        com.taostudio.tapaccounting.logic.BillDeleteHelper.deleteBillAndRevertBalance(db, bill)
+                        if (!com.taostudio.tapaccounting.logic.deleteBillAndRevertBalanceSafe(db, bill)) return@launch
                         withContext(Dispatchers.Main) {
                             Toast.makeText(activity, activity.getString(R.string.deleted), Toast.LENGTH_SHORT).show()
                             onDataChanged()

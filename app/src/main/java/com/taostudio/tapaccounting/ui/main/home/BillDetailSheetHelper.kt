@@ -337,7 +337,7 @@ object BillDetailSheetHelper {
                 bottomSheet.dismiss()
                 lifecycleOwner.lifecycleScope.launch(Dispatchers.IO) {
                     val db = AppDatabase.getDatabase(context)
-                    com.taostudio.tapaccounting.logic.BillDeleteHelper.deleteBillAndRevertBalance(db, bill)
+                    if (!com.taostudio.tapaccounting.logic.deleteBillAndRevertBalanceSafe(db, bill)) return@launch
                     withContext(Dispatchers.Main) {
                         onBillChanged?.invoke()
                         Toast.makeText(context, context.getString(R.string.deleted), Toast.LENGTH_SHORT).show()

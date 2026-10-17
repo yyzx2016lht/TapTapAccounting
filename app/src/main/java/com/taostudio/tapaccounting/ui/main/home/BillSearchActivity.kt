@@ -186,7 +186,7 @@ class BillSearchActivity : AppCompatActivity() {
             val billsToDelete = adapter.getSelectedBills()
             if (billsToDelete.isEmpty()) return@setOnClickListener
             lifecycleScope.launch {
-                com.taostudio.tapaccounting.logic.BillDeleteHelper.deleteBillsAndRevertBalance(db, billsToDelete)
+                if (!com.taostudio.tapaccounting.logic.deleteBillsAndRevertBalanceSafe(db, billsToDelete)) return@launch
                 val deletedIds = billsToDelete.map { it.id }.toSet()
                 allBills = allBills.filterNot { it.id in deletedIds }
                 adapter.clearSelection()

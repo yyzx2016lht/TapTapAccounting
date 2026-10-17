@@ -517,14 +517,18 @@ class ChatSessionController(
             btnDelete.setOnClickListener {
                 dialog.dismiss()
                 lifecycleScope.launch {
+                    var deleteFailed = false
                     withContext(Dispatchers.IO) {
                         val selectedBills = sortedBills.filterIndexed { index, _ -> selectedIndexes.contains(index) }
-                        selectedBills.forEach { bill ->
-                            com.taostudio.tapaccounting.logic.BillDeleteHelper.deleteBillAndRevertBalance(db, bill)
+                        for (bill in selectedBills) {
+                            if (!com.taostudio.tapaccounting.logic.deleteBillAndRevertBalanceSafe(db, bill)) {
+                                deleteFailed = true
+                                return@withContext
+                            }
                         }
                         db.chatMessageDao().deleteByBookAndConversation(row.bookName, row.conversationId)
                     }
-                    onSessionDeleted(row)
+                    if (!deleteFailed) onSessionDeleted(row)
                 }
             }
 

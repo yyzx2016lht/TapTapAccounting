@@ -542,7 +542,14 @@ class SettingsActivity : AppCompatActivity() {
                 ) {
                     showFinalDeleteConfirm(target, getString(R.string.delete_with_bills)) {
                         lifecycleScope.launch(Dispatchers.IO) {
-                            categoryRepository.deleteCategoryAndBills(target.id, AppDatabase.getDatabase(this@SettingsActivity))
+                            try {
+                                categoryRepository.deleteCategoryAndBills(target.id, AppDatabase.getDatabase(this@SettingsActivity))
+                            } catch (e: kotlinx.coroutines.CancellationException) {
+                                throw e
+                            } catch (e: Exception) {
+                                Utils.toast(this@SettingsActivity, com.taostudio.tapaccounting.logic.deleteFailureMessage(e))
+                                return@launch
+                            }
                             withContext(Dispatchers.Main) {
                                 if (expandedParentName == target.name) expandedParentName = null
                                 renderUI()

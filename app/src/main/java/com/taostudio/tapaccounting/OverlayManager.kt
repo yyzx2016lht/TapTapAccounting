@@ -863,6 +863,7 @@ class OverlayManager(private val ctx: Context) {
         val fee = obj.optDouble("fee", 0.0).coerceAtLeast(0.0)
 
         CoroutineScope(Dispatchers.IO).launch {
+            try {
             val db = AppDatabase.getDatabase(ctx)
             val availableBooks = BookAccountManager.getBookAccounts(ctx)
             val fallbackBookName = BookAccountManager.resolveWritableBook(
@@ -914,6 +915,11 @@ class OverlayManager(private val ctx: Context) {
                 bookName = resolvedBookName
             )
             com.taostudio.tapaccounting.logic.BillMutationService.insertBillAndApplyImpact(db, bill)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Logger.w(ctx, "OverlayManager", "AI 多单落库失败：${e.message}")
+            }
         }
     }
 

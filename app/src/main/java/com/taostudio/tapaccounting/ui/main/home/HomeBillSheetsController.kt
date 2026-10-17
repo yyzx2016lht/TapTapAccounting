@@ -566,7 +566,7 @@ internal class HomeBillSheetsController(
                 bottomSheet.dismiss()
                 fragment.lifecycleScope.launch(Dispatchers.IO) {
                     val db = AppDatabase.getDatabase(context)
-                    com.taostudio.tapaccounting.logic.BillDeleteHelper.deleteBillAndRevertBalance(db, bill)
+                    if (!com.taostudio.tapaccounting.logic.deleteBillAndRevertBalanceSafe(db, bill)) return@launch
                     withContext(Dispatchers.Main) {
                         onDataChanged()
                         Toast.makeText(fragment.context, "已删除", Toast.LENGTH_SHORT).show()

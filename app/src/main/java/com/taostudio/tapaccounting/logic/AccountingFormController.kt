@@ -2016,6 +2016,17 @@ class AccountingFormController(
                     onCloseRequest(true)
                 }
             }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main + NonCancellable) {
+                    Utils.toast(
+                        ctx,
+                        if (e is com.taostudio.tapaccounting.logic.MissingCurrencyRateException)
+                            "保存失败：缺少汇率，请先在「汇率」页更新后重试"
+                        else "保存失败，请稍后重试"
+                    )
+                }
             } finally {
                 withContext(Dispatchers.Main + NonCancellable) {
                     isSaving = false

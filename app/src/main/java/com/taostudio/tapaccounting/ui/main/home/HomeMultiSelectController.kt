@@ -79,7 +79,7 @@ internal class HomeMultiSelectController(
             ) {
                 val db = AppDatabase.getDatabase(fragment.requireContext())
                 fragment.lifecycleScope.launch(Dispatchers.IO) {
-                    com.taostudio.tapaccounting.logic.BillDeleteHelper.deleteBillsAndRevertBalance(db, billsToDelete)
+                    if (!com.taostudio.tapaccounting.logic.deleteBillsAndRevertBalanceSafe(db, billsToDelete)) return@launch
                     withContext(Dispatchers.Main) {
                         getHomeAdapter().clearSelection()
                         onDataChanged()

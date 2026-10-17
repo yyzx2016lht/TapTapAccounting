@@ -101,6 +101,8 @@ class HomeFragment : Fragment() {
     private lateinit var rvTransactions: RecyclerView
     private lateinit var layoutEmptyView: View
     private lateinit var btnEmptyAddBill: View
+    private lateinit var tvEmptyTitle: TextView
+    private lateinit var tvEmptyHint: TextView
     private lateinit var homeAdapter: HomeAdapter
     private lateinit var bookDrawerController: HomeBookDrawerController
     private lateinit var bannerController: HomeBannerController
@@ -180,6 +182,7 @@ class HomeFragment : Fragment() {
     private lateinit var tvMonthSelector: TextView
     private lateinit var tvChartTotal: TextView
     private lateinit var tvChartTitle: TextView
+    private lateinit var tvChartCaption: TextView
     private lateinit var vBannerTopScrim: View
     private lateinit var vBannerGradient: View
     private lateinit var swipeRefreshLayout: SwipeRefreshLayout
@@ -288,12 +291,15 @@ class HomeFragment : Fragment() {
         barChart = cvChartContainer.findViewById(R.id.barChart)
         tvChartTotal = cvChartContainer.findViewById(R.id.tvChartTotal)
         tvChartTitle = cvChartContainer.findViewById(R.id.tvChartTitle)
+        tvChartCaption = cvChartContainer.findViewById(R.id.tvChartCaption)
         cvChartContainer.findViewById<ImageView>(R.id.ivChartSettings)?.setOnClickListener {
             showChartSettingsDialog()
         }
         rvTransactions = view.findViewById(R.id.rvTransactions)
         layoutEmptyView = layoutInflater.inflate(R.layout.item_home_empty, null, false)
         btnEmptyAddBill = layoutEmptyView.findViewById(R.id.btnEmptyAddBill)
+        tvEmptyTitle = layoutEmptyView.findViewById(R.id.tv_empty_title)
+        tvEmptyHint = layoutEmptyView.findViewById(R.id.tv_empty_hint)
         swipeRefreshLayout = view.findViewById(R.id.swipeRefreshLayout)
         drawerBooks = view.findViewById(R.id.drawerBooks)
         layoutBookDrawer = view.findViewById(R.id.layoutBookDrawer)
@@ -595,6 +601,13 @@ class HomeFragment : Fragment() {
                     val monthlyBills = state.monthlyBills
                     val adapterT0 = System.currentTimeMillis()
                     homeAdapter.showEmptyState = !state.isLoading && monthlyBills.isEmpty()
+                    if (homeAdapter.showEmptyState && homeAdapter.showChart) {
+                        tvEmptyTitle.setText(R.string.no_bills_this_month)
+                        tvEmptyHint.setText(R.string.no_bills_this_month_hint)
+                    } else {
+                        tvEmptyTitle.setText(R.string.no_bills_yet)
+                        tvEmptyHint.setText(R.string.no_bills_hint)
+                    }
 
                     if (state.isLoading && monthlyBills.isEmpty()) {
                         // 正在切换账本/加载中，且还没有新数据：直接清空列表，不走 DiffUtil
@@ -1105,6 +1118,7 @@ class HomeFragment : Fragment() {
                 barChart = barChart,
                 tvChartTotal = tvChartTotal,
                 tvChartTitle = tvChartTitle,
+                tvChartCaption = tvChartCaption,
                 tvMonthExpense = tvMonthExpense,
                 tvMonthIncome = tvMonthIncome,
                 tvMonthBalance = tvMonthBalance,

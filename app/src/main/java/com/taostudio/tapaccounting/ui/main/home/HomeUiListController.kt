@@ -5,6 +5,7 @@ import android.view.ViewGroup
 import android.widget.TextView
 import androidx.core.view.WindowCompat
 import androidx.fragment.app.Fragment
+import androidx.recyclerview.widget.DefaultItemAnimator
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
@@ -71,8 +72,15 @@ internal class HomeUiListController(
         (fragment.activity as? MainActivity)?.homeRecycledViewPool?.let {
             rvTransactions.setRecycledViewPool(it)
         }
-        (rvTransactions.itemAnimator as? androidx.recyclerview.widget.SimpleItemAnimator)?.supportsChangeAnimations = false
-        rvTransactions.itemAnimator = null
+        // 保留条目增/删/移动的过渡动画，但关掉"内容变更"动画：首页多处
+        // notifyItemRangeChanged(0, itemCount, PAYLOAD_*) 会与 DiffUtil 派发同帧触发
+        // requestLayout，change animation 留下的临时分离 holder 会被布局重新 attach，
+        // 抛 "Called attach on a child which is not detached"。与 ChatActivity 同款处理。
+        rvTransactions.itemAnimator = DefaultItemAnimator().apply {
+            supportsChangeAnimations = false
+            addDuration = 180L
+            removeDuration = 160L
+        }
 
         homeAdapter.onBillItemClick = { bill ->
             onShowBillDetailSheet(bill)

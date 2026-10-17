@@ -3,6 +3,7 @@ package com.taostudio.tapaccounting.ui.main.home
 import com.taostudio.tapaccounting.BillColors
 import android.graphics.Color
 import android.text.SpannableString
+import android.view.View
 import android.text.Spanned
 import android.text.style.RelativeSizeSpan
 import android.text.style.StyleSpan
@@ -31,6 +32,7 @@ internal class HomeChartController(
     private val barChart: BarChart,
     private val tvChartTotal: TextView,
     private val tvChartTitle: TextView,
+    private val tvChartCaption: TextView,
     private val tvMonthExpense: TextView,
     private val tvMonthIncome: TextView,
     private val tvMonthBalance: TextView,
@@ -294,6 +296,17 @@ internal class HomeChartController(
             1 -> "总计: ${String.format(Locale.getDefault(), "%,.2f", totalIncome)}"
             else -> "总计: ${String.format(Locale.getDefault(), "%,.2f", totalExpense)}"
         }
+        val monthStart = Calendar.getInstance().apply {
+            set(Calendar.YEAR, getSelectedYear())
+            set(Calendar.MONTH, getSelectedMonth() - 1)
+            set(Calendar.DAY_OF_MONTH, 1)
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }.timeInMillis
+        val crossesMonth = startDateMs < monthStart && (totalExpense > 0f || totalIncome > 0f)
+        tvChartCaption.visibility = if (crossesMonth) View.VISIBLE else View.GONE
 
         val expenseEntries = mutableListOf<BarEntry>()
         val incomeEntries = mutableListOf<BarEntry>()

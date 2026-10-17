@@ -30,6 +30,7 @@ import com.taostudio.tapaccounting.R
 import com.taostudio.tapaccounting.TapApplication
 import com.taostudio.tapaccounting.TextIconRenderer
 import com.taostudio.tapaccounting.data.local.entity.Bill
+import com.taostudio.tapaccounting.logic.CategoryIconUrlCache
 import com.taostudio.tapaccounting.logic.BillDisplayFormatter
 import com.taostudio.tapaccounting.logic.CurrencyManager
 import com.taostudio.tapaccounting.ui.common.UiMotion.applyItemPressFeedback
@@ -51,10 +52,6 @@ class HomeAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
     private val diffScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
     private var submitJob: Job? = null
     private var submitGeneration: Long = 0L
-    // 图标 URL 缓存，key 形如 "type|categoryName"。
-    private val iconUrlCache = mutableMapOf<String, String>()
-    // 缓存对应的分类版本号；分类换图标/被删除后版本号会变，届时整表清空重查。
-    private var iconCacheRevision = -1
     private val itemTimeFormatter = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault())
 
     companion object {
@@ -160,17 +157,13 @@ class HomeAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
         return BillDisplayFormatter.stripRefundPrefix(categoryName)
     }
 
-    private fun buildIconCacheKey(categoryName: String, type: Int): String = "$type|$categoryName"
+    private fun buildIconCacheKey(categoryName: String, type: Int): String =
+        CategoryIconUrlCache.key(categoryName, type)
 
-    private fun getCachedIconUrl(key: String): String? = synchronized(iconUrlCache) { iconUrlCache[key] }
+    private fun getCachedIconUrl(key: String): String? = CategoryIconUrlCache.get(key)
 
     private fun putCachedIconUrl(key: String, url: String) {
-        synchronized(iconUrlCache) {
-            if (iconUrlCache.size > 200) {
-                iconUrlCache.clear()
-            }
-            iconUrlCache[key] = url
-        }
+        CategoryIconUrlCache.put(key, url)
     }
 
     /**
@@ -323,13 +316,17 @@ class HomeAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
         }
     }
 
-    fun toggleMultiSelectMode() {
-        isMultiSelectMode = !isMultiSelectMode
-        if (!isMultiSelectMode) {
-            selectedBills.clear()
-        }
-        onSelectionChanged?.invoke(selectedBills.size)
+    /**
+     * 长按进入多选：先把账单并入选中，再统一刷一次界面，最后才回调。
+     * 与资产详情页的进入顺序一致（先选中 → 再通知），不再出现「已选 0 笔」触发一次、
+     * 「已选 1 笔」再触发一次把底部操作栏动画打断重启的情况。
+     */
+    private fun enterMultiSelect(bills: List<Bill>) {
+        isMultiSelectMode = true
+        selectedBills.clear()
+        selectedBills.addAll(bills)
         notifyItemRangeChanged(0, items.size, PAYLOAD_MODE_CHANGE)
+        onSelectionChanged?.invoke(selectedBills.size)
     }
 
     fun clearSelection() {
@@ -633,14 +630,7 @@ class HomeAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
                 if (boundDeprecated) return@setOnLongClickListener true
                 if (!isMultiSelectMode) {
                     if (!boundSelectable) return@setOnLongClickListener true
-                    toggleMultiSelectMode()
-                    selectedBills.add(bill)
-                    val pos = adapterPosition
-                    if (pos != RecyclerView.NO_POSITION) {
-                        notifyItemChanged(pos, PAYLOAD_SELECTION_CHANGE)
-                        updateHeaderSelectionNear(pos)
-                    }
-                    onSelectionChanged?.invoke(selectedBills.size)
+                    enterMultiSelect(listOf(bill))
                 }
                 true
             }
@@ -900,11 +890,7 @@ class HomeAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
                 )
                 setIconContainerSizeDp(44, 44)
                 setIconSizeDp(21)
-                // 分类换过图标/被删除后，缓存里按名字存的旧图标要整表作废，重新解析
-                if (iconCacheRevision != CategoryIcons.revision) {
-                    iconCacheRevision = CategoryIcons.revision
-                    synchronized(iconUrlCache) { iconUrlCache.clear() }
-                }
+                // 分类换图标后由共享缓存按 revision 整表作废（见 CategoryIconUrlCache.get），这里不用再手动比对
                 val cachedIconUrl = getCachedIconUrl(iconCacheKey)
                 if (cachedIconUrl != null) {
                     // 图标没变（多选切换、局部刷新等重绑）时不清空不重载，避免闪一下

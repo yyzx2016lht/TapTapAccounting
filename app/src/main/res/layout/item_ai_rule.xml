@@ -44,10 +44,11 @@
                 android:id="@+id/tv_status"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:background="@drawable/bg_status_active"
-                android:text="@string/active"
-                android:textColor="#3F8F4E"
-                android:textSize="12sp" />
+                android:background="@drawable/bg_status_inactive"
+                android:text="@string/status_disabled"
+                android:textColor="#8A98AD"
+                android:textSize="12sp"
+                android:visibility="gone" />
 
             <Switch
                 android:id="@+id/switch_rule_enabled"
@@ -63,12 +64,9 @@
             android:id="@+id/tv_actions"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="10dp"
-            android:background="@drawable/bg_rule_page_section"
-            android:lineSpacingExtra="5dp"
-            android:paddingHorizontal="12dp"
-            android:paddingVertical="10dp"
-            android:text="类型：支出\n分类：餐饮\n账户：微信"
+            android:layout_marginTop="6dp"
+            android:lineSpacingExtra="3dp"
+            android:text="支出 · 餐饮 · 微信"
             android:textColor="#607089"
             android:textSize="13sp" />
     </LinearLayout>

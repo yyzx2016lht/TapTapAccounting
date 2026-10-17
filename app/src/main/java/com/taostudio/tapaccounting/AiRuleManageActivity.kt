@@ -1,14 +1,9 @@
 package com.taostudio.tapaccounting
 
 import android.graphics.Color
-import android.graphics.Typeface
 import android.os.Bundle
 import android.text.Editable
-import android.text.SpannableStringBuilder
-import android.text.Spanned
 import android.text.TextWatcher
-import android.text.style.ForegroundColorSpan
-import android.text.style.StyleSpan
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -387,49 +382,32 @@ class AiRuleManageActivity : AppCompatActivity() {
             val rule = items[position]
 
             holder.tvKeyword.text = rule.keyword
-
-            if (rule.isEnabled) {
-                holder.tvStatus.text = holder.itemView.context.getString(R.string.status_enabled)
-                holder.tvStatus.setTextColor(Color.parseColor("#4CAF50"))
-                holder.tvStatus.setBackgroundResource(R.drawable.bg_status_active)
-            } else {
-                holder.tvStatus.text = holder.itemView.context.getString(R.string.status_disabled)
-                holder.tvStatus.setTextColor(Color.parseColor("#9E9E9E"))
-                holder.tvStatus.setBackgroundResource(R.drawable.bg_status_inactive)
-            }
-
-            val sb = SpannableStringBuilder()
-
-            fun appendAction(label: String, value: String?) {
-                if (value.isNullOrEmpty()) return
-                val labelStart = sb.length
-                sb.append(label).append(": ")
-                val valueStart = sb.length
-                sb.append(value).append("   ")
-                sb.setSpan(StyleSpan(Typeface.BOLD), valueStart, sb.length - 3, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-                sb.setSpan(ForegroundColorSpan(Color.parseColor("#333333")), valueStart, sb.length - 3, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-                sb.setSpan(ForegroundColorSpan(Color.parseColor("#7A8598")), labelStart, valueStart, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-            }
+            holder.tvKeyword.setTextColor(Color.parseColor(if (rule.isEnabled) "#24344A" else "#8A98AD"))
+            holder.tvStatus.visibility = if (rule.isEnabled) View.GONE else View.VISIBLE
 
             val ctx = holder.itemView.context
+            val parts = mutableListOf<String>()
             rule.targetType?.let {
-                val typeStr = when (it) {
+                parts += when (it) {
                     0 -> ctx.getString(R.string.type_expense)
                     1 -> ctx.getString(R.string.type_income)
                     2 -> ctx.getString(R.string.type_transfer)
                     3 -> ctx.getString(R.string.type_repayment)
                     else -> ctx.getString(R.string.type_unknown)
                 }
-                appendAction(ctx.getString(R.string.label_type), typeStr)
             }
-            appendAction(ctx.getString(R.string.label_category), rule.targetCategory)
-            appendAction(ctx.getString(R.string.label_account), rule.targetAccount1)
-            appendAction(ctx.getString(R.string.label_target_account), rule.targetAccount2)
-
-            holder.tvActions.text = if (sb.isEmpty()) ctx.getString(R.string.no_auto_fill_action) else sb
+            listOf(rule.targetCategory, rule.targetAccount1, rule.targetAccount2)
+                .filter { !it.isNullOrBlank() }
+                .forEach { parts += it!! }
+            holder.tvActions.text = if (parts.isEmpty()) {
+                ctx.getString(R.string.no_auto_fill_action)
+            } else {
+                parts.joinToString(" · ")
+            }
             holder.cbSelect.visibility = if (isMultiSelectMode()) View.VISIBLE else View.GONE
             holder.cbSelect.isChecked = isSelected(rule)
-            holder.itemView.alpha = if (isMultiSelectMode() && isSelected(rule)) 0.82f else 1f
+            val restingAlpha = if (rule.isEnabled) 1f else 0.72f
+            holder.itemView.alpha = if (isMultiSelectMode() && isSelected(rule)) restingAlpha * 0.82f else restingAlpha
 
             holder.switchEnabled.setOnCheckedChangeListener(null)
             holder.switchEnabled.isChecked = rule.isEnabled

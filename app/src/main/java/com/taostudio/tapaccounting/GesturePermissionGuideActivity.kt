@@ -35,6 +35,7 @@ class GesturePermissionGuideActivity : AppCompatActivity() {
 
     private lateinit var summaryText: TextView
     private lateinit var listContainer: LinearLayout
+    private lateinit var tryOverlayButton: MaterialButton
 
     private data class StatusStyle(
         val label: String,
@@ -150,6 +151,13 @@ class GesturePermissionGuideActivity : AppCompatActivity() {
         listContainer = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
         }
+        content.addView(buildOverlayPreviewCard(), LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        ).apply {
+            bottomMargin = dp(12)
+        })
+
         content.addView(listContainer)
         scroll.addView(content)
         root.addView(scroll, LinearLayout.LayoutParams(
@@ -164,7 +172,16 @@ class GesturePermissionGuideActivity : AppCompatActivity() {
         val items = buildGuideItems()
         val verifiedRequired = items.count { it.required && it.autoDetectable && it.status.verified }
         val requiredCount = items.count { it.required && it.autoDetectable }
-        summaryText.text = getString(R.string.prepared_count_fmt, verifiedRequired, requiredCount)
+        val missing = (requiredCount - verifiedRequired).coerceAtLeast(0)
+        summaryText.text = if (missing == 0) {
+            getString(R.string.prepared_count_ready_fmt, verifiedRequired, requiredCount)
+        } else {
+            getString(R.string.prepared_count_pending_fmt, missing)
+        }
+        val overlayReady = Build.VERSION.SDK_INT < Build.VERSION_CODES.M || Settings.canDrawOverlays(this)
+        tryOverlayButton.text = getString(
+            if (overlayReady) R.string.try_overlay else R.string.try_overlay_need_permission
+        )
 
         listContainer.removeAllViews()
         items.forEachIndexed { index, item ->
@@ -174,6 +191,100 @@ class GesturePermissionGuideActivity : AppCompatActivity() {
             ).apply {
                 bottomMargin = if (index == items.lastIndex) 0 else dp(10)
             })
+        }
+    }
+
+    private fun buildOverlayPreviewCard(): View {
+        return CardView(this).apply {
+            radius = dp(16).toFloat()
+            cardElevation = 0f
+            setCardBackgroundColor(Color.WHITE)
+            addView(LinearLayout(this@GesturePermissionGuideActivity).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(dp(16), dp(14), dp(16), dp(14))
+                addView(TextView(this@GesturePermissionGuideActivity).apply {
+                    text = getString(R.string.overlay_preview_title)
+                    setTextColor(Color.parseColor("#1A2744"))
+                    textSize = 16f
+                    setTypeface(typeface, android.graphics.Typeface.BOLD)
+                })
+                addView(TextView(this@GesturePermissionGuideActivity).apply {
+                    text = getString(R.string.overlay_preview_desc)
+                    setTextColor(Color.parseColor("#6D7785"))
+                    textSize = 12f
+                    setPadding(0, dp(4), 0, dp(12))
+                })
+                addView(FrameLayout(this@GesturePermissionGuideActivity).apply {
+                    background = roundedBg(Color.parseColor("#EDEFFA"), dp(14).toFloat())
+                    setPadding(dp(18), dp(16), dp(18), dp(16))
+                    addView(LinearLayout(this@GesturePermissionGuideActivity).apply {
+                        orientation = LinearLayout.VERTICAL
+                        background = roundedBg(Color.WHITE, dp(16).toFloat())
+                        setPadding(dp(16), dp(14), dp(16), dp(14))
+                        val amountRow = LinearLayout(this@GesturePermissionGuideActivity).apply {
+                            orientation = LinearLayout.HORIZONTAL
+                            gravity = Gravity.CENTER_VERTICAL
+                        }
+                        amountRow.addView(TextView(this@GesturePermissionGuideActivity).apply {
+                            text = "0.00"
+                            setTextColor(Color.parseColor("#1A2744"))
+                            textSize = 28f
+                            setTypeface(typeface, android.graphics.Typeface.BOLD)
+                        }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+                        amountRow.addView(TextView(this@GesturePermissionGuideActivity).apply {
+                            text = getString(R.string.type_expense)
+                            setTextColor(Color.parseColor("#5C6BC0"))
+                            textSize = 12f
+                            setPadding(dp(10), dp(4), dp(10), dp(4))
+                            background = roundedBg(Color.parseColor("#EDEFFA"), dp(12).toFloat())
+                        })
+                        addView(amountRow)
+                        addView(TextView(this@GesturePermissionGuideActivity).apply {
+                            text = "餐饮  ·  微信"
+                            setTextColor(Color.parseColor("#8A98AD"))
+                            textSize = 13f
+                            setPadding(0, dp(10), 0, 0)
+                        })
+                    })
+                })
+                tryOverlayButton = MaterialButton(this@GesturePermissionGuideActivity).apply {
+                    textSize = 13f
+                    cornerRadius = dp(10)
+                    isAllCaps = false
+                    insetTop = 0
+                    insetBottom = 0
+                    styleGuideButton(this, emphasize = true)
+                    setOnClickListener { previewOverlay() }
+                }
+                addView(tryOverlayButton, LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    dp(40)
+                ).apply { topMargin = dp(12) })
+            })
+        }
+    }
+
+    private fun previewOverlay() {
+        val overlayReady = Build.VERSION.SDK_INT < Build.VERSION_CODES.M || Settings.canDrawOverlays(this)
+        if (!overlayReady) {
+            openOverlaySettings()
+            return
+        }
+        OverlayService.startCompat(this, Intent(this, OverlayService::class.java).apply {
+            action = OverlayService.ACTION_SHOW_OVERLAY
+        })
+    }
+
+    private fun styleGuideButton(button: MaterialButton, emphasize: Boolean) {
+        if (emphasize) {
+            button.backgroundTintList = android.content.res.ColorStateList.valueOf(Color.parseColor("#5C6BC0"))
+            button.strokeWidth = 0
+            button.setTextColor(Color.WHITE)
+        } else {
+            button.backgroundTintList = android.content.res.ColorStateList.valueOf(Color.WHITE)
+            button.strokeColor = android.content.res.ColorStateList.valueOf(Color.parseColor("#C5CEF0"))
+            button.strokeWidth = dp(1)
+            button.setTextColor(Color.parseColor("#5C6BC0"))
         }
     }
 
@@ -266,12 +377,15 @@ class GesturePermissionGuideActivity : AppCompatActivity() {
                     setPadding(0, dp(6), 0, dp(10))
                 })
 
+                val needsAction = item.required && item.autoDetectable && !item.status.verified
                 addView(MaterialButton(this@GesturePermissionGuideActivity).apply {
                     text = item.actionText
                     textSize = 13f
-                    setTextColor(Color.WHITE)
                     cornerRadius = dp(10)
-                    backgroundTintList = android.content.res.ColorStateList.valueOf(Color.parseColor("#5C6BC0"))
+                    isAllCaps = false
+                    insetTop = 0
+                    insetBottom = 0
+                    styleGuideButton(this, emphasize = needsAction)
                     setOnClickListener { item.onAction() }
                 }, LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.MATCH_PARENT,

@@ -2,6 +2,7 @@ package com.taostudio.tapaccounting.ui.activity
 
 import com.taostudio.tapaccounting.BillColors
 import android.graphics.Color
+import android.graphics.Paint
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
@@ -39,6 +40,7 @@ class HistoryBillActivity : AppCompatActivity() {
 
     private lateinit var rvDeletedBills: RecyclerView
     private lateinit var tvEmpty: TextView
+    private lateinit var tvTrashHint: TextView
     private lateinit var header: SecondaryPageHeaderView
     private lateinit var btnHeaderActionText: TextView
     private lateinit var layoutBottomActions: View
@@ -52,6 +54,7 @@ class HistoryBillActivity : AppCompatActivity() {
 
     private val headerDateFormat = SimpleDateFormat("MM.dd", Locale.getDefault())
     private val weekdayFormat = SimpleDateFormat("EEEE", Locale.CHINA)
+    private val billDateFormat = SimpleDateFormat("MM.dd", Locale.getDefault())
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -64,6 +67,7 @@ class HistoryBillActivity : AppCompatActivity() {
 
     private fun initViews() {
         header = findViewById(R.id.secondary_header)
+        tvTrashHint = findViewById(R.id.tv_trash_hint)
         btnHeaderActionText = header.findViewById(R.id.btn_header_action_text)
         btnHeaderActionText.setOnClickListener { onHeaderActionClicked() }
         header.findViewById<View>(R.id.btn_back)?.setOnClickListener {
@@ -280,6 +284,7 @@ class HistoryBillActivity : AppCompatActivity() {
                 adapter.submitList(grouped, selectedDeletedBillIds)
                 val isEmpty = deletedBills.isEmpty()
                 tvEmpty.visibility = if (isEmpty) View.VISIBLE else View.GONE
+                tvTrashHint.visibility = if (isEmpty) View.GONE else View.VISIBLE
                 rvDeletedBills.visibility = if (isEmpty) View.GONE else View.VISIBLE
                 updateUI()
             }
@@ -301,7 +306,7 @@ class HistoryBillActivity : AppCompatActivity() {
             if (dayBills.isEmpty()) return@forEach
             val firstBill = dayBills.first()
             val deletedAt = firstBill.deletedAt
-            val dateStr = headerDateFormat.format(Date(deletedAt))
+            val dateStr = getString(R.string.trash_deleted_on_fmt, headerDateFormat.format(Date(deletedAt)))
             val weekdayStr = weekdayFormat.format(Date(deletedAt))
             items.add(
                 ListItem.Header(
@@ -405,6 +410,11 @@ class HistoryBillActivity : AppCompatActivity() {
             cancelOnTouchOutside = true,
             useSolidPanelBackground = true
         )
+    }
+
+    private fun displayOrFallback(raw: String, fallback: String, vararg placeholders: String): String {
+        val trimmed = raw.trim()
+        return if (trimmed.isEmpty() || placeholders.any { it == trimmed }) fallback else trimmed
     }
 
     override fun onBackPressed() {
@@ -532,7 +542,9 @@ class HistoryBillActivity : AppCompatActivity() {
             private val ivIcon: ImageView = itemView.findViewById(R.id.iv_bill_category_icon)
             private val tvCategory: TextView = itemView.findViewById(R.id.tv_bill_category)
             private val tvDetail: TextView = itemView.findViewById(R.id.tv_bill_detail)
+            private val tvTime: TextView = itemView.findViewById(R.id.tv_bill_time)
             private val tvAmount: TextView = itemView.findViewById(R.id.tv_bill_amount)
+            private val tvDeleted: TextView = itemView.findViewById(R.id.tv_bill_exclude_stats)
             private val tvAsset: TextView = itemView.findViewById(R.id.tv_bill_asset)
 
             fun updateSelectionUI(selectMode: Boolean, selectedIds: Set<Long>, billId: Long) {
@@ -548,16 +560,33 @@ class HistoryBillActivity : AppCompatActivity() {
 
                 val categoryName = when {
                     isTransfer -> itemView.context.getString(R.string.transfer_label)
-                    bill.categoryName.isBlank() -> itemView.context.getString(R.string.uncategorized)
-                    else -> BillDisplayFormatter.stripRefundPrefix(bill.categoryName)
+                    else -> displayOrFallback(
+                        BillDisplayFormatter.stripRefundPrefix(bill.categoryName),
+                        itemView.context.getString(R.string.uncategorized),
+                        itemView.context.getString(R.string.select_category),
+                        itemView.context.getString(R.string.select_category_label)
+                    )
                 }
                 tvCategory.text = categoryName
+                tvCategory.setTextColor(Color.parseColor("#283548"))
 
-                val detail = buildString {
-                    append(bill.accountName)
-                    if (bill.remark.isNotBlank()) append(" | ${bill.remark}")
-                }
+                val account = displayOrFallback(
+                    bill.accountName,
+                    "",
+                    itemView.context.getString(R.string.select_asset),
+                    itemView.context.getString(R.string.select_asset_dialog)
+                )
+                val detail = listOf(account, bill.remark.trim())
+                    .filter { it.isNotBlank() }
+                    .joinToString(" · ")
                 tvDetail.text = detail
+                tvDetail.visibility = if (detail.isBlank()) View.GONE else View.VISIBLE
+
+                tvTime.visibility = View.VISIBLE
+                tvTime.text = itemView.context.getString(
+                    R.string.trash_bill_date_fmt,
+                    billDateFormat.format(Date(bill.time))
+                )
 
                 val symbol = CurrencyManager.getSymbol(bill.currency)
                 val amountText = when {
@@ -567,7 +596,6 @@ class HistoryBillActivity : AppCompatActivity() {
                     else -> "$symbol${String.format("%.2f", bill.amount)}"
                 }
                 tvAmount.text = amountText
-
                 val amountColor = when {
                     bill.excludeFromStats -> Color.parseColor("#9AA1AA")
                     isRefund -> Color.parseColor("#9AA1AA")
@@ -576,9 +604,11 @@ class HistoryBillActivity : AppCompatActivity() {
                     else -> Color.parseColor("#757575")
                 }
                 tvAmount.setTextColor(amountColor)
+                tvAmount.paintFlags = tvAmount.paintFlags or Paint.STRIKE_THRU_TEXT_FLAG
 
-                tvAsset.text = bill.accountName
-                tvAsset.visibility = View.VISIBLE
+                tvDeleted.visibility = View.VISIBLE
+                tvDeleted.text = itemView.context.getString(R.string.trash_deleted_mark)
+                tvAsset.visibility = View.GONE
 
                 val iconColor = when {
                     isRefund -> Color.parseColor("#9E9E9E")
@@ -586,8 +616,15 @@ class HistoryBillActivity : AppCompatActivity() {
                     bill.type == Bill.TYPE_INCOME -> BillColors.income
                     else -> Color.parseColor("#9E9E9E")
                 }
+                ivIcon.imageTintList = null
                 ivIcon.setColorFilter(iconColor)
-                layoutIcon.setBackgroundResource(R.drawable.bg_home_transaction_icon_refined)
+                layoutIcon.setBackgroundResource(
+                    when {
+                        !isRefund && bill.type == Bill.TYPE_EXPENSE -> R.drawable.bg_circle_expense_soft
+                        !isRefund && bill.type == Bill.TYPE_INCOME -> R.drawable.bg_circle_income_soft
+                        else -> R.drawable.bg_circle_soft
+                    }
+                )
 
                 val lookupName = if (isRefund) categoryName else bill.categoryName
                 val lookupType = if (isRefund) Bill.TYPE_EXPENSE else bill.type
@@ -597,6 +634,7 @@ class HistoryBillActivity : AppCompatActivity() {
                         val iconUrl = CategoryIconHelper.findCategoryIcon(this@HistoryBillActivity, lookupName, lookupType)
                         withContext(Dispatchers.Main) {
                             if (iconUrl.isNotEmpty()) {
+                                ivIcon.setColorFilter(iconColor)
                                 Glide.with(ivIcon)
                                     .load(iconUrl)
                                     .diskCacheStrategy(com.bumptech.glide.load.engine.DiskCacheStrategy.DATA)

@@ -61,6 +61,7 @@ import com.taostudio.tapaccounting.ui.dialog.ElegantDatePickerSheet
 import com.taostudio.tapaccounting.ui.dialog.OverlayDialogs
 import com.taostudio.tapaccounting.logic.BillDeleteHelper
 import com.taostudio.tapaccounting.logic.BillMutationService
+import com.taostudio.tapaccounting.logic.CategoryIconUrlCache
 import com.taostudio.tapaccounting.logic.PaymentGroups
 import com.taostudio.tapaccounting.logic.CurrencyManager
 import com.taostudio.tapaccounting.logic.CurrencyUtils
@@ -70,6 +71,7 @@ import com.taostudio.tapaccounting.ui.common.BillStatsMultiSelect
 import com.taostudio.tapaccounting.ui.common.MultiSelectMoreTip
 import com.taostudio.tapaccounting.ui.common.MultiSelectMotion
 import com.taostudio.tapaccounting.ui.common.UiMotion.FabScrollBehavior
+import com.taostudio.tapaccounting.ui.common.UiMotion.applyItemPressFeedback
 import com.taostudio.tapaccounting.logic.InvestmentLotDraftStorage
 import com.taostudio.tapaccounting.logic.InvestmentLotEntryHelper
 import com.taostudio.tapaccounting.logic.InvestmentInterestService
@@ -353,23 +355,48 @@ class AssetDetailActivity : AppCompatActivity() {
                     return@showGridAssetPicker
                 }
                 lifecycleScope.launch {
-                    val result = withContext(Dispatchers.IO) {
-                        val targetAsset = db.assetDao().getAssetByName(selectedName) ?: return@withContext 0
-                        var moved = 0
-                        targets.forEach { bill ->
-                            val movedBill = moveBillToTargetAsset(bill, sourceAsset, targetAsset)
-                            if (movedBill != null) {
-                                db.billDao().updateBill(movedBill)
-                                moved++
+                    var moved: Int? = null
+                    var failure: Exception? = null
+                    try {
+                        moved = withContext(Dispatchers.IO) {
+                            val targetAsset = db.assetDao().getAssetByName(selectedName)
+                            if (targetAsset == null) {
+                                null
+                            } else {
+                                // 走写入漏斗：回滚旧资产余额影响、改挂资产、再应用到目标资产
+                                BillMutationService.moveBillsToAsset(db, targets, sourceAsset, targetAsset)
                             }
                         }
-                        moved
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        failure = e
                     }
                     adapter.clearSelection()
-                    if (result > 0) {
-                        applyBillSearch()
+                    val error = failure
+                    val movedCount = moved
+                    when {
+                        error != null -> Toast.makeText(
+                            this@AssetDetailActivity,
+                            error.message ?: "移动失败",
+                            Toast.LENGTH_SHORT
+                        ).show()
+
+                        movedCount == null -> Toast.makeText(
+                            this@AssetDetailActivity,
+                            R.string.asset_not_found,
+                            Toast.LENGTH_SHORT
+                        ).show()
+
+                        else -> {
+                            if (movedCount > 0) applyBillSearch()
+                            Toast.makeText(
+                                this@AssetDetailActivity,
+                                "已移动 $movedCount 条账单",
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        }
                     }
-                    Toast.makeText(this@AssetDetailActivity, "已移动 $result 条账单", Toast.LENGTH_SHORT).show()
                 }
             }
         }
@@ -616,50 +643,6 @@ class AssetDetailActivity : AppCompatActivity() {
         } catch (_: IllegalStateException) {
             dismissMoreMenu()
         }
-    }
-
-    private fun moveBillToTargetAsset(
-        bill: Bill,
-        sourceAsset: Asset,
-        targetAsset: Asset
-    ): Bill? {
-        val matchSourceAccount = bill.accountId == sourceAsset.id ||
-            (bill.accountId == null && bill.accountName == sourceAsset.name)
-        val matchSourceToAccount = bill.toAccountId == sourceAsset.id ||
-            (bill.toAccountId == null && bill.toAccountName == sourceAsset.name)
-
-        val updated = if (bill.type == Bill.TYPE_TRANSFER) {
-            when {
-                matchSourceAccount && matchSourceToAccount -> bill.copy(
-                    accountId = targetAsset.id,
-                    accountName = targetAsset.name,
-                    toAccountId = targetAsset.id,
-                    toAccountName = targetAsset.name
-                )
-                matchSourceAccount -> bill.copy(
-                    accountId = targetAsset.id,
-                    accountName = targetAsset.name
-                )
-                matchSourceToAccount -> bill.copy(
-                    toAccountId = targetAsset.id,
-                    toAccountName = targetAsset.name
-                )
-                else -> null
-            }
-        } else {
-            when {
-                matchSourceAccount -> bill.copy(
-                    accountId = targetAsset.id,
-                    accountName = targetAsset.name
-                )
-                matchSourceToAccount -> bill.copy(
-                    toAccountId = targetAsset.id,
-                    toAccountName = targetAsset.name
-                )
-                else -> null
-            }
-        }
-        return if (updated != null && updated != bill) updated else null
     }
 
     private fun observeData() {
@@ -1249,7 +1232,35 @@ class AssetDetailActivity : AppCompatActivity() {
             if (position >= 0) notifyItemChanged(position, PAYLOAD_DETAIL_HEADER_CHANGE)
         }
 
+        /**
+         * 预解析这一批账单的分类图标并写入共享缓存，行绑定时直接命中。
+         * 与账单页、资产统计页同一做法：冷缓存期间行短暂留空，而不是「占位图→真实图标」地闪一下。
+         */
+        private fun preloadCategoryIconUrls(bills: List<Bill>) {
+            val lookups = linkedMapOf<String, Pair<String, Int>>()
+            bills.forEach { bill ->
+                val isRefund = bill.subType == Bill.SUBTYPE_REFUND
+                val name = if (isRefund) stripRefundPrefix(bill.categoryName) else bill.categoryName
+                val type = if (isRefund) Bill.TYPE_EXPENSE else bill.type
+                val key = CategoryIconUrlCache.key(name, type)
+                if (!lookups.containsKey(key)) lookups[key] = name to type
+            }
+            if (lookups.isEmpty()) return
+            lifecycleScope.launch {
+                withContext(Dispatchers.IO) {
+                    lookups.forEach { (key, lookup) ->
+                        if (CategoryIconUrlCache.get(key) != null) return@forEach
+                        CategoryIconUrlCache.put(
+                            key,
+                            CategoryIconHelper.findCategoryIcon(applicationContext, lookup.first, lookup.second)
+                        )
+                    }
+                }
+            }
+        }
+
         fun submitList(newList: List<Bill>) {
+            preloadCategoryIconUrls(newList)
             rows.clear()
             rows.add(DetailActionHeaderRow)
             if (newList.isNotEmpty()) {
@@ -1489,6 +1500,17 @@ class AssetDetailActivity : AppCompatActivity() {
             super.onViewRecycled(holder)
         }
 
+        /**
+         * 行按压反馈与账单页一致：手指按下时整行缩到 0.98、变暗，松手弹回。
+         * 只在行 attach 时挂一次监听（与 HomeAdapter 相同做法），不在 bind 里重复设置。
+         */
+        override fun onViewAttachedToWindow(holder: RecyclerView.ViewHolder) {
+            super.onViewAttachedToWindow(holder)
+            if (holder is BillViewHolder || holder is GroupViewHolder) {
+                holder.itemView.applyItemPressFeedback()
+            }
+        }
+
         inner class DetailActionHeaderViewHolder(v: View) : RecyclerView.ViewHolder(v) {
             private val tvCreditCycleSummary = v.findViewById<TextView>(R.id.tv_credit_cycle_summary)
             private val tvAssetRemark = v.findViewById<TextView>(R.id.tv_asset_remark)
@@ -1571,11 +1593,26 @@ class AssetDetailActivity : AppCompatActivity() {
             private var iconLoadJob: Job? = null
             private var boundBillId: Long = -1L
 
+            /** 当前 ImageView 上已经绑定的图标 URL；即将绑定的与之相同就跳过，避免重绑闪烁。 */
+            private var boundIconUrl: String? = null
+
             fun cancelIconLoad() {
                 iconLoadJob?.cancel()
                 iconLoadJob = null
+                boundIconUrl = null
                 if (!isFinishing && !isDestroyed) {
                     Glide.with(this@AssetDetailActivity).clear(ivIcon)
+                }
+            }
+
+            /** 切换本行分类图标；调用前已确认 URL 与当前绑定不同（相同一律不调用）。 */
+            private fun applyCategoryIcon(iconUrl: String) {
+                ivIcon.setImageDrawable(null)
+                if (iconUrl.isNotEmpty() && !isFinishing && !isDestroyed) {
+                    Glide.with(this@AssetDetailActivity)
+                        .load(iconUrl)
+                        .diskCacheStrategy(com.bumptech.glide.load.engine.DiskCacheStrategy.ALL)
+                        .into(ivIcon)
                 }
             }
 
@@ -1618,7 +1655,9 @@ class AssetDetailActivity : AppCompatActivity() {
             fun bind(row: BillRow, position: Int) {
                 val bill = row.bill
                 boundBillId = bill.id
-                cancelIconLoad()
+                // 只取消未完成的加载、不清图：命中缓存且图标没变时保持原样（重绑不闪一下）
+                iconLoadJob?.cancel()
+                iconLoadJob = null
                 val isTransfer = bill.type == Bill.TYPE_TRANSFER
                 val isRepayment = isTransfer && bill.subType == Bill.SUBTYPE_REPAYMENT
                 val isRefund = bill.subType == Bill.SUBTYPE_REFUND
@@ -1715,6 +1754,8 @@ class AssetDetailActivity : AppCompatActivity() {
                             else -> R.drawable.bg_bill_dot_neutral
                         }
                     )
+                    // 点模式与图标模式互切时强制重载
+                    boundIconUrl = null
                 } else {
                     iconContainer.layoutParams = iconContainer.layoutParams.apply {
                         val widthPx = (itemView.resources.displayMetrics.density * 44).toInt()
@@ -1740,22 +1781,32 @@ class AssetDetailActivity : AppCompatActivity() {
 
                     val iconName = if (isRefund) baseCategory else bill.categoryName
                     val iconType = if (isRefund) Bill.TYPE_EXPENSE else bill.type
-                    ivIcon.setImageResource(R.mipmap.ic_launcher)
-                    iconLoadJob = lifecycleScope.launch {
-                        val iconUrl = withContext(Dispatchers.IO) {
-                            CategoryIconHelper.findCategoryIcon(applicationContext, iconName, iconType)
+                    val iconCacheKey = CategoryIconUrlCache.key(iconName, iconType)
+                    val cachedIconUrl = CategoryIconUrlCache.get(iconCacheKey)
+                    if (cachedIconUrl != null) {
+                        // 命中缓存：与当前已绑定一致就完全不碰 ImageView（二次提交、切多选等重绑不闪）
+                        if (cachedIconUrl != boundIconUrl) {
+                            boundIconUrl = cachedIconUrl
+                            applyCategoryIcon(cachedIconUrl)
                         }
-                        if (
-                            iconUrl.isNotEmpty() &&
-                            boundBillId == bill.id &&
-                            bindingAdapterPosition != RecyclerView.NO_POSITION &&
-                            !isFinishing &&
-                            !isDestroyed
-                        ) {
-                            Glide.with(this@AssetDetailActivity)
-                                .load(iconUrl)
-                                .diskCacheStrategy(com.bumptech.glide.load.engine.DiskCacheStrategy.ALL)
-                                .into(ivIcon)
+                    } else {
+                        // 冷缓存：先留空等真实图标（不用启动图占位），解析完成后写进共享缓存
+                        boundIconUrl = null
+                        ivIcon.setImageDrawable(null)
+                        iconLoadJob = lifecycleScope.launch {
+                            val iconUrl = withContext(Dispatchers.IO) {
+                                CategoryIconHelper.findCategoryIcon(applicationContext, iconName, iconType)
+                            }
+                            CategoryIconUrlCache.put(iconCacheKey, iconUrl)
+                            if (
+                                boundBillId == bill.id &&
+                                bindingAdapterPosition != RecyclerView.NO_POSITION &&
+                                !isFinishing &&
+                                !isDestroyed
+                            ) {
+                                boundIconUrl = iconUrl
+                                applyCategoryIcon(iconUrl)
+                            }
                         }
                     }
                 }

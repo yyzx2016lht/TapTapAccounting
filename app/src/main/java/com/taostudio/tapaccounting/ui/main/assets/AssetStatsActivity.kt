@@ -1,7 +1,6 @@
 package com.taostudio.tapaccounting.ui.main.assets
 
 import com.taostudio.tapaccounting.BillColors
-import com.taostudio.tapaccounting.CategoryIcons
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.ColorDrawable
@@ -47,6 +46,7 @@ import com.github.mikephil.charting.animation.Easing
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.bottomsheet.BottomSheetBehavior
 import com.google.android.material.bottomsheet.BottomSheetDialog
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -60,8 +60,11 @@ import com.taostudio.tapaccounting.data.local.AppDatabase
 import com.taostudio.tapaccounting.data.local.entity.Asset
 import com.taostudio.tapaccounting.data.local.entity.Bill
 import com.taostudio.tapaccounting.logic.BillAssetImpactService
+import com.taostudio.tapaccounting.logic.BillMutationService
+import com.taostudio.tapaccounting.logic.CategoryIconUrlCache
 import com.taostudio.tapaccounting.ui.common.MultiSelectBarSummary
 import com.taostudio.tapaccounting.ui.common.MultiSelectMotion
+import com.taostudio.tapaccounting.ui.common.UiMotion.applyItemPressFeedback
 import com.taostudio.tapaccounting.logic.BillDisplayFormatter
 import com.taostudio.tapaccounting.logic.CurrencyManager
 import com.taostudio.tapaccounting.logic.BillDeleteHelper
@@ -465,26 +468,53 @@ class AssetStatsActivity : AppCompatActivity() {
                     return@showGridAssetPicker
                 }
                 lifecycleScope.launch {
-                    val result = withContext(Dispatchers.IO) {
-                        val targetAsset = db.assetDao().getAssetByName(selectedName) ?: return@withContext 0
-                        var moved = 0
-                        targets.forEach { bill ->
-                            val movedBill = moveBillToTargetAsset(bill, sourceAsset, targetAsset)
-                            if (movedBill != null) {
-                                db.billDao().updateBill(movedBill)
-                                moved++
+                    var moved: Int? = null
+                    var failure: Exception? = null
+                    try {
+                        moved = withContext(Dispatchers.IO) {
+                            val targetAsset = db.assetDao().getAssetByName(selectedName)
+                            if (targetAsset == null) {
+                                null
+                            } else {
+                                // 走写入漏斗：回滚旧资产余额影响、改挂资产、再应用到目标资产
+                                BillMutationService.moveBillsToAsset(db, targets, sourceAsset, targetAsset)
                             }
                         }
-                        moved
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        failure = e
                     }
                     billAdapter.clearSelection()
-                    if (result > 0) {
-                        filteredBillsCache.clear()
-                        billRowsCache.clear()
-                        categoryBreakdownCache.clear()
-                        loadAssetAndBills()
+                    val error = failure
+                    val movedCount = moved
+                    when {
+                        error != null -> Toast.makeText(
+                            this@AssetStatsActivity,
+                            error.message ?: "移动失败",
+                            Toast.LENGTH_LONG
+                        ).show()
+
+                        movedCount == null -> Toast.makeText(
+                            this@AssetStatsActivity,
+                            getString(R.string.asset_not_found),
+                            Toast.LENGTH_SHORT
+                        ).show()
+
+                        else -> {
+                            if (movedCount > 0) {
+                                filteredBillsCache.clear()
+                                billRowsCache.clear()
+                                categoryBreakdownCache.clear()
+                                loadAssetAndBills()
+                            }
+                            Toast.makeText(
+                                this@AssetStatsActivity,
+                                getString(R.string.moved_bills_fmt, movedCount),
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        }
                     }
-                    Toast.makeText(this@AssetStatsActivity, getString(R.string.moved_bills_fmt, result), Toast.LENGTH_SHORT).show()
                 }
             }
         }
@@ -522,50 +552,6 @@ class AssetStatsActivity : AppCompatActivity() {
         )
         btnMsDelete.alpha = if (hasSelection) 1f else 0.45f
         btnMsMove.alpha = if (hasSelection) 1f else 0.45f
-    }
-
-    private fun moveBillToTargetAsset(
-        bill: Bill,
-        sourceAsset: Asset,
-        targetAsset: Asset
-    ): Bill? {
-        val matchSourceAccount = bill.accountId == sourceAsset.id ||
-            (bill.accountId == null && bill.accountName == sourceAsset.name)
-        val matchSourceToAccount = bill.toAccountId == sourceAsset.id ||
-            (bill.toAccountId == null && bill.toAccountName == sourceAsset.name)
-
-        val updated = if (bill.type == Bill.TYPE_TRANSFER) {
-            when {
-                matchSourceAccount && matchSourceToAccount -> bill.copy(
-                    accountId = targetAsset.id,
-                    accountName = targetAsset.name,
-                    toAccountId = targetAsset.id,
-                    toAccountName = targetAsset.name
-                )
-                matchSourceAccount -> bill.copy(
-                    accountId = targetAsset.id,
-                    accountName = targetAsset.name
-                )
-                matchSourceToAccount -> bill.copy(
-                    toAccountId = targetAsset.id,
-                    toAccountName = targetAsset.name
-                )
-                else -> null
-            }
-        } else {
-            when {
-                matchSourceAccount -> bill.copy(
-                    accountId = targetAsset.id,
-                    accountName = targetAsset.name
-                )
-                matchSourceToAccount -> bill.copy(
-                    toAccountId = targetAsset.id,
-                    toAccountName = targetAsset.name
-                )
-                else -> null
-            }
-        }
-        return if (updated != null && updated != bill) updated else null
     }
 
     private fun initCharts() {
@@ -2222,23 +2208,18 @@ class AssetStatsActivity : AppCompatActivity() {
         private val typeHeader = 0
         private val typeBill = 1
         private val rows = mutableListOf<Any>()
-        private val iconUrlCache = mutableMapOf<String, String>()
-        // 缓存对应的分类版本号；分类换图标/被删除后版本号会变，届时整表清空重查。
-        private var iconCacheRevision = -1
         var isMultiSelectMode: Boolean = false
         val selectedBills = mutableSetOf<Bill>()
         var onBillItemClick: ((Bill) -> Unit)? = null
         var onSelectionChanged: ((Int) -> Unit)? = null
 
-        private fun buildIconCacheKey(categoryName: String, type: Int): String = "$type|$categoryName"
+        private fun buildIconCacheKey(categoryName: String, type: Int): String =
+            CategoryIconUrlCache.key(categoryName, type)
 
-        private fun getCachedIconUrl(key: String): String? = synchronized(iconUrlCache) { iconUrlCache[key] }
+        private fun getCachedIconUrl(key: String): String? = CategoryIconUrlCache.get(key)
 
         private fun putCachedIconUrl(key: String, url: String) {
-            synchronized(iconUrlCache) {
-                if (iconUrlCache.size > 200) iconUrlCache.clear()
-                iconUrlCache[key] = url
-            }
+            CategoryIconUrlCache.put(key, url)
         }
 
         fun replaceRows(list: List<Any>) {
@@ -2384,6 +2365,14 @@ class AssetStatsActivity : AppCompatActivity() {
             super.onViewRecycled(holder)
             if (holder is BillVH) {
                 Glide.with(holder.ivIcon.context).clear(holder.ivIcon)
+            }
+        }
+
+        /** 行按压反馈与账单页一致（按下缩 0.98 / 变暗，松手弹回）。 */
+        override fun onViewAttachedToWindow(holder: RecyclerView.ViewHolder) {
+            super.onViewAttachedToWindow(holder)
+            if (holder is BillVH) {
+                holder.itemView.applyItemPressFeedback()
             }
         }
 
@@ -2570,11 +2559,7 @@ class AssetStatsActivity : AppCompatActivity() {
                     val iconLookupType = if (isRefund) Bill.TYPE_EXPENSE else bill.type
                     val iconCacheKey = buildIconCacheKey(iconLookupName, iconLookupType)
                     ivIcon.tag = iconCacheKey
-                    // 分类换过图标/被删除后，缓存里按名字存的旧图标要整表作废，重新解析
-                    if (iconCacheRevision != CategoryIcons.revision) {
-                        iconCacheRevision = CategoryIcons.revision
-                        synchronized(iconUrlCache) { iconUrlCache.clear() }
-                    }
+                    // 分类换图标后由共享缓存按 revision 整表作废（见 CategoryIconUrlCache.get），这里不用再手动比对
                     val cachedIconUrl = getCachedIconUrl(iconCacheKey)
                     if (cachedIconUrl != null) {
                         if (cachedIconUrl.isNotEmpty()) {

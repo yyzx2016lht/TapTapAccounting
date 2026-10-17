@@ -5,6 +5,7 @@ import com.taostudio.tapaccounting.TapApplication
 import com.taostudio.tapaccounting.Logger
 import com.taostudio.tapaccounting.Prefs
 import com.taostudio.tapaccounting.data.local.AppDatabase
+import com.taostudio.tapaccounting.data.local.entity.Asset
 import com.taostudio.tapaccounting.data.local.entity.Bill
 import com.taostudio.tapaccounting.data.repository.CategoryRepository
 import com.taostudio.tapaccounting.data.sync.SharedMutationHooks
@@ -367,6 +368,64 @@ object BillMutationService {
             matchRecurringQuietly(db, savedBill)
             db.billDao().getBillById(savedBill.id) ?: savedBill
         }.also { notifyWidgetsChanged() }
+    }
+
+    /**
+     * 批量把账单移动到另一个资产（资产详情页 / 资产统计页的「移动」）。
+     *
+     * 与编辑路径同一套余额规则：先回滚旧账单对原资产的余额影响，改完资产绑定后再应用到目标资产；
+     * 任何一步失败整批回滚（汇率缺失抛异常中止，禁止「账单改了资产但余额不动」）。
+     * 金额、分类、退款关系、扣款组一概不动——这不是编辑，只是把账单改挂到别的资产。
+     *
+     * 资产绑定是设备本地的私有数据（共享账单 payload 上报前会剔除账户字段），因此只写本地库，
+     * 不进共享同步队列。自动估算收益由理财批次自动维护，跳过不移动（与编辑路径的拒绝口径一致）。
+     *
+     * @return 实际移动成功的条数（不含不匹配源资产、或被跳过的账单）。
+     */
+    suspend fun moveBillsToAsset(
+        db: AppDatabase,
+        bills: List<Bill>,
+        sourceAsset: Asset,
+        targetAsset: Asset
+    ): Int {
+        val targets = bills.distinctBy { it.id }.filter { it.id > 0L }
+        if (targets.isEmpty()) return 0
+        val movedCount = db.withTransaction {
+            var moved = 0
+            targets.forEach { bill ->
+                // 事务内重读，避免并发编辑时用过期快照改挂资产
+                val fresh = db.billDao().getBillById(bill.id) ?: return@forEach
+                if (fresh.subType == Bill.SUBTYPE_INVESTMENT_ESTIMATE) {
+                    logWarn("BILL_GUARD", "（警告）move 跳过自动估算收益账单，billId=${fresh.id}")
+                    return@forEach
+                }
+                val movedBill = BillAssetMovePlanner.moveToAsset(fresh, sourceAsset, targetAsset)
+                    ?: return@forEach
+                validateRequiredRatesForBill(db, movedBill)
+
+                val oldImpacted = BillAssetImpactService.revertBillBalanceImpact(db, fresh)
+                if (oldImpacted == 0 && fresh.type in setOf(Bill.TYPE_EXPENSE, Bill.TYPE_INCOME, Bill.TYPE_TRANSFER)) {
+                    logWarn("BILL_GUARD", "（警告）move 回滚旧资产时资产未变化，billId=${fresh.id}, type=${fresh.type}, asset=${fresh.accountName}, toAsset=${fresh.toAccountName}")
+                }
+
+                db.billDao().updateBill(movedBill)
+
+                val newImpacted = BillAssetImpactService.applyBillBalanceImpact(db, movedBill)
+                if (newImpacted == 0 && movedBill.type in setOf(Bill.TYPE_EXPENSE, Bill.TYPE_INCOME, Bill.TYPE_TRANSFER)) {
+                    logWarn("BILL_GUARD", "（警告）move 写入新资产后资产未变化，billId=${movedBill.id}, type=${movedBill.type}, asset=${movedBill.accountName}, toAsset=${movedBill.toAccountName}")
+                }
+
+                // 转账目标端是理财资产时，本金批次跟随账单换资产（与 replaceBill 一致）
+                InvestmentInterestService.syncLotAfterBillReplacement(db, fresh, movedBill)
+
+                logFull("BILL_MUTATION", "move:done id=${movedBill.id}, type=${movedBill.type}, amount=${movedBill.amount}, from=${sourceAsset.name}, to=${targetAsset.name}")
+                auditBill("move", movedBill)
+                moved++
+            }
+            moved
+        }
+        notifyWidgetsChanged()
+        return movedCount
     }
 
     suspend fun saveRefundBill(

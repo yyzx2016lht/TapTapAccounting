@@ -112,7 +112,7 @@
         android:layout_weight="1"
         android:layout_marginTop="12dp"
         android:clipToPadding="false"
-        android:paddingBottom="8dp" />
+        android:paddingBottom="20dp" />
 
     <com.google.android.material.button.MaterialButton
         android:id="@+id/btn_add_rule"

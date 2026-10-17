@@ -594,6 +594,9 @@
     <string name="rate_status_uninit">汇率状态：未初始化</string>
     <string name="no_bills_yet">还没有账单</string>
     <string name="no_bills_hint">记录每一笔收支，掌控财务从现在开始</string>
+    <string name="no_bills_this_month">本月还没有账单</string>
+    <string name="no_bills_this_month_hint">上面的趋势是最近几天，不一定都在这个月</string>
+    <string name="home_chart_cross_month">含上个月的日期，不只统计当前月份</string>
     <string name="record_one">记一笔</string>
     <string name="search_bills">搜索账单</string>
     <string name="book">账本</string>
@@ -1130,6 +1133,10 @@
     <string name="settings_display_legacy">显示设置（旧版整组）</string>
     <string name="settings_advanced_legacy">高级设置（旧版整组）</string>
     <string name="trash_empty">回收站为空</string>
+    <string name="trash_hint">这些账单已经删除，不计入统计。分组日期是删除时间，每条下面是原来的账单日期。</string>
+    <string name="trash_deleted_on_fmt">删除于 %1$s</string>
+    <string name="trash_bill_date_fmt">账单 %1$s</string>
+    <string name="trash_deleted_mark">已删除</string>
     <string name="select_category_label">选择分类</string>
     <string name="currency_label">币种</string>
     <string name="fee_label">手续费</string>
@@ -1358,6 +1365,12 @@
     <string name="quick_accounting_ready">快捷记账准备</string>
     <string name="prepare_gesture_action">把快捷动作准备好</string>
     <string name="prepared_count_fmt">已准备 %1$d/%2$d 个关键项。不同手机入口名字不一样，这里只保留真正需要你处理的几步。</string>
+    <string name="prepared_count_ready_fmt">关键项都好了（%1$d/%2$d）。可以先看记账面板长什么样。自启动和通知不影响现在记账。</string>
+    <string name="prepared_count_pending_fmt">还差 %1$d 个关键项。实心按钮需要先处理，描边按钮可以以后再看。</string>
+    <string name="overlay_preview_title">敲一下背板，会弹出这样</string>
+    <string name="overlay_preview_desc">先在这里看一眼面板，再去桌面试。</string>
+    <string name="try_overlay">弹出看看</string>
+    <string name="try_overlay_need_permission">先开启悬浮窗</string>
     <string name="overlay_permission_title">悬浮窗权限</string>
     <string name="overlay_permission_desc">让翻转或敲击后能直接弹出记账面板。</string>
     <string name="ready_label">已准备</string>

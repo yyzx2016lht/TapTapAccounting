@@ -10,13 +10,16 @@ import android.view.LayoutInflater
 import android.view.View
 import android.widget.FrameLayout
 import android.widget.LinearLayout
+import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.cardview.widget.CardView
 import androidx.lifecycle.lifecycleScope
+import com.taostudio.tapaccounting.AmountFormatHelper
 import com.taostudio.tapaccounting.R
+import com.taostudio.tapaccounting.logic.CurrencyManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -99,29 +102,114 @@ class WidgetSettingsActivity : AppCompatActivity() {
             }
             card.findViewById<FrameLayout>(R.id.fl_widget_preview).addView(host)
             previewHosts[size] = host
+            mountPreview(host, size, null)
             catalog.addView(card)
         }
     }
 
     private fun refreshPreviews() {
         val config = WidgetConfig.default(this)
-        val availableDp = resources.configuration.screenWidthDp - CATALOG_HORIZONTAL_INSET_DP
         lifecycleScope.launch {
             previewHosts.forEach { (size, host) ->
                 val snapshot = withContext(Dispatchers.IO) {
                     ExpenseWidgetRenderer.buildSnapshot(applicationContext, config, size)
                 }
-                val views = ExpenseWidgetRenderer.buildViews(
-                    this@WidgetSettingsActivity, size, snapshot, previewSizeDp(size, availableDp).first
-                )
-                // 个别 ROM 对 App 内 apply RemoteViews 有限制；失败就只保留文字说明
-                val preview = runCatching { views.apply(this@WidgetSettingsActivity, host) }.getOrNull()
-                    ?: return@forEach
-                host.removeAllViews()
-                host.addView(preview, FrameLayout.LayoutParams(
-                    FrameLayout.LayoutParams.MATCH_PARENT,
-                    FrameLayout.LayoutParams.MATCH_PARENT
-                ))
+                mountPreview(host, size, snapshot)
+            }
+        }
+    }
+
+    /** 先放样式本身，RemoteViews 能套上真实数据就替换；套不上也别留一块空白。 */
+    private fun mountPreview(host: FrameLayout, size: WidgetSize, snapshot: ExpenseWidgetRenderer.Snapshot?) {
+        val widthDp = previewSizeDp(size, resources.configuration.screenWidthDp - CATALOG_HORIZONTAL_INSET_DP).first
+        val applied = snapshot?.let { data ->
+            val views = ExpenseWidgetRenderer.buildViews(this, size, data, widthDp)
+            runCatching { views.apply(this, host) }.getOrNull()
+        }
+        val preview = applied ?: LayoutInflater.from(this).inflate(layoutOf(size), host, false).also { root ->
+            if (snapshot != null) bindFallback(root, size, snapshot)
+        }
+        host.removeAllViews()
+        host.addView(preview, FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT,
+            FrameLayout.LayoutParams.MATCH_PARENT
+        ))
+    }
+
+    private fun layoutOf(size: WidgetSize): Int = when (size) {
+        WidgetSize.COMPACT -> R.layout.widget_expense_compact
+        WidgetSize.STANDARD -> R.layout.widget_expense_standard
+        WidgetSize.TODAY_BUDGET -> R.layout.widget_expense_today_budget
+        WidgetSize.DETAILED -> R.layout.widget_expense_detailed
+    }
+
+    private fun bindFallback(root: View, size: WidgetSize, snapshot: ExpenseWidgetRenderer.Snapshot) {
+        fun money(amount: Double) =
+            AmountFormatHelper.formatCurrency(CurrencyManager.getSymbol("CNY"), amount)
+        fun text(id: Int, value: String) {
+            root.findViewById<TextView>(id)?.text = value
+        }
+        fun progress(percent: Int?) {
+            val bar = root.findViewById<ProgressBar>(R.id.progress_widget_budget) ?: return
+            if (percent == null) {
+                bar.visibility = View.GONE
+            } else {
+                bar.visibility = View.VISIBLE
+                bar.progress = percent.coerceIn(0, 100)
+            }
+        }
+        when (size) {
+            WidgetSize.COMPACT -> {
+                text(R.id.tv_widget_subtitle, "${snapshot.bookLabel} · ${snapshot.periodLabel}")
+                text(R.id.tv_widget_primary_label, "${snapshot.periodLabel}支出")
+                text(R.id.tv_widget_primary_value, money(snapshot.expense))
+            }
+            WidgetSize.STANDARD -> {
+                text(R.id.tv_widget_primary_label, "预算剩余")
+                text(R.id.tv_widget_secondary_label, "本月预算")
+                if (snapshot.budget == null || snapshot.remaining == null) {
+                    text(R.id.tv_widget_primary_value, "未设置")
+                    text(R.id.tv_widget_secondary_value, "—")
+                    progress(null)
+                } else {
+                    text(R.id.tv_widget_primary_value, money(snapshot.remaining))
+                    text(R.id.tv_widget_secondary_value, money(snapshot.budget))
+                    progress(snapshot.budgetPercent)
+                }
+            }
+            WidgetSize.TODAY_BUDGET -> {
+                text(R.id.tv_widget_primary_label, "今日花费")
+                text(R.id.tv_widget_primary_value, money(snapshot.expense))
+                text(R.id.tv_widget_secondary_label, "预算剩余")
+                if (snapshot.remaining == null) {
+                    text(R.id.tv_widget_secondary_value, "未设置")
+                    progress(null)
+                } else {
+                    text(R.id.tv_widget_secondary_value, money(snapshot.remaining))
+                    progress(snapshot.budgetPercent)
+                }
+            }
+            WidgetSize.DETAILED -> {
+                text(R.id.tv_widget_subtitle, "${snapshot.bookLabel} · ${snapshot.periodLabel}")
+                text(R.id.tv_widget_primary_label, "${snapshot.periodLabel}支出")
+                text(R.id.tv_widget_primary_value, money(snapshot.expense))
+                text(R.id.tv_widget_secondary_label, "本月预算")
+                text(R.id.tv_widget_tertiary_label, "预算剩余")
+                if (snapshot.budget == null || snapshot.remaining == null) {
+                    text(R.id.tv_widget_secondary_value, "未设置")
+                    text(R.id.tv_widget_tertiary_value, "—")
+                    text(R.id.tv_widget_status, "打开应用设置本月预算")
+                    progress(null)
+                } else {
+                    text(R.id.tv_widget_secondary_value, money(snapshot.budget))
+                    text(R.id.tv_widget_tertiary_value, money(snapshot.remaining))
+                    val percent = snapshot.budgetPercent ?: 0
+                    text(
+                        R.id.tv_widget_status,
+                        if (percent > 100) "已超预算 · ${percent}%" else "本月预算已用 ${percent}%"
+                    )
+                    progress(percent)
+                }
             }
         }
     }

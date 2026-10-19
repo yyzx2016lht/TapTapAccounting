@@ -1,16 +1,24 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#0F172A"
-    android:orientation="vertical">
+    android:background="#0B1220">
+
+    <androidx.viewpager2.widget.ViewPager2
+        android:id="@+id/pager_images"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
 
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="56dp"
+        android:layout_height="wrap_content"
+        android:background="#990B1220"
         android:gravity="center_vertical"
-        android:paddingHorizontal="8dp">
+        android:orientation="horizontal"
+        android:paddingHorizontal="8dp"
+        android:paddingTop="8dp"
+        android:paddingBottom="10dp">
 
         <ImageView
             android:id="@+id/btn_back"
@@ -21,61 +29,31 @@
             android:src="@drawable/ic_chevron_left"
             app:tint="#FFFFFF" />
 
-        <TextView
-            android:id="@+id/tv_viewer_title"
-            android:layout_width="wrap_content"
+        <LinearLayout
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:textColor="#FFFFFF"
-            android:textSize="15sp"
-            android:textStyle="bold" />
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/tv_viewer_title"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:ellipsize="middle"
+                android:singleLine="true"
+                android:textColor="#FFFFFF"
+                android:textSize="15sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/tv_viewer_hint"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:text="@string/swipe_to_browse_hint"
+                android:textColor="#94A3B8"
+                android:textSize="12sp" />
+        </LinearLayout>
     </LinearLayout>
 
-    <ImageView
-        android:id="@+id/iv_viewer_image"
-        android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1"
-        android:adjustViewBounds="true"
-        android:scaleType="fitCenter" />
-
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="64dp"
-        android:gravity="center"
-        android:orientation="horizontal"
-        android:paddingHorizontal="16dp">
-
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/btn_viewer_prev"
-            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-            android:layout_width="0dp"
-            android:layout_height="42dp"
-            android:layout_weight="1"
-            android:layout_marginEnd="8dp"
-            android:elevation="0dp"
-            android:stateListAnimator="@null"
-            android:text="@string/previous"
-            android:textAllCaps="false"
-            android:textColor="#FFFFFF"
-            app:cornerRadius="10dp"
-            app:strokeColor="#94A3B8"
-            app:strokeWidth="1dp" />
-
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/btn_viewer_next"
-            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-            android:layout_width="0dp"
-            android:layout_height="42dp"
-            android:layout_weight="1"
-            android:layout_marginStart="8dp"
-            android:elevation="0dp"
-            android:stateListAnimator="@null"
-            android:text="@string/next"
-            android:textAllCaps="false"
-            android:textColor="#FFFFFF"
-            app:cornerRadius="10dp"
-            app:strokeColor="#94A3B8"
-            app:strokeWidth="1dp" />
-    </LinearLayout>
-
-</LinearLayout>
+</FrameLayout>

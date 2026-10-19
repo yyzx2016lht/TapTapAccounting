@@ -26,6 +26,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -42,6 +43,9 @@ class ScreenCaptureActivity : AppCompatActivity() {
 
         private var cachedProjectionResultCode: Int? = null
         private var cachedProjectionData: Intent? = null
+
+        /** Shizuku 静默截屏前藏起本页 UI，避免加载卡被拍进画面。 */
+        private const val SHIZUKU_CAPTURE_SETTLE_MS = 64L
     }
 
     private lateinit var mediaProjectionManager: MediaProjectionManager
@@ -79,7 +83,12 @@ class ScreenCaptureActivity : AppCompatActivity() {
         captureCard = findViewById(R.id.layout_capture_card)
         scanLine = findViewById(R.id.view_scan_line)
         mediaProjectionManager = getSystemService(MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
-        startWaitingAnimation()
+        val useSilentShizuku = Prefs.isShizukuModeEnabled(this) && ShizukuSafe.isReady(this)
+        if (useSilentShizuku) {
+            // 首帧就透明，避免闪一下「正在截屏」再消失。
+            window.setBackgroundDrawableResource(android.R.color.transparent)
+            window.decorView.alpha = 0f
+        }
 
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
@@ -101,17 +110,19 @@ class ScreenCaptureActivity : AppCompatActivity() {
         )
 
         when {
-            Prefs.isShizukuModeEnabled(this) && ShizukuSafe.isReady(this) -> {
-                tvStatus.text = getString(R.string.shizuku_capturing)
+            useSilentShizuku -> {
+                // 不展示「正在截屏」卡片：Shizuku screencap 会把本页一起拍进去。
                 Logger.d(this, "ScreenCaptureActivity", "Using Shizuku silent screencap path")
                 startShizukuCapture()
             }
             cachedProjectionResultCode != null && cachedProjectionData != null -> {
+                startWaitingAnimation()
                 tvStatus.text = getString(R.string.recognizing_screen)
                 Logger.d(this, "ScreenCaptureActivity", "Reusing cached screen capture permission")
                 startMediaProjectionCapture()
             }
             else -> {
+                startWaitingAnimation()
                 tvStatus.text = getString(R.string.requesting_capture_permission)
                 Logger.d(this, "ScreenCaptureActivity", "Requesting screen capture permission")
                 capturePermissionLauncher.launch(mediaProjectionManager.createScreenCaptureIntent())
@@ -121,15 +132,28 @@ class ScreenCaptureActivity : AppCompatActivity() {
 
     private fun startShizukuCapture() {
         captureJob?.cancel()
-        captureJob = lifecycleScope.launch(Dispatchers.IO) {
+        captureJob = lifecycleScope.launch {
             try {
-                val bytes = ShizukuShell.execBytes("screencap -p")
+                withContext(Dispatchers.Main) {
+                    stopWaitingAnimation()
+                    findViewById<View>(android.R.id.content)?.alpha = 0f
+                    window.decorView.alpha = 0f
+                }
+                delay(SHIZUKU_CAPTURE_SETTLE_MS)
+                val bytes = withContext(Dispatchers.IO) { ShizukuShell.execBytes("screencap -p") }
                 if (bytes == null || bytes.isEmpty()) {
                     Logger.d(this@ScreenCaptureActivity, "ScreenCaptureActivity", "Shizuku screencap returned empty bytes, fallback to MediaProjection")
-                    withContext(Dispatchers.Main) { fallbackToMediaProjection() }
+                    withContext(Dispatchers.Main) {
+                        window.decorView.alpha = 1f
+                        findViewById<View>(android.R.id.content)?.alpha = 1f
+                        startWaitingAnimation()
+                        fallbackToMediaProjection()
+                    }
                     return@launch
                 }
-                val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                val bitmap = withContext(Dispatchers.IO) {
+                    BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                }
                 if (bitmap == null) {
                     Logger.d(this@ScreenCaptureActivity, "ScreenCaptureActivity", "Shizuku screencap decode returned null")
                     withContext(Dispatchers.Main) { fail(getString(R.string.screenshot_failed)) }

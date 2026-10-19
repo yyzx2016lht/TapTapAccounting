@@ -12,19 +12,23 @@ import android.graphics.PixelFormat
 import android.os.Build
 import android.util.Base64
 import android.view.Gravity
+import android.view.HapticFeedbackConstants
 import android.view.KeyEvent
 import android.view.LayoutInflater
 import android.view.View
 import android.view.WindowManager
 import android.view.ViewPropertyAnimator
+import android.view.animation.DecelerateInterpolator
 import android.view.animation.LinearInterpolator
 import android.view.animation.PathInterpolator
+import android.widget.FrameLayout
 import android.widget.RadioButton
 import android.widget.RadioGroup
 import android.widget.TextView
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
@@ -52,6 +56,10 @@ class OverlayManager(private val ctx: Context) {
         private const val OVERLAY_HIDDEN_SCALE = 0.985f
         private const val CAPTURE_CARD_ENTER_DURATION_MS = 260L
         private const val CAPTURE_CARD_EXIT_DURATION_MS = 150L
+        /** 截屏前等待合成器摘掉悬浮层，避免把加载卡/悬浮窗拍进画面。 */
+        private const val CAPTURE_SETTLE_MS = 64L
+        /** 截完后的扫光提示时长（不挡识别进度）。 */
+        private const val CAPTURE_DONE_FLASH_MS = 420L
         private const val OVERLAY_OUTSIDE_TOUCH_GRACE_MS = 600L
     }
 
@@ -356,8 +364,11 @@ class OverlayManager(private val ctx: Context) {
             Logger.d(ctx, "OverlayManager", "Using cached vision probe support. model=$screenModel")
         }
 
-        showScreenCaptureLoadingOverlay(ctx.getString(R.string.preparing_screen_capture))
-        updateScreenCaptureLoadingHint(ctx.getString(R.string.checking_model_capability))
+        // 探测未缓存时才显示准备层；真正 screencap 前会立刻摘掉，避免拍进弹层。
+        if (!isProbeCachedSuccess) {
+            showScreenCaptureLoadingOverlay(ctx.getString(R.string.preparing_screen_capture))
+            updateScreenCaptureLoadingHint(ctx.getString(R.string.checking_model_capability))
+        }
 
         setOverlayVisible(false)
 
@@ -368,6 +379,7 @@ class OverlayManager(private val ctx: Context) {
                 withContext(Dispatchers.Main) {
                     Logger.e(ctx, "OverlayManager", "Screen capture aborted: model=$screenModel missing from current cache")
                     Prefs.setScreenModelVisionSupported(ctx, screenModel, false)
+                    hideScreenCaptureLoadingOverlay()
                     Utils.toast(ctx, ctx.getString(R.string.toast_vision_model_invalid))
                     finishScreenCaptureFlow(restoreOverlay = true)
                 }
@@ -406,6 +418,11 @@ class OverlayManager(private val ctx: Context) {
                     startAccessibilityScreenCaptureRecognition()
                     return@withContext
                 }
+                // 系统截屏授权仍需要可见提示；Shizuku/无障碍路径绝不在截屏瞬间盖层。
+                if (captureLoadingView == null) {
+                    showScreenCaptureLoadingOverlay(ctx.getString(R.string.requesting_capture_permission))
+                    updateScreenCaptureLoadingHint(ctx.getString(R.string.confirm_in_system_dialog))
+                }
                 launchSystemScreenCaptureActivity()
             }
         }
@@ -434,18 +451,20 @@ class OverlayManager(private val ctx: Context) {
 
     private fun launchSystemScreenCaptureActivity() {
         ScreenCaptureActivity.onScreenshotCaptured = { uri ->
-            hideScreenCaptureLoadingOverlay()
+            removeScreenCaptureLoadingOverlayImmediate()
             finishScreenCaptureFlow(restoreOverlay = false)
-            aiAssistant.analyzeScreenshot(uri, handleAiResult)
+            playCaptureDoneHint {
+                aiAssistant.analyzeScreenshot(uri, handleAiResult)
+            }
         }
         ScreenCaptureActivity.onRecognitionError = { message -> handleScreenCaptureError(message) }
         ScreenCaptureActivity.onRecognitionCancelled = { handleScreenCaptureCancelled() }
+        // Activity 自己会画授权/等待 UI；先摘掉悬浮加载层，避免 Shizuku 静默截屏时叠拍两层。
+        removeScreenCaptureLoadingOverlayImmediate()
         val intent = android.content.Intent(ctx, ScreenCaptureActivity::class.java).apply {
             addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
         }
         Logger.i(ctx, "OverlayManager", "Launching ScreenCaptureActivity")
-        updateScreenCaptureLoadingStatus(ctx.getString(R.string.requesting_capture_permission))
-        updateScreenCaptureLoadingHint(ctx.getString(R.string.confirm_in_system_dialog))
         runCatching { ctx.startActivity(intent) }
             .onFailure {
                 Logger.e(ctx, "OverlayManager", "Launching ScreenCaptureActivity failed: ${it.message}")
@@ -457,16 +476,20 @@ class OverlayManager(private val ctx: Context) {
     }
 
     private fun startShizukuScreenCaptureRecognition() {
-        updateScreenCaptureLoadingStatus(ctx.getString(R.string.shizuku_capturing))
-        updateScreenCaptureLoadingHint(ctx.getString(R.string.keep_page_still))
         screenCaptureJob?.cancel()
         screenCaptureJob = CoroutineScope(Dispatchers.IO).launch {
             try {
+                // 截屏是瞬间事：先清干净画面，再 screencap；识别 loading 交给 AiAssistant。
+                awaitCleanFrameForCapture()
                 val bytes = ShizukuShell.execBytes("screencap -p")
                 if (bytes == null || bytes.isEmpty()) {
                     Logger.e(ctx, "OverlayManager", "Shizuku screencap returned empty bytes")
                     withContext(Dispatchers.Main) {
                         Logger.d(ctx, "OverlayManager", "Falling back to MediaProjection capture")
+                        if (captureLoadingView == null) {
+                            showScreenCaptureLoadingOverlay(ctx.getString(R.string.requesting_capture_permission))
+                            updateScreenCaptureLoadingHint(ctx.getString(R.string.confirm_in_system_dialog))
+                        }
                         launchSystemScreenCaptureActivity()
                     }
                     return@launch
@@ -476,6 +499,10 @@ class OverlayManager(private val ctx: Context) {
                     Logger.d(ctx, "OverlayManager", "Shizuku screencap decode returned null")
                     withContext(Dispatchers.Main) {
                         Logger.d(ctx, "OverlayManager", "Falling back to MediaProjection capture after decode failure")
+                        if (captureLoadingView == null) {
+                            showScreenCaptureLoadingOverlay(ctx.getString(R.string.requesting_capture_permission))
+                            updateScreenCaptureLoadingHint(ctx.getString(R.string.confirm_in_system_dialog))
+                        }
                         launchSystemScreenCaptureActivity()
                     }
                     return@launch
@@ -484,10 +511,11 @@ class OverlayManager(private val ctx: Context) {
                 Logger.d(ctx, "OverlayManager", "Shizuku screencap succeeded. bytes=${bytes.size}, size=${bitmap.width}x${bitmap.height}")
                 val uri = bitmapToTempUri(bitmap)
                 withContext(Dispatchers.Main) {
-                    hideScreenCaptureLoadingOverlay()
                     finishScreenCaptureFlow(restoreOverlay = false)
                     if (uri != null) {
-                        aiAssistant.analyzeScreenshot(uri, handleAiResult)
+                        playCaptureDoneHint {
+                            aiAssistant.analyzeScreenshot(uri, handleAiResult)
+                        }
                     } else {
                         Utils.toast(ctx, ctx.getString(R.string.toast_capture_failed))
                     }
@@ -496,6 +524,10 @@ class OverlayManager(private val ctx: Context) {
                 Logger.e(ctx, "OverlayManager", "Shizuku in-place screen recognition failed: ${e.message}")
                 withContext(Dispatchers.Main) {
                     Logger.d(ctx, "OverlayManager", "Falling back to MediaProjection capture after exception")
+                    if (captureLoadingView == null) {
+                        showScreenCaptureLoadingOverlay(ctx.getString(R.string.requesting_capture_permission))
+                        updateScreenCaptureLoadingHint(ctx.getString(R.string.confirm_in_system_dialog))
+                    }
                     launchSystemScreenCaptureActivity()
                 }
             }
@@ -503,11 +535,10 @@ class OverlayManager(private val ctx: Context) {
     }
 
     private fun startAccessibilityScreenCaptureRecognition() {
-        updateScreenCaptureLoadingStatus(ctx.getString(R.string.accessibility_capturing))
-        updateScreenCaptureLoadingHint(ctx.getString(R.string.keep_page_still))
         screenCaptureJob?.cancel()
         screenCaptureJob = CoroutineScope(Dispatchers.IO).launch {
             try {
+                awaitCleanFrameForCapture()
                 KeepAliveAccessibilityService.takeScreenshotCompat { bitmap ->
                     if (bitmap == null) {
                         Logger.d(ctx, "OverlayManager", "Accessibility screencap returned null")
@@ -516,6 +547,10 @@ class OverlayManager(private val ctx: Context) {
                             if (Prefs.isShizukuModeEnabled(ctx) && ShizukuSafe.isReady(ctx)) {
                                 startShizukuScreenCaptureRecognition()
                             } else {
+                                if (captureLoadingView == null) {
+                                    showScreenCaptureLoadingOverlay(ctx.getString(R.string.requesting_capture_permission))
+                                    updateScreenCaptureLoadingHint(ctx.getString(R.string.confirm_in_system_dialog))
+                                }
                                 launchSystemScreenCaptureActivity()
                             }
                         }
@@ -525,10 +560,11 @@ class OverlayManager(private val ctx: Context) {
                     Logger.d(ctx, "OverlayManager", "Accessibility screencap succeeded. size=${bitmap.width}x${bitmap.height}")
                     val uri = bitmapToTempUri(bitmap)
                     CoroutineScope(Dispatchers.Main).launch {
-                        hideScreenCaptureLoadingOverlay()
                         finishScreenCaptureFlow(restoreOverlay = false)
                         if (uri != null) {
-                            aiAssistant.analyzeScreenshot(uri, handleAiResult)
+                            playCaptureDoneHint {
+                                aiAssistant.analyzeScreenshot(uri, handleAiResult)
+                            }
                         } else {
                             Utils.toast(ctx, ctx.getString(R.string.toast_capture_failed))
                         }
@@ -541,10 +577,142 @@ class OverlayManager(private val ctx: Context) {
                     if (Prefs.isShizukuModeEnabled(ctx) && ShizukuSafe.isReady(ctx)) {
                         startShizukuScreenCaptureRecognition()
                     } else {
+                        if (captureLoadingView == null) {
+                            showScreenCaptureLoadingOverlay(ctx.getString(R.string.requesting_capture_permission))
+                            updateScreenCaptureLoadingHint(ctx.getString(R.string.confirm_in_system_dialog))
+                        }
                         launchSystemScreenCaptureActivity()
                     }
                 }
             }
+        }
+    }
+
+    /** 截屏前瞬时清层：不等退出动画，再短等合成器落地。 */
+    private suspend fun awaitCleanFrameForCapture() {
+        withContext(Dispatchers.Main) {
+            removeScreenCaptureLoadingOverlayImmediate()
+            hideOverlayViewsForCaptureImmediate()
+        }
+        delay(CAPTURE_SETTLE_MS)
+    }
+
+    private fun hideOverlayViewsForCaptureImmediate() {
+        val view = overlayView ?: return
+        cancelOverlayAnimations(view)
+        view.animate().cancel()
+        view.alpha = 0f
+        view.visibility = View.INVISIBLE
+    }
+
+    private fun removeScreenCaptureLoadingOverlayImmediate() {
+        stopCaptureLoadingAnimation()
+        val view = captureLoadingView ?: return
+        val wm = windowManager ?: ctx.getSystemService(Context.WINDOW_SERVICE) as? WindowManager
+        captureLoadingView = null
+        captureLoadingParams = null
+        view.animate().cancel()
+        view.findViewById<View>(R.id.layout_capture_card)?.animate()?.cancel()
+        runCatching { wm?.removeView(view) }
+    }
+
+    /**
+     * 截屏完成后的轻反馈：白闪 + 扫光划过，不拦截触摸。
+     * 在真正截完之后播放，不会进画面；播完再进入识别。
+     */
+    private fun playCaptureDoneHint(onFinished: () -> Unit) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !android.provider.Settings.canDrawOverlays(ctx)) {
+            onFinished()
+            return
+        }
+        val wm = windowManager ?: (ctx.getSystemService(Context.WINDOW_SERVICE) as? WindowManager)
+        if (wm == null) {
+            onFinished()
+            return
+        }
+
+        val density = ctx.resources.displayMetrics.density
+        val screenH = ctx.resources.displayMetrics.heightPixels.toFloat()
+        val flash = View(ctx).apply {
+            setBackgroundColor(0x55FFFFFF)
+            alpha = 0f
+        }
+        val scanLine = View(ctx).apply {
+            setBackgroundColor(0xE67C9FF8.toInt())
+            alpha = 0f
+        }
+        val root = FrameLayout(ctx).apply {
+            addView(flash, FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT
+            ))
+            addView(scanLine, FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                (3f * density).toInt()
+            ).apply { gravity = Gravity.TOP })
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
+        }
+        val params = WindowManager.LayoutParams().apply {
+            width = WindowManager.LayoutParams.MATCH_PARENT
+            height = WindowManager.LayoutParams.MATCH_PARENT
+            type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+            } else {
+                @Suppress("DEPRECATION")
+                WindowManager.LayoutParams.TYPE_PHONE
+            }
+            flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
+                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
+                WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
+            format = PixelFormat.TRANSLUCENT
+            gravity = Gravity.TOP or Gravity.START
+            windowAnimations = 0
+        }
+
+        try {
+            wm.addView(root, params)
+        } catch (e: Exception) {
+            Logger.e(ctx, "OverlayManager", "playCaptureDoneHint addView failed: ${e.message}")
+            onFinished()
+            return
+        }
+
+        runCatching {
+            root.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+        }
+
+        flash.animate()
+            .alpha(1f)
+            .setDuration(70L)
+            .withEndAction {
+                flash.animate()
+                    .alpha(0f)
+                    .setDuration(260L)
+                    .setInterpolator(DecelerateInterpolator())
+                    .start()
+            }
+            .start()
+
+        ValueAnimator.ofFloat(-screenH * 0.08f, screenH).apply {
+            duration = CAPTURE_DONE_FLASH_MS
+            interpolator = DecelerateInterpolator()
+            addUpdateListener { anim ->
+                val p = anim.animatedFraction
+                scanLine.translationY = anim.animatedValue as Float
+                scanLine.alpha = when {
+                    p < 0.12f -> p / 0.12f
+                    p > 0.75f -> ((1f - p) / 0.25f).coerceIn(0f, 1f)
+                    else -> 1f
+                }
+            }
+            addListener(object : AnimatorListenerAdapter() {
+                override fun onAnimationEnd(animation: Animator) {
+                    runCatching { wm.removeView(root) }
+                    onFinished()
+                }
+            })
+            start()
         }
     }
 

@@ -528,7 +528,7 @@
     <string name="sync_remote_desc">从云端拉取最新API配置</string>
     <string name="ai_feature_manage_desc">管理图片记账、语音识别等 AI 能力</string>
     <string name="storage_cleanup">存储清理</string>
-    <string name="storage_cleanup_desc">预览语音与图片占用后，再选择清理</string>
+    <string name="storage_cleanup_desc">按分类查看占用，勾选后清理</string>
     <string name="gesture_and_interaction">手势与交互</string>
     <string name="use_quick_gesture">使用快捷手势</string>
     <string name="gesture_desc_setting">通过翻转手机或敲击背板快速启动记账</string>
@@ -1067,9 +1067,15 @@
     <string name="chat_avatar_files">聊天头像（默认不清理）</string>
     <string name="book_cover_bg">账本封面与背景（默认不清理）</string>
     <string name="temp_cache_files">临时与缓存文件</string>
+    <string name="screen_capture_cache_files">截屏记账缓存</string>
     <string name="cleanup_safe_hint">不会删除账单、分类、资产和设置等核心数据。</string>
     <string name="preview_files">预览待删文件</string>
+    <string name="browse_files">查看</string>
+    <string name="cleanup_category_hint">勾选要清理的分类；点「查看」可单独浏览该分类文件。</string>
     <string name="cleanup_selected">清理所选内容</string>
+    <string name="cleanup_category_empty">这个分类暂时没有文件</string>
+    <string name="cleanup_category_stats_fmt">%1$d 个文件 · %2$s</string>
+    <string name="swipe_to_browse_hint">左右滑动切换</string>
     <string name="view_deleted_bills">查看已删除的账单</string>
     <string name="preview_cleanup">预览待清理内容</string>
     <string name="image_album">图片相册</string>
@@ -1291,6 +1297,7 @@
     <string name="cleanup_avatar_stats_fmt">%1$d 个 · %2$s</string>
     <string name="cleanup_book_cover_stats_fmt">%1$d 个 · %2$s</string>
     <string name="cleanup_temp_stats_fmt">%1$d 个 · %2$s</string>
+    <string name="cleanup_screen_capture_stats_fmt">%1$d 个 · %2$s</string>
     <string name="select_preview_content">请先勾选要预览的内容</string>
     <string name="confirm_cleanup_title">确认清理</string>
     <string name="confirm_cleanup_message_fmt">将删除 %1$d 个文件，预计释放 %2$s。\n\n不会删除账单、分类、资产和设置等核心数据。</string>

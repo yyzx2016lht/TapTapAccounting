@@ -9,6 +9,7 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.ImageView
+import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
@@ -16,6 +17,7 @@ import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.button.MaterialButton
+import com.taostudio.tapaccounting.ui.widget.SecondaryPageHeaderView
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -27,33 +29,36 @@ import java.util.Locale
 class StoragePreviewActivity : AppCompatActivity() {
 
     companion object {
+        const val EXTRA_CATEGORY_ID = "extra_category_id"
+        const val EXTRA_OLDER_ONLY = "extra_older_only"
+
+        // 兼容旧入口（若仍有勾选后统一预览）
         const val EXTRA_INCLUDE_VOICE = "extra_include_voice"
         const val EXTRA_INCLUDE_IMAGES = "extra_include_images"
         const val EXTRA_INCLUDE_CHAT_AVATAR = "extra_include_chat_avatar"
         const val EXTRA_INCLUDE_BOOK_COVER_BG = "extra_include_book_cover_bg"
         const val EXTRA_INCLUDE_TEMP_CACHE = "extra_include_temp_cache"
-        const val EXTRA_OLDER_ONLY = "extra_older_only"
+        const val EXTRA_INCLUDE_SCREEN_CAPTURES = "extra_include_screen_captures"
     }
 
     private enum class PreviewTab { IMAGES, AUDIOS }
 
+    private lateinit var header: SecondaryPageHeaderView
     private lateinit var btnImages: MaterialButton
     private lateinit var btnAudios: MaterialButton
+    private lateinit var layoutTabs: LinearLayout
     private lateinit var tvSummary: TextView
     private lateinit var tvEmpty: TextView
     private lateinit var recyclerView: RecyclerView
 
-    private var allFiles: List<File> = emptyList()
     private var imageFiles: List<File> = emptyList()
     private var audioFiles: List<File> = emptyList()
+    private var otherFiles: List<File> = emptyList()
     private var currentTab: PreviewTab = PreviewTab.IMAGES
 
-    private val imageAdapter = ImageGridAdapter(
-        onClick = { file, index -> openImageViewer(index) }
-    )
-    private val audioAdapter = AudioListAdapter(
-        onPlayClick = { file -> togglePlay(file) }
-    )
+    private val imageAdapter = ImageGridAdapter { _, index -> openImageViewer(index) }
+    private val audioAdapter = AudioListAdapter { file -> togglePlay(file) }
+    private val fileAdapter = FileListAdapter()
 
     private var mediaPlayer: MediaPlayer? = null
     private var playingPath: String? = null
@@ -63,9 +68,11 @@ class StoragePreviewActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_storage_preview)
 
+        header = findViewById(R.id.secondary_header)
         findViewById<ImageView>(R.id.btn_back).setOnClickListener { finish() }
         btnImages = findViewById(R.id.btn_tab_images)
         btnAudios = findViewById(R.id.btn_tab_audios)
+        layoutTabs = findViewById(R.id.layout_preview_tabs)
         tvSummary = findViewById(R.id.tv_preview_summary)
         tvEmpty = findViewById(R.id.tv_preview_empty)
         recyclerView = findViewById(R.id.rv_preview)
@@ -82,67 +89,73 @@ class StoragePreviewActivity : AppCompatActivity() {
     }
 
     private fun loadFiles() {
-        val includeVoice = intent.getBooleanExtra(EXTRA_INCLUDE_VOICE, true)
-        val includeImages = intent.getBooleanExtra(EXTRA_INCLUDE_IMAGES, true)
-        val includeChatAvatar = intent.getBooleanExtra(EXTRA_INCLUDE_CHAT_AVATAR, false)
-        val includeBookCoverBg = intent.getBooleanExtra(EXTRA_INCLUDE_BOOK_COVER_BG, false)
-        val includeTempCache = intent.getBooleanExtra(EXTRA_INCLUDE_TEMP_CACHE, true)
+        val category = StorageCleanupCategory.fromId(intent.getStringExtra(EXTRA_CATEGORY_ID))
         val olderOnly = intent.getBooleanExtra(EXTRA_OLDER_ONLY, false)
 
         lifecycleScope.launch(Dispatchers.IO) {
-            val selected = mutableListOf<File>()
-            if (includeVoice) {
-                selected += listFilesInDir(File(filesDir, "chat_voice"))
-                    .filter { !olderOnly || isOlderThanDays(it, 30) }
-            }
-            if (includeImages) {
-                selected += listFilesInDir(File(filesDir, "chat_images")).filter { !olderOnly || isOlderThanDays(it, 30) }
-                selected += listFilesInDir(File(filesDir, "chat_pics")).filter { !olderOnly || isOlderThanDays(it, 30) }
-            }
-            if (includeChatAvatar) {
-                addIfFileExists(selected, File(filesDir, "chat_ai_avatar.jpg"), olderOnly)
-                addIfFileExists(selected, File(filesDir, "chat_user_avatar.jpg"), olderOnly)
-                addIfFileExists(selected, File(filesDir, "chat_ai_avatar.png"), olderOnly)
-                addIfFileExists(selected, File(filesDir, "chat_user_avatar.png"), olderOnly)
-            }
-            if (includeBookCoverBg) {
-                selected += listFilesInDir(File(filesDir, "chat_bg")).filter { !olderOnly || isOlderThanDays(it, 30) }
-                addIfFileExists(selected, File(filesDir, "chat_bg.jpg"), olderOnly)
-                addIfFileExists(selected, File(filesDir, "chat_bg.png"), olderOnly)
-                addIfFileExists(selected, File(filesDir, "chat_bg.webp"), olderOnly)
-                addIfFileExists(selected, File(filesDir, "chat_bg.jpeg"), olderOnly)
-                addIfFileExists(selected, File(filesDir, "chat_bg.bmp"), olderOnly)
-                addIfFileExists(selected, File(filesDir, "chat_bg.gif"), olderOnly)
-                selected += listFilesInDir(File(filesDir, "banners")).filter { !olderOnly || isOlderThanDays(it, 30) }
-            }
-            if (includeTempCache) {
-                selected += listFilesInDir(File(cacheDir, "picked_images"))
-                selected += listFilesInDir(File(cacheDir, "avatar_crop"))
-                selected += listFilesInDir(File(cacheDir, "banner_crop"))
-                selected += cacheDir.listFiles()
-                    ?.filter { it.isFile && shouldCleanupCacheFile(it.name) }
-                    .orEmpty()
-            }
+            val files = if (category != null) {
+                StorageCleanupCatalog.listGroup(this@StoragePreviewActivity, category, olderOnly).files
+            } else {
+                // 旧多选入口兜底
+                buildLegacySelection(olderOnly)
+            }.sortedByDescending { it.lastModified() }
 
-            val dedup = selected.distinctBy { it.absolutePath }
-            val images = dedup.filter { isImageFile(it) }.sortedByDescending { it.lastModified() }
-            val audios = dedup.filter { isAudioFile(it) }.sortedByDescending { it.lastModified() }
+            val images = files.filter { StorageCleanupCatalog.isImageFile(it) }
+            val audios = files.filter { StorageCleanupCatalog.isAudioFile(it) }
+            val others = files.filterNot {
+                StorageCleanupCatalog.isImageFile(it) || StorageCleanupCatalog.isAudioFile(it)
+            }
 
             withContext(Dispatchers.Main) {
-                allFiles = dedup
+                header.setTitle(
+                    category?.let { getString(it.titleRes) } ?: getString(R.string.preview_cleanup)
+                )
                 imageFiles = images
                 audioFiles = audios
-                tvSummary.text = getString(R.string.preview_summary_fmt, allFiles.size, imageFiles.size, audioFiles.size)
-                switchTab(if (imageFiles.isNotEmpty()) PreviewTab.IMAGES else PreviewTab.AUDIOS)
+                otherFiles = others
+                val bytes = files.sumOf { it.length() }
+                tvSummary.text = getString(
+                    R.string.cleanup_category_stats_fmt,
+                    files.size,
+                    StorageCleanupCatalog.formatBytes(bytes)
+                )
+
+                val showTabs = images.isNotEmpty() && audios.isNotEmpty()
+                layoutTabs.visibility = if (showTabs) View.VISIBLE else View.GONE
+                when {
+                    images.isNotEmpty() -> switchTab(PreviewTab.IMAGES)
+                    audios.isNotEmpty() -> switchTab(PreviewTab.AUDIOS)
+                    others.isNotEmpty() -> showOtherFiles()
+                    else -> {
+                        recyclerView.adapter = null
+                        tvEmpty.visibility = View.VISIBLE
+                        tvEmpty.text = getString(R.string.cleanup_category_empty)
+                    }
+                }
             }
         }
+    }
+
+    private fun buildLegacySelection(olderOnly: Boolean): List<File> {
+        val selected = mutableListOf<File>()
+        fun include(cat: StorageCleanupCategory, key: String, default: Boolean) {
+            if (intent.getBooleanExtra(key, default)) {
+                selected += StorageCleanupCatalog.listGroup(this, cat, olderOnly).files
+            }
+        }
+        include(StorageCleanupCategory.VOICE, EXTRA_INCLUDE_VOICE, true)
+        include(StorageCleanupCategory.IMAGES, EXTRA_INCLUDE_IMAGES, true)
+        include(StorageCleanupCategory.CHAT_AVATAR, EXTRA_INCLUDE_CHAT_AVATAR, false)
+        include(StorageCleanupCategory.BOOK_COVER_BG, EXTRA_INCLUDE_BOOK_COVER_BG, false)
+        include(StorageCleanupCategory.SCREEN_CAPTURES, EXTRA_INCLUDE_SCREEN_CAPTURES, true)
+        include(StorageCleanupCategory.TEMP_CACHE, EXTRA_INCLUDE_TEMP_CACHE, true)
+        return selected.distinctBy { it.absolutePath }
     }
 
     private fun switchTab(tab: PreviewTab) {
         currentTab = tab
         stopPlayback()
         updateTabStyle()
-
         when (tab) {
             PreviewTab.IMAGES -> {
                 recyclerView.layoutManager = GridLayoutManager(this, 3)
@@ -159,6 +172,15 @@ class StoragePreviewActivity : AppCompatActivity() {
                 tvEmpty.text = getString(R.string.no_preview_audio)
             }
         }
+    }
+
+    private fun showOtherFiles() {
+        layoutTabs.visibility = View.GONE
+        recyclerView.layoutManager = LinearLayoutManager(this)
+        recyclerView.adapter = fileAdapter
+        fileAdapter.submit(otherFiles)
+        tvEmpty.visibility = if (otherFiles.isEmpty()) View.VISIBLE else View.GONE
+        tvEmpty.text = getString(R.string.cleanup_category_empty)
     }
 
     private fun updateTabStyle() {
@@ -181,12 +203,15 @@ class StoragePreviewActivity : AppCompatActivity() {
 
     private fun openImageViewer(index: Int) {
         if (imageFiles.isEmpty()) return
-        val paths = ArrayList(imageFiles.map { it.absolutePath })
-        val intent = Intent(this, StorageImageViewerActivity::class.java).apply {
-            putStringArrayListExtra(StorageImageViewerActivity.EXTRA_IMAGE_PATHS, paths)
-            putExtra(StorageImageViewerActivity.EXTRA_INDEX, index)
-        }
-        startActivity(intent)
+        startActivity(
+            Intent(this, StorageImageViewerActivity::class.java).apply {
+                putStringArrayListExtra(
+                    StorageImageViewerActivity.EXTRA_IMAGE_PATHS,
+                    ArrayList(imageFiles.map { it.absolutePath })
+                )
+                putExtra(StorageImageViewerActivity.EXTRA_INDEX, index)
+            }
+        )
     }
 
     private fun togglePlay(file: File) {
@@ -222,60 +247,6 @@ class StoragePreviewActivity : AppCompatActivity() {
         playingPath = null
     }
 
-    private fun shouldCleanupCacheFile(name: String): Boolean {
-        val n = name.lowercase(Locale.getDefault())
-        return n.startsWith("temp_") ||
-            n == "voice_input.wav" ||
-            n == "chat_voice_input.wav" ||
-            n.startsWith("sense_voice") ||
-            n.endsWith(".bak")
-    }
-
-    private fun listFilesInDir(dir: File): List<File> {
-        if (!dir.exists() || !dir.isDirectory) return emptyList()
-        return dir.walkTopDown().filter { it.isFile }.toList()
-    }
-
-    private fun addIfFileExists(target: MutableList<File>, file: File, olderOnly: Boolean) {
-        if (file.exists() && file.isFile && (!olderOnly || isOlderThanDays(file, 30))) target += file
-    }
-
-    private fun isOlderThanDays(file: File, days: Int): Boolean {
-        val cutoff = System.currentTimeMillis() - days * 24L * 60L * 60L * 1000L
-        return file.lastModified() in 1 until cutoff
-    }
-
-    private fun formatBytes(bytes: Long): String {
-        if (bytes < 1024) return "$bytes B"
-        val kb = bytes / 1024.0
-        if (kb < 1024) return String.format(Locale.getDefault(), "%.1f KB", kb)
-        val mb = kb / 1024.0
-        if (mb < 1024) return String.format(Locale.getDefault(), "%.1f MB", mb)
-        val gb = mb / 1024.0
-        return String.format(Locale.getDefault(), "%.2f GB", gb)
-    }
-
-    private fun isImageFile(file: File): Boolean {
-        val n = file.name.lowercase(Locale.getDefault())
-        return n.endsWith(".jpg") ||
-            n.endsWith(".jpeg") ||
-            n.endsWith(".png") ||
-            n.endsWith(".webp") ||
-            n.endsWith(".bmp") ||
-            n.endsWith(".gif")
-    }
-
-    private fun isAudioFile(file: File): Boolean {
-        val n = file.name.lowercase(Locale.getDefault())
-        return n.endsWith(".wav") ||
-            n.endsWith(".mp3") ||
-            n.endsWith(".m4a") ||
-            n.endsWith(".amr") ||
-            n.endsWith(".aac") ||
-            n.endsWith(".ogg") ||
-            n.endsWith(".opus")
-    }
-
     private inner class ImageGridAdapter(
         private val onClick: (File, Int) -> Unit
     ) : RecyclerView.Adapter<ImageGridAdapter.VH>() {
@@ -288,7 +259,8 @@ class StoragePreviewActivity : AppCompatActivity() {
         }
 
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VH {
-            val view = LayoutInflater.from(parent.context).inflate(R.layout.item_storage_preview_image, parent, false)
+            val view = LayoutInflater.from(parent.context)
+                .inflate(R.layout.item_storage_preview_image, parent, false)
             return VH(view)
         }
 
@@ -321,17 +293,59 @@ class StoragePreviewActivity : AppCompatActivity() {
         }
 
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VH {
-            val view = LayoutInflater.from(parent.context).inflate(R.layout.item_storage_preview_audio, parent, false)
+            val view = LayoutInflater.from(parent.context)
+                .inflate(R.layout.item_storage_preview_audio, parent, false)
             return VH(view)
         }
 
         override fun onBindViewHolder(holder: VH, position: Int) {
             val file = data[position]
-            val modified = if (file.lastModified() > 0) dateFormat.format(Date(file.lastModified())) else getString(R.string.unknown_time)
+            val modified = if (file.lastModified() > 0) {
+                dateFormat.format(Date(file.lastModified()))
+            } else {
+                getString(R.string.unknown_time)
+            }
             holder.tvTitle.text = file.name
-            holder.tvMeta.text = "${formatBytes(file.length())} · $modified"
-            holder.btnPlay.text = if (file.absolutePath == currentPlayingPath) getString(R.string.stop) else getString(R.string.play)
+            holder.tvMeta.text = "${StorageCleanupCatalog.formatBytes(file.length())} · $modified"
+            holder.btnPlay.text =
+                if (file.absolutePath == currentPlayingPath) getString(R.string.stop) else getString(R.string.play)
             holder.btnPlay.setOnClickListener { onPlayClick(file) }
+        }
+
+        override fun getItemCount(): Int = data.size
+
+        inner class VH(v: View) : RecyclerView.ViewHolder(v) {
+            val tvTitle: TextView = v.findViewById(R.id.tv_audio_title)
+            val tvMeta: TextView = v.findViewById(R.id.tv_audio_meta)
+            val btnPlay: MaterialButton = v.findViewById(R.id.btn_audio_play)
+        }
+    }
+
+    private inner class FileListAdapter : RecyclerView.Adapter<FileListAdapter.VH>() {
+        private val data = mutableListOf<File>()
+
+        fun submit(list: List<File>) {
+            data.clear()
+            data.addAll(list)
+            notifyDataSetChanged()
+        }
+
+        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VH {
+            val view = LayoutInflater.from(parent.context)
+                .inflate(R.layout.item_storage_preview_audio, parent, false)
+            return VH(view)
+        }
+
+        override fun onBindViewHolder(holder: VH, position: Int) {
+            val file = data[position]
+            val modified = if (file.lastModified() > 0) {
+                dateFormat.format(Date(file.lastModified()))
+            } else {
+                getString(R.string.unknown_time)
+            }
+            holder.tvTitle.text = file.name
+            holder.tvMeta.text = "${StorageCleanupCatalog.formatBytes(file.length())} · $modified"
+            holder.btnPlay.visibility = View.GONE
         }
 
         override fun getItemCount(): Int = data.size
@@ -346,25 +360,19 @@ class StoragePreviewActivity : AppCompatActivity() {
     private fun decodeSampledBitmap(file: File, reqSize: Int): Bitmap? {
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         BitmapFactory.decodeFile(file.absolutePath, bounds)
-        val sample = calculateInSampleSize(bounds, reqSize, reqSize)
-        val options = BitmapFactory.Options().apply { inSampleSize = sample }
-        return runCatching { BitmapFactory.decodeFile(file.absolutePath, options) }.getOrNull()
-    }
-
-    private fun calculateInSampleSize(options: BitmapFactory.Options, reqWidth: Int, reqHeight: Int): Int {
-        val height = options.outHeight
-        val width = options.outWidth
         var inSampleSize = 1
-        if (height > reqHeight || width > reqWidth) {
+        val height = bounds.outHeight
+        val width = bounds.outWidth
+        if (height > reqSize || width > reqSize) {
             var halfHeight = height / 2
             var halfWidth = width / 2
-            while (halfHeight / inSampleSize >= reqHeight && halfWidth / inSampleSize >= reqWidth) {
+            while (halfHeight / inSampleSize >= reqSize && halfWidth / inSampleSize >= reqSize) {
                 inSampleSize *= 2
                 halfHeight /= 2
                 halfWidth /= 2
             }
         }
-        return inSampleSize.coerceAtLeast(1)
+        val options = BitmapFactory.Options().apply { this.inSampleSize = inSampleSize.coerceAtLeast(1) }
+        return runCatching { BitmapFactory.decodeFile(file.absolutePath, options) }.getOrNull()
     }
 }
-

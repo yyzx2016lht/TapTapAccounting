@@ -2,10 +2,12 @@ package com.taostudio.tapaccounting
 
 import android.graphics.BitmapFactory
 import android.os.Bundle
+import android.view.ViewGroup
 import android.widget.ImageView
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
-import com.google.android.material.button.MaterialButton
+import androidx.recyclerview.widget.RecyclerView
+import androidx.viewpager2.widget.ViewPager2
 import java.io.File
 
 class StorageImageViewerActivity : AppCompatActivity() {
@@ -15,55 +17,72 @@ class StorageImageViewerActivity : AppCompatActivity() {
         const val EXTRA_INDEX = "extra_index"
     }
 
-    private lateinit var ivImage: ImageView
+    private lateinit var pager: ViewPager2
     private lateinit var tvTitle: TextView
-    private lateinit var btnPrev: MaterialButton
-    private lateinit var btnNext: MaterialButton
+    private lateinit var tvHint: TextView
 
     private var imagePaths: List<String> = emptyList()
-    private var index: Int = 0
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_storage_image_viewer)
 
-        ivImage = findViewById(R.id.iv_viewer_image)
+        pager = findViewById(R.id.pager_images)
         tvTitle = findViewById(R.id.tv_viewer_title)
-        btnPrev = findViewById(R.id.btn_viewer_prev)
-        btnNext = findViewById(R.id.btn_viewer_next)
+        tvHint = findViewById(R.id.tv_viewer_hint)
         findViewById<ImageView>(R.id.btn_back).setOnClickListener { finish() }
 
         imagePaths = intent.getStringArrayListExtra(EXTRA_IMAGE_PATHS).orEmpty()
-        index = intent.getIntExtra(EXTRA_INDEX, 0).coerceIn(0, (imagePaths.size - 1).coerceAtLeast(0))
+        val startIndex = intent.getIntExtra(EXTRA_INDEX, 0)
+            .coerceIn(0, (imagePaths.size - 1).coerceAtLeast(0))
 
-        btnPrev.setOnClickListener {
-            if (imagePaths.isEmpty()) return@setOnClickListener
-            index = if (index - 1 < 0) imagePaths.lastIndex else index - 1
-            bind()
-        }
-        btnNext.setOnClickListener {
-            if (imagePaths.isEmpty()) return@setOnClickListener
-            index = if (index + 1 > imagePaths.lastIndex) 0 else index + 1
-            bind()
-        }
-
-        bind()
-    }
-
-    private fun bind() {
         if (imagePaths.isEmpty()) {
             tvTitle.text = getString(R.string.no_image)
-            ivImage.setImageDrawable(null)
-            btnPrev.isEnabled = false
-            btnNext.isEnabled = false
+            tvHint.visibility = android.view.View.GONE
             return
         }
-        val path = imagePaths[index]
-        val file = File(path)
-        tvTitle.text = "${index + 1}/${imagePaths.size} · ${file.name}"
-        ivImage.setImageBitmap(BitmapFactory.decodeFile(path))
-        btnPrev.isEnabled = true
-        btnNext.isEnabled = true
+
+        pager.adapter = ImagePagerAdapter(imagePaths)
+        pager.setCurrentItem(startIndex, false)
+        pager.registerOnPageChangeCallback(object : ViewPager2.OnPageChangeCallback() {
+            override fun onPageSelected(position: Int) {
+                bindTitle(position)
+            }
+        })
+        bindTitle(startIndex)
+        tvHint.visibility = if (imagePaths.size > 1) android.view.View.VISIBLE else android.view.View.GONE
+    }
+
+    private fun bindTitle(index: Int) {
+        val file = File(imagePaths[index])
+        tvTitle.text = "${index + 1}/${imagePaths.size}  ·  ${file.name}"
+    }
+
+    private class ImagePagerAdapter(
+        private val paths: List<String>
+    ) : RecyclerView.Adapter<ImagePagerAdapter.VH>() {
+
+        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VH {
+            val imageView = ImageView(parent.context).apply {
+                layoutParams = ViewGroup.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT
+                )
+                adjustViewBounds = true
+                scaleType = ImageView.ScaleType.FIT_CENTER
+            }
+            return VH(imageView)
+        }
+
+        override fun onBindViewHolder(holder: VH, position: Int) {
+            val path = paths[position]
+            holder.imageView.setImageBitmap(
+                runCatching { BitmapFactory.decodeFile(path) }.getOrNull()
+            )
+        }
+
+        override fun getItemCount(): Int = paths.size
+
+        class VH(val imageView: ImageView) : RecyclerView.ViewHolder(imageView)
     }
 }
-

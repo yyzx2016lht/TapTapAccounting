@@ -47,6 +47,7 @@ class ProfileFragment : Fragment(R.layout.fragment_profile) {
     // P1-29: 视图级协程作用域，onDestroyView 时取消
     private val viewScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var suppressHomeTrendCardSwitchCallback = false
+    private var trashEntrySubtitle: TextView? = null
     private data class ToggleTracker(var count: Int = 0, var firstToggleAtMs: Long = 0L)
     private val toggleTimers = mutableMapOf<String, ToggleTracker>()
     private var pendingEditUserAvatarView: ImageView? = null
@@ -97,6 +98,26 @@ class ProfileFragment : Fragment(R.layout.fragment_profile) {
         rootRef?.let { updateShowBookEntrySettingVisibility(it) }
         rootRef?.let { refreshUserAvatarCard(it) }
         rootRef?.let { refreshHomeTrendCardSwitch(it) }
+        refreshTrashEntryCount()
+    }
+
+    /** 回收站入口副标题：实时显示已删除账单条数，从回收站返回后也要刷新。 */
+    private fun refreshTrashEntryCount() {
+        val tv = trashEntrySubtitle ?: return
+        val ctx = context ?: return
+        viewScope.launch {
+            val count = runCatching {
+                AppDatabase.getDatabase(ctx).deletedBillDao().getCount()
+            }.getOrDefault(0)
+            withContext(Dispatchers.Main) {
+                if (!isAdded) return@withContext
+                tv.text = if (count > 0) {
+                    getString(R.string.deleted_bill_count_fmt, count)
+                } else {
+                    getString(R.string.trash_entry_desc)
+                }
+            }
+        }
     }
 
     override fun onHiddenChanged(hidden: Boolean) {
@@ -208,6 +229,13 @@ class ProfileFragment : Fragment(R.layout.fragment_profile) {
         view.findViewById<View>(R.id.layout_storage_cleanup_entry)?.setOnClickListener {
             requireActivity().startActivity(Intent(requireContext(), StorageCleanupActivity::class.java))
         }
+        view.findViewById<View>(R.id.layout_trash_entry)?.setOnClickListener {
+            requireActivity().startActivity(
+                Intent(requireContext(), com.taostudio.tapaccounting.ui.activity.HistoryBillActivity::class.java)
+            )
+        }
+        trashEntrySubtitle = view.findViewById(R.id.tv_trash_entry_subtitle)
+        refreshTrashEntryCount()
 
         // --- 白名单 ---
         val switchShowMultiCur = view.findViewById<CompoundButton>(R.id.switch_show_multi_cur)

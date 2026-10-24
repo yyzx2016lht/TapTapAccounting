@@ -11,7 +11,6 @@ import android.view.ViewGroup
 import android.widget.CheckBox
 import android.widget.ImageView
 import android.widget.TextView
-import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.bumptech.glide.Glide
@@ -33,6 +32,8 @@ import com.taostudio.tapaccounting.data.local.entity.Bill
 import com.taostudio.tapaccounting.logic.CategoryIconUrlCache
 import com.taostudio.tapaccounting.logic.BillDisplayFormatter
 import com.taostudio.tapaccounting.logic.CurrencyManager
+import com.taostudio.tapaccounting.ui.common.UiMotion
+import com.taostudio.tapaccounting.ui.common.RowModeMotion
 import com.taostudio.tapaccounting.ui.common.UiMotion.applyItemPressFeedback
 import com.taostudio.tapaccounting.viewscope.SharedBookMemberContext
 import java.text.SimpleDateFormat
@@ -48,11 +49,14 @@ class HomeAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
 
     // 图标查询放在 IO 线程，避免主线程阻塞。
     private val adapterScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
-    // Diff 计算放在 Default 线程，减少主线程卡顿。
-    private val diffScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
+    // 列表分组构建放 Default 线程，提交用 notifyDataSetChanged（与资产详情同款），不走 DiffUtil。
+    private val buildScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
     private var submitJob: Job? = null
     private var submitGeneration: Long = 0L
     private val itemTimeFormatter = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault())
+
+    /** 列表数据已落到 Adapter 后回调（账本切换 reveal / 首次 stagger）。 */
+    var onListDispatched: (() -> Unit)? = null
 
     companion object {
         const val TYPE_CHART = 2
@@ -216,6 +220,7 @@ class HomeAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
             lastSubmittedShowEmptyState == showEmptyState
         ) {
             Log.d("HomePerf", "submitList: skip (list unchanged)")
+            onListDispatched?.invoke()
             return
         }
 
@@ -227,76 +232,23 @@ class HomeAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
         // 固定当前提交的图表开关，避免异步阶段读取到后续变化。
         val includeChart = showChart
         val includeEmptyState = showEmptyState
+        val oldSize = items.size
 
-        val oldItems = items.toList()
+        submitJob = buildScope.launch {
+            val newItems = buildHomeListItems(
+                combinedBills = combinedBills,
+                includeChart = includeChart,
+                includeEmptyState = includeEmptyState
+            )
 
-        submitJob = diffScope.launch {
-            val dfKey = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
-            val dfDisplay = SimpleDateFormat("MM.dd", Locale.getDefault())
-            val dfWeekday = SimpleDateFormat("E", Locale.CHINESE)
-
-            val newItems = mutableListOf<ListItem>()
-            // 趋势卡在前，空账单提示在后；二者可同时存在。
-            resolveHomeLeadingItems(
-                showChart = includeChart,
-                showEmptyState = includeEmptyState
-            ).forEach { item ->
-                newItems.add(
-                    when (item) {
-                        HomeLeadingItem.TREND_CARD -> ListItem.Chart
-                        HomeLeadingItem.EMPTY_STATE -> ListItem.Empty
-                    }
-                )
-            }
-            if (combinedBills.isNotEmpty()) {
-                val grouped = combinedBills.groupBy { dfKey.format(Date(it.bill.time)) }
-                for ((dateKey, billsInDay) in grouped) {
-                    var dailyIncome = 0.0
-                    var dailyExpense = 0.0
-                    billsInDay.forEach {
-                        if (it.isDeprecated) return@forEach
-                        val amountCny = it.bill.amount * it.bill.exchangeRate
-                        if (isRefundBill(it.bill)) {
-                            dailyIncome += amountCny
-                        } else if (it.bill.type == Bill.TYPE_EXPENSE) {
-                            dailyExpense += amountCny
-                        } else if (it.bill.type == Bill.TYPE_INCOME) {
-                            dailyIncome += amountCny
-                        }
-                    }
-                    val sampleDate = Date(billsInDay.first().bill.time)
-                    val dateStr = dfDisplay.format(sampleDate)
-                    val weekdayStr = dfWeekday.format(sampleDate)
-                    newItems.add(ListItem.Header(dateStr, weekdayStr, dailyIncome, dailyExpense, dateKey))
-                    billsInDay.forEach { displayBill -> newItems.add(ListItem.Item(displayBill)) }
-                }
-            }
-
-            val diffResult = DiffUtil.calculateDiff(object : DiffUtil.Callback() {
-                override fun getOldListSize() = oldItems.size
-                override fun getNewListSize() = newItems.size
-                override fun areItemsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean {
-                    val old = oldItems[oldItemPosition]
-                    val new = newItems[newItemPosition]
-                    if (old is ListItem.Chart && new is ListItem.Chart) return true
-                    if (old is ListItem.Empty && new is ListItem.Empty) return true
-                    if (old is ListItem.Header && new is ListItem.Header) return old.rawDateKey == new.rawDateKey
-                    if (old is ListItem.Item && new is ListItem.Item) return old.displayBill.bill.id == new.displayBill.bill.id
-                    return false
-                }
-                override fun areContentsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean {
-                    return oldItems[oldItemPosition] == newItems[newItemPosition]
-                }
-            })
-
-            // 回到主线程提交 diff，确保 RecyclerView 更新线程安全。
+            // 与资产详情 TransactionAdapter.submitList 同款：整表 notifyDataSetChanged，
+            // 不走 DiffUtil insert/remove，从根上避开 CoordinatorLayout 下的 attach 闪退。
             withContext(Dispatchers.Main) {
                 if (generation != submitGeneration) {
                     Log.d("HomePerf", "submitList: drop stale generation=$generation latest=$submitGeneration")
                     return@withContext
                 }
                 val t0 = System.currentTimeMillis()
-                val wasEmpty = items.isEmpty()
                 rawBills.clear()
                 rawBills.addAll(combinedBills)
                 lastSubmittedShowChart = includeChart
@@ -310,10 +262,67 @@ class HomeAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
                     rawBills.any { !it.isDeprecated && it.bill == selected }
                 })
 
-                diffResult.dispatchUpdatesTo(this@HomeAdapter)
-                Log.d("HomePerf", "dispatchUpdatesTo: oldSize=${oldItems.size} newSize=${newItems.size} wasEmpty=$wasEmpty  [${System.currentTimeMillis() - t0}ms on main]")
+                notifyDataSetChanged()
+                Log.d(
+                    "HomePerf",
+                    "notifyDataSetChanged: oldSize=$oldSize newSize=${newItems.size}  [${System.currentTimeMillis() - t0}ms on main]"
+                )
+                onListDispatched?.invoke()
             }
         }
+    }
+
+    private fun buildHomeListItems(
+        combinedBills: List<DisplayBill>,
+        includeChart: Boolean,
+        includeEmptyState: Boolean
+    ): List<ListItem> {
+        val dfKey = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+        val dfDisplay = SimpleDateFormat("MM.dd", Locale.getDefault())
+        val dfWeekday = SimpleDateFormat("E", Locale.CHINESE)
+        val newItems = mutableListOf<ListItem>()
+        // 趋势卡在前，空账单提示在后；二者可同时存在。
+        resolveHomeLeadingItems(
+            showChart = includeChart,
+            showEmptyState = includeEmptyState
+        ).forEach { item ->
+            newItems.add(
+                when (item) {
+                    HomeLeadingItem.TREND_CARD -> ListItem.Chart
+                    HomeLeadingItem.EMPTY_STATE -> ListItem.Empty
+                }
+            )
+        }
+        if (combinedBills.isEmpty()) return newItems
+
+        val grouped = combinedBills.groupBy { dfKey.format(Date(it.bill.time)) }
+        for ((dateKey, billsInDay) in grouped) {
+            var dailyIncome = 0.0
+            var dailyExpense = 0.0
+            billsInDay.forEach {
+                if (it.isDeprecated) return@forEach
+                val amountCny = it.bill.amount * it.bill.exchangeRate
+                if (isRefundBill(it.bill)) {
+                    dailyIncome += amountCny
+                } else if (it.bill.type == Bill.TYPE_EXPENSE) {
+                    dailyExpense += amountCny
+                } else if (it.bill.type == Bill.TYPE_INCOME) {
+                    dailyIncome += amountCny
+                }
+            }
+            val sampleDate = Date(billsInDay.first().bill.time)
+            newItems.add(
+                ListItem.Header(
+                    dateStr = dfDisplay.format(sampleDate),
+                    weekdayStr = dfWeekday.format(sampleDate),
+                    income = dailyIncome,
+                    expense = dailyExpense,
+                    rawDateKey = dateKey
+                )
+            )
+            billsInDay.forEach { displayBill -> newItems.add(ListItem.Item(displayBill)) }
+        }
+        return newItems
     }
 
     /**
@@ -332,9 +341,30 @@ class HomeAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
     fun clearSelection() {
         selectedBills.clear()
         isMultiSelectMode = false
-        onSelectionChanged?.invoke(0)
         notifyItemRangeChanged(0, items.size, PAYLOAD_MODE_CHANGE)
+        onSelectionChanged?.invoke(0)
     }
+
+    /** 勾选框/行内容的联动动画统一实现在 [RowModeMotion]（资产详情页共用同一套）。 */
+    private fun applyRowMode(
+        checkBox: CheckBox,
+        show: Boolean,
+        animate: Boolean,
+        shownAlpha: Float = 1f,
+        spacer: View? = null,
+        afterShown: (() -> Unit)? = null
+    ) = RowModeMotion.apply(
+        checkBox = checkBox,
+        show = show,
+        animate = animate,
+        isModeActive = { isMultiSelectMode },
+        shownAlpha = shownAlpha,
+        spacer = spacer,
+        afterShown = afterShown
+    )
+
+    private fun resetRowMotion(row: View, checkBox: CheckBox, spacer: View? = null) =
+        RowModeMotion.reset(row, checkBox, spacer)
 
     fun deselectAll() {
         selectedBills.clear()
@@ -445,7 +475,7 @@ class HomeAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
                 }
             } else if (holder is HeaderViewHolder && item is ListItem.Header) {
                 when {
-                    payloads.contains(PAYLOAD_MODE_CHANGE) -> holder.updateMode(position)
+                    payloads.contains(PAYLOAD_MODE_CHANGE) -> holder.updateMode(position, animate = true)
                     payloads.contains(PAYLOAD_SELECTION_CHANGE) || payloads.contains(PAYLOAD_HEADER_SELECTION_CHANGE) -> holder.updateSelection(position)
                 }
             }
@@ -457,7 +487,11 @@ class HomeAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
             is ListItem.Chart -> (holder as ChartViewHolder).bind(chartView)
             is ListItem.Empty -> (holder as EmptyViewHolder).bind(emptyView)
             is ListItem.Header -> (holder as HeaderViewHolder).bind(item, position)
-            is ListItem.Item -> (holder as ItemViewHolder).bind(item.displayBill, position)
+            is ListItem.Item -> {
+                // 行动画（删除折叠 / 撤销展开）靠这个 tag 定位被操作的行。
+                holder.itemView.setTag(R.id.tag_bill_row_id, item.displayBill.bill.id)
+                (holder as ItemViewHolder).bind(item.displayBill, position)
+            }
         }
     }
 
@@ -471,14 +505,12 @@ class HomeAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
             holder.iconJob = null
             Glide.with(holder.ivIcon.context).clear(holder.ivIcon)
             holder.boundIconUrl = null
-            // 入场动画（UiMotion.staggerFirstLoadAnimation）直接往行上写 translationY/alpha，
+            // 入场动画 / 多选勾选动画直接往行及其子视图上写 translation/alpha/scale，
             // RecyclerView 回收时不会重置它们。行若在半路被回收再复用给别的位置，
-            // 上一次的偏移会跟着走，所以回收点统一清干净。
-            holder.itemView.animate().cancel()
-            holder.itemView.translationY = 0f
-            holder.itemView.alpha = 1f
-            holder.itemView.scaleX = 1f
-            holder.itemView.scaleY = 1f
+            // 上一次的偏移会跟着走，所以回收点统一清干净（含勾选框与行内容位移）。
+            holder.resetRowMotionOnRecycle()
+        } else if (holder is HeaderViewHolder) {
+            holder.resetRowMotionOnRecycle()
         }
     }
 
@@ -511,8 +543,8 @@ class HomeAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
     }
 
     override fun onDetachedFromRecyclerView(recyclerView: RecyclerView) {
-        super.onDetachedFromRecyclerView(recyclerView)
         submitJob?.cancel()
+        super.onDetachedFromRecyclerView(recyclerView)
     }
 
     private fun resolveGroupBackground(
@@ -533,6 +565,8 @@ class HomeAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
 
     inner class HeaderViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
         private val cbSelectDay: CheckBox = itemView.findViewById(R.id.cb_select_day)
+        /** 勾选框占位：宽度随多选 0 ↔ 38dp 动画，带动日期文字平移；勾选框本身是覆盖层，不影响行高。 */
+        private val spHeaderCheck: View = itemView.findViewById(R.id.sp_header_check)
         private val tvDate: TextView = itemView.findViewById(R.id.tv_header_date)
         private val tvSummary: TextView? = itemView.findViewById(
             itemView.context.resources.getIdentifier("tv_header_summary", "id", itemView.context.packageName)
@@ -563,18 +597,30 @@ class HomeAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
             } else {
                 tvSummary?.visibility = View.VISIBLE
             }
-            updateMode(position)
+            updateMode(position, animate = false)
         }
 
-        fun updateMode(position: Int) {
-            cbSelectDay.visibility = if (isMultiSelectMode) View.VISIBLE else View.GONE
-            updateSelection(position)
+        fun updateMode(position: Int, animate: Boolean) {
+            applyRowMode(
+                checkBox = cbSelectDay,
+                show = isMultiSelectMode,
+                animate = animate,
+                spacer = spHeaderCheck,
+                afterShown = { updateSelection(position) }
+            )
+            if (!animate || !isMultiSelectMode) {
+                updateSelection(position)
+            }
         }
 
         fun updateSelection(position: Int) {
             val (allSelected, partiallySelected) = headerSelectionState(position)
             cbSelectDay.isChecked = allSelected
             cbSelectDay.alpha = if (partiallySelected) 0.55f else 1f
+        }
+
+        fun resetRowMotionOnRecycle() {
+            resetRowMotion(itemView, cbSelectDay, spHeaderCheck)
         }
     }
 
@@ -637,30 +683,38 @@ class HomeAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
         }
 
         fun updateMode(isSelected: Boolean, animate: Boolean) {
+            itemView.animate().cancel()
+            itemView.scaleX = 1f
+            itemView.scaleY = 1f
+            itemView.translationY = 0f
             if (isMultiSelectMode) {
-                checkBox.visibility = View.VISIBLE
                 checkBox.isEnabled = boundSelectable
-                checkBox.alpha = if (boundSelectable) 1f else 0.45f
                 checkBox.isChecked = boundSelectable && isSelected
-                itemView.animate().cancel()
-                itemView.scaleX = 1f
-                itemView.scaleY = 1f
-                itemView.translationY = 0f
+                applyRowMode(
+                    checkBox = checkBox,
+                    show = true,
+                    animate = animate,
+                    shownAlpha = if (boundSelectable) 1f else 0.45f
+                )
+                iconContainer?.visibility = View.VISIBLE
             } else {
-                checkBox.visibility = View.GONE
                 checkBox.isEnabled = true
-                checkBox.alpha = 1f
                 checkBox.isChecked = false
-                itemView.animate().cancel()
-                itemView.scaleX = 1f
-                itemView.scaleY = 1f
-                itemView.translationY = 0f
+                applyRowMode(
+                    checkBox = checkBox,
+                    show = false,
+                    animate = animate
+                )
                 iconContainer?.visibility = View.VISIBLE
             }
         }
 
         fun updateSelection(isSelected: Boolean) {
             checkBox.isChecked = boundSelectable && isSelected
+        }
+
+        fun resetRowMotionOnRecycle() {
+            resetRowMotion(itemView, checkBox)
         }
 
         private fun setIconSizeDp(dp: Int) {

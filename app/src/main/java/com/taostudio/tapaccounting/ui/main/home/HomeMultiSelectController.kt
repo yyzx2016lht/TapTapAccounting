@@ -8,14 +8,21 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.view.ContextThemeWrapper
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.updatePadding
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
+import androidx.recyclerview.widget.RecyclerView
+import com.taostudio.tapaccounting.ui.common.BillRowAnimator
+import com.taostudio.tapaccounting.ui.common.BillUndoController
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import com.taostudio.tapaccounting.R
 import com.taostudio.tapaccounting.data.local.AppDatabase
 import com.taostudio.tapaccounting.data.local.entity.Bill
+import com.taostudio.tapaccounting.logic.BillDeleteUndo
 import com.taostudio.tapaccounting.logic.BillMoveTargetResolver
 import com.taostudio.tapaccounting.ui.dialog.BillMoveDialog
 import com.taostudio.tapaccounting.ui.dialog.OverlayDialogs
@@ -34,7 +41,12 @@ internal class HomeMultiSelectController(
     private val dismissKeyboardForDialog: () -> Unit,
     private val configureDialogWindow: (Dialog, Int, Float) -> Unit,
     private val onDataChanged: () -> Unit = {},
+    /** 账单列表：批量删除时用它定位被删的行播行动画。 */
+    private val getRecyclerView: () -> RecyclerView? = { null }
 ) {
+    /** 操作栏 XML 原始底部内边距，用于叠加系统导航条 inset（首次 setup 时捕获）。 */
+    private var multiSelectActionsBasePaddingBottom = -1
+
     fun setupMultiSelectActions() {
         btnMsCancel.setOnClickListener {
             getHomeAdapter().clearSelection()
@@ -71,23 +83,23 @@ internal class HomeMultiSelectController(
             val billsToDelete = getHomeAdapter().selectedBills.toList()
             if (billsToDelete.isEmpty()) return@setOnClickListener
 
-            showConfirmDialog(
-                title = "确认删除",
-                message = "确定要删除选中的 ${billsToDelete.size} 条账单吗？删除后可在回收站恢复。",
-                confirmText = "确认删除",
-                isDanger = true
-            ) {
+            val recyclerView = getRecyclerView()
+            val deletedIds = billsToDelete.map { it.id }
+            BillRowAnimator.collapseThen(BillRowAnimator.findRows(recyclerView, deletedIds)) {
                 val db = AppDatabase.getDatabase(fragment.requireContext())
                 fragment.lifecycleScope.launch(Dispatchers.IO) {
-                    if (!com.taostudio.tapaccounting.logic.deleteBillsAndRevertBalanceSafe(db, billsToDelete)) return@launch
+                    val rows = BillDeleteUndo.delete(db, billsToDelete) ?: return@launch
                     withContext(Dispatchers.Main) {
                         getHomeAdapter().clearSelection()
                         onDataChanged()
-                        Toast.makeText(
-                            fragment.context,
-                            "已删除 ${billsToDelete.size} 条账单",
-                            Toast.LENGTH_SHORT
-                        ).show()
+                        BillUndoController.showNow(
+                            fragment.requireActivity().findViewById(android.R.id.content),
+                            fragment.getString(R.string.deleted_bills_fmt, billsToDelete.size),
+                            rows
+                        ) {
+                            onDataChanged()
+                            BillRowAnimator.expandAfterRefresh(recyclerView, rows.map { it.originalBillId })
+                        }
                     }
                 }
             }
@@ -97,11 +109,29 @@ internal class HomeMultiSelectController(
     fun setupMultiSelectActionsBottomOffset() {
         // Home 页面容器已经通过 activity_main.xml 为底栏预留了固定高度，
         // 这里不应再叠加 BottomNavigation 的额外偏移，否则会出现“悬空”间隙。
-        val lp = layoutMultiSelectActions.layoutParams as? ViewGroup.MarginLayoutParams ?: return
-        if (lp.bottomMargin != multiSelectActionsBaseBottomMargin) {
+        val lp = layoutMultiSelectActions.layoutParams as? ViewGroup.MarginLayoutParams
+        if (lp != null && lp.bottomMargin != multiSelectActionsBaseBottomMargin) {
             lp.bottomMargin = multiSelectActionsBaseBottomMargin
             layoutMultiSelectActions.layoutParams = lp
         }
+
+        // 手势条避让（关键）：首页是 edge-to-edge（decorFitsSystemWindows = false），
+        // 进入多选后容器铺满到屏幕最底边，操作栏背景贴底——但内容必须再让出一个
+        // 系统导航条（手势条）的高度，否则最下面一排按钮会被横条压住、显示不全。
+        // 资产详情页是普通窗口，内容天然布局在系统栏之上，所以那边没有这个问题。
+        // 背景仍铺到屏幕最底，只是把 inset 加进 paddingBottom，观感与 BottomNavigation 一致。
+        if (multiSelectActionsBasePaddingBottom < 0) {
+            multiSelectActionsBasePaddingBottom = layoutMultiSelectActions.paddingBottom
+        }
+        ViewCompat.setOnApplyWindowInsetsListener(layoutMultiSelectActions) { view, insets ->
+            val navBottom = insets.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom
+            val target = multiSelectActionsBasePaddingBottom + navBottom
+            if (view.paddingBottom != target) {
+                view.updatePadding(bottom = target)
+            }
+            insets
+        }
+        ViewCompat.requestApplyInsets(layoutMultiSelectActions)
     }
 
     private fun showMoveToBookDialog(bills: List<Bill>) {
@@ -137,48 +167,6 @@ internal class HomeMultiSelectController(
                 }
             }
         }
-    }
-
-    private fun showConfirmDialog(
-        title: String,
-        message: String,
-        confirmText: String = "确定",
-        isDanger: Boolean = false,
-        onConfirm: () -> Unit
-    ) {
-        val themeCtx = ContextThemeWrapper(fragment.requireContext(), R.style.Theme_TapAccounting)
-        val panel = LayoutInflater.from(fragment.requireContext())
-            .inflate(R.layout.dialog_delete_followup_confirm, null, false)
-        panel.findViewById<TextView>(R.id.tv_followup_confirm_title).text = title
-        panel.findViewById<TextView>(R.id.tv_followup_confirm_message).text = message
-
-        val dialog = AlertDialog.Builder(themeCtx)
-            .setView(panel)
-            .create()
-        dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
-
-        panel.findViewById<TextView>(R.id.btn_followup_confirm_cancel).setOnClickListener {
-            dialog.dismiss()
-        }
-        panel.findViewById<TextView>(R.id.btn_followup_confirm_ok).apply {
-            text = confirmText
-            setBackgroundResource(
-                if (isDanger) R.drawable.bg_delete_followup_danger_btn
-                else R.drawable.bg_delete_followup_primary_btn
-            )
-            setOnClickListener {
-                dialog.dismiss()
-                onConfirm()
-            }
-        }
-
-        OverlayDialogs.showPageCenterDialog(
-            dialog = dialog,
-            ctx = fragment.requireContext(),
-            widthRatio = 0.86f,
-            cancelOnTouchOutside = true,
-            useSolidPanelBackground = true
-        )
     }
 }
 

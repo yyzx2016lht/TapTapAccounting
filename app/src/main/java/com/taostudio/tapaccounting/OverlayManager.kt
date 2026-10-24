@@ -36,6 +36,8 @@ import com.taostudio.tapaccounting.data.local.AppDatabase
 import com.taostudio.tapaccounting.data.local.entity.Bill
 import com.taostudio.tapaccounting.logic.AccountingFormController
 import com.taostudio.tapaccounting.logic.VoiceInputHandler
+import com.taostudio.tapaccounting.logic.BatchBillInserter
+import com.taostudio.tapaccounting.ui.dialog.MergePaymentDialog
 import com.taostudio.tapaccounting.ui.dialog.OverlayDialogs
 import java.io.ByteArrayOutputStream
 import java.text.SimpleDateFormat
@@ -58,8 +60,8 @@ class OverlayManager(private val ctx: Context) {
         private const val CAPTURE_CARD_EXIT_DURATION_MS = 150L
         /** 截屏前等待合成器摘掉悬浮层，避免把加载卡/悬浮窗拍进画面。 */
         private const val CAPTURE_SETTLE_MS = 64L
-        /** 截完后的扫光提示时长（不挡识别进度）。 */
-        private const val CAPTURE_DONE_FLASH_MS = 420L
+        /** 截完反馈：一道扫光从上到下，节奏从容。 */
+        private const val CAPTURE_SCAN_DURATION_MS = 900L
         private const val OVERLAY_OUTSIDE_TOUCH_GRACE_MS = 600L
     }
 
@@ -92,6 +94,8 @@ class OverlayManager(private val ctx: Context) {
     private var isScreenCaptureInProgress = false
     private var screenCaptureTriggerBtn: View? = null
     private var screenCaptureJob: Job? = null
+    /** 本次截屏临时文件；未完成入账则删除，避免 cache 堆积。 */
+    private var pendingScreenCaptureFile: java.io.File? = null
 
     private val pendingBills = mutableListOf<JSONObject>()
 
@@ -140,7 +144,13 @@ class OverlayManager(private val ctx: Context) {
         val requiresReview = resultJson.optBoolean("requires_review", false) || isVisualReviewDraft
         if (resultJson.has("bills")) {
             val billsArray = resultJson.getJSONArray("bills")
-            if (Prefs.isMultiBillNotSync(ctx) && !requiresReview) {
+            // 用户在识别完成页明确选了入账方式时以选择为准，不再走「多笔不弹窗」的静默保存
+            val explicitBatch = resultJson.optBoolean(AiAssistant.EXTRA_BATCH_SAVE_ALL, false)
+            val explicitQueue = resultJson.optBoolean(AiAssistant.EXTRA_FORCE_BILL_QUEUE, false)
+            if (explicitBatch) {
+                // 「一键全部入账」：不弹记账表单，直接整批落库
+                saveBillsDirectly(resultJson)
+            } else if (!explicitQueue && Prefs.isMultiBillNotSync(ctx) && !requiresReview) {
                 val aiBookName = resultJson.optString("book_name", "").trim()
                 for (i in 0 until billsArray.length()) {
                     saveJsonToLocal(billsArray.getJSONObject(i), aiBookName)
@@ -160,6 +170,44 @@ class OverlayManager(private val ctx: Context) {
                 formController?.setCurrency(resultJson.optString("currency", "CNY"))
             } else {
                 showOverlay(resultJson, showSaveOnly = false)
+            }
+        }
+    }
+
+    /**
+     * 「一键全部入账」：整批账单直接落库，全程不展示记账表单。
+     *
+     * 之前这里会先 showOverlay 建出悬浮窗再让表单去保存，用户会看到表单闪一下；
+     * 现在先收起可能开着的悬浮窗，再由 [BatchBillInserter] 独立完成写入。
+     */
+    private fun saveBillsDirectly(resultJson: JSONObject) {
+        // 用户是在悬浮窗里发起的识别：直接收起，别把表单留在屏幕上
+        if (overlayView != null) removeOverlay()
+
+        val billsArray = resultJson.optJSONArray("bills")
+        if (billsArray == null || billsArray.length() == 0) return
+
+        val availableBooks = BookAccountManager.getBookAccounts(ctx)
+        val fallbackBookName = BookAccountManager.resolveWritableBook(
+            ctx,
+            BookAccountManager.getSelectedBook(ctx, availableBooks)
+        )
+        val assetFeatureEnabled = Prefs.isAssetFeatureEnabled(ctx)
+
+        CoroutineScope(Dispatchers.IO).launch {
+            val savedBills = BatchBillInserter.insertBills(
+                ctx = ctx,
+                json = resultJson,
+                billsArray = billsArray,
+                fallbackBookName = fallbackBookName,
+                isAssetFeatureEnabled = assetFeatureEnabled
+            )
+            withContext(Dispatchers.Main) {
+                Utils.toast(ctx, ctx.getString(R.string.toast_batch_saved_bills, savedBills.size))
+                // 只有图片/小票这类「一次付款」的来源才追问合并，文本来源不打扰
+                if (BatchBillInserter.canMergeAsOnePayment(resultJson, savedBills)) {
+                    MergePaymentDialog.show(ctx, savedBills) { /* 一键入账本就无界面，收尾即可 */ }
+                }
             }
         }
     }
@@ -453,9 +501,7 @@ class OverlayManager(private val ctx: Context) {
         ScreenCaptureActivity.onScreenshotCaptured = { uri ->
             removeScreenCaptureLoadingOverlayImmediate()
             finishScreenCaptureFlow(restoreOverlay = false)
-            playCaptureDoneHint {
-                aiAssistant.analyzeScreenshot(uri, handleAiResult)
-            }
+            beginScreenCaptureAccounting(uri)
         }
         ScreenCaptureActivity.onRecognitionError = { message -> handleScreenCaptureError(message) }
         ScreenCaptureActivity.onRecognitionCancelled = { handleScreenCaptureCancelled() }
@@ -513,9 +559,7 @@ class OverlayManager(private val ctx: Context) {
                 withContext(Dispatchers.Main) {
                     finishScreenCaptureFlow(restoreOverlay = false)
                     if (uri != null) {
-                        playCaptureDoneHint {
-                            aiAssistant.analyzeScreenshot(uri, handleAiResult)
-                        }
+                        beginScreenCaptureAccounting(uri)
                     } else {
                         Utils.toast(ctx, ctx.getString(R.string.toast_capture_failed))
                     }
@@ -562,9 +606,7 @@ class OverlayManager(private val ctx: Context) {
                     CoroutineScope(Dispatchers.Main).launch {
                         finishScreenCaptureFlow(restoreOverlay = false)
                         if (uri != null) {
-                            playCaptureDoneHint {
-                                aiAssistant.analyzeScreenshot(uri, handleAiResult)
-                            }
+                            beginScreenCaptureAccounting(uri)
                         } else {
                             Utils.toast(ctx, ctx.getString(R.string.toast_capture_failed))
                         }
@@ -616,11 +658,52 @@ class OverlayManager(private val ctx: Context) {
         runCatching { wm?.removeView(view) }
     }
 
-    /**
-     * 截屏完成后的轻反馈：白闪 + 扫光划过，不拦截触摸。
-     * 在真正截完之后播放，不会进画面；播完再进入识别。
-     */
+    /** 截屏成功 → toast → 扫光反馈 → 识别；未进入记账则删临时截屏。 */
+    private fun beginScreenCaptureAccounting(uri: android.net.Uri) {
+        pendingScreenCaptureFile = screenCaptureFileFromUri(uri)
+        Utils.toast(ctx, ctx.getString(R.string.toast_screenshot_success))
+        playCaptureDoneHint {
+            aiAssistant.analyzeScreenshot(
+                imageUri = uri,
+                onResult = { json ->
+                    // 已进入记账：保留截屏文件（可在存储清理里看到）；仅清引用
+                    pendingScreenCaptureFile = null
+                    handleAiResult(json)
+                },
+                onAbandoned = {
+                    // 未进入记账（取消/失败/无账单）：删掉本次截屏
+                    discardPendingScreenCapture()
+                }
+            )
+        }
+    }
+
+    private fun screenCaptureFileFromUri(uri: android.net.Uri): java.io.File? {
+        val path = uri.path?.takeIf { it.isNotBlank() } ?: return null
+        val file = java.io.File(path)
+        return file.takeIf { it.exists() && it.parentFile?.name == "screen_captures" }
+    }
+
+    private fun discardPendingScreenCapture() {
+        val file = pendingScreenCaptureFile ?: return
+        pendingScreenCaptureFile = null
+        if (file.exists()) {
+            val ok = runCatching { file.delete() }.getOrDefault(false)
+            Logger.d(ctx, "OverlayManager", "Discard screen capture cache: ${file.name}, deleted=$ok")
+        }
+    }
+
+    /** 截完反馈：一道柔和扫光从上到下划过，不挡触摸。 */
     private fun playCaptureDoneHint(onFinished: () -> Unit) {
+        try {
+            playCaptureScanHintInternal(onFinished)
+        } catch (e: Exception) {
+            Logger.e(ctx, "OverlayManager", "playCaptureDoneHint failed: ${e.message}")
+            onFinished()
+        }
+    }
+
+    private fun playCaptureScanHintInternal(onFinished: () -> Unit) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !android.provider.Settings.canDrawOverlays(ctx)) {
             onFinished()
             return
@@ -633,25 +716,28 @@ class OverlayManager(private val ctx: Context) {
 
         val density = ctx.resources.displayMetrics.density
         val screenH = ctx.resources.displayMetrics.heightPixels.toFloat()
-        val flash = View(ctx).apply {
-            setBackgroundColor(0x55FFFFFF)
-            alpha = 0f
-        }
-        val scanLine = View(ctx).apply {
-            setBackgroundColor(0xE67C9FF8.toInt())
-            alpha = 0f
-        }
+        val bandH = (96f * density).toInt().coerceAtLeast(1)
+
         val root = FrameLayout(ctx).apply {
-            addView(flash, FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT,
-                FrameLayout.LayoutParams.MATCH_PARENT
-            ))
-            addView(scanLine, FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT,
-                (3f * density).toInt()
-            ).apply { gravity = Gravity.TOP })
             importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
         }
+        // 半透明渐变扫光带：中间亮、上下淡，看起来像扫过去而不是硬线。
+        val scanBand = View(ctx).apply {
+            background = android.graphics.drawable.GradientDrawable(
+                android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM,
+                intArrayOf(0x00FFFFFF, 0x66FFFFFF, 0xAA7C9FF8.toInt(), 0x66FFFFFF, 0x00FFFFFF)
+            )
+            alpha = 0f
+            translationY = -bandH.toFloat()
+        }
+        root.addView(
+            scanBand,
+            FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                bandH
+            ).apply { gravity = Gravity.TOP }
+        )
+
         val params = WindowManager.LayoutParams().apply {
             width = WindowManager.LayoutParams.MATCH_PARENT
             height = WindowManager.LayoutParams.MATCH_PARENT
@@ -678,31 +764,20 @@ class OverlayManager(private val ctx: Context) {
             return
         }
 
-        runCatching {
-            root.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
-        }
+        runCatching { root.performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK) }
 
-        flash.animate()
-            .alpha(1f)
-            .setDuration(70L)
-            .withEndAction {
-                flash.animate()
-                    .alpha(0f)
-                    .setDuration(260L)
-                    .setInterpolator(DecelerateInterpolator())
-                    .start()
-            }
-            .start()
-
-        ValueAnimator.ofFloat(-screenH * 0.08f, screenH).apply {
-            duration = CAPTURE_DONE_FLASH_MS
-            interpolator = DecelerateInterpolator()
+        val ease = PathInterpolator(0.33f, 0f, 0.2f, 1f)
+        ValueAnimator.ofFloat(-bandH.toFloat(), screenH).apply {
+            duration = CAPTURE_SCAN_DURATION_MS
+            interpolator = ease
             addUpdateListener { anim ->
+                val y = anim.animatedValue as Float
                 val p = anim.animatedFraction
-                scanLine.translationY = anim.animatedValue as Float
-                scanLine.alpha = when {
-                    p < 0.12f -> p / 0.12f
-                    p > 0.75f -> ((1f - p) / 0.25f).coerceIn(0f, 1f)
+                scanBand.translationY = y
+                // 进出时淡入淡出，中段保持可见
+                scanBand.alpha = when {
+                    p < 0.12f -> (p / 0.12f).coerceIn(0f, 1f)
+                    p > 0.82f -> ((1f - p) / 0.18f).coerceIn(0f, 1f)
                     else -> 1f
                 }
             }
@@ -1099,6 +1174,8 @@ class OverlayManager(private val ctx: Context) {
     }
 
     fun removeOverlay(isSaved: Boolean = true) {
+        // 若仍挂着「未进入记账」的截屏，关掉悬浮层时一并删掉
+        discardPendingScreenCapture()
         hideScreenCaptureLoadingOverlay()
         finishScreenCaptureFlow(restoreOverlay = false)
         voiceHandler?.release()

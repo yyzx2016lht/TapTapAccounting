@@ -3,9 +3,9 @@ package com.taostudio.tapaccounting.ui.main.home
 import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
+import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.fragment.app.Fragment
-import androidx.recyclerview.widget.DefaultItemAnimator
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
@@ -72,23 +72,20 @@ internal class HomeUiListController(
         (fragment.activity as? MainActivity)?.homeRecycledViewPool?.let {
             rvTransactions.setRecycledViewPool(it)
         }
-        // 保留条目增/删/移动的过渡动画，但关掉"内容变更"动画：首页多处
-        // notifyItemRangeChanged(0, itemCount, PAYLOAD_*) 会与 DiffUtil 派发同帧触发
-        // requestLayout，change animation 留下的临时分离 holder 会被布局重新 attach，
-        // 抛 "Called attach on a child which is not detached"。与 ChatActivity 同款处理。
-        rvTransactions.itemAnimator = DefaultItemAnimator().apply {
-            supportsChangeAnimations = false
-            addDuration = 180L
-            removeDuration = 160L
-        }
+        // 与资产详情同款整表刷新（notifyDataSetChanged），关掉 ItemAnimator：
+        // DiffUtil 增删动画在首页 AppBar/CoordinatorLayout 下会闪退，整表刷新不需要它。
+        rvTransactions.itemAnimator = null
 
         homeAdapter.onBillItemClick = { bill ->
             onShowBillDetailSheet(bill)
         }
 
         homeAdapter.onSelectionChanged = { count ->
+            val main = fragment.activity as? MainActivity
             if (homeAdapter.isMultiSelectMode) {
                 setIsMultiSelectModeActive(true)
+                // 先收起底栏 Tab，再滑入操作栏——否则操作栏只能卡在 Tab 上方，观感远不如资产详情。
+                main?.setHomeMultiSelectChrome(true)
                 MultiSelectMotion.animateIn(layoutMultiSelectActions)
                 // 摘要行放在操作栏里（对齐资产详情页）：不依赖顶部 banner，滚动位置不影响展示
                 tvMsSummary.text = MultiSelectBarSummary.build(
@@ -100,11 +97,17 @@ internal class HomeUiListController(
                     btnMsExcludeStats as TextView,
                     homeAdapter.selectedBills.toList()
                 )
+                fabScrollBehavior.markHidden()
+                // Material FAB 的 hide()/show() 自带缩放+淡入淡出动画（同资产详情页），
+                // 内部状态机自洽。不要用直接改 visibility 的辅助函数叠属性动画，
+                // 会和 FAB 内部动画状态机打架（真机实测出现 FAB 空心、+ 号丢失）。
+                main?.findViewById<FloatingActionButton>(R.id.fab_add)?.hide()
             } else {
                 setIsMultiSelectModeActive(false)
                 MultiSelectMotion.animateOut(layoutMultiSelectActions)
+                main?.setHomeMultiSelectChrome(false)
+                fabScrollBehavior.syncVisible()
             }
-            fabScrollBehavior.syncVisible()
         }
 
         rvTransactions.clearOnScrollListeners()
@@ -206,6 +209,9 @@ internal class HomeUiListController(
         if (!fragment.isAdded) return
         val window = fragment.requireActivity().window
         WindowCompat.setDecorFitsSystemWindows(window, false)
+        // decorFits 切到 false 后重新分发 insets，保证多选操作栏拿到手势条高度
+        // 用于底部避让（见 HomeMultiSelectController.setupMultiSelectActionsBottomOffset）
+        ViewCompat.requestApplyInsets(layoutMultiSelectActions)
 
         val statusBar = getStatusBarHeight()
         val topLp = layoutStickyTopBar.layoutParams as? ViewGroup.MarginLayoutParams

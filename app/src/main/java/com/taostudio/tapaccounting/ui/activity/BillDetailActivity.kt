@@ -4,19 +4,16 @@ import com.taostudio.tapaccounting.BillColors
 import android.content.Context
 import android.content.Intent
 import android.graphics.Color
-import android.graphics.drawable.ColorDrawable
 import android.os.Build
 import android.os.Bundle
-import android.view.LayoutInflater
 import android.view.View
 import android.widget.EditText
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
-import androidx.appcompat.app.AlertDialog
+import com.taostudio.tapaccounting.ui.common.BillUndoController
 import androidx.appcompat.app.AppCompatActivity
-import androidx.appcompat.view.ContextThemeWrapper
 import androidx.appcompat.widget.SwitchCompat
 import androidx.lifecycle.lifecycleScope
 import com.bumptech.glide.Glide
@@ -31,7 +28,7 @@ import com.taostudio.tapaccounting.Prefs
 import com.taostudio.tapaccounting.R
 import com.taostudio.tapaccounting.data.local.entity.Bill
 import com.taostudio.tapaccounting.data.repository.CategoryRepository
-import com.taostudio.tapaccounting.logic.BillDeleteHelper
+import com.taostudio.tapaccounting.logic.BillDeleteUndo
 import com.taostudio.tapaccounting.logic.BillDisplayFormatter
 import com.taostudio.tapaccounting.logic.BillMutationService
 import com.taostudio.tapaccounting.logic.CurrencyManager
@@ -177,7 +174,7 @@ class BillDetailActivity : AppCompatActivity() {
         findViewById<View>(R.id.layout_bill_date).setOnClickListener { showBillDatePicker() }
         findViewById<View>(R.id.layout_book).setOnClickListener { showBookPicker() }
         layoutAsset.setOnClickListener { showAssetPicker() }
-        findViewById<View>(R.id.btn_delete).setOnClickListener { showDeleteConfirmation() }
+        findViewById<View>(R.id.btn_delete).setOnClickListener { deleteBill() }
         btnRefund.setOnClickListener { openRefundPage() }
 
         switchExcludeStats.setOnCheckedChangeListener { _, isChecked ->
@@ -599,33 +596,17 @@ class BillDetailActivity : AppCompatActivity() {
         }
     }
 
-    private fun showDeleteConfirmation() {
-        showCustomConfirmDialog(
-            title = getString(R.string.confirm_delete),
-            message = getString(R.string.confirm_delete_message),
-            confirmText = getString(R.string.confirm_delete),
-            isDanger = true,
-            onConfirm = { deleteBill() }
-        )
-    }
-
     private fun deleteBill() {
         val app = application as TapApplication
         lifecycleScope.launch(Dispatchers.IO) {
             val currentBill = bill ?: return@launch
-            runCatching { BillDeleteHelper.deleteBillAndRevertBalance(app.database, currentBill) }
-                .onSuccess {
-                    withContext(Dispatchers.Main) {
-                        Toast.makeText(this@BillDetailActivity, getString(R.string.bill_moved_to_trash), Toast.LENGTH_SHORT).show()
-                        setResult(RESULT_OK)
-                        finish()
-                    }
-                }
-                .onFailure { error ->
-                    withContext(Dispatchers.Main) {
-                        Toast.makeText(this@BillDetailActivity, getString(R.string.delete_failed), Toast.LENGTH_SHORT).show()
-                    }
-                }
+            val rows = BillDeleteUndo.delete(app.database, listOf(currentBill)) ?: return@launch
+            withContext(Dispatchers.Main) {
+                // 本页马上要 finish，Snackbar 挂不住，交给承载页在 onResume 时弹。
+                BillUndoController.request(getString(R.string.bill_deleted_undo), rows)
+                setResult(RESULT_OK)
+                finish()
+            }
         }
     }
 
@@ -876,46 +857,6 @@ class BillDetailActivity : AppCompatActivity() {
         val intent = Intent(this, RefundActivity::class.java)
         intent.putExtra(RefundActivity.BILL_ID, currentBill.id)
         startActivity(intent)
-    }
-
-    private fun showCustomConfirmDialog(
-        title: String,
-        message: String,
-        confirmText: String = getString(R.string.confirm),
-        isDanger: Boolean = false,
-        onConfirm: () -> Unit
-    ) {
-        val panel = LayoutInflater.from(this).inflate(R.layout.dialog_delete_followup_confirm, null, false)
-        panel.findViewById<TextView>(R.id.tv_followup_confirm_title).text = title
-        panel.findViewById<TextView>(R.id.tv_followup_confirm_message).text = message
-
-        val dialog = AlertDialog.Builder(ContextThemeWrapper(this, R.style.Theme_TapAccounting))
-            .setView(panel)
-            .create()
-        dialog.window?.setBackgroundDrawable(ColorDrawable(android.graphics.Color.TRANSPARENT))
-
-        panel.findViewById<TextView>(R.id.btn_followup_confirm_cancel).setOnClickListener {
-            dialog.dismiss()
-        }
-        panel.findViewById<TextView>(R.id.btn_followup_confirm_ok).apply {
-            text = confirmText
-            setBackgroundResource(
-                if (isDanger) R.drawable.bg_delete_followup_danger_btn
-                else R.drawable.bg_delete_followup_primary_btn
-            )
-            setOnClickListener {
-                dialog.dismiss()
-                onConfirm()
-            }
-        }
-
-        OverlayDialogs.showPageCenterDialog(
-            dialog = dialog,
-            ctx = this,
-            widthRatio = 0.86f,
-            cancelOnTouchOutside = true,
-            useSolidPanelBackground = false
-        )
     }
 
     companion object {

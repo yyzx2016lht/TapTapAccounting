@@ -34,6 +34,7 @@ import com.taostudio.tapaccounting.data.local.entity.AiRule
 import com.taostudio.tapaccounting.data.local.entity.Bill
 import com.taostudio.tapaccounting.ui.ExchangeRateActivity
 import com.taostudio.tapaccounting.ui.common.UiMotion.applyFormRowPressFeedback
+import com.taostudio.tapaccounting.ui.dialog.MergePaymentDialog
 import com.taostudio.tapaccounting.ui.dialog.OverlayDialogs
 import java.text.NumberFormat
 import java.text.ParsePosition
@@ -2469,87 +2470,29 @@ class AccountingFormController(
             
             val sourceKind = json.optString("source_kind", "")
             val isVisualReviewDraft = sourceKind == "screen_capture" || sourceKind == "receipt_image"
-            val isNotSync = Prefs.isMultiBillNotSync(ctx) && !json.optBoolean("requires_review", false) && !isVisualReviewDraft
-            if (isNotSync) {
+            // 用户在识别完成页选了「一键全部入账」/「逐条确认入账」时，以选择为准
+            val explicitBatch = json.optBoolean(AiAssistant.EXTRA_BATCH_SAVE_ALL, false)
+            val explicitQueue = json.optBoolean(AiAssistant.EXTRA_FORCE_BILL_QUEUE, false)
+            val isNotSync = !explicitQueue &&
+                Prefs.isMultiBillNotSync(ctx) && !json.optBoolean("requires_review", false) && !isVisualReviewDraft
+            if (explicitBatch || isNotSync) {
                 scope.launch(Dispatchers.IO) {
-                    val db = AppDatabase.getDatabase(ctx)
-                    for (i in 0 until billsArray.length()) {
-                        val obj = billsArray.getJSONObject(i)
-                        val resolvedBook = obj.optString("book_name", fallbackBookName)
-                        
-                        var typeIndex = obj.optInt("type", 0)
-                        if (!isAssetFeatureEnabled) {
-                            typeIndex = if (typeIndex == 1) 1 else 0
-                        } else if (typeIndex > 2) {
-                            typeIndex = 2
-                        }
-                        val amt = obj.optDouble("amount", 0.0)
-                        val asset1 = if (isAssetFeatureEnabled) obj.optString("asset_name", "") else ""
-                        val asset2Name = if (isAssetFeatureEnabled) obj.optString("to_asset_name", "") else ""
-                        val a1 = asset1.takeIf { it.isNotBlank() }?.let { db.assetDao().getAssetByName(it) }
-                        val a2ByName = asset2Name.takeIf { it.isNotBlank() }?.let { db.assetDao().getAssetByName(it) }
-                        var cat = com.taostudio.tapaccounting.logic.CategoryNameNormalizer.normalizeForStorage(obj.optString("category_name", ""))
-                        var toAssetId: Long? = null
-                        var toAssetNm = ""
-                        if (isAssetFeatureEnabled && typeIndex == 2) {
-                            // 仅当转入/转出都为现有资产时，才允许落为转账
-                            if (a1 != null && a2ByName != null) {
-                                cat = "转账"
-                                toAssetNm = asset2Name
-                                toAssetId = a2ByName.id
-                            } else {
-                                typeIndex = Bill.TYPE_EXPENSE
-                                if (cat.isBlank() || cat == "转账") cat = "其他"
-                            }
-                        }
-
-                        val timeStr = obj.optString("time", SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date()))
-                        val parsedTime = try { SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).parse(timeStr)?.time ?: System.currentTimeMillis() } catch(e:Exception){ System.currentTimeMillis() }
-                        val remark = obj.optString("remarks", "")
-                        val currency = obj.optString("currency", "CNY").ifBlank { "CNY" }
-                        val fee = obj.optDouble("fee", 0.0).coerceAtLeast(0.0)
-
-                        val a2 = if (toAssetId != null) db.assetDao().getAssetById(toAssetId) else null
-                        val exchangeRate = when {
-                            typeIndex == Bill.TYPE_TRANSFER && a2 != null && amt > 0.0 ->
-                                BillAssetImpactService.estimateExchangeRateToTarget(amt, currency, a2.currency)
-                            currency == "CNY" -> 1.0
-                            else -> {
-                                val rateToCurrency = CurrencyManager.getRate(currency) ?: 1.0
-                                if (rateToCurrency != 0.0) 1.0 / rateToCurrency else 1.0
-                            }
-                        }
-
-                        val categoryId = if (typeIndex == 2 || cat.isBlank()) {
-                            null
-                        } else {
-                            val categoryDbType = if (typeIndex == 1) 1 else 0
-                            val leaf = cat.substringAfterLast(" - ").substringAfterLast(" > ").trim()
-                            db.categoryDao().getCategoriesListByType(categoryDbType)
-                                .firstOrNull { it.name == leaf }?.id
-                        }
-
-                        val bill = Bill(
-                            amount = amt,
-                            type = typeIndex,
-                            currency = currency,
-                            exchangeRate = exchangeRate,
-                            fee = fee,
-                            accountName = asset1,
-                            accountId = a1?.id,
-                            toAccountId = toAssetId,
-                            toAccountName = toAssetNm,
-                            categoryId = categoryId,
-                            categoryName = cat,
-                            time = parsedTime,
-                            remark = remark,
-                            bookName = resolvedBook
-                        )
-                        BillMutationService.insertBillAndApplyImpact(db, bill)
-                    }
+                    val savedBills = BatchBillInserter.insertBills(
+                        ctx = ctx,
+                        json = json,
+                        billsArray = billsArray,
+                        fallbackBookName = fallbackBookName,
+                        isAssetFeatureEnabled = isAssetFeatureEnabled
+                    )
                     withContext(Dispatchers.Main) {
-                        Utils.toast(ctx, ctx.getString(R.string.toast_auto_saved_bills, billsArray.length()))
-                        onCloseRequest(true)
+                        Utils.toast(ctx, ctx.getString(R.string.toast_auto_saved_bills, savedBills.size))
+                        // 只有用户明确选了「一键全部入账」才追问合并；
+                        // 「多笔不弹窗」这类静默保存不打扰用户。
+                        if (explicitBatch && BatchBillInserter.canMergeAsOnePayment(json, savedBills)) {
+                            MergePaymentDialog.show(ctx, savedBills) { onCloseRequest(true) }
+                        } else {
+                            onCloseRequest(true)
+                        }
                     }
                 }
             } else {

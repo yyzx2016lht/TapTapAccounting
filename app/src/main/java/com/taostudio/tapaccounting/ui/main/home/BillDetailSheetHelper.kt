@@ -1,6 +1,7 @@
 package com.taostudio.tapaccounting.ui.main.home
 
 import com.taostudio.tapaccounting.BillColors
+import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.graphics.Color
@@ -24,12 +25,16 @@ import com.taostudio.tapaccounting.CategoryIconHelper
 import com.taostudio.tapaccounting.R
 import com.taostudio.tapaccounting.data.local.AppDatabase
 import com.taostudio.tapaccounting.data.local.entity.Bill
+import com.taostudio.tapaccounting.logic.BillDeleteUndo
 import com.taostudio.tapaccounting.logic.BillDisplayFormatter
 import com.taostudio.tapaccounting.logic.BillMutationService
 import com.taostudio.tapaccounting.logic.CurrencyManager
 import com.taostudio.tapaccounting.ui.activity.EditBillActivity
 import com.taostudio.tapaccounting.ui.dialog.OverlayDialogs
+import androidx.recyclerview.widget.RecyclerView
 import com.taostudio.tapaccounting.ui.common.BillDetailStatsToggle
+import com.taostudio.tapaccounting.ui.common.BillRowAnimator
+import com.taostudio.tapaccounting.ui.common.BillUndoController
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -45,7 +50,9 @@ object BillDetailSheetHelper {
         bill: Bill,
         onRefund: ((Bill) -> Unit)? = null,
         onDismiss: (() -> Unit)? = null,
-        onBillChanged: (() -> Unit)? = null
+        onBillChanged: (() -> Unit)? = null,
+        /** 账单列表：删除/撤销时用它定位那一行播行动画；不传就没有动画。 */
+        listRecyclerView: RecyclerView? = null
     ) {
         if (Prefs.isIndependentDetailEnabled(context) && bill.id > 0L) {
             com.taostudio.tapaccounting.ui.activity.BillDetailActivity.start(context, bill.id)
@@ -284,7 +291,7 @@ object BillDetailSheetHelper {
         }
 
         btnDelete.setOnClickListener {
-            showDeleteConfirmDialog(context, lifecycleOwner, bill, bottomSheet, onBillChanged)
+            deleteBillDirect(context, lifecycleOwner, bill, bottomSheet, onBillChanged, listRecyclerView)
         }
 
         bottomSheet.setContentView(view)
@@ -308,51 +315,36 @@ object BillDetailSheetHelper {
         }
     }
 
-    private fun showDeleteConfirmDialog(
+    private fun deleteBillDirect(
         context: Context,
         lifecycleOwner: LifecycleOwner,
         bill: Bill,
         bottomSheet: BottomSheetDialog,
-        onBillChanged: (() -> Unit)?
+        onBillChanged: (() -> Unit)?,
+        listRecyclerView: RecyclerView?
     ) {
-        val panel = LayoutInflater.from(context).inflate(R.layout.dialog_delete_followup_confirm, null, false)
-        panel.findViewById<TextView>(R.id.tv_followup_confirm_title).text = context.getString(R.string.confirm_delete)
-        panel.findViewById<TextView>(R.id.tv_followup_confirm_message).text = context.getString(R.string.confirm_delete_message)
-
-        val dialog = androidx.appcompat.app.AlertDialog.Builder(
-            androidx.appcompat.view.ContextThemeWrapper(context, R.style.Theme_TapAccounting)
-        )
-            .setView(panel)
-            .create()
-        dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
-
-        panel.findViewById<TextView>(R.id.btn_followup_confirm_cancel).setOnClickListener {
-            dialog.dismiss()
-        }
-        panel.findViewById<TextView>(R.id.btn_followup_confirm_ok).apply {
-            text = context.getString(R.string.confirm_delete)
-            setBackgroundResource(R.drawable.bg_delete_followup_danger_btn)
-            setOnClickListener {
-                dialog.dismiss()
-                bottomSheet.dismiss()
-                lifecycleOwner.lifecycleScope.launch(Dispatchers.IO) {
-                    val db = AppDatabase.getDatabase(context)
-                    if (!com.taostudio.tapaccounting.logic.deleteBillAndRevertBalanceSafe(db, bill)) return@launch
-                    withContext(Dispatchers.Main) {
+        bottomSheet.dismiss()
+        val billId = bill.id
+        BillRowAnimator.collapseThen(
+            rows = BillRowAnimator.findRows(listRecyclerView, listOf(billId)),
+            startDelayMs = BillRowAnimator.SHEET_DISMISS_DELAY_MS
+        ) {
+            lifecycleOwner.lifecycleScope.launch(Dispatchers.IO) {
+                val db = AppDatabase.getDatabase(context)
+                val rows = BillDeleteUndo.delete(db, listOf(bill)) ?: return@launch
+                withContext(Dispatchers.Main) {
+                    onBillChanged?.invoke()
+                    BillUndoController.showNow(
+                        (context as? Activity)?.findViewById(android.R.id.content),
+                        context.getString(R.string.bill_deleted_undo),
+                        rows
+                    ) {
                         onBillChanged?.invoke()
-                        Toast.makeText(context, context.getString(R.string.deleted), Toast.LENGTH_SHORT).show()
+                        BillRowAnimator.expandAfterRefresh(listRecyclerView, rows.map { it.originalBillId })
                     }
                 }
             }
         }
-
-        OverlayDialogs.showPageCenterDialog(
-            dialog = dialog,
-            ctx = context,
-            widthRatio = 0.86f,
-            cancelOnTouchOutside = true,
-            useSolidPanelBackground = true
-        )
     }
 
     private fun fillLinkedBillRow(row: View, bill: Bill, forceGrayStyle: Boolean, context: Context, lifecycleOwner: LifecycleOwner) {

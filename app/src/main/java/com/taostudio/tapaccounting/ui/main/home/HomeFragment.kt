@@ -210,8 +210,11 @@ class HomeFragment : Fragment() {
     private var pendingBookSwitchName: String? = null
     // 切账本后首次数据显示时做一次轻量淡入，缓解“突然出现”的突兀感
     private var animateNextBookDataReveal: Boolean = false
+    // 列表提交完成后再播 reveal / stagger（submitList 异步构建行数据）
+    private var pendingBookRevealAfterDispatch: Boolean = false
     // 首次加载数据后做一次 stagger 入场动画，只播放一次
     private var hasPlayedInitialStagger: Boolean = false
+    private var pendingStaggerAfterDispatch: Boolean = false
 
     private lateinit var layoutMultiSelectActions: View
     private lateinit var tvMsSummary: TextView
@@ -252,7 +255,8 @@ class HomeFragment : Fragment() {
             fragment = this,
             dfDetailTime = dfDetailTime,
             dfDetailTimeShort = dfDetailTimeShort,
-            onDataChanged = { homeViewModel.reload() }
+            onDataChanged = { homeViewModel.reload() },
+            getRecyclerView = { rvTransactions }
         )
     }
     private val accountCurrencyById = mutableMapOf<Long, String>()
@@ -370,13 +374,26 @@ class HomeFragment : Fragment() {
             configureDialogWindow = { dialog, width, dim -> configureDialogWindow(dialog, width, dim) },
         )
 
-        layoutMultiSelectActions = view.findViewById(R.id.layout_multi_select_actions)
-        btnMsCancel = view.findViewById(R.id.btn_ms_cancel)
-        btnMsSelectAll = view.findViewById(R.id.btn_ms_select_all)
-        btnMsDelete = view.findViewById(R.id.btn_ms_delete)
-        btnMsMoveBook = view.findViewById(R.id.btn_ms_move_book)
-        btnMsExcludeStats = view.findViewById(R.id.btn_ms_exclude_stats)
-        tvMsSummary = view.findViewById(R.id.tv_ms_summary)
+        // 操作栏已上移到 Activity 层（activity_main.xml）：进入/退出多选时 fragment 容器
+        // 尺寸完全不变，列表不会重排，观感与资产详情页一致。这里从 Activity 取视图。
+        val hostActivity = requireActivity()
+        layoutMultiSelectActions = hostActivity.findViewById(R.id.layout_multi_select_actions)
+        btnMsCancel = hostActivity.findViewById(R.id.btn_ms_cancel)
+        btnMsSelectAll = hostActivity.findViewById(R.id.btn_ms_select_all)
+        btnMsDelete = hostActivity.findViewById(R.id.btn_ms_delete)
+        btnMsMoveBook = hostActivity.findViewById(R.id.btn_ms_move_book)
+        btnMsExcludeStats = hostActivity.findViewById(R.id.btn_ms_exclude_stats)
+        tvMsSummary = hostActivity.findViewById(R.id.tv_ms_summary)
+        // Fragment 可能被重建（切 Tab/回收），Activity 层的操作栏状态要按当前多选状态复位，
+        // 避免残留上一次的 translation/alpha/可见性。用 INVISIBLE 而不是 GONE：
+        // INVISIBLE 参与布局和 window insets 分发，底部手势条避让（paddingBottom）才能生效。
+        if (!isMultiSelectModeActive) {
+            layoutMultiSelectActions.animate().cancel()
+            layoutMultiSelectActions.visibility = View.INVISIBLE
+            layoutMultiSelectActions.translationY = 0f
+            layoutMultiSelectActions.alpha = 1f
+        }
+        androidx.core.view.ViewCompat.requestApplyInsets(layoutMultiSelectActions)
         multiSelectActionsBaseBottomMargin =
             (layoutMultiSelectActions.layoutParams as? ViewGroup.MarginLayoutParams)?.bottomMargin ?: 0
         multiSelectController = HomeMultiSelectController(
@@ -393,6 +410,7 @@ class HomeFragment : Fragment() {
             dismissKeyboardForDialog = { dismissKeyboardForDialog() },
             configureDialogWindow = { dialog, width, dim -> configureDialogWindow(dialog, width, dim) },
             onDataChanged = { homeViewModel.reload() },
+            getRecyclerView = { rvTransactions },
         )
 
         headerBannerLayout = view.findViewById(R.id.headerBannerLayout)
@@ -611,26 +629,26 @@ class HomeFragment : Fragment() {
 
                     if (state.isLoading && monthlyBills.isEmpty()) {
                         // 正在切换账本/加载中，且还没有新数据：直接清空列表，不走 DiffUtil
+                        pendingBookRevealAfterDispatch = false
+                        pendingStaggerAfterDispatch = false
                         homeAdapter.submitList(emptyList())
-                        rvTransactions.requestLayout()
                     } else {
                         val shouldAnimateReveal = animateNextBookDataReveal && !state.isLoading && monthlyBills.isNotEmpty()
                         if (shouldAnimateReveal) {
                             animateNextBookDataReveal = false
+                            rvTransactions.animate().cancel()
                             rvTransactions.alpha = 0.92f
+                            pendingBookRevealAfterDispatch = true
+                        } else if (rvTransactions.alpha < 1f && !pendingBookRevealAfterDispatch) {
+                            rvTransactions.animate().cancel()
+                            rvTransactions.alpha = 1f
                         }
-                        // 直接调用 submitList，Adapter 内部已在子线程计算 DiffUtil 再切回主线程 dispatch，
-                        // 不需要额外的 view.post{}，否则多个任务堆积在主线程消息队列会触发连续动画导致 5s+ 触摸冻结
+                        if (!hasPlayedInitialStagger && !state.isLoading && monthlyBills.isNotEmpty()) {
+                            pendingStaggerAfterDispatch = true
+                        }
+                        // submitList 异步建行后 notifyDataSetChanged；reveal/stagger 见 onListDispatched。
                         homeAdapter.submitList(monthlyBills)
-                        if (shouldAnimateReveal) {
-                            rvTransactions.animate()
-                                .alpha(1f)
-                                .setDuration(140L)
-                                .setStartDelay(16L)
-                                .start()
-                        }
                         Log.d("HomePerf", "submitList called: ${monthlyBills.size} bills  [${System.currentTimeMillis() - adapterT0}ms]")
-                        rvTransactions.requestLayout()
                         crossfadeSummaryAmounts(
                             transactions = monthlyBills,
                             displayMode = state.displayMode,
@@ -640,15 +658,10 @@ class HomeFragment : Fragment() {
                             viewScope = state.viewScope
                         )
 
-                        // 首次加载到数据时，对首屏可见的前几项做 stagger 入场动画
-                        if (!hasPlayedInitialStagger && !state.isLoading && monthlyBills.isNotEmpty()) {
-                            hasPlayedInitialStagger = true
-                            UiMotion.staggerFirstLoadAnimation(rvTransactions, maxItems = 6, itemDelayMs = 40L, startDelayMs = 100L)
-                        }
-
                         // 只有当加载完成且真的没有账单时，才复位空列表的滚动位置。
                         if (!state.isLoading && monthlyBills.isEmpty()) {
                             animateNextBookDataReveal = false
+                            pendingBookRevealAfterDispatch = false
                             // 无账单时也可能保留趋势卡；主动展开 AppBar，保证趋势卡和空态从顶部开始展示。
                             homeAppBar?.setExpanded(true, false)
                             appBarVerticalOffset = 0
@@ -821,6 +834,12 @@ class HomeFragment : Fragment() {
         }
     }
 
+    /** 撤销删除这类「外部写库」之后，由宿主（MainActivity）触发重新拉一次流水。 */
+    fun reloadTransactionsFromHost() {
+        if (!isAdded) return
+        refreshBookAccounts(reloadTransactions = true)
+    }
+
     private fun applyBookDrawerAdaptiveWidth() {
         val density = resources.displayMetrics.density
         val screenWidth = resources.displayMetrics.widthPixels
@@ -841,6 +860,9 @@ class HomeFragment : Fragment() {
             !isBookDrawerOpen() &&
             !isMultiSelectModeActive
     }
+
+    /** 多选进行中：宿主据此屏蔽左右滑切 Tab（操作栏在 Activity 层，不会跟随页面平移）。 */
+    fun isInMultiSelectMode(): Boolean = isMultiSelectModeActive
 
     private fun updateMonthSelectorText() {
         val mode = homeViewModel.uiState.value.displayMode
@@ -1069,6 +1091,27 @@ class HomeFragment : Fragment() {
 
     private fun setupRecyclerView() {
         uiListController.setupRecyclerView()
+        homeAdapter.onListDispatched = labeled@{
+            if (!isAdded) return@labeled
+            if (pendingBookRevealAfterDispatch) {
+                pendingBookRevealAfterDispatch = false
+                rvTransactions.animate()
+                    .alpha(1f)
+                    .setDuration(140L)
+                    .setStartDelay(16L)
+                    .start()
+            }
+            if (pendingStaggerAfterDispatch) {
+                pendingStaggerAfterDispatch = false
+                hasPlayedInitialStagger = true
+                UiMotion.staggerFirstLoadAnimation(
+                    rvTransactions,
+                    maxItems = 6,
+                    itemDelayMs = 40L,
+                    startDelayMs = 100L
+                )
+            }
+        }
     }
 
     private fun setupTopBarDoubleTapToTop() {

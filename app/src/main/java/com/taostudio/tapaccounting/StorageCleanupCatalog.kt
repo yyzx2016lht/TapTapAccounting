@@ -5,13 +5,17 @@ import java.io.File
 import java.util.Locale
 
 /** 存储清理分类与文件枚举，供清理页 / 预览页共用。 */
-enum class StorageCleanupCategory(val id: String, val titleRes: Int) {
-    VOICE("voice", R.string.chat_voice_files),
-    IMAGES("images", R.string.chat_image_files),
-    CHAT_AVATAR("chat_avatar", R.string.chat_avatar_files),
-    BOOK_COVER_BG("book_cover_bg", R.string.book_cover_bg),
-    SCREEN_CAPTURES("screen_captures", R.string.screen_capture_cache_files),
-    TEMP_CACHE("temp_cache", R.string.temp_cache_files);
+enum class StorageCleanupCategory(
+    val id: String,
+    val titleRes: Int,
+    val iconRes: Int
+) {
+    VOICE("voice", R.string.chat_voice_files, R.drawable.ic_mic),
+    IMAGES("images", R.string.chat_image_files, R.drawable.ic_chat_image),
+    CHAT_AVATAR("chat_avatar", R.string.chat_avatar_files, R.drawable.ic_image),
+    BOOK_COVER_BG("book_cover_bg", R.string.book_cover_bg, R.drawable.ic_image),
+    SCREEN_CAPTURES("screen_captures", R.string.screen_capture_cache_files, R.drawable.ic_chat_camera),
+    TEMP_CACHE("temp_cache", R.string.temp_cache_files, R.drawable.ic_tune_outline);
 
     companion object {
         fun fromId(id: String?): StorageCleanupCategory? =

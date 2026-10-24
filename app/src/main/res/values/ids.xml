@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 账单行携带的账单 id：行动画（删除折叠 / 撤销展开）靠它定位被操作的那一行 -->
+    <item name="tag_bill_row_id" type="id" />
+    <!-- 账单行上正在跑的动画句柄，避免同一行被重复启动动画 -->
+    <item name="tag_bill_row_anim" type="id" />
+</resources>

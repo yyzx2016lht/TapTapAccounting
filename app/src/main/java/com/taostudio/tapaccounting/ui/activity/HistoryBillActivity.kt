@@ -29,6 +29,7 @@ import com.taostudio.tapaccounting.data.local.entity.DeletedBill
 import com.taostudio.tapaccounting.logic.BillDisplayFormatter
 import com.taostudio.tapaccounting.logic.BillRestoreHelper
 import com.taostudio.tapaccounting.logic.CurrencyManager
+import com.taostudio.tapaccounting.ui.common.RowModeMotion
 import com.taostudio.tapaccounting.ui.dialog.OverlayDialogs
 import com.taostudio.tapaccounting.ui.widget.SecondaryPageHeaderView
 import java.text.SimpleDateFormat
@@ -40,7 +41,6 @@ class HistoryBillActivity : AppCompatActivity() {
 
     private lateinit var rvDeletedBills: RecyclerView
     private lateinit var tvEmpty: TextView
-    private lateinit var tvTrashHint: TextView
     private lateinit var header: SecondaryPageHeaderView
     private lateinit var btnHeaderActionText: TextView
     private lateinit var layoutBottomActions: View
@@ -67,7 +67,6 @@ class HistoryBillActivity : AppCompatActivity() {
 
     private fun initViews() {
         header = findViewById(R.id.secondary_header)
-        tvTrashHint = findViewById(R.id.tv_trash_hint)
         btnHeaderActionText = header.findViewById(R.id.btn_header_action_text)
         btnHeaderActionText.setOnClickListener { onHeaderActionClicked() }
         header.findViewById<View>(R.id.btn_back)?.setOnClickListener {
@@ -108,7 +107,8 @@ class HistoryBillActivity : AppCompatActivity() {
                 title = getString(R.string.restore_bill_title),
                 message = getString(R.string.restore_bills_confirm_fmt, billsToRestore.size),
                 confirmText = getString(R.string.confirm_restore),
-                isDanger = false
+                isDanger = false,
+                iconRes = R.drawable.ic_dialog_restore
             ) {
                 restoreBills(billsToRestore)
             }
@@ -122,7 +122,8 @@ class HistoryBillActivity : AppCompatActivity() {
                 title = getString(R.string.delete_bill_title),
                 message = getString(R.string.delete_bills_confirm_fmt, billsToDelete.size),
                 confirmText = getString(R.string.permanent_delete),
-                isDanger = true
+                isDanger = true,
+                iconRes = R.drawable.ic_set_trash
             ) {
                 permanentlyDeleteBills(billsToDelete)
             }
@@ -189,30 +190,55 @@ class HistoryBillActivity : AppCompatActivity() {
 
     private fun showBillActionDialog(bill: DeletedBill) {
         val themeCtx = ContextThemeWrapper(this, R.style.Theme_TapAccounting)
-        val panel = LayoutInflater.from(this).inflate(R.layout.dialog_delete_followup_confirm, null, false)
-        panel.findViewById<TextView>(R.id.tv_followup_confirm_title).text = getString(R.string.bill_action_title)
-        panel.findViewById<TextView>(R.id.tv_followup_confirm_message).text = getString(R.string.bill_action_message)
+        val panel = LayoutInflater.from(this).inflate(R.layout.dialog_trash_bill_action, null, false)
+
+        val ivIcon = panel.findViewById<ImageView>(R.id.iv_trash_action_icon)
+        val iconColor = iconColorOf(bill)
+        panel.findViewById<TextView>(R.id.tv_trash_action_category).text = categoryNameOf(bill)
+        panel.findViewById<TextView>(R.id.tv_trash_action_meta).text = buildList {
+            add(bill.accountName.trim())
+            add(getString(R.string.trash_bill_date_fmt, billDateFormat.format(Date(bill.time))))
+        }.filter { it.isNotBlank() }.joinToString(" · ")
+        panel.findViewById<TextView>(R.id.tv_trash_action_amount).apply {
+            text = amountTextOf(bill)
+            setTextColor(amountColorOf(bill))
+        }
+
+        val lookupName = if (bill.subType == Bill.SUBTYPE_REFUND) {
+            BillDisplayFormatter.stripRefundPrefix(bill.categoryName)
+        } else {
+            bill.categoryName
+        }
+        val lookupType = if (bill.subType == Bill.SUBTYPE_REFUND) Bill.TYPE_EXPENSE else bill.type
+        ivIcon.setColorFilter(iconColor)
+        lifecycleScope.launch(Dispatchers.IO) {
+            val iconUrl = CategoryIconHelper.findCategoryIcon(this@HistoryBillActivity, lookupName, lookupType)
+            withContext(Dispatchers.Main) {
+                if (iconUrl.isNotEmpty()) {
+                    ivIcon.setColorFilter(iconColor)
+                    Glide.with(ivIcon)
+                        .load(iconUrl)
+                        .diskCacheStrategy(com.bumptech.glide.load.engine.DiskCacheStrategy.DATA)
+                        .into(ivIcon)
+                }
+            }
+        }
 
         val dialog = AlertDialog.Builder(themeCtx)
             .setView(panel)
             .create()
         dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
 
-        val btnOk = panel.findViewById<TextView>(R.id.btn_followup_confirm_ok)
-        val btnCancel = panel.findViewById<TextView>(R.id.btn_followup_confirm_cancel)
-
-        btnCancel.text = getString(R.string.restore)
-        btnCancel.setBackgroundResource(R.drawable.bg_delete_followup_primary_btn)
-        btnCancel.setOnClickListener {
+        panel.findViewById<View>(R.id.btn_trash_action_restore).setOnClickListener {
             dialog.dismiss()
             restoreBill(bill)
         }
-
-        btnOk.text = getString(R.string.permanent_delete)
-        btnOk.setBackgroundResource(R.drawable.bg_delete_followup_danger_btn)
-        btnOk.setOnClickListener {
+        panel.findViewById<View>(R.id.btn_trash_action_delete).setOnClickListener {
             dialog.dismiss()
             permanentlyDeleteBill(bill)
+        }
+        panel.findViewById<View>(R.id.btn_trash_action_cancel).setOnClickListener {
+            dialog.dismiss()
         }
 
         OverlayDialogs.showPageCenterDialog(
@@ -224,12 +250,52 @@ class HistoryBillActivity : AppCompatActivity() {
         )
     }
 
+    private fun categoryNameOf(bill: DeletedBill): String {
+        if (bill.type == Bill.TYPE_TRANSFER) return getString(R.string.transfer_label)
+        return displayOrFallback(
+            BillDisplayFormatter.stripRefundPrefix(bill.categoryName),
+            getString(R.string.uncategorized),
+            getString(R.string.select_category),
+            getString(R.string.select_category_label)
+        )
+    }
+
+    private fun amountTextOf(bill: DeletedBill): String {
+        val symbol = CurrencyManager.getSymbol(bill.currency)
+        return when {
+            bill.subType == Bill.SUBTYPE_REFUND -> "$symbol${String.format("%.2f", bill.amount)}"
+            bill.type == Bill.TYPE_EXPENSE -> "-$symbol${String.format("%.2f", bill.amount)}"
+            bill.type == Bill.TYPE_INCOME -> "+$symbol${String.format("%.2f", bill.amount)}"
+            else -> "$symbol${String.format("%.2f", bill.amount)}"
+        }
+    }
+
+    private fun amountColorOf(bill: DeletedBill): Int {
+        return when {
+            bill.excludeFromStats -> Color.parseColor("#9AA1AA")
+            bill.subType == Bill.SUBTYPE_REFUND -> Color.parseColor("#9AA1AA")
+            bill.type == Bill.TYPE_EXPENSE -> BillColors.expense
+            bill.type == Bill.TYPE_INCOME -> BillColors.income
+            else -> Color.parseColor("#757575")
+        }
+    }
+
+    private fun iconColorOf(bill: DeletedBill): Int {
+        return when {
+            bill.subType == Bill.SUBTYPE_REFUND -> Color.parseColor("#9E9E9E")
+            bill.type == Bill.TYPE_EXPENSE -> BillColors.expense
+            bill.type == Bill.TYPE_INCOME -> BillColors.income
+            else -> Color.parseColor("#9E9E9E")
+        }
+    }
+
     private fun restoreBill(bill: DeletedBill) {
         showConfirmDialog(
             title = getString(R.string.restore_bill_title),
             message = getString(R.string.restore_bill_confirm),
             confirmText = getString(R.string.confirm_restore),
-            isDanger = false
+            isDanger = false,
+            iconRes = R.drawable.ic_dialog_restore
         ) {
             restoreBills(listOf(bill))
         }
@@ -253,7 +319,8 @@ class HistoryBillActivity : AppCompatActivity() {
             title = getString(R.string.delete_bill_title),
             message = getString(R.string.delete_bill_confirm),
             confirmText = getString(R.string.permanent_delete),
-            isDanger = true
+            isDanger = true,
+            iconRes = R.drawable.ic_set_trash
         ) {
             permanentlyDeleteBills(listOf(bill))
         }
@@ -284,7 +351,6 @@ class HistoryBillActivity : AppCompatActivity() {
                 adapter.submitList(grouped, selectedDeletedBillIds)
                 val isEmpty = deletedBills.isEmpty()
                 tvEmpty.visibility = if (isEmpty) View.VISIBLE else View.GONE
-                tvTrashHint.visibility = if (isEmpty) View.GONE else View.VISIBLE
                 rvDeletedBills.visibility = if (isEmpty) View.GONE else View.VISIBLE
                 updateUI()
             }
@@ -293,6 +359,9 @@ class HistoryBillActivity : AppCompatActivity() {
 
     private fun buildGroupedItems(bills: List<DeletedBill>): List<ListItem> {
         val items = mutableListOf<ListItem>()
+        if (bills.isEmpty()) return items
+        // 说明卡放进列表当第一项，往下滚就跟着滚走，不再常驻顶部占位。
+        items.add(ListItem.Note)
         val cal = Calendar.getInstance()
         val grouped = linkedMapOf<String, MutableList<DeletedBill>>()
 
@@ -377,11 +446,26 @@ class HistoryBillActivity : AppCompatActivity() {
         message: String,
         confirmText: String = getString(R.string.confirm),
         isDanger: Boolean = false,
+        iconRes: Int = 0,
         onConfirm: () -> Unit
     ) {
         val panel = LayoutInflater.from(this).inflate(R.layout.dialog_delete_followup_confirm, null, false)
         panel.findViewById<TextView>(R.id.tv_followup_confirm_title).text = title
         panel.findViewById<TextView>(R.id.tv_followup_confirm_message).text = message
+
+        if (iconRes != 0) {
+            val badge = panel.findViewById<View>(R.id.fl_followup_confirm_icon)
+            badge.visibility = View.VISIBLE
+            badge.setBackgroundResource(
+                if (isDanger) R.drawable.bg_dialog_icon_badge_danger else R.drawable.bg_dialog_icon_badge_brand
+            )
+            panel.findViewById<ImageView>(R.id.iv_followup_confirm_icon).apply {
+                setImageResource(iconRes)
+                setColorFilter(
+                    if (isDanger) Color.parseColor("#C13E4A") else Color.parseColor("#5C6BC0")
+                )
+            }
+        }
 
         val dialog = AlertDialog.Builder(ContextThemeWrapper(this, R.style.Theme_TapAccounting))
             .setView(panel)
@@ -426,6 +510,9 @@ class HistoryBillActivity : AppCompatActivity() {
     }
 
     sealed class ListItem {
+        /** 顶部说明卡，作为列表第一项随内容滚动。 */
+        object Note : ListItem()
+
         data class Header(
             val dateStr: String,
             val weekdayStr: String,
@@ -450,6 +537,7 @@ class HistoryBillActivity : AppCompatActivity() {
         }
 
         fun applySelectionState(selectMode: Boolean, selectedIds: Set<Long>) {
+            val modeChanged = this.selectMode != selectMode
             this.selectMode = selectMode
             this.selectedIds = selectedIds
             val recyclerView = this@HistoryBillActivity.rvDeletedBills
@@ -460,11 +548,11 @@ class HistoryBillActivity : AppCompatActivity() {
                 when (holder) {
                     is HeaderViewHolder -> {
                         val header = items[position] as? ListItem.Header ?: continue
-                        holder.updateSelectionUI(selectMode, selectedIds, header)
+                        holder.updateSelectionUI(selectMode, selectedIds, header, animate = modeChanged)
                     }
                     is ItemViewHolder -> {
                         val item = items[position] as? ListItem.Item ?: continue
-                        holder.updateSelectionUI(selectMode, selectedIds, item.bill.id)
+                        holder.updateSelectionUI(selectMode, selectedIds, item.bill.id, animate = modeChanged)
                     }
                 }
             }
@@ -482,6 +570,7 @@ class HistoryBillActivity : AppCompatActivity() {
 
         override fun getItemViewType(position: Int): Int {
             return when (items[position]) {
+                is ListItem.Note -> 2
                 is ListItem.Header -> 0
                 is ListItem.Item -> 1
             }
@@ -489,6 +578,10 @@ class HistoryBillActivity : AppCompatActivity() {
 
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
             return when (viewType) {
+                2 -> {
+                    val view = LayoutInflater.from(parent.context).inflate(R.layout.item_trash_note, parent, false)
+                    NoteViewHolder(view)
+                }
                 0 -> {
                     val view = LayoutInflater.from(parent.context).inflate(R.layout.item_bill_header, parent, false)
                     HeaderViewHolder(view)
@@ -502,12 +595,15 @@ class HistoryBillActivity : AppCompatActivity() {
 
         override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
             when (val item = items[position]) {
+                is ListItem.Note -> Unit
                 is ListItem.Header -> (holder as HeaderViewHolder).bind(item)
                 is ListItem.Item -> (holder as ItemViewHolder).bind(item.bill)
             }
         }
 
         override fun getItemCount() = items.size
+
+        inner class NoteViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView)
 
         inner class HeaderViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
             private val tvDate: TextView = itemView.findViewById(R.id.tv_header_date)
@@ -518,8 +614,14 @@ class HistoryBillActivity : AppCompatActivity() {
                 tvDate.text = "${header.dateStr} ${header.weekdayStr}"
                 tvSummary.visibility = View.GONE
 
-                cbSelectDay.visibility = if (selectMode) View.VISIBLE else View.GONE
                 val allSelected = header.billIds.isNotEmpty() && header.billIds.all { selectedIds.contains(it) }
+                RowModeMotion.apply(
+                    checkBox = cbSelectDay,
+                    show = selectMode,
+                    animate = false,
+                    isModeActive = { this@HistoryBillAdapter.selectMode },
+                    spacer = itemView.findViewById(R.id.sp_header_check)
+                )
                 cbSelectDay.isChecked = allSelected
                 itemView.setOnClickListener {
                     if (selectMode) toggleDaySelection(header.billIds)
@@ -529,8 +631,19 @@ class HistoryBillActivity : AppCompatActivity() {
                 }
             }
 
-            fun updateSelectionUI(selectMode: Boolean, selectedIds: Set<Long>, header: ListItem.Header) {
-                cbSelectDay.visibility = if (selectMode) View.VISIBLE else View.GONE
+            fun updateSelectionUI(
+                selectMode: Boolean,
+                selectedIds: Set<Long>,
+                header: ListItem.Header,
+                animate: Boolean = false
+            ) {
+                RowModeMotion.apply(
+                    checkBox = cbSelectDay,
+                    show = selectMode,
+                    animate = animate,
+                    isModeActive = { this@HistoryBillAdapter.selectMode },
+                    spacer = itemView.findViewById(R.id.sp_header_check)
+                )
                 val allSelected = header.billIds.isNotEmpty() && header.billIds.all { selectedIds.contains(it) }
                 cbSelectDay.isChecked = allSelected
             }
@@ -547,8 +660,18 @@ class HistoryBillActivity : AppCompatActivity() {
             private val tvDeleted: TextView = itemView.findViewById(R.id.tv_bill_exclude_stats)
             private val tvAsset: TextView = itemView.findViewById(R.id.tv_bill_asset)
 
-            fun updateSelectionUI(selectMode: Boolean, selectedIds: Set<Long>, billId: Long) {
-                cbSelect.visibility = if (selectMode) View.VISIBLE else View.GONE
+            fun updateSelectionUI(
+                selectMode: Boolean,
+                selectedIds: Set<Long>,
+                billId: Long,
+                animate: Boolean = false
+            ) {
+                RowModeMotion.apply(
+                    checkBox = cbSelect,
+                    show = selectMode,
+                    animate = animate,
+                    isModeActive = { this@HistoryBillAdapter.selectMode }
+                )
                 cbSelect.isChecked = selectedIds.contains(billId)
             }
 
@@ -644,7 +767,12 @@ class HistoryBillActivity : AppCompatActivity() {
                     }
                 }
 
-                cbSelect.visibility = if (selectMode) View.VISIBLE else View.GONE
+                RowModeMotion.apply(
+                    checkBox = cbSelect,
+                    show = selectMode,
+                    animate = false,
+                    isModeActive = { this@HistoryBillAdapter.selectMode }
+                )
                 cbSelect.isChecked = selectedIds.contains(bill.id)
 
                 itemView.setOnClickListener {

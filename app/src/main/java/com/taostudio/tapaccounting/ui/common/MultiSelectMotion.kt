@@ -40,6 +40,7 @@ object MultiSelectMotion {
             .alpha(1f)
             .setDuration(UiMotion.NORMAL)
             .setInterpolator(UiMotion.STANDARD_EASING)
+            .withLayer()
             .start()
     }
 
@@ -58,6 +59,7 @@ object MultiSelectMotion {
             .alpha(0f)
             .setDuration(UiMotion.NORMAL)
             .setInterpolator(UiMotion.STANDARD_EASING)
+            .withLayer()
             .withEndAction {
                 // 只有仍是本次退场动画（没有新动画接管）才允许隐藏
                 if (animToken[bar] == token) {

@@ -63,6 +63,8 @@ config.json
 # ===== 杂项 =====
 codex_overlay_preview.png
 assets/dexopt/
+before_screen_accounting.png
+*shizuku_capture*.jpg
 
 # ===== 临时工作目录 =====
 .tmp/

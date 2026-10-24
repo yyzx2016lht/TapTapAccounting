@@ -65,6 +65,14 @@ android {
     packaging {
         jniLibs {
             useLegacyPackaging = true
+            // sherpa-onnx 自带的 C / C++ API 动态库只给“不走 JNI”的使用者准备
+            // （见 app/src/main/jniLibs/arm64-v8a/README.md）。本项目通过
+            // OfflineRecognizer 走 JNI，而 libsherpa-onnx-jni.so 的 DT_NEEDED 只依赖
+            // libonnxruntime.so，因此排除它们：APK 里的 native 数据少约 2.2MB（压缩后）。
+            excludes += setOf(
+                "**/libsherpa-onnx-c-api.so",
+                "**/libsherpa-onnx-cxx-api.so",
+            )
         }
     }
 
@@ -105,6 +113,10 @@ dependencies {
     ksp(libs.room.compiler)
 
     // 本地语音识别：显式引入 AAR，避免 fileTree 对 AAR 的处理不稳定
+    // 必须是 16KB 对齐的版本（>= v1.12.x，见 k2-fsa/sherpa-onnx#2520）；
+    // 旧版 libonnxruntime.so / libsherpa-onnx-*.so 只有 4KB LOAD 对齐，
+    // 在 16KB 页设备上会触发系统“Android 应用兼容性”回退模式警告。
+    // 当前捆绑版本：sherpa-onnx v1.13.8（arm64-v8a 段 p_align = 0x4000）。
     implementation(fileTree(mapOf("dir" to "libs", "include" to listOf("*.jar"))))
     implementation(files(sherpaAar))
     implementation("org.apache.commons:commons-compress:1.24.0")
@@ -123,9 +135,14 @@ dependencies {
     implementation("com.github.yalantis:ucrop:2.2.8")
     implementation("com.kizitonwose.calendar:view:2.4.0")
 
-    // TensorFlow Lite for tap detection
-    implementation("org.tensorflow:tensorflow-lite:2.14.0")
-    implementation("org.tensorflow:tensorflow-lite-support:0.4.0")
+    // 点击检测用的 LiteRT（原 TensorFlow Lite）。
+    // 关键：org.tensorflow:tensorflow-lite（含 2.16.1/2.17.0）预编译的
+    // libtensorflowlite_jni.so 只有 4KB LOAD 对齐，在 16KB 页设备上会触发
+    // 系统“Android 应用兼容性”警告，且 Google Play 已要求 16KB 支持。
+    // LiteRT 1.4.x 的 .so 为 16KB 对齐（p_align = 0x4000），并保留
+    // org.tensorflow.lite.Interpreter / .nnapi.NnApiDelegate 包名，
+    // 因此 TfClassifier / TapTfClassifier 不需要改代码。
+    implementation("com.google.ai.edge.litert:litert:1.4.2")
 
     // Onboarding spotlight / coach mark
     implementation("com.github.takusemba:spotlight:2.0.5")

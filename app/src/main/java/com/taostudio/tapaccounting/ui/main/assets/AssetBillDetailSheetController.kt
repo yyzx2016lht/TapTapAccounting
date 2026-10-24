@@ -28,12 +28,16 @@ import com.taostudio.tapaccounting.R
 import com.taostudio.tapaccounting.data.local.AppDatabase
 import com.taostudio.tapaccounting.data.local.entity.Bill
 import com.taostudio.tapaccounting.logic.BillAssetImpactService
+import com.taostudio.tapaccounting.logic.BillDeleteUndo
 import com.taostudio.tapaccounting.logic.BillDisplayFormatter
 import com.taostudio.tapaccounting.logic.CurrencyManager
 import com.taostudio.tapaccounting.logic.BillMutationService
 import com.taostudio.tapaccounting.ui.activity.EditBillActivity
 import com.taostudio.tapaccounting.ui.dialog.OverlayDialogs
+import androidx.recyclerview.widget.RecyclerView
 import com.taostudio.tapaccounting.ui.common.BillDetailStatsToggle
+import com.taostudio.tapaccounting.ui.common.BillRowAnimator
+import com.taostudio.tapaccounting.ui.common.BillUndoController
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -49,7 +53,9 @@ internal class AssetBillDetailSheetController(
     private val refundedAmountInBillCurrency: (Bill) -> Double,
     private val baseOriginalAmount: (Bill) -> Double,
     private val buildAssetDetailFormula: (Bill, Long) -> String?,
-    private val onDataChanged: () -> Unit = {}
+    private val onDataChanged: () -> Unit = {},
+    /** 账单列表：删除/撤销时用它定位那一行播行动画；拿不到就退化成无动画。 */
+    private val getRecyclerView: () -> RecyclerView? = { null }
 ) {
     private var activeDetailSheet: BottomSheetDialog? = null
     private var lastDetailBillId: Long = -1L
@@ -504,28 +510,26 @@ internal class AssetBillDetailSheetController(
 
         view.findViewById<View>(R.id.btn_delete).setOnClickListener {
             bottomSheet.dismiss()
-            val themeContext = ContextThemeWrapper(activity, R.style.Theme_TapAccounting)
-            val dialog = AlertDialog.Builder(themeContext)
-                .setTitle(activity.getString(R.string.confirm_delete))
-                .setMessage(activity.getString(R.string.confirm_delete_message))
-                .setPositiveButton(activity.getString(R.string.delete)) { _, _ ->
-                    scope.launch(Dispatchers.IO) {
-                        if (!com.taostudio.tapaccounting.logic.deleteBillAndRevertBalanceSafe(db, bill)) return@launch
-                        withContext(Dispatchers.Main) {
-                            Toast.makeText(activity, activity.getString(R.string.deleted), Toast.LENGTH_SHORT).show()
+            val recyclerView = getRecyclerView()
+            BillRowAnimator.collapseThen(
+                rows = BillRowAnimator.findRows(recyclerView, listOf(bill.id)),
+                startDelayMs = BillRowAnimator.SHEET_DISMISS_DELAY_MS
+            ) {
+                scope.launch(Dispatchers.IO) {
+                    val rows = BillDeleteUndo.delete(db, listOf(bill)) ?: return@launch
+                    withContext(Dispatchers.Main) {
+                        onDataChanged()
+                        BillUndoController.showNow(
+                            activity.findViewById(android.R.id.content),
+                            activity.getString(R.string.bill_deleted_undo),
+                            rows
+                        ) {
                             onDataChanged()
+                            BillRowAnimator.expandAfterRefresh(recyclerView, rows.map { it.originalBillId })
                         }
                     }
                 }
-                .setNegativeButton(activity.getString(R.string.cancel), null)
-                .create()
-            OverlayDialogs.showPageCenterDialog(
-                dialog,
-                activity,
-                widthRatio = 0.88f,
-                cancelOnTouchOutside = true,
-                useSolidPanelBackground = true
-            )
+            }
         }
 
         bottomSheet.setContentView(view)

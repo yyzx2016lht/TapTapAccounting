@@ -785,6 +785,9 @@
     <string name="restore_count">恢复(%1$d)</string>
     <string name="permanent_delete_count">永久删除(%1$d)</string>
     <string name="trash">回收站</string>
+    <string name="trash_entry_desc">查看和恢复已删除的账单</string>
+    <string name="trash_view_action">查看</string>
+    <string name="bills_moved_to_trash_fmt">已移入回收站 %1$d 条账单</string>
     <string name="operate_asset_title">操作"%1$s"</string>
     <string name="delete_account_title">删除账户</string>
     <string name="exclude_total_asset">不计入总资产</string>
@@ -798,6 +801,15 @@
     <string name="visual_retry_hint">失败时用视觉模型重试</string>
     <string name="expand_all">展开全部</string>
     <string name="record_now">现在就记</string>
+    <!-- 多条账单识别完成后的入账方式 -->
+    <string name="record_all_at_once">一键全部入账</string>
+    <string name="record_one_by_one">逐条确认入账</string>
+    <!-- 一键全部入账后询问是否并成一笔扣款 -->
+    <string name="merge_payment_count">共 %1$d 笔</string>
+    <string name="merge_payment_message">这些账单看起来来自同一次付款。合并后它们各自仍是独立账单、分类统计不变，只是在资产详情里折叠成一行显示合计，方便和银行流水对账。</string>
+    <string name="merge_bills_positive">合并为一笔扣款</string>
+    <string name="merge_bills_negative">保持分开</string>
+    <string name="toast_bills_merged">已合并为一笔扣款</string>
     <string name="confirm_fill_book">确认填入账本</string>
     <string name="hint_supplement_info">补充信息（可选，如支付方式、时间等）</string>
     <string name="start_recognition">开始识别</string>
@@ -1071,12 +1083,18 @@
     <string name="cleanup_safe_hint">不会删除账单、分类、资产和设置等核心数据。</string>
     <string name="preview_files">预览待删文件</string>
     <string name="browse_files">查看</string>
-    <string name="cleanup_category_hint">勾选要清理的分类；点「查看」可单独浏览该分类文件。</string>
+    <string name="cleanup_hero_label">可清理空间</string>
+    <string name="cleanup_section_categories">文件分类</string>
+    <string name="cleanup_category_hint">点卡片查看内容；勾选后点底部「清理」删除。</string>
     <string name="cleanup_selected">清理所选内容</string>
+    <string name="cleanup_action">清理</string>
+    <string name="cleanup_bar_title_fmt">已选 %1$d 类</string>
+    <string name="cleanup_bar_subtitle_fmt">%1$d 个文件 · %2$s</string>
+    <string name="cleanup_file_count_fmt">%1$d 个文件</string>
     <string name="cleanup_category_empty">这个分类暂时没有文件</string>
     <string name="cleanup_category_stats_fmt">%1$d 个文件 · %2$s</string>
+    <string name="cleanup_total_count_fmt">共 %1$d 个可清理文件</string>
     <string name="swipe_to_browse_hint">左右滑动切换</string>
-    <string name="view_deleted_bills">查看已删除的账单</string>
     <string name="preview_cleanup">预览待清理内容</string>
     <string name="image_album">图片相册</string>
     <string name="audio_preview">语音试听</string>
@@ -1165,6 +1183,7 @@
     <string name="toast_auto_switch_book">已自动切换到账本：%1$s</string>
     <string name="toast_local_rule_applied">该笔账单已应用本地规则</string>
     <string name="toast_auto_saved_bills">已自动存入 %1$d 条账单</string>
+    <string name="toast_batch_saved_bills">已存入 %1$d 条账单</string>
     <string name="toast_transfer_to_expense">转账要求转入和转出账户都为现有资产，已改为支出，请确认</string>
     <string name="toast_rule_add_canceled">已取消添加规则</string>
     <string name="toast_repayment_require_both">还款要求转出和转入账户都为现有资产，请检查账户</string>
@@ -1198,6 +1217,7 @@
     <string name="toast_capture_start_failed">无法启动截屏，请稍后重试</string>
     <string name="toast_capture_failed">截屏识别失败，请稍后重试</string>
     <string name="toast_capture_canceled">已取消截屏记账</string>
+    <string name="toast_screenshot_success">截屏成功</string>
     <string name="toast_generate_bill_failed">生成账单失败，请稍后重试</string>
     <string name="toast_no_draft">未生成可核对的文本草稿</string>
     <string name="toast_tap_no_action">已识别敲击，但还没有配置触发动作</string>
@@ -1291,7 +1311,7 @@
     <string name="count_format">%1$d 个</string>
 
     <!-- 硬编码中文抽取 - 存储清理 -->
-    <string name="deleted_bill_count_fmt">已删除 %1$d 条账单</string>
+    <string name="deleted_bill_count_fmt">已删除 %1$d 条账单，可恢复</string>
     <string name="cleanup_voice_stats_fmt">%1$d 个 · %2$s</string>
     <string name="cleanup_images_stats_fmt">%1$d 个 · %2$s</string>
     <string name="cleanup_avatar_stats_fmt">%1$d 个 · %2$s</string>
@@ -1925,6 +1945,7 @@
     <string name="select_target_asset">选择目标资产</string>
     <string name="asset_not_found">未找到资产</string>
     <string name="deleted_bills_fmt">已删除 %1$d 条账单</string>
+    <string name="bill_deleted_undo">账单已删除</string>
     <string name="moved_bills_fmt">已移动 %1$d 条账单</string>
     <string name="delete_fmt">删除(%1$d)</string>
     <string name="delete_label">删除</string>

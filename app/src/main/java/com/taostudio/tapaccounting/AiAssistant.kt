@@ -37,7 +37,10 @@ class AiAssistant(private val ctx: Context) {
     private var tvRecordedTextPreview: TextView? = null
     private var progressAiLoading: View? = null
     private var btnExpandPreview: TextView? = null
-    private var btnStartRecordNow: View? = null
+    /** 多条账单识别完成后「一键全部入账 / 逐条确认入账」的按钮容器 */
+    private var layoutMultiRecordActions: View? = null
+    private var btnRecordAllAtOnce: View? = null
+    private var btnRecordOneByOne: View? = null
     private var analyzeJob: Job? = null
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
@@ -62,6 +65,14 @@ class AiAssistant(private val ctx: Context) {
         const val MODE_CANCEL = 3
 
         private const val VOICE_PLACEHOLDER_TEXT = "正在解析语音..."
+
+        /** 多账单结果里的入账方式标记：整批直接入库，不经逐条表单。 */
+        const val EXTRA_BATCH_SAVE_ALL = "batch_save_all"
+        /** 多账单结果里的入账方式标记：强制走逐条确认队列（忽略「多笔不弹窗」设置）。 */
+        const val EXTRA_FORCE_BILL_QUEUE = "force_bill_queue"
+        /** 图片记账顶层字段：画面本身是否为「一次消费的凭证」（一张小票/一个支付成功页/一个订单详情）。 */
+        const val KEY_SINGLE_PAYMENT = "single_payment"
+
     }
 
     fun showInputPanel(
@@ -98,7 +109,9 @@ class AiAssistant(private val ctx: Context) {
         tvRecordedTextPreview = view.findViewById(R.id.tv_recorded_text_preview)
         progressAiLoading = view.findViewById(R.id.progress_ai_loading)
         btnExpandPreview = view.findViewById(R.id.btn_expand_preview)
-        btnStartRecordNow = view.findViewById(R.id.btn_start_record_now)
+        layoutMultiRecordActions = view.findViewById(R.id.layout_multi_record_actions)
+        btnRecordAllAtOnce = view.findViewById(R.id.btn_record_all_at_once)
+        btnRecordOneByOne = view.findViewById(R.id.btn_record_one_by_one)
 
         btnClose.setOnClickListener { dismiss() }
 
@@ -155,7 +168,7 @@ class AiAssistant(private val ctx: Context) {
                 tvRecordedTextPreview?.visibility = View.GONE
                 progressAiLoading?.visibility = View.VISIBLE
                 btnExpandPreview?.visibility = View.GONE
-                btnStartRecordNow?.visibility = View.GONE
+                layoutMultiRecordActions?.visibility = View.GONE
                 dialog.setCancelable(false)
                 btnClose.visibility = View.GONE
             }
@@ -169,7 +182,7 @@ class AiAssistant(private val ctx: Context) {
                 tvRecordedTextPreview?.visibility = View.GONE
                 progressAiLoading?.visibility = View.VISIBLE
                 btnExpandPreview?.visibility = View.GONE
-                btnStartRecordNow?.visibility = View.GONE
+                layoutMultiRecordActions?.visibility = View.GONE
                 dialog.setCancelable(false)
                 btnClose.visibility = View.GONE
             }
@@ -183,7 +196,7 @@ class AiAssistant(private val ctx: Context) {
                 tvRecordedTextPreview?.visibility = View.GONE
                 progressAiLoading?.visibility = View.VISIBLE
                 btnExpandPreview?.visibility = View.GONE
-                btnStartRecordNow?.visibility = View.GONE
+                layoutMultiRecordActions?.visibility = View.GONE
                 dialog.setCancelable(true)
                 btnClose.visibility = View.VISIBLE
             }
@@ -267,7 +280,9 @@ class AiAssistant(private val ctx: Context) {
         tvRecordedTextPreview = view.findViewById(R.id.tv_recorded_text_preview)
         progressAiLoading = view.findViewById(R.id.progress_ai_loading)
         btnExpandPreview = view.findViewById(R.id.btn_expand_preview)
-        btnStartRecordNow = view.findViewById(R.id.btn_start_record_now)
+        layoutMultiRecordActions = view.findViewById(R.id.layout_multi_record_actions)
+        btnRecordAllAtOnce = view.findViewById(R.id.btn_record_all_at_once)
+        btnRecordOneByOne = view.findViewById(R.id.btn_record_one_by_one)
     }
 
     private fun presentAccountingResult(
@@ -281,8 +296,9 @@ class AiAssistant(private val ctx: Context) {
                 bills.getJSONObject(i).put("original_text_from_user", sourceText)
             }
             if (bills.length() == 1) {
-                dismiss()
+                // 先回调再 dismiss，避免 dismiss 时把「未进入记账」当成放弃而删截屏
                 onResult(bills.getJSONObject(0))
+                dismiss()
                 return
             }
             updateLoadingText(ctx.getString(R.string.recognition_complete_count, bills.length()))
@@ -298,17 +314,23 @@ class AiAssistant(private val ctx: Context) {
                     text = if (expanded) ctx.getString(R.string.collapse) else ctx.getString(R.string.expand_all)
                 }
             }
-            btnStartRecordNow?.apply {
-                visibility = View.VISIBLE
-                setOnClickListener {
-                    dismiss()
-                    onResult(result)
-                }
+            layoutMultiRecordActions?.visibility = View.VISIBLE
+            btnRecordAllAtOnce?.setOnClickListener {
+                // 整批直存；落库后由表单侧按图片来源判断要不要问一次「是否合并」
+                result.put(EXTRA_BATCH_SAVE_ALL, true)
+                onResult(result)
+                dismiss()
+            }
+            btnRecordOneByOne?.setOnClickListener {
+                // 逐条走记账表单确认
+                result.put(EXTRA_FORCE_BILL_QUEUE, true)
+                onResult(result)
+                dismiss()
             }
         } else {
             result.put("original_text_from_user", sourceText)
-            dismiss()
             onResult(result)
+            dismiss()
         }
     }
 
@@ -596,11 +618,23 @@ class AiAssistant(private val ctx: Context) {
     }
 
     /** 截屏记账入口：默认直出 JSON；开启「截屏沿用图片记账」时走图片记账流程 */
-    fun analyzeScreenshot(imageUri: Uri, onResult: (JSONObject) -> Unit) {
-        if (!ensureOverlayPermission()) return
+    fun analyzeScreenshot(
+        imageUri: Uri,
+        onResult: (JSONObject) -> Unit,
+        onAbandoned: (() -> Unit)? = null
+    ) {
+        if (!ensureOverlayPermission()) {
+            onAbandoned?.invoke()
+            return
+        }
         lastReceiptImageUri = imageUri
         if (Prefs.isScreenAccountingUseImageFlow(ctx)) {
-            analyzeImage(imageUri, onResult)
+            analyzeImages(
+                imageUris = listOf(imageUri),
+                onResult = onResult,
+                onAbandoned = onAbandoned,
+                sourceKind = "screen_capture"
+            )
         } else {
             dispatchImageAccounting(
                 imageUris = listOf(imageUri),
@@ -608,23 +642,42 @@ class AiAssistant(private val ctx: Context) {
                 naturalLanguage = false,
                 onResult = onResult,
                 sourceKind = "screen_capture",
-                quickScreenMode = true
+                quickScreenMode = true,
+                onAbandoned = onAbandoned
             )
         }
     }
 
-    fun analyzeImages(imageUris: List<Uri>, onResult: (JSONObject) -> Unit) {
-        if (!ensureOverlayPermission()) return
-        if (imageUris.isEmpty()) return
+    fun analyzeImages(
+        imageUris: List<Uri>,
+        onResult: (JSONObject) -> Unit,
+        onAbandoned: (() -> Unit)? = null,
+        sourceKind: String = "receipt_image"
+    ) {
+        if (!ensureOverlayPermission()) {
+            onAbandoned?.invoke()
+            return
+        }
+        if (imageUris.isEmpty()) {
+            onAbandoned?.invoke()
+            return
+        }
         lastReceiptImageUri = imageUris.first()
 
         val needSupplement = Prefs.isReceiptImageDraftConfirmEnabled(ctx)
         val naturalLanguage = Prefs.isImageAccountingNaturalLanguage(ctx)
 
         if (needSupplement) {
-            showSupplementInput(imageUris, naturalLanguage, onResult)
+            showSupplementInput(imageUris, naturalLanguage, onResult, onAbandoned, sourceKind)
         } else {
-            dispatchImageAccounting(imageUris, supplementText = "", naturalLanguage, onResult)
+            dispatchImageAccounting(
+                imageUris = imageUris,
+                supplementText = "",
+                naturalLanguage = naturalLanguage,
+                onResult = onResult,
+                sourceKind = sourceKind,
+                onAbandoned = onAbandoned
+            )
         }
     }
 
@@ -634,10 +687,13 @@ class AiAssistant(private val ctx: Context) {
     private fun showSupplementInput(
         imageUris: List<Uri>,
         naturalLanguage: Boolean,
-        onResult: (JSONObject) -> Unit
+        onResult: (JSONObject) -> Unit,
+        onAbandoned: (() -> Unit)? = null,
+        sourceKind: String = "receipt_image"
     ) {
         val (dialog, view) = createDialog(cancelable = true)
         currentDialog = dialog
+        var continued = false
 
         val layoutInput = view.findViewById<View>(R.id.layout_input)
         val layoutLoading = view.findViewById<View>(R.id.layout_loading)
@@ -651,17 +707,28 @@ class AiAssistant(private val ctx: Context) {
         layoutResult.visibility = View.GONE
         btnClose.visibility = View.VISIBLE
         tvRecordedTextPreview?.visibility = View.GONE
-        btnStartRecordNow?.visibility = View.GONE
+        layoutMultiRecordActions?.visibility = View.GONE
         btnExpandPreview?.visibility = View.GONE
 
         etInput.hint = ctx.getString(R.string.hint_supplement_info)
         etInput.setText("")
         btnIdentify.text = ctx.getString(R.string.start_recognition)
         btnIdentify.setOnClickListener {
+            continued = true
             val supplement = etInput.text.toString().trim()
-            dispatchImageAccounting(imageUris, supplement, naturalLanguage, onResult)
+            dispatchImageAccounting(
+                imageUris = imageUris,
+                supplementText = supplement,
+                naturalLanguage = naturalLanguage,
+                onResult = onResult,
+                sourceKind = sourceKind,
+                onAbandoned = onAbandoned
+            )
         }
         btnClose.setOnClickListener { dismiss() }
+        installDialogDismissHandler(dialog) {
+            if (!continued) onAbandoned?.invoke()
+        }
 
         dialog.show()
     }
@@ -675,7 +742,8 @@ class AiAssistant(private val ctx: Context) {
         naturalLanguage: Boolean,
         onResult: (JSONObject) -> Unit,
         sourceKind: String = "receipt_image",
-        quickScreenMode: Boolean = false
+        quickScreenMode: Boolean = false,
+        onAbandoned: (() -> Unit)? = null
     ) {
         // 安全关闭 showSupplementInput 的旧弹窗：
         // 先移除 dismiss 监听，避免它将 currentDialog 置空，
@@ -684,9 +752,16 @@ class AiAssistant(private val ctx: Context) {
         currentDialog?.dismiss()
         currentDialog = null
         if (naturalLanguage) {
-            analyzeImageNaturalLanguage(imageUris, supplementText, onResult)
+            analyzeImageNaturalLanguage(imageUris, supplementText, onResult, onAbandoned)
         } else {
-            analyzeImageDirect(imageUris, supplementText, onResult, sourceKind, quickScreenMode)
+            analyzeImageDirect(
+                imageUris = imageUris,
+                supplementText = supplementText,
+                onResult = onResult,
+                sourceKind = sourceKind,
+                quickScreenMode = quickScreenMode,
+                onAbandoned = onAbandoned
+            )
         }
     }
 
@@ -695,15 +770,20 @@ class AiAssistant(private val ctx: Context) {
         supplementText: String,
         onResult: (JSONObject) -> Unit,
         sourceKind: String = "receipt_image",
-        quickScreenMode: Boolean = false
+        quickScreenMode: Boolean = false,
+        onAbandoned: (() -> Unit)? = null
     ) {
-        if (!ensureOverlayPermission()) return
+        if (!ensureOverlayPermission()) {
+            onAbandoned?.invoke()
+            return
+        }
         lastReceiptImageUri = imageUris.first()
 
         val (dialog, view) = createDialog(cancelable = false)
         currentDialog = dialog
         bindLoadingPanelViews(view)
         currentHideStreamText = true
+        var deliveredResult = false
 
         val etInput = view.findViewById<EditText>(R.id.et_ai_input)
         disableSelectionActionModeIfService(etInput)
@@ -714,7 +794,7 @@ class AiAssistant(private val ctx: Context) {
         view.findViewById<View>(R.id.layout_result)?.visibility = View.GONE
         view.findViewById<View>(R.id.btn_close)?.visibility = View.VISIBLE
         tvRecordedTextPreview?.visibility = View.GONE
-        btnStartRecordNow?.visibility = View.GONE
+        layoutMultiRecordActions?.visibility = View.GONE
         btnExpandPreview?.visibility = View.GONE
         progressAiLoading?.visibility = View.VISIBLE
         tvThinkingLog?.text = ctx.getString(R.string.generating_from_image)
@@ -724,6 +804,9 @@ class AiAssistant(private val ctx: Context) {
         view.findViewById<View>(R.id.btn_close)?.setOnClickListener {
             analyzeJob?.cancel()
             dismiss()
+        }
+        installDialogDismissHandler(dialog) {
+            if (!deliveredResult) onAbandoned?.invoke()
         }
 
         analyzeJob = scope.launch {
@@ -787,7 +870,10 @@ class AiAssistant(private val ctx: Context) {
                         dismiss()
                         return@withContext
                     }
-                    presentAccountingResult(result, supplementText, onResult)
+                    presentAccountingResult(result, supplementText) { json ->
+                        deliveredResult = true
+                        onResult(json)
+                    }
                 }
             } catch (e: kotlinx.coroutines.CancellationException) {
                 withContext(Dispatchers.Main) {
@@ -804,13 +890,22 @@ class AiAssistant(private val ctx: Context) {
         }
     }
 
-    private fun analyzeImageNaturalLanguage(imageUris: List<Uri>, supplementText: String, onResult: (JSONObject) -> Unit) {
-        if (!ensureOverlayPermission()) return
+    private fun analyzeImageNaturalLanguage(
+        imageUris: List<Uri>,
+        supplementText: String,
+        onResult: (JSONObject) -> Unit,
+        onAbandoned: (() -> Unit)? = null
+    ) {
+        if (!ensureOverlayPermission()) {
+            onAbandoned?.invoke()
+            return
+        }
         lastReceiptImageUri = imageUris.first()
 
         val (dialog, view) = createDialog(cancelable = false)
         currentDialog = dialog
         bindLoadingPanelViews(view)
+        var continued = false
 
         val etInput = view.findViewById<EditText>(R.id.et_ai_input)
         disableSelectionActionModeIfService(etInput)
@@ -821,7 +916,7 @@ class AiAssistant(private val ctx: Context) {
         view.findViewById<View>(R.id.layout_result)?.visibility = View.GONE
         view.findViewById<View>(R.id.btn_close)?.visibility = View.VISIBLE
         tvRecordedTextPreview?.visibility = View.GONE
-        btnStartRecordNow?.visibility = View.GONE
+        layoutMultiRecordActions?.visibility = View.GONE
         btnExpandPreview?.visibility = View.GONE
         progressAiLoading?.visibility = View.VISIBLE
         tvThinkingLog?.text = ctx.getString(R.string.sending_to_vision)
@@ -830,6 +925,9 @@ class AiAssistant(private val ctx: Context) {
         view.findViewById<View>(R.id.btn_close)?.setOnClickListener {
             analyzeJob?.cancel()
             dismiss()
+        }
+        installDialogDismissHandler(dialog) {
+            if (!continued) onAbandoned?.invoke()
         }
 
         analyzeJob = scope.launch {
@@ -840,6 +938,7 @@ class AiAssistant(private val ctx: Context) {
                     }
                 }
                 withContext(Dispatchers.Main) {
+                    continued = true
                     showReceiptSummary(summary, supplementText, onResult)
                 }
             } catch (e: kotlinx.coroutines.CancellationException) {
@@ -947,6 +1046,15 @@ class AiAssistant(private val ctx: Context) {
         }
     }
 
+    /** 统一 dismiss：业务回调 + 恢复双击悬浮 + 清空引用（后设的会覆盖 createDialog 默认）。 */
+    private fun installDialogDismissHandler(dialog: AlertDialog, onDismiss: (() -> Unit)? = null) {
+        dialog.setOnDismissListener {
+            onDismiss?.invoke()
+            restartTapIfNeeded()
+            currentDialog = null
+        }
+    }
+
     private fun createDialog(cancelable: Boolean): Pair<AlertDialog, View> {
         val themeContext = ContextThemeWrapper(ctx, R.style.Theme_TapAccounting)
         val view = LayoutInflater.from(themeContext).inflate(R.layout.layout_dialog_ai_input, null)
@@ -956,10 +1064,7 @@ class AiAssistant(private val ctx: Context) {
             .setCancelable(cancelable)
             .create()
 
-        dialog.setOnDismissListener {
-            restartTapIfNeeded()
-            currentDialog = null
-        }
+        installDialogDismissHandler(dialog)
 
         dialog.window?.apply {
             val useOverlayWindow =

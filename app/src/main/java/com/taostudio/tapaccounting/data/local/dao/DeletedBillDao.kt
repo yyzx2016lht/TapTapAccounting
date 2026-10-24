@@ -29,6 +29,13 @@ interface DeletedBillDao {
     @Query("SELECT * FROM deleted_bills WHERE originalBillId IN (:ids) ORDER BY deletedAt DESC")
     suspend fun getByOriginalBillIds(ids: List<Long>): List<DeletedBill>
 
+    /**
+     * 取「某个时间点之后」进回收站的记录，用于删除后立刻圈定本次删除产生的行（含被级联
+     * 一起删掉的关联退款），交给撤销逻辑整体还原。
+     */
+    @Query("SELECT * FROM deleted_bills WHERE deletedAt >= :from ORDER BY deletedAt DESC")
+    suspend fun getDeletedSince(from: Long): List<DeletedBill>
+
     @Query("DELETE FROM deleted_bills")
     suspend fun deleteAll()
 

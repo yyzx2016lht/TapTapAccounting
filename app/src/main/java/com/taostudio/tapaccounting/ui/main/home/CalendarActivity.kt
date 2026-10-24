@@ -47,6 +47,7 @@ import com.taostudio.tapaccounting.CategoryIconHelper
 import com.taostudio.tapaccounting.R
 import com.taostudio.tapaccounting.data.local.AppDatabase
 import com.taostudio.tapaccounting.data.local.entity.Bill
+import com.taostudio.tapaccounting.logic.BillDeleteUndo
 import com.taostudio.tapaccounting.logic.BillStatsContribution
 import com.taostudio.tapaccounting.logic.BillDisplayFormatter
 import com.taostudio.tapaccounting.logic.CurrencyManager
@@ -58,6 +59,8 @@ import com.taostudio.tapaccounting.ui.main.YearMonthPickerDialog
 import com.taostudio.tapaccounting.ui.common.BillDetailStatsToggle
 import com.taostudio.tapaccounting.ui.common.MultiSelectBarSummary
 import com.taostudio.tapaccounting.ui.common.MultiSelectMotion
+import com.taostudio.tapaccounting.ui.common.BillRowAnimator
+import com.taostudio.tapaccounting.ui.common.BillUndoController
 import com.taostudio.tapaccounting.viewscope.LedgerMemberScope
 import com.taostudio.tapaccounting.viewscope.LedgerViewScopeStore
 import com.taostudio.tapaccounting.viewscope.ResolvedLedgerViewScope
@@ -213,6 +216,9 @@ class CalendarActivity : AppCompatActivity() {
             loadDataForMonth()
         }
         hasResumedOnce = true
+        BillUndoController.consumePending(findViewById(android.R.id.content)) {
+            loadDataForMonth()
+        }
     }
 
     private fun initViews() {
@@ -298,13 +304,23 @@ class CalendarActivity : AppCompatActivity() {
             val billsToDelete = dailyAdapter.selectedBills.toList()
             if (billsToDelete.isEmpty()) return@setOnClickListener
 
-            val db = AppDatabase.getDatabase(this)
-            lifecycleScope.launch {
-                if (!com.taostudio.tapaccounting.logic.deleteBillsAndRevertBalanceSafe(db, billsToDelete)) return@launch
+            val deletedIds = billsToDelete.map { it.id }
+            BillRowAnimator.collapseThen(BillRowAnimator.findRows(rvDailyBills, deletedIds)) {
+                val db = AppDatabase.getDatabase(this)
+                lifecycleScope.launch {
+                    val rows = BillDeleteUndo.delete(db, billsToDelete) ?: return@launch
 
-                dailyAdapter.clearSelection()
-                loadDataForMonth()
-                Toast.makeText(this@CalendarActivity, "已删除 ${billsToDelete.size} 条账单", Toast.LENGTH_SHORT).show()
+                    dailyAdapter.clearSelection()
+                    loadDataForMonth()
+                    BillUndoController.showNow(
+                        findViewById(android.R.id.content),
+                        getString(R.string.deleted_bills_fmt, billsToDelete.size),
+                        rows
+                    ) {
+                        loadDataForMonth()
+                        BillRowAnimator.expandAfterRefresh(rvDailyBills, rows.map { it.originalBillId })
+                    }
+                }
             }
         }
         btnMsExcludeStats.setOnClickListener {
@@ -904,13 +920,25 @@ class CalendarActivity : AppCompatActivity() {
 
         btnDelete.setOnClickListener {
             bottomSheet.dismiss()
-            lifecycleScope.launch(Dispatchers.IO) {
-                val db = AppDatabase.getDatabase(this@CalendarActivity)
-                if (!com.taostudio.tapaccounting.logic.deleteBillAndRevertBalanceSafe(db, bill)) return@launch
+            BillRowAnimator.collapseThen(
+                rows = BillRowAnimator.findRows(rvDailyBills, listOf(bill.id)),
+                startDelayMs = BillRowAnimator.SHEET_DISMISS_DELAY_MS
+            ) {
+                lifecycleScope.launch(Dispatchers.IO) {
+                    val db = AppDatabase.getDatabase(this@CalendarActivity)
+                    val rows = BillDeleteUndo.delete(db, listOf(bill)) ?: return@launch
 
-                withContext(Dispatchers.Main) {
-                    loadDataForMonth()
-                    Toast.makeText(this@CalendarActivity, "已删除", Toast.LENGTH_SHORT).show()
+                    withContext(Dispatchers.Main) {
+                        loadDataForMonth()
+                        BillUndoController.showNow(
+                            findViewById(android.R.id.content),
+                            getString(R.string.bill_deleted_undo),
+                            rows
+                        ) {
+                            loadDataForMonth()
+                            BillRowAnimator.expandAfterRefresh(rvDailyBills, rows.map { it.originalBillId })
+                        }
+                    }
                 }
             }
         }

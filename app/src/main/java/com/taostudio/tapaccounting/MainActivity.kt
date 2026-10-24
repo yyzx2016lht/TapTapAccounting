@@ -41,6 +41,7 @@ import com.google.android.material.snackbar.Snackbar
 import com.taostudio.tapaccounting.logic.BillEntryDefaults
 import com.taostudio.tapaccounting.ui.main.SharedYearMonthSession
 import com.taostudio.tapaccounting.ui.common.AddBillEntrySheetLauncher
+import com.taostudio.tapaccounting.ui.common.BillUndoController
 import com.taostudio.tapaccounting.ui.common.UiMotion
 import com.taostudio.tapaccounting.ui.dialog.OverlayDialogs
 import com.taostudio.tapaccounting.ui.main.home.HomeFragment
@@ -204,6 +205,8 @@ class MainActivity : AppCompatActivity() {
     private var bottomNavBasePaddingBottom = 0
     private var fabBaseBottomMargin = 0
     private var navBarBottomInset = 0
+    /** 首页多选时收起底栏，让操作栏贴底（对齐资产详情全屏体验）。 */
+    private var homeMultiSelectChromeActive = false
 
     /**
      * 跨 HomeFragment 重建共享的 RecycledViewPool。
@@ -341,6 +344,7 @@ class MainActivity : AppCompatActivity() {
             when {
                 // If on Stats page and touch is on PieChart, let PieChart handle the gesture
                 currentTabIndex == 1 && isSwipeTouchOnPieChart(rawX, rawY) -> false
+                home?.isInMultiSelectMode() == true -> false
                 home?.isBookDrawerOpen() == true -> false
                 assets?.isAssetDrawerOpen() == true -> false
                 currentTabIndex == 0 && dir < 0 -> {
@@ -671,7 +675,21 @@ class MainActivity : AppCompatActivity() {
         com.taostudio.tapaccounting.data.sync.SharedSyncScheduler.enqueueNow(this)
         RecentTasksHelper.ensureTaskVisible(this)
         refreshBottomNavigationTabs()
-        swipeContainer.post { RecurringDuePromptController.maybeShow(this) }
+        swipeContainer.post {
+            RecurringDuePromptController.maybeShow(this)
+            BillUndoController.consumePending(findViewById(android.R.id.content)) {
+                refreshTransactionsAfterUndo()
+            }
+        }
+    }
+
+    /** 撤销删除后账单回到列表，重新拉一次当前 Tab 的数据。 */
+    private fun refreshTransactionsAfterUndo() {
+        tabFragments.forEach { fragment ->
+            if (fragment is HomeFragment && fragment.isAdded && !fragment.isHidden) {
+                fragment.reloadTransactionsFromHost()
+            }
+        }
     }
 
     override fun onPause() {
@@ -733,6 +751,9 @@ class MainActivity : AppCompatActivity() {
     private fun updateMainBottomOffsets() {
         val bottomNav = bottomNavigationView ?: return
         val bottomNavHeight = bottomNav.height.takeIf { it > 0 } ?: return
+        // fragment 容器始终为底栏预留固定高度，多选进/出都不再改它——
+        // 容器尺寸一变，RecyclerView 就会重排、滚动位置被压缩，列表会“整体上移一下”。
+        // 多选操作栏已移到 Activity 层（activity_main.xml），贴底与它无关。
         val containerLp = swipeContainer.layoutParams as? ViewGroup.MarginLayoutParams
         if (containerLp != null && containerLp.bottomMargin != bottomNavHeight) {
             containerLp.bottomMargin = bottomNavHeight
@@ -745,6 +766,57 @@ class MainActivity : AppCompatActivity() {
         if (fabLp.bottomMargin != desiredMargin) {
             fabLp.bottomMargin = desiredMargin.coerceAtLeast(fabBaseBottomMargin + navBarBottomInset)
             fab.layoutParams = fabLp
+        }
+    }
+
+    /**
+     * 首页进入/退出多选时调用：只负责 BottomNavigation 的收起/归位。
+     *
+     * 多选操作栏已放到 Activity 层（activity_main.xml 的 layout_multi_select_actions），
+     * 它本来就贴在屏幕最底边，所以**完全不需要调整 home fragment 容器的大小**。
+     * 这是退出观感的关键：容器尺寸不变 → RecyclerView 不重排、滚动位置不被压缩 →
+     * 列表不会在动画结束时“整体上移一下”，手感与资产详情页（那边没有底栏、从不重排）一致。
+     */
+    fun setHomeMultiSelectChrome(active: Boolean) {
+        if (homeMultiSelectChromeActive == active) return
+        homeMultiSelectChromeActive = active
+        val bottomNav = bottomNavigationView ?: return
+        bottomNav.animate().cancel()
+        if (active) {
+            val slide = (bottomNav.height.takeIf { it > 0 } ?: bottomNav.measuredHeight)
+                .toFloat()
+                .coerceAtLeast(1f)
+            if (bottomNav.visibility != View.VISIBLE) {
+                bottomNav.visibility = View.VISIBLE
+            }
+            bottomNav.animate()
+                .translationY(slide)
+                .alpha(0f)
+                .setDuration(UiMotion.NORMAL)
+                .setInterpolator(UiMotion.EXIT_EASING)
+                .withEndAction {
+                    if (homeMultiSelectChromeActive) {
+                        bottomNav.visibility = View.INVISIBLE
+                        bottomNav.translationY = slide
+                        bottomNav.alpha = 0f
+                    }
+                }
+                .start()
+        } else {
+            bottomNav.visibility = View.VISIBLE
+            val slide = (bottomNav.height.takeIf { it > 0 } ?: bottomNav.measuredHeight)
+                .toFloat()
+                .coerceAtLeast(1f)
+            if (bottomNav.translationY == 0f && bottomNav.alpha >= 0.99f) {
+                bottomNav.translationY = slide
+                bottomNav.alpha = 0f
+            }
+            bottomNav.animate()
+                .translationY(0f)
+                .alpha(1f)
+                .setDuration(UiMotion.NORMAL)
+                .setInterpolator(UiMotion.STANDARD_EASING)
+                .start()
         }
     }
 

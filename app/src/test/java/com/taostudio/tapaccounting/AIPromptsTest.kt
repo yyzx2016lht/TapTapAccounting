@@ -101,6 +101,40 @@ class AIPromptsTest {
         assertTrue(rule.contains("商品名不同则绝不合并"))
     }
 
+    @Test
+    fun remarksRuleKeepsSceneContextButForbidsInventingIt() {
+        // 回归：旧规则要求 remarks「精简品名」，模型把「在吴阿姨的店里喝了一杯豆浆」
+        // 压成了「豆浆」。账单搜索是 remark LIKE '%关键词%'，备注越短越捞不回来、也越难回忆。
+        val prompt = AIPrompts.buildCategoryRulesCompact(hasSecondLevel = false)
+
+        assertFalse("备注规则不能再要求精简成光秃秃的品名", prompt.contains("简短名词短语"))
+        assertTrue(prompt.contains("场景 + 品名"))
+        assertTrue(prompt.contains("最短可辨识的店名"))
+        // 场景只能来自原话/画面文字：编一个店名就是静默错账
+        assertTrue(prompt.contains("严禁臆造"))
+        assertTrue(prompt.contains("严禁凭常识、品类、地点推断或补写店名与事由"))
+    }
+
+    @Test
+    fun imagePromptPointsToRemarksContentRule() {
+        assertFalse(AIPrompts.IMAGE_ACCOUNTING_PROMPT.contains("精简品名"))
+        assertTrue(AIPrompts.IMAGE_ACCOUNTING_PROMPT.contains("备注内容规则"))
+    }
+
+    @Test
+    fun ruleExtractPromptRejectsWholeRemarkAsKeyword() {
+        // 回归：备注改成「场景+品名」后，关键词提取若整条照搬（"吴阿姨店里豆浆"），
+        // 下次换个说法（"豆浆"）就匹配不上——规则等于白学。
+        val prompt = com.taostudio.tapaccounting.logic.RuleDialogHelper.DEFAULT_RULE_PROMPT
+
+        assertTrue(prompt.contains("只取核心品名"))
+        assertTrue(prompt.contains("严禁整条照搬"))
+        assertTrue(prompt.contains("同行人"))
+        // 占位符不能改名，否则外部自定义提示词替换失效
+        assertTrue(prompt.contains("{{REMARK}}"))
+        assertTrue(prompt.contains("{{CATEGORY}}"))
+    }
+
     private fun promptContext() = AIAccountingPromptContext(
         dbAssets = emptyList(),
         assetInfoList = emptyList(),

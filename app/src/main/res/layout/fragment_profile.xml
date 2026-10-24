@@ -147,7 +147,7 @@
                             android:layout_width="40dp"
                             android:layout_height="40dp"
                             android:padding="9dp"
-                            android:src="@drawable/ic_profile_alert"
+                            android:src="@drawable/ic_set_bell"
                             android:tint="#FFFFFF"
                             android:background="@drawable/bg_icon_badge_amber" />
 
@@ -255,7 +255,7 @@
                                 android:background="@drawable/bg_icon_badge_blue">
                                 <ImageView
                                     style="@style/SettingsBadgeIcon"
-                                    android:src="@drawable/ic_profile_category_tree" />
+                                    android:src="@drawable/ic_set_category" />
                             </FrameLayout>
 
                             <LinearLayout style="@style/SettingsTextBlock">
@@ -291,7 +291,7 @@
                                 android:background="@drawable/bg_icon_badge_purple">
                                 <ImageView
                                     style="@style/SettingsBadgeIcon"
-                                    android:src="@drawable/ic_profile_bill_display" />
+                                    android:src="@drawable/ic_set_bill_display" />
                             </FrameLayout>
 
                             <LinearLayout style="@style/SettingsTextBlock">
@@ -328,7 +328,7 @@
                                 android:background="@drawable/bg_icon_badge_green">
                                 <ImageView
                                     style="@style/SettingsBadgeIcon"
-                                    android:src="@drawable/ic_profile_exchange" />
+                                    android:src="@drawable/ic_set_currency" />
                             </FrameLayout>
 
                             <LinearLayout style="@style/SettingsTextBlock">
@@ -364,7 +364,7 @@
                                 android:background="@drawable/bg_icon_badge_orange">
                                 <ImageView
                                     style="@style/SettingsBadgeIcon"
-                                    android:src="@drawable/ic_profile_sensitivity" />
+                                    android:src="@drawable/ic_set_quick_entry" />
                             </FrameLayout>
 
                             <LinearLayout style="@style/SettingsTextBlock">
@@ -400,7 +400,7 @@
                                 android:background="@drawable/bg_icon_badge_pink">
                                 <ImageView
                                     style="@style/SettingsBadgeIcon"
-                                    android:src="@drawable/ic_profile_backup" />
+                                    android:src="@drawable/ic_set_backup" />
                             </FrameLayout>
 
                             <LinearLayout style="@style/SettingsTextBlock">
@@ -417,8 +417,44 @@
 
                         <View
                             android:id="@+id/divider_sync_remote_config"
-                            style="@style/SettingsDivider"
-                            android:visibility="gone" />
+                            style="@style/SettingsDivider" />
+                    </LinearLayout>
+
+                    <!-- 回收站：已删除账单的恢复入口，放在数据管理类目里 -->
+                    <LinearLayout
+                        android:id="@+id/group_trash_entry"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical">
+
+                        <LinearLayout
+                            android:id="@+id/layout_trash_entry"
+                            style="@style/SettingsRow.Clickable">
+
+                            <FrameLayout
+                                style="@style/SettingsBadge"
+                                android:background="@drawable/bg_icon_badge_amber">
+                                <ImageView
+                                    style="@style/SettingsBadgeIcon"
+                                    android:src="@drawable/ic_set_trash" />
+                            </FrameLayout>
+
+                            <LinearLayout style="@style/SettingsTextBlock">
+                                <TextView
+                                    style="@style/SettingsItemTitle"
+                                    android:text="@string/trash" />
+                                <TextView
+                                    android:id="@+id/tv_trash_entry_subtitle"
+                                    style="@style/SettingsItemSubtitle"
+                                    android:text="@string/trash_entry_desc" />
+                            </LinearLayout>
+
+                            <ImageView style="@style/SettingsChevron" />
+                        </LinearLayout>
+
+                        <View
+                            android:id="@+id/divider_after_trash_entry"
+                            style="@style/SettingsDivider" />
                     </LinearLayout>
 
                     <!-- 同步远程配置 -->
@@ -438,7 +474,7 @@
                                 android:background="@drawable/bg_icon_badge_cyan">
                                 <ImageView
                                     style="@style/SettingsBadgeIcon"
-                                    android:src="@drawable/ic_profile_backup"
+                                    android:src="@drawable/ic_set_sync"
                                     android:rotation="180" />
                             </FrameLayout>
 
@@ -481,7 +517,7 @@
                                     style="@style/SettingsBadgeIcon"
                                     android:layout_width="24dp"
                                     android:layout_height="24dp"
-                                    android:src="@drawable/ic_ai_net_robot" />
+                                    android:src="@drawable/ic_set_ai" />
                             </FrameLayout>
 
                             <LinearLayout style="@style/SettingsTextBlock">
@@ -519,7 +555,7 @@
                                     style="@style/SettingsBadgeIcon"
                                     android:layout_width="24dp"
                                     android:layout_height="24dp"
-                                    android:src="@drawable/ic_profile_trash_white" />
+                                    android:src="@drawable/ic_set_storage" />
                             </FrameLayout>
 
                             <LinearLayout style="@style/SettingsTextBlock">
@@ -533,6 +569,10 @@
 
                             <ImageView style="@style/SettingsChevron" />
                         </LinearLayout>
+
+                        <View
+                            android:id="@+id/divider_widget_settings_entry"
+                            style="@style/SettingsDivider" />
                     </LinearLayout>
 
                     <!-- 桌面小组件 -->
@@ -553,7 +593,7 @@
                                     style="@style/SettingsBadgeIcon"
                                     android:layout_width="24dp"
                                     android:layout_height="24dp"
-                                    android:src="@drawable/ic_profile_bill_display" />
+                                    android:src="@drawable/ic_set_widget" />
                             </FrameLayout>
 
                             <LinearLayout style="@style/SettingsTextBlock">
@@ -615,7 +655,7 @@
                                 android:background="@drawable/bg_icon_badge_teal">
                                 <ImageView
                                     style="@style/SettingsBadgeIcon"
-                                    android:src="@drawable/ic_profile_tap" />
+                                    android:src="@drawable/ic_set_gesture" />
                             </FrameLayout>
 
                             <LinearLayout style="@style/SettingsTextBlock">
@@ -656,7 +696,7 @@
                                 android:background="@drawable/bg_icon_badge_cyan">
                                 <ImageView
                                     style="@style/SettingsBadgeIcon"
-                                    android:src="@drawable/ic_profile_book_entry" />
+                                    android:src="@drawable/ic_set_book" />
                             </FrameLayout>
 
                             <LinearLayout style="@style/SettingsTextBlock">
@@ -699,7 +739,7 @@
                                     style="@style/SettingsBadgeIcon"
                                     android:layout_width="24dp"
                                     android:layout_height="24dp"
-                                    android:src="@drawable/ic_nav_assets" />
+                                    android:src="@drawable/ic_set_asset" />
                             </FrameLayout>
 
                             <LinearLayout style="@style/SettingsTextBlock">
@@ -740,7 +780,7 @@
                                 android:background="@drawable/bg_icon_badge_cyan">
                                 <ImageView
                                     style="@style/SettingsBadgeIcon"
-                                    android:src="@drawable/ic_profile_trend" />
+                                    android:src="@drawable/ic_set_trend" />
                             </FrameLayout>
 
                             <LinearLayout style="@style/SettingsTextBlock">
@@ -780,7 +820,7 @@
                                 android:background="@drawable/bg_icon_badge_purple">
                                 <ImageView
                                     style="@style/SettingsBadgeIcon"
-                                    android:src="@drawable/ic_ai_net_magic" />
+                                    android:src="@drawable/ic_set_ai" />
                             </FrameLayout>
 
                             <LinearLayout style="@style/SettingsTextBlock">
@@ -852,7 +892,7 @@
                             style="@style/SettingsBadgeIcon"
                             android:layout_width="24dp"
                             android:layout_height="24dp"
-                            android:src="@drawable/ic_ai_net_robot" />
+                            android:src="@drawable/ic_set_ai" />
                     </FrameLayout>
 
                     <LinearLayout style="@style/SettingsTextBlock">
@@ -914,7 +954,7 @@
                                 android:background="@drawable/bg_icon_badge_cyan">
                                 <ImageView
                                     style="@style/SettingsBadgeIcon"
-                                    android:src="@drawable/ic_profile_shizuku_mode" />
+                                    android:src="@drawable/ic_set_shizuku_mode" />
                             </FrameLayout>
 
                             <LinearLayout style="@style/SettingsTextBlock">
@@ -958,7 +998,7 @@
                                 android:background="@drawable/bg_icon_badge_amber">
                                 <ImageView
                                     style="@style/SettingsBadgeIcon"
-                                    android:src="@drawable/ic_profile_shizuku_guard" />
+                                    android:src="@drawable/ic_set_shizuku_guard" />
                             </FrameLayout>
 
                             <LinearLayout style="@style/SettingsTextBlock">
@@ -999,7 +1039,7 @@
                                 android:background="@drawable/bg_icon_badge_green">
                                 <ImageView
                                     style="@style/SettingsBadgeIcon"
-                                    android:src="@drawable/ic_profile_currency_switch" />
+                                    android:src="@drawable/ic_set_currency" />
                             </FrameLayout>
 
                             <LinearLayout style="@style/SettingsTextBlock">
@@ -1041,7 +1081,7 @@
                                 android:background="@drawable/bg_icon_badge_cyan">
                                 <ImageView
                                     style="@style/SettingsBadgeIcon"
-                                    android:src="@drawable/ic_profile_dev_terminal" />
+                                    android:src="@drawable/ic_set_devlog" />
                             </FrameLayout>
 
                             <LinearLayout style="@style/SettingsTextBlock">

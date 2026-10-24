@@ -53,6 +53,9 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import com.taostudio.tapaccounting.logic.BillDeleteUndo
+import com.taostudio.tapaccounting.ui.common.BillRowAnimator
+import com.taostudio.tapaccounting.ui.common.BillUndoController
 import com.taostudio.tapaccounting.R
 import com.taostudio.tapaccounting.CategoryIconHelper
 import com.taostudio.tapaccounting.Prefs
@@ -62,6 +65,7 @@ import com.taostudio.tapaccounting.data.local.entity.Bill
 import com.taostudio.tapaccounting.logic.BillAssetImpactService
 import com.taostudio.tapaccounting.logic.BillMutationService
 import com.taostudio.tapaccounting.logic.CategoryIconUrlCache
+import com.taostudio.tapaccounting.ui.common.RowModeMotion
 import com.taostudio.tapaccounting.ui.common.MultiSelectBarSummary
 import com.taostudio.tapaccounting.ui.common.MultiSelectMotion
 import com.taostudio.tapaccounting.ui.common.UiMotion.applyItemPressFeedback
@@ -214,7 +218,8 @@ class AssetStatsActivity : AppCompatActivity() {
                 billRowsCache.clear()
                 categoryBreakdownCache.clear()
                 loadAssetAndBills()
-            }
+            },
+            getRecyclerView = { rvBillList }
         )
     }
     private val piePalette = listOf(
@@ -437,19 +442,27 @@ class AssetStatsActivity : AppCompatActivity() {
         btnMsDelete.setOnClickListener {
             val targets = billAdapter.getSelectedBills()
             if (targets.isEmpty()) return@setOnClickListener
-            lifecycleScope.launch(Dispatchers.IO) {
-                if (!com.taostudio.tapaccounting.logic.deleteBillsAndRevertBalanceSafe(db, targets)) return@launch
-                withContext(Dispatchers.Main) {
-                    billAdapter.clearSelection()
-                    filteredBillsCache.clear()
-                    billRowsCache.clear()
-                    categoryBreakdownCache.clear()
-                    loadAssetAndBills()
-                    Toast.makeText(
-                        this@AssetStatsActivity,
-                        getString(R.string.deleted_bills_fmt, targets.size),
-                        Toast.LENGTH_SHORT
-                    ).show()
+            BillRowAnimator.collapseThen(BillRowAnimator.findRows(rvBillList, targets.map { it.id })) {
+                lifecycleScope.launch(Dispatchers.IO) {
+                    val rows = BillDeleteUndo.delete(db, targets) ?: return@launch
+                    withContext(Dispatchers.Main) {
+                        billAdapter.clearSelection()
+                        filteredBillsCache.clear()
+                        billRowsCache.clear()
+                        categoryBreakdownCache.clear()
+                        loadAssetAndBills()
+                        BillUndoController.showNow(
+                            findViewById(android.R.id.content),
+                            getString(R.string.deleted_bills_fmt, targets.size),
+                            rows
+                        ) {
+                            filteredBillsCache.clear()
+                            billRowsCache.clear()
+                            categoryBreakdownCache.clear()
+                            loadAssetAndBills()
+                            BillRowAnimator.expandAfterRefresh(rvBillList, rows.map { it.originalBillId })
+                        }
+                    }
                 }
             }
         }
@@ -2324,7 +2337,11 @@ class AssetStatsActivity : AppCompatActivity() {
         override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
             when (val row = rows[position]) {
                 is SectionHeaderRow -> (holder as HeaderVH).bind(row, position)
-                is BillRow -> (holder as BillVH).bind(row.bill, position)
+                is BillRow -> {
+                    // 行动画（删除折叠 / 撤销展开）靠这个 tag 定位被操作的行。
+                    holder.itemView.setTag(R.id.tag_bill_row_id, row.bill.id)
+                    (holder as BillVH).bind(row.bill, position)
+                }
             }
         }
 
@@ -2337,7 +2354,7 @@ class AssetStatsActivity : AppCompatActivity() {
                 val row = rows.getOrNull(position) as? BillRow
                 if (row != null) {
                     if (payloads.contains(PAYLOAD_MODE_CHANGE)) {
-                        holder.updateMode(row.bill)
+                        holder.updateMode(row.bill, animate = true)
                         return
                     }
                     if (payloads.contains(PAYLOAD_SELECTION_CHANGE)) {
@@ -2348,7 +2365,7 @@ class AssetStatsActivity : AppCompatActivity() {
             }
             if (payloads.isNotEmpty() && holder is HeaderVH) {
                 if (payloads.contains(PAYLOAD_MODE_CHANGE)) {
-                    holder.updateMode(position)
+                    holder.updateMode(position, animate = true)
                     return
                 }
                 if (payloads.contains(PAYLOAD_SELECTION_CHANGE) || payloads.contains(PAYLOAD_HEADER_SELECTION_CHANGE)) {
@@ -2378,6 +2395,8 @@ class AssetStatsActivity : AppCompatActivity() {
 
         inner class HeaderVH(v: View) : RecyclerView.ViewHolder(v) {
             private val cbSelect = v.findViewById<CheckBox>(R.id.cb_select_section)
+            /** 勾选框占位：宽度随多选 0 ↔ 占位宽 动画，勾选框本身是覆盖层、不影响行高。 */
+            private val spHeaderCheck = v.findViewById<View>(R.id.sp_header_check)
             private val tvTitle = v.findViewById<TextView>(R.id.tv_section_title)
             private val tvSummary = v.findViewById<TextView>(R.id.tv_section_summary)
 
@@ -2397,8 +2416,14 @@ class AssetStatsActivity : AppCompatActivity() {
                 updateMode(position)
             }
 
-            fun updateMode(position: Int) {
-                cbSelect.visibility = if (isMultiSelectMode) View.VISIBLE else View.GONE
+            fun updateMode(position: Int, animate: Boolean = false) {
+                RowModeMotion.apply(
+                    checkBox = cbSelect,
+                    show = isMultiSelectMode,
+                    animate = animate,
+                    isModeActive = { isMultiSelectMode },
+                    spacer = spHeaderCheck
+                )
                 updateSelection(position)
             }
 
@@ -2436,8 +2461,13 @@ class AssetStatsActivity : AppCompatActivity() {
                 }
             }
 
-            fun updateMode(bill: Bill) {
-                cbSelect.visibility = if (isMultiSelectMode) View.VISIBLE else View.GONE
+            fun updateMode(bill: Bill, animate: Boolean = false) {
+                RowModeMotion.apply(
+                    checkBox = cbSelect,
+                    show = isMultiSelectMode,
+                    animate = animate,
+                    isModeActive = { isMultiSelectMode }
+                )
                 cbSelect.isChecked = selectedBills.contains(bill)
             }
 

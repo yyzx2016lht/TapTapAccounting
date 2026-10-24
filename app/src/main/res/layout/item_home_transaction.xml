@@ -12,13 +12,22 @@
     android:paddingHorizontal="14dp"
     android:paddingVertical="12dp">
 
+    <!--
+        高度固定为 44dp（= 图标容器高度），并且把 minHeight/minWidth 清零：
+        这样勾选框的 VISIBLE/GONE 不会改变行高。若保留 wrap_content，MaterialCheckBox
+        自身最小高度会把每行撑高 ~12px，退出多选时整表瞬间变矮，列表会“跳一下”。
+        勾选框的 button drawable 是固定尺寸并在视图内居中绘制，视觉大小不受影响。
+    -->
     <CheckBox
         android:id="@+id/cb_bill_select"
         android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
+        android:layout_height="44dp"
         android:layout_marginEnd="8dp"
         android:clickable="false"
         android:focusable="false"
+        android:gravity="center_vertical|start"
+        android:minHeight="0dp"
+        android:minWidth="0dp"
         android:visibility="gone"
         tools:visibility="gone" />
 

@@ -1,40 +1,63 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<!--
+    分组头。勾选框做「覆盖层 + 占位 View」：MaterialCheckBox 的按钮 drawable
+    （约 28dp）比标题文字行还高，若参与行高测量，进/出多选时分组头会忽高忽低，
+    导致列表上下跳动。占位 View 的宽度动画负责让标题横向让位，勾选框本身不参与布局。
+-->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:layout_marginTop="8dp"
     android:background="@drawable/bg_bill_group_top"
-    android:gravity="center_vertical"
-    android:orientation="horizontal"
     android:paddingHorizontal="14dp"
     android:paddingVertical="10dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:minHeight="20dp"
+        android:orientation="horizontal">
+
+        <!-- 勾选框占位：宽度随多选模式 0 ↔ 勾选框占位宽 动画，带动右侧文字平移 -->
+        <View
+            android:id="@+id/sp_header_check"
+            android:layout_width="0dp"
+            android:layout_height="1dp" />
+
+        <TextView
+            android:id="@+id/tv_section_title"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="03月"
+            android:textColor="#1F2937"
+            android:textSize="@dimen/text_size_18"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/tv_section_summary"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="收:¥800.00 支:¥47.33"
+            android:textColor="#8A93A3"
+            android:textSize="@dimen/text_size_13" />
+    </LinearLayout>
 
     <CheckBox
         android:id="@+id/cb_select_section"
         android:layout_width="32dp"
-        android:layout_height="32dp"
+        android:layout_height="20dp"
+        android:layout_gravity="start|center_vertical"
         android:layout_marginEnd="6dp"
         android:buttonTint="@color/brand_primary"
         android:clickable="false"
         android:focusable="false"
+        android:gravity="center_vertical|start"
+        android:minHeight="0dp"
+        android:minWidth="0dp"
+        android:paddingTop="0dp"
+        android:paddingBottom="0dp"
         android:visibility="gone" />
 
-    <TextView
-        android:id="@+id/tv_section_title"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:layout_weight="1"
-        android:text="03月"
-        android:textColor="#1F2937"
-        android:textSize="@dimen/text_size_18"
-        android:textStyle="bold" />
-
-    <TextView
-        android:id="@+id/tv_section_summary"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="收:¥800.00 支:¥47.33"
-        android:textColor="#8A93A3"
-        android:textSize="@dimen/text_size_13" />
-
-</LinearLayout>
+</FrameLayout>

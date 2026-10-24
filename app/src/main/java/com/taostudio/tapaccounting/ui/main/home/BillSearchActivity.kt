@@ -19,6 +19,9 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import com.taostudio.tapaccounting.BookAccountManager
+import com.taostudio.tapaccounting.logic.BillDeleteUndo
+import com.taostudio.tapaccounting.ui.common.BillRowAnimator
+import com.taostudio.tapaccounting.ui.common.BillUndoController
 import com.taostudio.tapaccounting.R
 import com.taostudio.tapaccounting.data.local.AppDatabase
 import com.taostudio.tapaccounting.data.local.entity.Bill
@@ -89,7 +92,8 @@ class BillSearchActivity : AppCompatActivity() {
                     context = this,
                     lifecycleOwner = this,
                     bill = bill,
-                    onBillChanged = { loadAllBills() }
+                    onBillChanged = { loadAllBills() },
+                    listRecyclerView = rvResults
                 )
             }
         }
@@ -185,17 +189,23 @@ class BillSearchActivity : AppCompatActivity() {
         btnMsDelete.setOnClickListener {
             val billsToDelete = adapter.getSelectedBills()
             if (billsToDelete.isEmpty()) return@setOnClickListener
-            lifecycleScope.launch {
-                if (!com.taostudio.tapaccounting.logic.deleteBillsAndRevertBalanceSafe(db, billsToDelete)) return@launch
-                val deletedIds = billsToDelete.map { it.id }.toSet()
-                allBills = allBills.filterNot { it.id in deletedIds }
-                adapter.clearSelection()
-                applyFilter(etSearch.text?.toString().orEmpty().trim())
-                Toast.makeText(
-                    this@BillSearchActivity,
-                    "已删除 ${billsToDelete.size} 条账单",
-                    Toast.LENGTH_SHORT
-                ).show()
+            val targetIds = billsToDelete.map { it.id }
+            BillRowAnimator.collapseThen(BillRowAnimator.findRows(rvResults, targetIds)) {
+                lifecycleScope.launch {
+                    val rows = BillDeleteUndo.delete(db, billsToDelete) ?: return@launch
+                    val deletedIds = billsToDelete.map { it.id }.toSet()
+                    allBills = allBills.filterNot { it.id in deletedIds }
+                    adapter.clearSelection()
+                    applyFilter(etSearch.text?.toString().orEmpty().trim())
+                    BillUndoController.showNow(
+                        findViewById(android.R.id.content),
+                        getString(R.string.deleted_bills_fmt, billsToDelete.size),
+                        rows
+                    ) {
+                        loadAllBills()
+                        BillRowAnimator.expandAfterRefresh(rvResults, rows.map { it.originalBillId })
+                    }
+                }
             }
         }
     }

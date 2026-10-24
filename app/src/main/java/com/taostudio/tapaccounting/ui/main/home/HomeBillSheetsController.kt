@@ -31,7 +31,11 @@ import com.taostudio.tapaccounting.logic.CurrencyManager
 import com.taostudio.tapaccounting.logic.BillMutationService
 import com.taostudio.tapaccounting.ui.activity.EditBillActivity
 import com.taostudio.tapaccounting.ui.dialog.OverlayDialogs
+import com.taostudio.tapaccounting.logic.BillDeleteUndo
+import androidx.recyclerview.widget.RecyclerView
 import com.taostudio.tapaccounting.ui.common.BillDetailStatsToggle
+import com.taostudio.tapaccounting.ui.common.BillRowAnimator
+import com.taostudio.tapaccounting.ui.common.BillUndoController
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -40,7 +44,9 @@ internal class HomeBillSheetsController(
     private val fragment: Fragment,
     private val dfDetailTime: SimpleDateFormat,
     private val dfDetailTimeShort: SimpleDateFormat,
-    private val onDataChanged: () -> Unit = {}
+    private val onDataChanged: () -> Unit = {},
+    /** 账单列表：删除/撤销时用它定位那一行播行动画；拿不到就退化成无动画。 */
+    private val getRecyclerView: () -> RecyclerView? = { null }
 ) {
     private var activeDetailSheet: BottomSheetDialog? = null
     private var lastDetailBillId: Long = -1L
@@ -529,7 +535,7 @@ internal class HomeBillSheetsController(
         }
 
         btnDelete.setOnClickListener {
-            showDeleteConfirmDialog(bill, bottomSheet)
+            deleteBillDirect(bill, bottomSheet)
         }
 
         bottomSheet.setContentView(view)
@@ -542,46 +548,31 @@ internal class HomeBillSheetsController(
         bottomSheet.show()
     }
 
-    private fun showDeleteConfirmDialog(bill: Bill, bottomSheet: BottomSheetDialog) {
+    private fun deleteBillDirect(bill: Bill, bottomSheet: BottomSheetDialog) {
         val context = fragment.requireContext()
-        val panel = LayoutInflater.from(context).inflate(R.layout.dialog_delete_followup_confirm, null, false)
-        panel.findViewById<TextView>(R.id.tv_followup_confirm_title).text = "确认删除"
-        panel.findViewById<TextView>(R.id.tv_followup_confirm_message).text = "删除后可在回收站恢复，是否继续？"
-
-        val dialog = androidx.appcompat.app.AlertDialog.Builder(
-            androidx.appcompat.view.ContextThemeWrapper(context, R.style.Theme_TapAccounting)
-        )
-            .setView(panel)
-            .create()
-        dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
-
-        panel.findViewById<TextView>(R.id.btn_followup_confirm_cancel).setOnClickListener {
-            dialog.dismiss()
-        }
-        panel.findViewById<TextView>(R.id.btn_followup_confirm_ok).apply {
-            text = "确认删除"
-            setBackgroundResource(R.drawable.bg_delete_followup_danger_btn)
-            setOnClickListener {
-                dialog.dismiss()
-                bottomSheet.dismiss()
-                fragment.lifecycleScope.launch(Dispatchers.IO) {
-                    val db = AppDatabase.getDatabase(context)
-                    if (!com.taostudio.tapaccounting.logic.deleteBillAndRevertBalanceSafe(db, bill)) return@launch
-                    withContext(Dispatchers.Main) {
+        bottomSheet.dismiss()
+        val recyclerView = getRecyclerView()
+        val billId = bill.id
+        BillRowAnimator.collapseThen(
+            rows = BillRowAnimator.findRows(recyclerView, listOf(billId)),
+            startDelayMs = BillRowAnimator.SHEET_DISMISS_DELAY_MS
+        ) {
+            fragment.lifecycleScope.launch(Dispatchers.IO) {
+                val db = AppDatabase.getDatabase(context)
+                val rows = BillDeleteUndo.delete(db, listOf(bill)) ?: return@launch
+                withContext(Dispatchers.Main) {
+                    onDataChanged()
+                    BillUndoController.showNow(
+                        fragment.requireActivity().findViewById(android.R.id.content),
+                        context.getString(R.string.bill_deleted_undo),
+                        rows
+                    ) {
                         onDataChanged()
-                        Toast.makeText(fragment.context, "已删除", Toast.LENGTH_SHORT).show()
+                        BillRowAnimator.expandAfterRefresh(recyclerView, rows.map { it.originalBillId })
                     }
                 }
             }
         }
-
-        OverlayDialogs.showPageCenterDialog(
-            dialog = dialog,
-            ctx = context,
-            widthRatio = 0.86f,
-            cancelOnTouchOutside = true,
-            useSolidPanelBackground = true
-        )
     }
 
     private fun configureDetailBottomSheet(bottomSheet: BottomSheetDialog) {

@@ -414,6 +414,31 @@ Before starting:
   the delete cannot be asserted in JVM tests. `DuplicateCategoryMergerTest` covers the decision rules
   (which pair, which direction, when to give up).
 
+## Native Packaging Checks
+
+### 28. Native Library 16 KB Page-Size Alignment
+
+- Risk: every `.so` reached through `app/libs/sherpa-onnx.aar` and the LiteRT/TensorFlow Lite
+  prebuilt used to declare only 4 KB aligned `PT_LOAD` segments. On a device booted with a 16 KB
+  page size the package manager then runs the app in "16 KB backward compatibility mode" and shows
+  the system `Android 应用兼容性` dialog on first launch, listing
+  `lib/arm64-v8a/libtensorflowlite_jni.so`, `libsherpa-onnx-jni.so`, `libsherpa-onnx-c-api.so` …
+  with `LOAD 区段未对齐`. Google Play requires 16 KB support for apps targeting Android 15
+  (API 35)+, and from 2027-02-01 updates without it cannot be released.
+- Steps:
+  - Build the APK, then run `python tools/check-native-16kb.py app/build/outputs/apk/release/app-release.apk`.
+  - Confirm the ZIP half separately with `zipalign -c -P 16 -v 4 app-release.apk`.
+  - Install on a 16 KB device or emulator (`adb shell getconf PAGE_SIZE` must print `16384`) and
+    launch it.
+- Expected:
+  - The checker reports 0 non-aligned libraries.
+  - No `Android 应用兼容性` dialog on first launch.
+  - Local ASR still initializes and transcribes, since the AAR upgrade also bumps the bundled
+    onnxruntime build.
+- Pinned versions: sherpa-onnx AAR v1.13.8 (16 KB support landed in k2-fsa/sherpa-onnx#2520,
+  Aug 2025) and `com.google.ai.edge.litert:litert:1.4.2`. `org.tensorflow:tensorflow-lite` stays
+  unaligned through its newest release 2.17.0, so it must not be reintroduced.
+
 ## Release Sign-off
 
 Mark each item:
@@ -439,5 +464,6 @@ These were already checked in the current codebase:
 - Release APK builds successfully.
 - Debug APK builds successfully.
 - Key native libraries are packaged in release.
+- Every packaged arm64-v8a library is 16 KB aligned: `python tools/check-native-16kb.py <apk>` reports 0 non-aligned (last verified on `app-debug.apk`; re-run after any native dependency bump).
 - `@raw/assets`, `@raw/category`, and `@raw/default_category` remain reachable in release.
 - Sensitive classes used by reflection/Gson such as `BuiltInCategory` and `SiliconFlowApi` are preserved appropriately for release behavior.

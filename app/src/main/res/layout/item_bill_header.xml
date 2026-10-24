@@ -1,42 +1,73 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<!--
+    日期分组头。勾选框做成「覆盖层 + 占位 View」：
+    MaterialCheckBox 的按钮 drawable 固有高度约 28dp，比日期文字行还高，
+    只要它参与 LinearLayout 的行高测量，勾选框一出现分组头就会从 119px 变 135px，
+    退出多选时整段列表上移（真机逐帧实测的跳动来源）。
+    改成 FrameLayout + 绝对定位后，勾选框不再影响行高；横向让位由 sp_header_check
+    的宽度动画完成（0 ↔ 勾选框占位宽），视觉与原来的行内勾选框一致。
+-->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:layout_marginTop="14dp"
     android:background="@drawable/bg_bill_group_top"
-    android:orientation="horizontal"
-    android:gravity="center_vertical"
     android:paddingHorizontal="14dp"
     android:paddingTop="10dp"
     android:paddingBottom="8dp">
 
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:minHeight="20dp"
+        android:orientation="horizontal">
+
+        <!-- 勾选框占位：宽度随多选模式 0 ↔ 38dp 动画，带动右侧文字平移 -->
+        <View
+            android:id="@+id/sp_header_check"
+            android:layout_width="0dp"
+            android:layout_height="1dp" />
+
+        <TextView
+            android:id="@+id/tv_header_date"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            tools:text="12.31 周三"
+            android:textColor="@color/home_date_header_text"
+            android:textSize="@dimen/text_size_14"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/tv_header_summary"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            tools:text="收:¥46.07 支:¥214.23"
+            android:textColor="@color/home_date_summary_text"
+            android:textSize="@dimen/text_size_13" />
+    </LinearLayout>
+
+    <!--
+        覆盖层：FrameLayout 的 wrap_content 高度会取所有子视图的最大值，所以这里必须
+        把勾选框高度压到日期文字行高以内（20dp = 按钮 drawable 自身高度，不裁剪），
+        否则分组头仍会被撑高。padding 归零同理。
+    -->
     <CheckBox
         android:id="@+id/cb_select_day"
         android:layout_width="32dp"
-        android:layout_height="32dp"
+        android:layout_height="20dp"
+        android:layout_gravity="start|center_vertical"
         android:layout_marginEnd="6dp"
         android:buttonTint="@color/brand_primary"
         android:clickable="false"
         android:focusable="false"
+        android:gravity="center_vertical|start"
+        android:minHeight="0dp"
+        android:minWidth="0dp"
+        android:paddingTop="0dp"
+        android:paddingBottom="0dp"
         android:visibility="gone" />
 
-    <TextView
-        android:id="@+id/tv_header_date"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:layout_weight="1"
-        tools:text="12.31 周三"
-        android:textColor="@color/home_date_header_text"
-        android:textSize="@dimen/text_size_14"
-        android:textStyle="bold" />
-
-    <TextView
-        android:id="@+id/tv_header_summary"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        tools:text="收:¥46.07 支:¥214.23"
-        android:textColor="@color/home_date_summary_text"
-        android:textSize="@dimen/text_size_13" />
-
-</LinearLayout>
+</FrameLayout>

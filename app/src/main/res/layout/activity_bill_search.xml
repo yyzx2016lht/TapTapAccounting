@@ -1,8 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#F7F8FA">
+    android:background="@color/settings_page_bg">
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -14,54 +15,452 @@
             android:layout_height="56dp"
             android:orientation="horizontal"
             android:gravity="center_vertical"
-            android:paddingStart="12dp"
+            android:paddingStart="8dp"
             android:paddingEnd="12dp"
-            android:background="#FFFFFF">
+            android:background="@color/surface_card">
 
             <ImageView
                 android:id="@+id/btn_bill_search_back"
-                android:layout_width="28dp"
-                android:layout_height="28dp"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
                 android:src="@drawable/ic_chevron_left"
+                app:tint="@color/text_primary"
                 android:contentDescription="@string/back"
-                android:padding="2dp"
+                android:padding="8dp"
                 android:background="?attr/selectableItemBackgroundBorderless" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/title_bill_search"
+                android:textColor="@color/text_primary"
+                android:textSize="17sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/layout_search_box"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="12dp"
+            android:layout_marginEnd="12dp"
+            android:layout_marginTop="12dp"
+            android:background="@drawable/bg_search_card"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingStart="14dp"
+            android:paddingEnd="6dp"
+            android:paddingTop="5dp"
+            android:paddingBottom="5dp">
+
+            <ImageView
+                android:layout_width="20dp"
+                android:layout_height="20dp"
+                android:src="@drawable/ic_search_outline"
+                app:tint="@color/text_secondary" />
 
             <EditText
                 android:id="@+id/et_bill_search"
                 android:layout_width="0dp"
-                android:layout_height="38dp"
+                android:layout_height="40dp"
                 android:layout_weight="1"
-                android:layout_marginStart="10dp"
-                android:background="@drawable/bg_search_box"
-                android:hint="@string/hint_search_bill"
+                android:layout_marginStart="8dp"
+                android:background="@null"
+                android:hint="@string/hint_search_bill_full"
                 android:imeOptions="actionSearch"
                 android:inputType="text"
                 android:maxLines="1"
-                android:paddingStart="12dp"
-                android:paddingEnd="12dp"
-                android:textColor="#333333"
-                android:textColorHint="#8892A0"
-                android:textSize="@dimen/text_size_14" />
+                android:textColor="@color/text_primary"
+                android:textColorHint="@color/text_secondary"
+                android:textSize="@dimen/text_size_15" />
+
+            <ImageView
+                android:id="@+id/btn_search_clear"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
+                android:padding="7dp"
+                android:src="@drawable/ic_close_small"
+                app:tint="@color/text_secondary"
+                android:visibility="gone"
+                android:background="?attr/selectableItemBackgroundBorderless" />
         </LinearLayout>
 
-        <TextView
-            android:id="@+id/tv_bill_search_scope"
+        <LinearLayout
+            android:id="@+id/layout_search_filters"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:paddingStart="16dp"
-            android:paddingEnd="16dp"
-            android:paddingTop="10dp"
-            android:paddingBottom="6dp"
-            android:textColor="#8A93A0"
-            android:textSize="@dimen/text_size_13"
-            android:text="@string/all_books" />
+            android:layout_marginStart="12dp"
+            android:layout_marginEnd="12dp"
+            android:layout_marginTop="12dp"
+            android:background="@drawable/bg_search_card"
+            android:orientation="horizontal"
+            android:paddingTop="4dp"
+            android:paddingBottom="4dp">
+
+            <LinearLayout
+                android:id="@+id/filter_time_touch"
+                android:layout_width="0dp"
+                android:layout_height="40dp"
+                android:layout_weight="1"
+                android:gravity="center"
+                android:orientation="horizontal"
+                android:background="?attr/selectableItemBackgroundBorderless">
+
+                <TextView
+                    android:id="@+id/tv_filter_time"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/search_time_all"
+                    android:textColor="@color/text_primary"
+                    android:textSize="@dimen/text_size_15" />
+
+                <ImageView
+                    android:id="@+id/iv_filter_time_arrow"
+                    android:layout_width="16dp"
+                    android:layout_height="16dp"
+                    android:layout_marginStart="4dp"
+                    android:src="@drawable/ic_chevron_small" />
+            </LinearLayout>
+
+            <View
+                android:layout_width="1dp"
+                android:layout_height="20dp"
+                android:layout_gravity="center_vertical"
+                android:background="@color/asset_divider" />
+
+            <LinearLayout
+                android:id="@+id/filter_book_touch"
+                android:layout_width="0dp"
+                android:layout_height="40dp"
+                android:layout_weight="1"
+                android:gravity="center"
+                android:orientation="horizontal"
+                android:background="?attr/selectableItemBackgroundBorderless">
+
+                <TextView
+                    android:id="@+id/tv_filter_book"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/all_books"
+                    android:textColor="@color/text_primary"
+                    android:textSize="@dimen/text_size_15" />
+
+                <ImageView
+                    android:id="@+id/iv_filter_book_arrow"
+                    android:layout_width="16dp"
+                    android:layout_height="16dp"
+                    android:layout_marginStart="4dp"
+                    android:src="@drawable/ic_chevron_small" />
+            </LinearLayout>
+
+            <View
+                android:layout_width="1dp"
+                android:layout_height="20dp"
+                android:layout_gravity="center_vertical"
+                android:background="@color/asset_divider" />
+
+            <LinearLayout
+                android:id="@+id/filter_more_touch"
+                android:layout_width="0dp"
+                android:layout_height="40dp"
+                android:layout_weight="1"
+                android:gravity="center"
+                android:orientation="horizontal"
+                android:background="?attr/selectableItemBackgroundBorderless">
+
+                <TextView
+                    android:id="@+id/tv_filter_more"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/search_filter"
+                    android:textColor="@color/text_primary"
+                    android:textSize="@dimen/text_size_15" />
+
+                <ImageView
+                    android:id="@+id/iv_filter_more_arrow"
+                    android:layout_width="16dp"
+                    android:layout_height="16dp"
+                    android:layout_marginStart="4dp"
+                    android:src="@drawable/ic_chevron_small" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <FrameLayout
+            android:id="@+id/layout_search_panel_container"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="12dp"
+            android:layout_marginEnd="12dp"
+            android:layout_marginTop="8dp"
+            android:visibility="gone" />
+
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/layout_search_summary"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="12dp"
+            android:layout_marginEnd="12dp"
+            android:layout_marginTop="12dp"
+            app:cardBackgroundColor="@color/surface_card"
+            app:cardCornerRadius="16dp"
+            app:cardElevation="0dp"
+            app:strokeColor="@color/asset_divider"
+            app:strokeWidth="1dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:paddingBottom="8dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="52dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingStart="16dp"
+                    android:paddingEnd="8dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/search_summary"
+                        android:textColor="@color/text_primary"
+                        android:textSize="16sp"
+                        android:textStyle="bold" />
+
+                    <View
+                        android:layout_width="0dp"
+                        android:layout_height="1dp"
+                        android:layout_weight="1" />
+
+                    <TextView
+                        android:id="@+id/tv_search_count"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="@dimen/text_size_13" />
+
+                    <View
+                        android:layout_width="1dp"
+                        android:layout_height="16dp"
+                        android:layout_marginStart="10dp"
+                        android:layout_marginEnd="2dp"
+                        android:background="@color/asset_divider" />
+
+                    <ImageView
+                        android:id="@+id/btn_search_sort"
+                        android:layout_width="36dp"
+                        android:layout_height="36dp"
+                        android:padding="8dp"
+                        android:src="@drawable/ic_shaixuan"
+                        app:tint="@color/text_secondary"
+                        android:background="?attr/selectableItemBackgroundBorderless" />
+                </LinearLayout>
+
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:background="@color/asset_divider" />
+
+                <GridLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:columnCount="3"
+                    android:paddingTop="4dp">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_columnWeight="1"
+                        android:layout_gravity="fill_horizontal"
+                        android:gravity="center"
+                        android:orientation="vertical"
+                        android:paddingTop="10dp"
+                        android:paddingBottom="10dp">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="@string/total_expense"
+                            android:textColor="@color/text_secondary"
+                            android:textSize="@dimen/text_size_13" />
+
+                        <TextView
+                            android:id="@+id/tv_sum_expense"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="4dp"
+                            android:text="0.00"
+                            android:textColor="@color/text_primary"
+                            android:textSize="16sp"
+                            android:textStyle="bold"
+                            android:maxLines="1"
+                            android:singleLine="true"
+                            android:ellipsize="end" />
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_columnWeight="1"
+                        android:layout_gravity="fill_horizontal"
+                        android:gravity="center"
+                        android:orientation="vertical"
+                        android:paddingTop="10dp"
+                        android:paddingBottom="10dp">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="@string/total_income"
+                            android:textColor="@color/text_secondary"
+                            android:textSize="@dimen/text_size_13" />
+
+                        <TextView
+                            android:id="@+id/tv_sum_income"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="4dp"
+                            android:text="0.00"
+                            android:textColor="@color/text_primary"
+                            android:textSize="16sp"
+                            android:textStyle="bold"
+                            android:maxLines="1"
+                            android:singleLine="true"
+                            android:ellipsize="end" />
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_columnWeight="1"
+                        android:layout_gravity="fill_horizontal"
+                        android:gravity="center"
+                        android:orientation="vertical"
+                        android:paddingTop="10dp"
+                        android:paddingBottom="10dp">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="@string/balance"
+                            android:textColor="@color/text_secondary"
+                            android:textSize="@dimen/text_size_13" />
+
+                        <TextView
+                            android:id="@+id/tv_sum_balance"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="4dp"
+                            android:text="0.00"
+                            android:textColor="@color/text_primary"
+                            android:textSize="16sp"
+                            android:textStyle="bold"
+                            android:maxLines="1"
+                            android:singleLine="true"
+                            android:ellipsize="end" />
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:id="@+id/cell_sum_transfer"
+                        android:layout_width="0dp"
+                        android:layout_columnWeight="1"
+                        android:layout_gravity="fill_horizontal"
+                        android:gravity="center"
+                        android:orientation="vertical"
+                        android:paddingTop="10dp"
+                        android:paddingBottom="10dp">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="@string/transfer_repayment"
+                            android:textColor="@color/text_secondary"
+                            android:textSize="@dimen/text_size_13" />
+
+                        <TextView
+                            android:id="@+id/tv_sum_transfer"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="4dp"
+                            android:text="0.00"
+                            android:textColor="@color/text_primary"
+                            android:textSize="16sp"
+                            android:textStyle="bold"
+                            android:maxLines="1"
+                            android:singleLine="true"
+                            android:ellipsize="end" />
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:id="@+id/cell_sum_refund"
+                        android:layout_width="0dp"
+                        android:layout_columnWeight="1"
+                        android:layout_gravity="fill_horizontal"
+                        android:gravity="center"
+                        android:orientation="vertical"
+                        android:paddingTop="10dp"
+                        android:paddingBottom="10dp">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="@string/refund"
+                            android:textColor="@color/text_secondary"
+                            android:textSize="@dimen/text_size_13" />
+
+                        <TextView
+                            android:id="@+id/tv_sum_refund"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="4dp"
+                            android:text="0.00"
+                            android:textColor="@color/text_primary"
+                            android:textSize="16sp"
+                            android:textStyle="bold"
+                            android:maxLines="1"
+                            android:singleLine="true"
+                            android:ellipsize="end" />
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:id="@+id/cell_sum_excluded"
+                        android:layout_width="0dp"
+                        android:layout_columnWeight="1"
+                        android:layout_gravity="fill_horizontal"
+                        android:gravity="center"
+                        android:orientation="vertical"
+                        android:paddingTop="10dp"
+                        android:paddingBottom="10dp">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="@string/search_excluded_stats"
+                            android:textColor="@color/text_secondary"
+                            android:textSize="@dimen/text_size_13" />
+
+                        <TextView
+                            android:id="@+id/tv_sum_excluded"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="4dp"
+                            android:text="0.00"
+                            android:textColor="@color/text_primary"
+                            android:textSize="16sp"
+                            android:textStyle="bold"
+                            android:maxLines="1"
+                            android:singleLine="true"
+                            android:ellipsize="end" />
+                    </LinearLayout>
+                </GridLayout>
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
 
         <androidx.recyclerview.widget.RecyclerView
             android:id="@+id/rv_bill_search_results"
             android:layout_width="match_parent"
             android:layout_height="0dp"
             android:layout_weight="1"
+            android:layout_marginTop="12dp"
             android:clipToPadding="false"
             android:paddingStart="12dp"
             android:paddingEnd="12dp"
@@ -73,8 +472,8 @@
             android:layout_height="wrap_content"
             android:gravity="center"
             android:padding="24dp"
-            android:text="@string/no_matching_bills"
-            android:textColor="#9AA1AA"
+            android:text="@string/search_no_result_hint"
+            android:textColor="@color/text_secondary"
             android:textSize="@dimen/text_size_14"
             android:visibility="gone" />
     </LinearLayout>

@@ -10,6 +10,10 @@
 
 - [`backup-restore-rules.md`](backup-restore-rules.md)：恢复判定规则、共享账本冲突面、覆盖恢复的依赖与不变量
 
+## 账单搜索
+
+- [`bill-search.md`](bill-search.md)：对标钱迹的搜索页实现（过滤面板、汇总口径、分组排序、弹窗复用、与钱迹的差异）
+
 ## 运维与发布
 
 - [`release-regression-checklist.md`](operations/release-regression-checklist.md)

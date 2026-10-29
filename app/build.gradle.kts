@@ -13,6 +13,9 @@ val keystorePropertiesFile = rootProject.file("key.properties")
 if (keystorePropertiesFile.exists()) {
     keystoreProperties.load(FileInputStream(keystorePropertiesFile))
 }
+// key.properties 是本机 signing 配置（gitignored）；缺失时跳过 release 签名，
+// debug 照常可用。注意：原 release-keystore 丢失后即使重建，签名也会变化。
+val hasReleaseKey = keystorePropertiesFile.exists()
 
 android {
     namespace = "com.taostudio.tapaccounting"
@@ -32,12 +35,14 @@ android {
         }
     }
 
-    signingConfigs {
-        create("release") {
-            keyAlias = keystoreProperties["keyAlias"] as String
-            keyPassword = keystoreProperties["keyPassword"] as String
-            storeFile = file(keystoreProperties["storeFile"] as String)
-            storePassword = keystoreProperties["storePassword"] as String
+    if (hasReleaseKey) {
+        signingConfigs {
+            create("release") {
+                keyAlias = keystoreProperties["keyAlias"] as String
+                keyPassword = keystoreProperties["keyPassword"] as String
+                storeFile = file(keystoreProperties["storeFile"] as String)
+                storePassword = keystoreProperties["storePassword"] as String
+            }
         }
     }
 
@@ -45,7 +50,7 @@ android {
         getByName("debug") {
         }
         getByName("release") {
-            signingConfig = signingConfigs.getByName("release")
+            if (hasReleaseKey) signingConfig = signingConfigs.getByName("release")
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")

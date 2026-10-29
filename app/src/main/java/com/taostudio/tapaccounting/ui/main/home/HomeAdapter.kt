@@ -86,6 +86,8 @@ class HomeAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
     private val amountColorOther = Color.parseColor(COLOR_AMOUNT_OTHER)
     private val iconColorOther = Color.parseColor(COLOR_ICON_OTHER)
 
+    enum class GroupMode { DAY, MONTH, NONE }
+
     sealed class ListItem {
         // 用于承载首页图表占位项。
         object Chart : ListItem()
@@ -113,8 +115,14 @@ class HomeAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
     // 控制是否在列表顶部显示图表项。
     var showChart: Boolean = false
     var showEmptyState: Boolean = false
+    /** 搜索页分组模式：按天 / 按月 / 不分组（不分组时只出账单行）。 */
+    var groupMode: GroupMode = GroupMode.DAY
+    /** false = 按时间升序（钱迹汇总右上角排序钮切换）。 */
+    var sortDescending: Boolean = true
     private var lastSubmittedShowChart: Boolean = false
     private var lastSubmittedShowEmptyState: Boolean = false
+    private var lastSubmittedGroupMode: GroupMode = GroupMode.DAY
+    private var lastSubmittedSortDescending: Boolean = true
 
     var isMultiSelectMode: Boolean = false
     val selectedBills = mutableSetOf<Bill>()
@@ -214,11 +222,16 @@ class HomeAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
                     .filter { it.id !in activeIds }
                     .map { DisplayBill(it, isDeprecated = true) }
             )
-        }.sortedByDescending { it.bill.time }
+        }.let { list ->
+            if (sortDescending) list.sortedByDescending { it.bill.time }
+            else list.sortedBy { it.bill.time }
+        }
         // 数据和展示状态都没变时，直接跳过，避免无效刷新。
         if (rawBills == combinedBills &&
             lastSubmittedShowChart == showChart &&
-            lastSubmittedShowEmptyState == showEmptyState
+            lastSubmittedShowEmptyState == showEmptyState &&
+            lastSubmittedGroupMode == groupMode &&
+            lastSubmittedSortDescending == sortDescending
         ) {
             Log.d("HomePerf", "submitList: skip (list unchanged)")
             onListDispatched?.invoke()
@@ -254,6 +267,8 @@ class HomeAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
                 rawBills.addAll(combinedBills)
                 lastSubmittedShowChart = includeChart
                 lastSubmittedShowEmptyState = includeEmptyState
+                lastSubmittedGroupMode = groupMode
+                lastSubmittedSortDescending = sortDescending
                 items.clear()
                 items.addAll(newItems)
 
@@ -278,8 +293,9 @@ class HomeAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
         includeChart: Boolean,
         includeEmptyState: Boolean
     ): List<ListItem> {
-        val dfKey = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
-        val dfDisplay = SimpleDateFormat("MM.dd", Locale.getDefault())
+        val isMonth = groupMode == GroupMode.MONTH
+        val dfKey = SimpleDateFormat(if (isMonth) "yyyy-MM" else "yyyy-MM-dd", Locale.getDefault())
+        val dfDisplay = SimpleDateFormat(if (isMonth) "yyyy年MM月" else "MM.dd", Locale.getDefault())
         val dfWeekday = SimpleDateFormat("E", Locale.CHINESE)
         val newItems = mutableListOf<ListItem>()
         // 趋势卡在前，空账单提示在后；二者可同时存在。
@@ -295,6 +311,10 @@ class HomeAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
             )
         }
         if (combinedBills.isEmpty()) return newItems
+        if (groupMode == GroupMode.NONE) {
+            combinedBills.forEach { displayBill -> newItems.add(ListItem.Item(displayBill)) }
+            return newItems
+        }
 
         val grouped = combinedBills.groupBy { dfKey.format(Date(it.bill.time)) }
         for ((dateKey, billsInDay) in grouped) {
@@ -317,7 +337,7 @@ class HomeAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
             newItems.add(
                 ListItem.Header(
                     dateStr = dfDisplay.format(sampleDate),
-                    weekdayStr = dfWeekday.format(sampleDate),
+                    weekdayStr = if (isMonth) "" else dfWeekday.format(sampleDate),
                     income = dailyIncome,
                     expense = dailyExpense,
                     rawDateKey = dateKey
@@ -585,7 +605,7 @@ class HomeAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
         }
 
         fun bind(header: ListItem.Header, position: Int) {
-            tvDate.text = "${header.dateStr} ${header.weekdayStr}"
+            tvDate.text = "${header.dateStr} ${header.weekdayStr}".trim()
 
             val summaryBuilder = StringBuilder()
             if (header.income > 0) {

@@ -477,6 +477,249 @@ object OverlayDialogs {
         }
     }
 
+    /**
+     * 分类多选版（搜索筛选专用）：视觉复用单选宫格（底部弹出、5 列图标宫格、
+     * 点一级展开二级子面板），选择态同款品牌高亮。
+     *
+     * - 父级点按只展开/收起，不直接选中；子面板首格「全选」勾选整棵子树
+     *   （含父级名，保证父级直挂账单也能命中）；
+     * - 无二级的父级点按直接勾选自身；
+     * - 结果是名字集合（一级名代表整棵子树），底部确认为准。
+     * 单选老逻辑（[showGridCategoryPicker]）不受影响。
+     */
+    fun showCategoryMultiPicker(
+        ctx: Context,
+        initialSelected: Set<String>,
+        onConfirm: (Set<String>) -> Unit
+    ) {
+        val themeContext = ContextThemeWrapper(ctx, R.style.Theme_TapAccounting)
+        val view = LayoutInflater.from(themeContext).inflate(R.layout.dialog_category_picker, null)
+        val dialog = AlertDialog.Builder(themeContext).setView(view).create()
+        val container = view.findViewById<LinearLayout>(R.id.container_categories)
+        val scrollCategories = view.findViewById<ScrollView>(R.id.scroll_categories)
+        val btnConfirm = view.findViewById<Button>(R.id.btn_confirm_category)
+        val tvTip = view.findViewById<TextView>(R.id.tv_sort_category_tip)
+        view.findViewById<TextView>(R.id.dialog_title).text = ctx.getString(R.string.search_pick_category)
+
+        val selected = initialSelected.toMutableSet()
+        val expanded = mutableSetOf<String>()
+
+        fun styleCell(itemView: View, icon: String, isSelected: Boolean, dbType: Int) {
+            val normalIconColor = if (dbType == 1) BillColors.income else BillColors.expense
+            val normalBgColor = if (dbType == 1) Color.parseColor("#E8F5E9") else Color.parseColor("#FFEBEE")
+            val ivIcon = itemView.findViewById<ImageView>(R.id.iv_category_icon)
+            itemView.findViewById<TextView>(R.id.tv_category_name).apply {
+                setTextColor(if (isSelected) Color.parseColor("#5C6BC0") else Color.parseColor("#333333"))
+            }
+            ivIcon.setColorFilter(if (isSelected) Color.parseColor("#5C6BC0") else normalIconColor)
+            itemView.findViewById<View>(R.id.layout_category_icon_container).background =
+                android.graphics.drawable.GradientDrawable().apply {
+                    shape = android.graphics.drawable.GradientDrawable.OVAL
+                    setColor(if (isSelected) Color.parseColor("#E8EAF6") else normalBgColor)
+                }
+            loadSafeCategoryIcon(ctx, icon, ivIcon)
+        }
+
+        fun refreshChrome() {
+            tvTip.visibility = View.VISIBLE
+            tvTip.text = if (selected.isEmpty()) {
+                ctx.getString(R.string.search_multi_picker_hint)
+            } else {
+                ctx.getString(R.string.search_multi_picked_fmt, selected.size)
+            }
+            btnConfirm.visibility = View.VISIBLE
+            btnConfirm.text = if (selected.isEmpty()) {
+                ctx.getString(R.string.confirm_btn)
+            } else {
+                "${ctx.getString(R.string.confirm_btn)}（${selected.size}）"
+            }
+        }
+
+        fun isParentSelected(node: com.taostudio.tapaccounting.CategoryNode): Boolean {
+            if (node.name in selected) return true
+            if (node.subs.isEmpty()) return false
+            return node.subs.all { it.name in selected }
+        }
+
+        fun toggleSubtree(node: com.taostudio.tapaccounting.CategoryNode, check: Boolean) {
+            if (check) {
+                selected.add(node.name)
+                node.subs.forEach { selected.add(it.name) }
+            } else {
+                selected.remove(node.name)
+                node.subs.forEach { selected.remove(it.name) }
+            }
+        }
+
+        fun sectionKey(dbType: Int, name: String) = "$dbType::$name"
+
+        fun buildSubPanel(
+            node: com.taostudio.tapaccounting.CategoryNode,
+            dbType: Int,
+            rerender: () -> Unit
+        ): View {
+            val panel = LinearLayout(ctx).apply {
+                orientation = LinearLayout.VERTICAL
+                setBackgroundResource(R.drawable.bg_rule_page_section)
+                setPadding(10, 10, 10, 8)
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply { setMargins(0, 2, 0, 4) }
+            }
+            val grid = android.widget.GridLayout(ctx).apply { columnCount = 5 }
+            // 首格「全选」：勾选整棵子树（含父级名）。
+            val allCell = LayoutInflater.from(ctx).inflate(R.layout.item_category_grid, grid, false)
+            val allSelected = node.name in selected &&
+                (node.subs.isEmpty() || node.subs.all { it.name in selected })
+            allCell.findViewById<TextView>(R.id.tv_category_name).apply {
+                text = ctx.getString(R.string.select_all)
+                setTextColor(if (allSelected) Color.parseColor("#5C6BC0") else Color.parseColor("#333333"))
+            }
+            val allIcon = allCell.findViewById<ImageView>(R.id.iv_category_icon)
+            allIcon.setColorFilter(
+                if (allSelected) Color.parseColor("#5C6BC0") else Color.parseColor("#90A4AE")
+            )
+            allCell.findViewById<View>(R.id.layout_category_icon_container).background =
+                android.graphics.drawable.GradientDrawable().apply {
+                    shape = android.graphics.drawable.GradientDrawable.OVAL
+                    setColor(if (allSelected) Color.parseColor("#E8EAF6") else Color.parseColor("#F0F2F5"))
+                }
+            allIcon.setImageResource(R.drawable.ic_select_all)
+            allCell.setOnClickListener {
+                toggleSubtree(node, !allSelected)
+                refreshChrome()
+                rerender()
+            }
+            grid.addView(
+                allCell,
+                android.widget.GridLayout.LayoutParams(
+                    android.widget.GridLayout.spec(android.widget.GridLayout.UNDEFINED, 1f),
+                    android.widget.GridLayout.spec(android.widget.GridLayout.UNDEFINED, 1f)
+                ).apply { width = 0 }
+            )
+            node.subs.forEach { sub ->
+                val item = LayoutInflater.from(ctx).inflate(R.layout.item_category_grid, grid, false)
+                item.findViewById<TextView>(R.id.tv_category_name).text = sub.name
+                styleCell(item, sub.icon, sub.name in selected, dbType)
+                item.setOnClickListener {
+                    if (sub.name in selected) selected.remove(sub.name)
+                    else selected.add(sub.name)
+                    refreshChrome()
+                    rerender()
+                }
+                grid.addView(
+                    item,
+                    android.widget.GridLayout.LayoutParams(
+                        android.widget.GridLayout.spec(android.widget.GridLayout.UNDEFINED, 1f),
+                        android.widget.GridLayout.spec(android.widget.GridLayout.UNDEFINED, 1f)
+                    ).apply { width = 0 }
+                )
+            }
+            val remainder = (node.subs.size + 1) % 5
+            if (remainder != 0) {
+                for (i in 0 until (5 - remainder)) {
+                    grid.addView(
+                        View(ctx),
+                        android.widget.GridLayout.LayoutParams(
+                            android.widget.GridLayout.spec(android.widget.GridLayout.UNDEFINED, 1f),
+                            android.widget.GridLayout.spec(android.widget.GridLayout.UNDEFINED, 1f)
+                        ).apply { width = 0 }
+                    )
+                }
+            }
+            panel.addView(grid)
+            return panel
+        }
+
+        fun renderSection(
+            title: String,
+            categories: List<com.taostudio.tapaccounting.CategoryNode>,
+            dbType: Int,
+            rerender: () -> Unit
+        ) {
+            val header = TextView(ctx).apply {
+                text = title
+                setTextColor(Color.parseColor("#8A93A0"))
+                textSize = 13f
+                setPadding(4, 10, 4, 2)
+            }
+            container.addView(header)
+            categories.chunked(5).forEach { row ->
+                val rowLayout = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL }
+                row.forEach { cat ->
+                    val itemView = LayoutInflater.from(ctx).inflate(R.layout.item_category_grid, rowLayout, false)
+                    itemView.findViewById<TextView>(R.id.tv_category_name).text = cat.name
+                    styleCell(itemView, cat.icon, isParentSelected(cat), dbType)
+                    itemView.setOnClickListener {
+                        if (cat.subs.isEmpty()) {
+                            if (cat.name in selected) selected.remove(cat.name)
+                            else selected.add(cat.name)
+                            refreshChrome()
+                            rerender()
+                        } else {
+                            val key = sectionKey(dbType, cat.name)
+                            if (key in expanded) expanded.remove(key) else expanded.add(key)
+                            rerender()
+                        }
+                    }
+                    rowLayout.addView(itemView, LinearLayout.LayoutParams(0, -2, 1f))
+                }
+                if (row.size < 5) {
+                    for (i in 0 until (5 - row.size)) rowLayout.addView(View(ctx), LinearLayout.LayoutParams(0, -2, 1f))
+                }
+                container.addView(rowLayout)
+                row.forEach { cat ->
+                    if (cat.subs.isNotEmpty() && sectionKey(dbType, cat.name) in expanded) {
+                        container.addView(buildSubPanel(cat, dbType, rerender))
+                    }
+                }
+            }
+        }
+
+        var expenseTree: List<com.taostudio.tapaccounting.CategoryNode> = emptyList()
+        var incomeTree: List<com.taostudio.tapaccounting.CategoryNode> = emptyList()
+        fun rerender() {
+            container.removeAllViews()
+            renderSection(ctx.getString(R.string.search_type_expense), expenseTree, 0, ::rerender)
+            renderSection(ctx.getString(R.string.search_type_income), incomeTree, 1, ::rerender)
+        }
+
+        tvTip.setOnClickListener {
+            if (selected.isNotEmpty()) {
+                selected.clear()
+                refreshChrome()
+                rerender()
+            }
+        }
+        btnConfirm.setOnClickListener {
+            onConfirm(selected.toSet())
+            dialog.dismiss()
+        }
+
+        CoroutineScope(Dispatchers.Main).launch {
+            val repo = com.taostudio.tapaccounting.data.repository.CategoryRepository(
+                AppDatabase.getDatabase(ctx).categoryDao()
+            )
+            val trees = withContext(Dispatchers.IO) {
+                repo.getCategoryTree(0) to repo.getCategoryTree(1)
+            }
+            expenseTree = trees.first
+            incomeTree = trees.second
+            refreshChrome()
+            rerender()
+            applyBottomPickerEnterAnimation(dialog, view, scrollCategories)
+            showStyledDialog(
+                dialog = dialog,
+                ctx = ctx,
+                widthRatio = 0.9f,
+                gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL,
+                y = 150,
+                clearDecorPadding = true
+            )
+        }
+    }
+
     private fun createSubPanel(
         ctx: Context,
         parent: CategoryNode,

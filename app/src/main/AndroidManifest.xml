@@ -176,7 +176,7 @@
         <activity android:name=".ui.activity.RefundActivity" android:label="退款" />
     <activity android:name=".ui.activity.EditBillActivity" android:label="编辑账单" android:theme="@style/Theme.TapAccounting.Transparent" />
     <activity android:name=".ui.main.home.CalendarActivity" android:label="日历账单" android:theme="@style/Theme.TapAccounting.AppCompatNoActionBar"/>
-    <activity android:name=".ui.main.home.BillSearchActivity" android:label="搜索账单" android:windowSoftInputMode="stateVisible|adjustResize" android:theme="@style/Theme.TapAccounting.AppCompatNoActionBar"/>
+    <activity android:name=".ui.main.home.BillSearchActivity" android:label="搜索账单" android:windowSoftInputMode="stateVisible|adjustResize" android:theme="@style/Theme.TapAccounting"/>
     <activity android:name=".ui.activity.BookOverviewActivity" android:label="账本总览" android:theme="@style/Theme.TapAccounting.AppCompatNoActionBar"/>
         <activity
             android:name="com.yalantis.ucrop.UCropActivity"

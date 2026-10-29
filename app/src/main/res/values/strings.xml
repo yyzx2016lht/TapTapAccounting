@@ -659,6 +659,50 @@
     <string name="standalone_detail">独立详情页</string>
     <string name="standalone_detail_hint">开启后账单详情使用独立页面而非弹窗</string>
 
+    <!-- 账单搜索（对标钱迹搜索页） -->
+    <string name="title_bill_search">搜索账单</string>
+    <string name="hint_search_bill_full">搜索：分类、备注、账户、金额</string>
+    <string name="search_summary">搜索汇总</string>
+    <string name="search_bills_count_fmt">%1$d笔账单</string>
+    <string name="search_time_all">全部</string>
+    <string name="search_group">分组</string>
+    <string name="search_group_day">按天</string>
+    <string name="search_group_month">按月</string>
+    <string name="search_group_none">不分组</string>
+    <string name="search_bill_date">账单日期</string>
+    <string name="search_preset_month">本月</string>
+    <string name="search_preset_last_month">上月</string>
+    <string name="search_preset_year">今年</string>
+    <string name="search_preset_last_year">去年</string>
+    <string name="search_custom">自定义</string>
+    <string name="search_start_date">开始日期</string>
+    <string name="search_end_date">截止日期</string>
+    <string name="search_select_book">选择账本</string>
+    <string name="search_books_multi_fmt">%1$d个账本</string>
+    <string name="search_filter">筛选</string>
+    <string name="search_asset">账户</string>
+    <string name="search_category">分类</string>
+    <string name="search_amount">金额</string>
+    <string name="search_min_amount">最小金额</string>
+    <string name="search_max_amount">最大金额</string>
+    <string name="search_bill_type">账单类型</string>
+    <string name="search_type_all">全部</string>
+    <string name="search_type_expense">支出</string>
+    <string name="search_type_income">收入</string>
+    <string name="search_type_transfer">转账</string>
+    <string name="search_type_repay">还款</string>
+    <string name="search_type_refund">退款</string>
+    <string name="search_reset">重置</string>
+    <string name="search_excluded_stats">不计收支</string>
+    <string name="search_no_result_hint">没有匹配的账单，换个关键词或调整筛选试试</string>
+    <string name="search_pick_category">选择分类</string>
+    <string name="search_multi_picker_hint">点一级分类展开二级</string>
+    <string name="search_multi_picked_fmt">已选 %1$d 项（点此清空）</string>
+    <string name="search_pick_account">选择账户</string>
+    <string name="search_pick_account_count_fmt">选择账户（%1$d）</string>
+    <string name="search_selected_items_fmt">%1$d项</string>
+    <string name="search_clear_all">清空</string>
+
     <!-- 聊天页面 -->
     <string name="subtotal">小计</string>
     <string name="hint_search_chat">搜索聊天记录…</string>

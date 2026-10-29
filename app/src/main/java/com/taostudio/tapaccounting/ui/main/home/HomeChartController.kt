@@ -19,6 +19,7 @@ import com.github.mikephil.charting.data.BarEntry
 import com.github.mikephil.charting.formatter.ValueFormatter
 import com.taostudio.tapaccounting.AmountFormatHelper
 import com.taostudio.tapaccounting.Prefs
+import com.taostudio.tapaccounting.logic.BillStatsContribution
 import com.taostudio.tapaccounting.R
 import com.taostudio.tapaccounting.data.local.entity.Bill
 import android.graphics.Typeface
@@ -189,6 +190,8 @@ internal class HomeChartController(
 
         transactions.forEach {
             if (it.subType == Bill.SUBTYPE_REFUND) return@forEach
+            // 不计入统计只影响资产金额，不进入首页汇总。
+            if (!BillStatsContribution.countsInStats(it)) return@forEach
             val amountCny = it.amount * it.exchangeRate
             if (it.type == Bill.TYPE_EXPENSE) expense += amountCny
             else if (it.type == Bill.TYPE_INCOME) income += amountCny
@@ -280,6 +283,8 @@ internal class HomeChartController(
 
         for (t in transactions) {
             if (t.subType == Bill.SUBTYPE_REFUND) continue
+            // 不计入统计只影响资产金额，不进入趋势卡。
+            if (!BillStatsContribution.countsInStats(t)) continue
             val dStr = dfChartKey.format(Date(t.time))
             val amount = (t.amount * t.exchangeRate).toFloat()
             if (t.type == Bill.TYPE_EXPENSE) {

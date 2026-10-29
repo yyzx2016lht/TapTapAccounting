@@ -59,13 +59,13 @@ class BookPeriodTotalsTest {
     }
 
     @Test
-    fun excludedBillsAreCountedButNotSummed() {
+    fun excludedBillsAreNeitherCountedNorSummed() {
         val totals = BookPeriodTotals.of(
             listOf(bill("伙食账本", amount = 30.0, excludeFromStats = true)),
             setOf("伙食账本")
         )
         assertEquals(0.0, totals.expense, 0.001)
-        assertEquals(1, totals.count)
+        assertEquals(0, totals.count)
     }
 
     @Test

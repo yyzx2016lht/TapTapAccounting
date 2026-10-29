@@ -17,6 +17,8 @@ data class BookPeriodTotals(
             var count = 0
             bills.forEach { bill ->
                 if (BookAccountManager.normalizeBookName(bill.bookName) !in normalizedBooks) return@forEach
+                // 不计入统计：金额与笔数都不计，只影响资产金额。
+                if (!BillStatsContribution.countsInStats(bill)) return@forEach
                 val amount = if (bill.currency == "CNY") bill.amount else bill.amount * bill.exchangeRate
                 val contribution = BillStatsContribution.from(bill, amount)
                 expense += contribution.expense

@@ -90,6 +90,7 @@ interface BillDao {
         WHERE time BETWEEN :startTime AND :endTime
           AND (:bookName = '' OR bookName = :bookName)
           AND excludeFromStats = 0
+          AND subType != :balanceAdjustmentExcludedSubtype
           AND (
               (type = :expenseType AND subType != :refundSubtype)
               OR (subType = :refundSubtype AND relatedBillId IS NULL
@@ -101,7 +102,8 @@ interface BillDao {
         endTime: Long,
         bookName: String,
         expenseType: Int = Bill.TYPE_EXPENSE,
-        refundSubtype: Int = Bill.SUBTYPE_REFUND
+        refundSubtype: Int = Bill.SUBTYPE_REFUND,
+        balanceAdjustmentExcludedSubtype: Int = Bill.SUBTYPE_BALANCE_ADJUSTMENT_EXCLUDED
     ): Double
 
     @Query("""
@@ -118,6 +120,7 @@ interface BillDao {
         WHERE time BETWEEN :startTime AND :endTime
           AND (:bookName = '' OR bookName = :bookName)
           AND excludeFromStats = 0
+          AND subType != :balanceAdjustmentExcludedSubtype
           AND (
               (type = :expenseType AND subType != :refundSubtype)
               OR (subType = :refundSubtype AND relatedBillId IS NULL
@@ -132,7 +135,8 @@ interface BillDao {
     """)
     suspend fun sumBudgetExpenseByCategoryName(
         startTime: Long, endTime: Long, bookName: String, categoryName: String,
-        expenseType: Int = Bill.TYPE_EXPENSE, refundSubtype: Int = Bill.SUBTYPE_REFUND
+        expenseType: Int = Bill.TYPE_EXPENSE, refundSubtype: Int = Bill.SUBTYPE_REFUND,
+        balanceAdjustmentExcludedSubtype: Int = Bill.SUBTYPE_BALANCE_ADJUSTMENT_EXCLUDED
     ): Double
 
     @Query("""
@@ -150,6 +154,7 @@ interface BillDao {
         WHERE time BETWEEN :startTime AND :endTime
           AND (:bookName = '' OR bookName = :bookName)
           AND excludeFromStats = 0
+          AND subType != :balanceAdjustmentExcludedSubtype
           AND (
               (type = :expenseType AND subType != :refundSubtype)
               OR (subType = :refundSubtype AND relatedBillId IS NULL
@@ -164,7 +169,8 @@ interface BillDao {
         bookName: String,
         categoryIds: List<Long>,
         expenseType: Int = Bill.TYPE_EXPENSE,
-        refundSubtype: Int = Bill.SUBTYPE_REFUND
+        refundSubtype: Int = Bill.SUBTYPE_REFUND,
+        balanceAdjustmentExcludedSubtype: Int = Bill.SUBTYPE_BALANCE_ADJUSTMENT_EXCLUDED
     ): List<CategoryExpenseSum>
 
     @Query("""
@@ -182,6 +188,7 @@ interface BillDao {
         WHERE time BETWEEN :startTime AND :endTime
           AND (:bookName = '' OR bookName = :bookName)
           AND excludeFromStats = 0
+          AND subType != :balanceAdjustmentExcludedSubtype
           AND (
               (type = :expenseType AND subType != :refundSubtype)
               OR (subType = :refundSubtype AND relatedBillId IS NULL
@@ -196,7 +203,8 @@ interface BillDao {
         endTime: Long,
         bookName: String,
         expenseType: Int = Bill.TYPE_EXPENSE,
-        refundSubtype: Int = Bill.SUBTYPE_REFUND
+        refundSubtype: Int = Bill.SUBTYPE_REFUND,
+        balanceAdjustmentExcludedSubtype: Int = Bill.SUBTYPE_BALANCE_ADJUSTMENT_EXCLUDED
     ): List<CategoryExpenseSum>
 
     @Query("""

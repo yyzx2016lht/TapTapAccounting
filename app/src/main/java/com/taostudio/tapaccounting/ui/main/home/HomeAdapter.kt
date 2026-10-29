@@ -31,6 +31,7 @@ import com.taostudio.tapaccounting.TextIconRenderer
 import com.taostudio.tapaccounting.data.local.entity.Bill
 import com.taostudio.tapaccounting.logic.CategoryIconUrlCache
 import com.taostudio.tapaccounting.logic.BillDisplayFormatter
+import com.taostudio.tapaccounting.logic.BillStatsContribution
 import com.taostudio.tapaccounting.logic.CurrencyManager
 import com.taostudio.tapaccounting.ui.common.UiMotion
 import com.taostudio.tapaccounting.ui.common.RowModeMotion
@@ -301,6 +302,8 @@ class HomeAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
             var dailyExpense = 0.0
             billsInDay.forEach {
                 if (it.isDeprecated) return@forEach
+                // 不计入统计的账单仍显示在列表里，但不参与日分组头的收/支合计。
+                if (!BillStatsContribution.countsInStats(it.bill)) return@forEach
                 val amountCny = it.bill.amount * it.bill.exchangeRate
                 if (isRefundBill(it.bill)) {
                     dailyIncome += amountCny

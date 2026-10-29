@@ -70,6 +70,7 @@ import com.taostudio.tapaccounting.ui.common.MultiSelectBarSummary
 import com.taostudio.tapaccounting.ui.common.MultiSelectMotion
 import com.taostudio.tapaccounting.ui.common.UiMotion.applyItemPressFeedback
 import com.taostudio.tapaccounting.logic.BillDisplayFormatter
+import com.taostudio.tapaccounting.logic.BillStatsContribution
 import com.taostudio.tapaccounting.logic.CurrencyManager
 import com.taostudio.tapaccounting.logic.BillDeleteHelper
 import com.taostudio.tapaccounting.ui.dialog.ElegantDatePickerSheet
@@ -1375,6 +1376,8 @@ class AssetStatsActivity : AppCompatActivity() {
         var totalRefund = 0.0
 
         bills.forEach { bill ->
+            // 不计入统计只影响资产金额，不进入资产统计页的合计（行仍保留显示）。
+            if (!BillStatsContribution.countsInStats(bill)) return@forEach
             when {
                 bill.subType == Bill.SUBTYPE_REFUND -> {
                     totalRefund += amountInAssetCurrency(bill, assetId, true)
@@ -1396,7 +1399,7 @@ class AssetStatsActivity : AppCompatActivity() {
         tvTotalIncome.text = String.format(Locale.getDefault(), "%s%,.2f", symbol, totalIncome)
         tvTotalTransfer.text = String.format(Locale.getDefault(), "%s%,.2f", symbol, totalTransfer)
         tvTotalRefund.text = String.format(Locale.getDefault(), "%s%,.2f", symbol, totalRefund)
-        tvTotalCount.text = bills.size.toString()
+        tvTotalCount.text = bills.count { BillStatsContribution.countsInStats(it) }.toString()
 
         val balance = totalIncome - totalExpense
         tvBalance.text = String.format(Locale.getDefault(), "%s%,.2f", symbol, balance)
@@ -1614,6 +1617,8 @@ class AssetStatsActivity : AppCompatActivity() {
     }
 
     private fun amountForBar(bill: Bill): Double {
+        // 不计入统计只影响资产金额，不进入柱状图。
+        if (!BillStatsContribution.countsInStats(bill)) return 0.0
         return when (barMode) {
             ChartMode.EXPENSE -> {
                 if (bill.type == Bill.TYPE_EXPENSE && bill.subType != Bill.SUBTYPE_REFUND) {
@@ -1863,6 +1868,8 @@ class AssetStatsActivity : AppCompatActivity() {
     private fun amountForPie(bill: Bill): Double = amountForPieByMode(bill, pieMode)
 
     private fun amountForPieByMode(bill: Bill, mode: ChartMode): Double {
+        // 不计入统计只影响资产金额，不进入饼图与分类占比。
+        if (!BillStatsContribution.countsInStats(bill)) return 0.0
         return when (mode) {
             ChartMode.EXPENSE -> {
                 if (bill.type == Bill.TYPE_EXPENSE && bill.subType != Bill.SUBTYPE_REFUND) {
@@ -1940,6 +1947,8 @@ class AssetStatsActivity : AppCompatActivity() {
         var income = 0.0
         var expense = 0.0
         bills.forEach { bill ->
+            // 分组头小计同样排除不计入统计（行仍保留显示）。
+            if (!BillStatsContribution.countsInStats(bill)) return@forEach
             when {
                 bill.subType == Bill.SUBTYPE_REFUND -> income += amountInAssetCurrency(bill, assetId, true)
                 bill.type == Bill.TYPE_INCOME -> income += amountInAssetCurrency(bill, assetId, true)

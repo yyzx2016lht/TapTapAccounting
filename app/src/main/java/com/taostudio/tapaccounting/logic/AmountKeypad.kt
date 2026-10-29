@@ -155,7 +155,9 @@ class AmountKeypad(
             view.text = "= ${AmountExpression.format(evaluated)}"
             view.visibility = View.VISIBLE
         } else {
-            view.visibility = View.GONE
+            // 占位隐藏：写回空格保持高度，只换文字不触发布局变化。
+            view.text = " "
+            view.visibility = View.INVISIBLE
         }
     }
 

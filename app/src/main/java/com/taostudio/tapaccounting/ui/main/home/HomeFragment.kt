@@ -188,7 +188,6 @@ class HomeFragment : Fragment() {
     private lateinit var swipeRefreshLayout: SwipeRefreshLayout
     private lateinit var ivCalendarView: ImageView
     private lateinit var ivSearchBill: ImageView
-    private lateinit var ivSyncStatus: ImageView
     private lateinit var layoutSyncError: View
     private lateinit var tvSyncError: TextView
     private lateinit var ivBookSwitcher: ImageView
@@ -320,7 +319,6 @@ class HomeFragment : Fragment() {
         tvMonthSelector = view.findViewById(R.id.tvMonthSelector)
         ivCalendarView = view.findViewById(R.id.ivCalendarView)
         ivSearchBill = view.findViewById(R.id.ivSearchBill)
-        ivSyncStatus = view.findViewById(R.id.ivSyncStatus)
         layoutSyncError = view.findViewById(R.id.layoutSyncError)
         tvSyncError = view.findViewById(R.id.tvSyncError)
         ivBookSwitcher = view.findViewById(R.id.ivBookSwitcher)
@@ -552,10 +550,6 @@ class HomeFragment : Fragment() {
             startActivity(intent)
         }
 
-        ivSyncStatus.setOnClickListener {
-            runSharedSync()
-        }
-
         // ivChartSettings 的点击已在 cvChartContainer inflate 时设置，此处无需再设置
 
         refreshController.setupPullToRefresh()
@@ -743,7 +737,7 @@ class HomeFragment : Fragment() {
     }
 
     private fun refreshSharedUi() {
-        if (!isAdded || !::ivSyncStatus.isInitialized) return
+        if (!isAdded) return
         viewLifecycleOwner.lifecycleScope.launch {
             val result = withContext(Dispatchers.IO) {
                 val db = AppDatabase.getDatabase(requireContext().applicationContext)
@@ -756,28 +750,9 @@ class HomeFragment : Fragment() {
                     db.syncStateDao().get(ledger.id) to db.syncQueueDao().count(ledger.id)
                 )
             }
-            ivSyncStatus.visibility = if (result == null) View.GONE else View.VISIBLE
             val state = result?.third?.first
-            val pending = result?.third?.second ?: 0
             layoutSyncError.visibility = if (state?.lastError.isNullOrBlank()) View.GONE else View.VISIBLE
             tvSyncError.text = state?.lastError.orEmpty()
-            ivSyncStatus.contentDescription = when {
-                state?.isSyncing == true -> "同步中"
-                !state?.lastError.isNullOrBlank() -> "同步失败：${state?.lastError}"
-                pending > 0 -> "待上传 $pending 项"
-                else -> "同步完成"
-            }
-        }
-    }
-
-    private fun runSharedSync() {
-        viewLifecycleOwner.lifecycleScope.launch {
-            val ledgerId = withContext(Dispatchers.IO) {
-                AppDatabase.getDatabase(requireContext()).sharedLedgerDao().getByBookName(selectedBookName)?.id
-            } ?: return@launch
-            runCatching { withContext(Dispatchers.IO) { SharedSyncEngine(requireContext().applicationContext, AppDatabase.getDatabase(requireContext())).syncLedger(ledgerId) } }
-            refreshSharedUi()
-            homeViewModel.forceReload(selectedBookName, selectedYear, selectedMonth, currentTimeRange, currentType, !Prefs.isShowHomeTrendCard(requireContext()))
         }
     }
 

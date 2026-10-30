@@ -40,6 +40,10 @@ import java.util.Locale
  */
 class RecurringBillsActivity : AppCompatActivity() {
 
+    companion object {
+        const val EXTRA_OPEN_SUGGESTED = "open_suggested"
+    }
+
     private lateinit var db: AppDatabase
     private lateinit var adapter: RecurringPatternAdapter
     private lateinit var rvBills: RecyclerView
@@ -113,7 +117,10 @@ class RecurringBillsActivity : AppCompatActivity() {
             override fun onTabReselected(tab: TabLayout.Tab?) {}
         })
 
-        selectStatusTab(RecurringStatus.CONFIRMED)
+        selectStatusTab(
+            if (intent.getBooleanExtra(EXTRA_OPEN_SUGGESTED, false)) RecurringStatus.SUGGESTED
+            else RecurringStatus.CONFIRMED
+        )
     }
 
     private fun bindBulkSelection(count: Int) {

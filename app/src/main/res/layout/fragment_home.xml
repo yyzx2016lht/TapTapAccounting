@@ -518,21 +518,6 @@
                         android:padding="7dp"
                         android:src="@drawable/ic_home_search"
                         app:tint="#FFFFFF" />
-
-                    <ImageView
-                        android:id="@+id/ivSyncStatus"
-                        android:layout_width="36dp"
-                        android:layout_height="36dp"
-                        android:layout_below="@id/ivSearchBill"
-                        android:layout_alignParentEnd="true"
-                        android:layout_marginTop="4dp"
-                        android:background="?attr/selectableItemBackgroundBorderless"
-                        android:clickable="true"
-                        android:focusable="true"
-                        android:padding="7dp"
-                        android:src="@drawable/ic_sync_status"
-                        android:visibility="gone"
-                        app:tint="#FFFFFF" />
                 </RelativeLayout>
 
             </androidx.coordinatorlayout.widget.CoordinatorLayout>

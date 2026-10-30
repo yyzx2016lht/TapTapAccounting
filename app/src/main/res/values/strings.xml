@@ -2351,6 +2351,8 @@
     <string name="recurring_status_due_soon">近期可能扣款</string>
     <string name="recurring_empty_pending">没有待确认的周期账单</string>
     <string name="recurring_empty_mine">还没有周期账单，点右上角添加</string>
+    <string name="recurring_suggestion_found_fmt">发现 %1$d 个疑似周期账单</string>
+    <string name="recurring_suggestion_view">去确认</string>
     <string name="recurring_empty_confirmed">没有已确认的周期账单</string>
     <string name="recurring_empty_dismissed">没有已忽略的周期账单</string>
     <string name="recurring_view_bills">查看账单</string>

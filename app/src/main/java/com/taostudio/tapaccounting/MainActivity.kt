@@ -50,6 +50,7 @@ import com.taostudio.tapaccounting.ui.main.stats.StatsFragment
 import com.taostudio.tapaccounting.ui.main.assets.AssetsFragment
 import com.taostudio.tapaccounting.ui.main.profile.ProfileFragment
 import com.taostudio.tapaccounting.ui.recurring.RecurringDuePromptController
+import com.taostudio.tapaccounting.ui.recurring.RecurringSuggestionNotice
 import com.taostudio.tapaccounting.ui.SensitivityActivity
 import com.google.android.material.textfield.TextInputLayout
 import kotlin.math.abs
@@ -677,6 +678,7 @@ class MainActivity : AppCompatActivity() {
         refreshBottomNavigationTabs()
         swipeContainer.post {
             RecurringDuePromptController.maybeShow(this)
+            RecurringSuggestionNotice.maybeShow(this, bottomNavigationView)
             BillUndoController.consumePending(findViewById(android.R.id.content)) {
                 refreshTransactionsAfterUndo()
             }

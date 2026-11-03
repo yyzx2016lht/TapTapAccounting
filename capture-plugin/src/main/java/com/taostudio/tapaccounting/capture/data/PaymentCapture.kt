@@ -29,6 +29,8 @@ data class PaymentCapture(
     val paymentMethodRaw: String? = null,
     val assetId: Long? = null,
     val assetName: String? = null,
+    /** 转账/还款的转入资产名；普通收支为 null。 */
+    val toAssetName: String? = null,
     val paidAt: Long,
     val capturedAt: Long,
     val bookName: String? = null,

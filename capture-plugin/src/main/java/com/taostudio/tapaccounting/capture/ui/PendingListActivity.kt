@@ -215,7 +215,8 @@ class PendingListActivity : Activity() {
             if (item.needsAmount) append("　· 待补金额")
             if (item.billType == null) append("　· 待手动选择类型")
             if (isRefund(item)) append("　· 待关联原支出")
-            item.assetName?.let { append("　· 资产：").append(it) }
+            item.assetName?.let { append(" · 资产：").append(it) }
+            item.toAssetName?.let { append(" · 转入：").append(it) }
         }
         row.addView(secondaryText(statusLine))
 
@@ -514,6 +515,7 @@ class PendingListActivity : Activity() {
             put("amount", (item.amountCents ?: 0L) / 100.0)
             put("currency", item.currency)
             item.assetName?.let { put("asset_name", it) }
+            item.toAssetName?.let { put("to_asset_name", it) }
             put("time", prefillTimeFormat.format(Date(item.paidAt)))
             put("remarks", item.note ?: "")
             item.bookName?.let { put("book_name", it) }

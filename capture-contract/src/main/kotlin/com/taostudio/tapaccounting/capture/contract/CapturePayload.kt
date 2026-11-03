@@ -21,6 +21,8 @@ data class CapturePayload(
     val merchant: String? = null,
     /** 原始支付方式，如“零钱”“招商银行储蓄卡(1234)”。 */
     val paymentMethodRaw: String? = null,
+    /** 转账/还款的转入资产名；规则里的 accountNameTo。 */
+    val toAssetName: String? = null,
     /** 支付时间（毫秒）；缺失时用捕获时间。 */
     val paidAt: Long,
     /** 捕获时间（毫秒）。 */

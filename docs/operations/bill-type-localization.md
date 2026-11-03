@@ -270,9 +270,12 @@ AutoAccounting 的做法：
 本插件的对应实现：
 
 - `CaptureForwarder` 已有 30 秒 raw MD5 去重。
-- `CaptureIngestProvider` 现在**只把规则命中或显式带类型的 payload 建成待记**；`NoMatch` 只记日志，不生成账单。
+- `CaptureIngestProvider` 现在**只把规则命中或显式带类型的 payload 建成待记**；`NoMatch` 只写历史，不生成账单。
 - `CaptureRepository` 按 `source + sourceTxnId` 幂等；转账幂等键为 `transcationid:paysubtype`，转账 `:1` 与退款 `:4` 不再互相覆盖。
-- 转账/退款事件如果是 WCDB `message` 表的 insert，可由现有 hook 直接拿到；AutoAccounting 另有 `TransferHooker`（`onGYNetEnd`）作为转账 UI 回调备用，本插件尚未接，后续按实际漏抓情况补。
+- 新增 `capture_events` 历史表（Room v5）：所有原始事件都保存，带 `matched/ruleName/autoType/localType/amount/merchant/channel`；插件首页新增“历史数据”，可查看和点开原始 JSON。
+- 历史页支持“导入自动记账历史”：从同机 `127.0.0.1:52045/data/list` 分页拉取 WeChat/Alipay 原始事件，按 `md5(rawJson)` 去重，只入历史表，不自动创建账单。
+- 转账/退款事件如果是 WCDB `message` 表的 insert/update，可由现有 hook 直接拿到；已补 `updateWithOnConflict` hook。
+- 已按 AutoAccounting `TransferHooker` 增加 `onGYNetEnd(int, String, JSONObject)` 扫描 hook，接收入账/退款方向（`is_payer=false`），避免和 WCDB 转出重复。
 - 丰巢等非支付 `mMap` 在 hook 侧跳过；RichText 缓存只挂到支付语义的 mMap。
 
 ⚠️ 本次真机问题：AutoAccounting 在 00:08 有两条 `paysubtype=4`、`isSend=0` 的退款且 `match=true`；插件 DB 只有 00:05 的转出。插件进程当时仍加载旧模块（`sourceTxnId` 仍是 8 位 msg id），旧幂等键把退款当重复丢掉。APK 更新后必须**强制停止微信/支付宝再打开**，Xposed 才会加载新类。
@@ -284,7 +287,8 @@ AutoAccounting 的做法：
 - `AssetNameResolver` 把渠道户名折成本地资产；`CategoryNameResolver` 把 AA 分类折成本地分类。
 - 退款直接入账会尝试匹配原支出；匹配不到返回 `needs_refund_link`，留在待关联。
 - 插件“入账”按钮直接调 App `importBills`；转账/还款要求两端资产。
-- 插件 Room v1→v4 迁移、旧数据保留；备用机合成数据验证通过。
+- 插件 Room v1→v5 迁移、旧数据保留；备用机合成数据验证通过。
+- 新增原始事件历史页，可导入 AutoAccounting 历史数据查看；未命中事件不再污染待记。
 
 剩余优化：
 1. 分类别名表目前是保守映射，未知分类留空；后续用真实规则命中的分类统计再补。

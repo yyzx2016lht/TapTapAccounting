@@ -4,6 +4,7 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Update
 
 @Dao
 interface PaymentCaptureDao {
@@ -11,6 +12,9 @@ interface PaymentCaptureDao {
     /** 幂等插入：id 已存在时返回 -1，不覆盖已有记录。 */
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insert(capture: PaymentCapture): Long
+
+    @Update
+    suspend fun update(capture: PaymentCapture): Int
 
     @Query("SELECT * FROM payment_captures ORDER BY paidAt DESC, createdAt DESC LIMIT :limit")
     suspend fun listRecent(limit: Int): List<PaymentCapture>

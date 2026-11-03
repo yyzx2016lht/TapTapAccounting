@@ -166,7 +166,7 @@ internal object ProbeHooker {
         val talker = readString(values, "talker")
         val isSend = readInt(values, "isSend")
         val cache = WechatRichCache.snapshot(now)
-        val txnId = readString(values, "msgSvrId", "msgId")
+        val fallbackTxnId = readString(values, "msgSvrId", "msgId")
 
         // 关键：按 AutoAccounting 规则的 envelope 构造 rawJson，
         // 规则引擎（143/157/156/138/155 等）才能直接命中。
@@ -189,6 +189,20 @@ internal object ProbeHooker {
             else -> ""
         }
         if (rawJson.isBlank()) return
+
+        if (table == TABLE_MESSAGE && type == MSG_TYPE_BOX && !isPaymentMmap(content)) {
+            log("skip non-payment mMap source=${ProbeText.xmlTagText(content, "appname") ?: "-"}")
+            return
+        }
+
+        val txnId = if (
+            table == TABLE_APP_MESSAGE ||
+            (table == TABLE_MESSAGE && type == MSG_TYPE_TRANSFER)
+        ) {
+            WechatEnvelope.transferTxnId(rawJson) ?: fallbackTxnId
+        } else {
+            fallbackTxnId
+        }
 
         val text = listOfNotNull(
             ProbeText.xmlTagText(content, "des"),
@@ -572,6 +586,27 @@ internal object ProbeHooker {
         values.getAsInteger(key) ?: values.getAsString(key)?.trim()?.toIntOrNull()
     } catch (_: Throwable) {
         null
+    }
+
+    /** 消息盒子 mMap 是否是支付/转账语义；丰巢取件、快递、群通知等直接跳过。 */
+    private fun isPaymentMmap(content: String): Boolean {
+        val text = listOfNotNull(
+            ProbeText.xmlTagText(content, "appname"),
+            ProbeText.xmlTagText(content, "title"),
+            ProbeText.xmlTagText(content, "des"),
+            ProbeText.xmlTagText(content, "display_name"),
+        ).joinToString("\n")
+        return listOf(
+            "微信支付",
+            "微信转账",
+            "微信收款",
+            "支付",
+            "付款",
+            "消费",
+            "转账",
+            "收款",
+            "退款",
+        ).any { text.contains(it) }
     }
 
     private fun readString(values: ContentValues, vararg keys: String): String? {

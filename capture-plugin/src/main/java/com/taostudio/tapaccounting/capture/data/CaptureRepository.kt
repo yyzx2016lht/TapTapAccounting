@@ -17,6 +17,25 @@ class CaptureRepository(private val dao: PaymentCaptureDao) {
         // 订单号优先去重；没有订单号时不做“金额+时间”自动合并（见需求 10.1）。
         payload.sourceTxnId?.takeIf { it.isNotBlank() }?.let { txn ->
             dao.findBySourceTxn(payload.source, txn)?.let { existing ->
+                // 同一笔转账会从 WCDB message 与 AppMessage 各来一次：
+                // 先到的可能没有 isSend、无法分类；后到的带类型时补全，不能只丢弃。
+                if (existing.billType == null && payload.billType != null) {
+                    val merged = existing.copy(
+                        amountCents = payload.amountCents ?: existing.amountCents,
+                        merchant = payload.merchant?.takeIf { it.isNotBlank() } ?: existing.merchant,
+                        categoryName = payload.categoryName ?: existing.categoryName,
+                        paymentMethodRaw = payload.paymentMethodRaw ?: existing.paymentMethodRaw,
+                        toAssetName = payload.toAssetName ?: existing.toAssetName,
+                        billType = payload.billType,
+                        subType = payload.subType ?: existing.subType,
+                        needsRefundLink = existing.needsRefundLink || payload.needsRefundLink,
+                        rawJson = payload.rawJson ?: existing.rawJson,
+                        ruleVersion = payload.ruleVersion ?: existing.ruleVersion,
+                        updatedAt = now,
+                    )
+                    dao.update(merged)
+                    return InsertOutcome(merged, inserted = false)
+                }
                 return InsertOutcome(existing, inserted = false)
             }
         }

@@ -22,6 +22,7 @@ import com.taostudio.tapaccounting.data.local.AppDatabase
 import com.taostudio.tapaccounting.data.local.entity.Asset
 import com.taostudio.tapaccounting.data.local.entity.Bill
 import com.taostudio.tapaccounting.data.local.entity.ExternalImport
+import com.taostudio.tapaccounting.logic.AssetNameResolver
 import com.taostudio.tapaccounting.logic.BillMutationService
 import com.taostudio.tapaccounting.logic.DuplicateCaptureException
 import kotlinx.coroutines.Dispatchers
@@ -209,6 +210,7 @@ class CaptureBridgeProvider : ContentProvider() {
                 return errorJson("invalid_prefill", "prefill 不是合法 JSON：${it.message}")
             }
         }
+        val normalizedPrefill = prefill?.let { normalizePrefillAssets(ctx, it) }
 
         // 第一道幂等：已导入过就直接回执，不再开悬浮窗。
         if (captureId != null) {
@@ -225,7 +227,7 @@ class CaptureBridgeProvider : ContentProvider() {
 
         val intent = Intent(ctx, OverlayService::class.java).apply {
             action = OverlayService.ACTION_SHOW_OVERLAY
-            prefill?.let { putExtra(OverlayService.EXTRA_PREFILL, it.toString()) }
+            normalizedPrefill?.let { putExtra(OverlayService.EXTRA_PREFILL, it.toString()) }
             captureId?.let { putExtra(OverlayService.EXTRA_CAPTURE_ID, it) }
             requestId?.let { putExtra(OverlayService.EXTRA_REQUEST_ID, it) }
         }
@@ -448,8 +450,23 @@ class CaptureBridgeProvider : ContentProvider() {
         }
         val trimmed = name?.trim().orEmpty()
         if (trimmed.isEmpty()) return null
-        return db.assetDao().getAssetByName(trimmed)
+        return AssetNameResolver.resolve(db.assetDao().getAllAssetsList(), trimmed)
             ?: throw IllegalArgumentException("asset_not_found:$trimmed")
+    }
+
+    /**
+     * 悬浮窗预填还是渠道原始户名（零钱/招商银行储蓄卡(4852)）；
+     * 在 App 边界折成本地资产名，避免编辑器里选中一个不存在的资产。
+     */
+    private suspend fun normalizePrefillAssets(ctx: Context, source: JSONObject): JSONObject {
+        val assets = AppDatabase.getDatabase(ctx).assetDao().getAllAssetsList()
+        val out = JSONObject(source.toString())
+        for (key in listOf("asset_name", "to_asset_name")) {
+            val raw = out.optString(key, "").trim()
+            if (raw.isEmpty()) continue
+            AssetNameResolver.resolve(assets, raw)?.let { out.put(key, it.name) }
+        }
+        return out
     }
 
     private fun parseImportBill(obj: JSONObject): ImportBill {

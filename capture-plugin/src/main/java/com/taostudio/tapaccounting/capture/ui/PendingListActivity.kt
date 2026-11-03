@@ -514,7 +514,9 @@ class PendingListActivity : Activity() {
             }
             put("amount", (item.amountCents ?: 0L) / 100.0)
             put("currency", item.currency)
-            item.assetName?.let { put("asset_name", it) }
+            // 规则给的渠道名（零钱/招商银行储蓄卡(4852)）先交给 App 做本地资产折算；
+            // assetName 是已经映射过的权威值，有则优先。
+            (item.assetName ?: item.paymentMethodRaw)?.let { put("asset_name", it) }
             item.toAssetName?.let { put("to_asset_name", it) }
             put("time", prefillTimeFormat.format(Date(item.paidAt)))
             put("remarks", item.note ?: "")

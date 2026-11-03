@@ -6,6 +6,7 @@ import android.os.Looper
 import android.os.SystemClock
 import android.webkit.ValueCallback
 import com.taostudio.tapaccounting.capture.contract.CaptureSource
+import dalvik.system.DexFile
 import de.robv.android.xposed.XC_MethodHook
 import de.robv.android.xposed.XposedBridge
 import de.robv.android.xposed.XposedHelpers
@@ -93,6 +94,7 @@ internal object ProbeHooker {
                 hookWechatDatabase(lpparam)
                 hookWechatRichText(lpparam)
                 hookWechatWebView(lpparam)
+                hookWechatRemittance(lpparam)
             }
 
             "com.eg.android.AlipayGphone" -> {
@@ -131,13 +133,45 @@ internal object ProbeHooker {
         } catch (t: Throwable) {
             log("hook unavailable: wcdb.SQLiteDatabase.insertWithOnConflict ($t)")
         }
+
+        // 微信有时不是新 insert，而是 update 转账消息状态（例如转账->退款/收款）。
+        // AutoAccounting 只挂了 insert；这里补上 update，values 不带 content 时自然跳过。
+        try {
+            XposedHelpers.findAndHookMethod(
+                "com.tencent.wcdb.database.SQLiteDatabase",
+                lpparam.classLoader,
+                "updateWithOnConflict",
+                String::class.java,
+                ContentValues::class.java,
+                String::class.java,
+                Array<String>::class.java,
+                Int::class.javaPrimitiveType!!,
+                object : XC_MethodHook() {
+                    override fun afterHookedMethod(param: MethodHookParam) {
+                        try {
+                            val table = param.args.getOrNull(0) as? String ?: return
+                            val values = param.args.getOrNull(1) as? ContentValues ?: return
+                            handleWechatWrite(table, values)
+                        } catch (t: Throwable) {
+                            log("wcdb update handle failed: ${t.javaClass.name}: ${t.message}")
+                        }
+                    }
+                },
+            )
+            log("hook installed: wcdb.SQLiteDatabase.updateWithOnConflict")
+        } catch (t: Throwable) {
+            log("hook unavailable: wcdb.SQLiteDatabase.updateWithOnConflict ($t)")
+        }
     }
 
     private fun handleWechatInsert(param: XC_MethodHook.MethodHookParam) {
         val table = param.args.getOrNull(0) as? String ?: return
-        if (table != TABLE_MESSAGE && table != TABLE_APP_MESSAGE) return
-
         val values = param.args.getOrNull(2) as? ContentValues ?: return
+        handleWechatWrite(table, values)
+    }
+
+    private fun handleWechatWrite(table: String, values: ContentValues) {
+        if (table != TABLE_MESSAGE && table != TABLE_APP_MESSAGE) return
         val type = readInt(values, "type") ?: return
 
         val keep = when (table) {
@@ -241,6 +275,80 @@ internal object ProbeHooker {
             amountCents = amountCents,
             dataType = "DATA",
         )
+    }
+
+    /**
+     * AutoAccounting 的 TransferHooker 等价物：转账详情回调 onGYNetEnd。
+     *
+     * 微信版本/混淆会让类名变化，AutoAccounting 用 DexKit 扫描；这里用 DexFile 枚举
+     * `com.tencent.mm.plugin.remittance.model.*`，找 (int, String, JSONObject) 的 onGYNetEnd。
+     * 只接收入账方向，避免与 WCDB 转出重复；入账/退款是 WCDB 最容易漏的路径。
+     */
+    private fun hookWechatRemittance(lpparam: XC_LoadPackage.LoadPackageParam) {
+        val appInfo = lpparam.appInfo ?: return
+        val paths = buildList {
+            appInfo.sourceDir?.let { add(it) }
+            appInfo.splitSourceDirs?.forEach { add(it) }
+        }
+        for (path in paths) {
+            try {
+                @Suppress("DEPRECATION")
+                val dex = DexFile(path)
+                val entries = dex.entries()
+                while (entries.hasMoreElements()) {
+                    val className = entries.nextElement()
+                    if (!className.startsWith("com.tencent.mm.plugin.remittance.model.")) continue
+                    val clazz = runCatching {
+                        XposedHelpers.findClassIfExists(className, lpparam.classLoader)
+                    }.getOrNull() ?: continue
+                    val method = clazz.declaredMethods.firstOrNull {
+                        it.name == "onGYNetEnd" &&
+                            it.parameterTypes.size == 3 &&
+                            it.parameterTypes[0] == Int::class.javaPrimitiveType &&
+                            it.parameterTypes[1] == String::class.java &&
+                            it.parameterTypes[2] == JSONObject::class.java
+                    } ?: continue
+                    XposedBridge.hookMethod(method, object : XC_MethodHook() {
+                        override fun afterHookedMethod(param: MethodHookParam) {
+                            try {
+                                val json = param.args.getOrNull(2) as? JSONObject ?: return
+                                if (!json.has("is_payer")) return
+                                val isPayer = json.optBoolean("is_payer", false)
+                                // 转出已由 WCDB 覆盖；这里只补齐入账/退款方向，避免双记。
+                                if (isPayer) return
+                                val nameKey = "receiver_name"
+                                val name = json.optString(nameKey, "").trim()
+                                json.put("hookerUser", name)
+                                val cache = WechatRichCache.snapshot(System.currentTimeMillis())
+                                cache?.payTools?.let { json.put("cachedPayTools", it) }
+                                cache?.payMoney?.let { json.put("cachedPayMoney", it) }
+                                cache?.payShop?.let { json.put("cachedPayShop", it) }
+                                json.put("t", System.currentTimeMillis())
+                                val raw = json.toString()
+                                val txn = sequenceOf("transcationid", "transferid", "transfer_id", "transferId")
+                                    .map { json.optString(it, "").trim() }
+                                    .firstOrNull { it.isNotEmpty() && it != "0" }
+                                CaptureForwarder.forward(
+                                    source = CaptureSource.WECHAT,
+                                    rawJson = raw,
+                                    merchant = name.takeIf { it.isNotEmpty() },
+                                    paymentMethodRaw = cache?.payTools,
+                                    sourceTxnId = txn?.let { "$it:in" },
+                                    dataType = "DATA",
+                                )
+                                log("remittance callback captured txn=${txn ?: "-"}")
+                            } catch (t: Throwable) {
+                                log("remittance callback failed: ${t.javaClass.name}: ${t.message}")
+                            }
+                        }
+                    })
+                    log("hook installed: remittance ${clazz.name}.onGYNetEnd")
+                    return
+                }
+            } catch (t: Throwable) {
+                log("remittance scan failed path=$path: ${t.javaClass.name}: ${t.message}")
+            }
+        }
     }
 
     /** 微信支付成功页的 RichText 文本节点（金额/支付方式常在这里）。只缓存，不单独上报。 */

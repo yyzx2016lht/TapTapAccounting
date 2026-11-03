@@ -247,6 +247,36 @@ MIGRATION_3_4: categoryName
 
 本轮没有安装到设备，也没有重跑 2 月 87 条真实样本；87 条支出的保证来自“这些规则名都映射 0/0 + 支出分支未改”。测试全部使用手写假规则名/假金额，没有复制 `.tmp_autoaccounting_pull/` 里的真实个人数据。
 
+## 6.5 AutoAccounting 全链路对照（2026-11-04）
+
+参考源码：
+
+- `app/.../xposed/core/utils/AnalysisUtils.kt`
+- `.../hooks/wechat/hooks/DatabaseHooker.kt`
+- `server/.../db/model/AppDataModel.kt`
+- `server/.../tools/BillService.kt`
+- `server/.../tools/BillManager.kt` / `TransferRecognizer.kt` / `DuplicateDetector.kt`
+
+AutoAccounting 的做法：
+
+1. hook 侧先做 `MD5(raw)` 去重（30 万条窗口），再走支付关键词白名单/黑名单。
+2. 原始事件通过 `JsAPI.analysis` 上报，服务端**每条都写入 `AppDataModel`**；`match=false` 的丰巢、普通通知也会留在数据页，但不生成账单。
+3. 规则命中才生成 `BillInfoModel`；未命中返回“未分析到有效账单”，不弹记账窗。
+4. 账单再走 `BillManager.groupBillInfo`：
+   - `TransferRecognizer` 在时间窗内按金额合并 Income/Expend/Transfer；
+   - `DuplicateDetector` 按金额/时间/类型/渠道合并重复通知。
+5. 最后才做资产映射、分类、保存、悬浮窗/回填。
+
+本插件的对应实现：
+
+- `CaptureForwarder` 已有 30 秒 raw MD5 去重。
+- `CaptureIngestProvider` 现在**只把规则命中或显式带类型的 payload 建成待记**；`NoMatch` 只记日志，不生成账单。
+- `CaptureRepository` 按 `source + sourceTxnId` 幂等；转账幂等键为 `transcationid:paysubtype`，转账 `:1` 与退款 `:4` 不再互相覆盖。
+- 转账/退款事件如果是 WCDB `message` 表的 insert，可由现有 hook 直接拿到；AutoAccounting 另有 `TransferHooker`（`onGYNetEnd`）作为转账 UI 回调备用，本插件尚未接，后续按实际漏抓情况补。
+- 丰巢等非支付 `mMap` 在 hook 侧跳过；RichText 缓存只挂到支付语义的 mMap。
+
+⚠️ 本次真机问题：AutoAccounting 在 00:08 有两条 `paysubtype=4`、`isSend=0` 的退款且 `match=true`；插件 DB 只有 00:05 的转出。插件进程当时仍加载旧模块（`sourceTxnId` 仍是 8 位 msg id），旧幂等键把退款当重复丢掉。APK 更新后必须**强制停止微信/支付宝再打开**，Xposed 才会加载新类。
+
 ## 7. 已完成与剩余优化
 
 已完成：

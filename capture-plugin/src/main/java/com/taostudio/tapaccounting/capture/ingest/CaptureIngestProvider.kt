@@ -52,21 +52,37 @@ class CaptureIngestProvider : ContentProvider() {
             val app = context?.applicationContext as? CaptureApp
                 ?: return ackError("provider not attached")
             AutoAccountingRuleEngine.init(app)
-            val enriched = enrichWithRules(payload)
-            if (enriched == null) {
-                // 与 AutoAccounting 一致：规则未命中的原始数据可以留在调试日志，
-                // 但不能生成“待记账单”。否则丰巢取件/群通知等会污染收件箱。
-                val count = runBlocking(Dispatchers.IO) { app.repository.countPending() }
-                CaptureNotifier.refresh(app, count)
-                return ackIgnored(payload.captureId, count)
-            }
-
+            val analysis = enrichWithRules(payload)
+            val enriched = analysis.payload
             val (outcome, count) = runBlocking(Dispatchers.IO) {
-                val result = app.repository.insert(enriched)
+                // 先留原始事件（AutoAccounting AppDataModel 等价物），
+                // 未命中的丰巢/普通通知只进历史，不建待记。
+                val rawJson = payload.rawJson
+                if (!rawJson.isNullOrBlank()) {
+                    app.eventRepository.insert(
+                        source = payload.source,
+                        rawType = payload.rawType,
+                        rawJson = rawJson,
+                        receivedAt = payload.capturedAt,
+                        matched = analysis.matched,
+                        ruleName = analysis.ruleName,
+                        autoType = analysis.autoType,
+                        localType = enriched?.billType ?: payload.billType,
+                        localSubType = enriched?.subType ?: payload.subType,
+                        amountCents = enriched?.amountCents ?: payload.amountCents,
+                        merchant = enriched?.merchant ?: payload.merchant,
+                        categoryName = enriched?.categoryName ?: payload.categoryName,
+                        channel = analysis.channel,
+                    )
+                }
+                val result = enriched?.let { app.repository.insert(it) }
                 result to app.repository.countPending()
             }
 
             CaptureNotifier.refresh(app, count)
+            if (outcome == null) {
+                return ackIgnored(payload.captureId, count)
+            }
             ackOk(outcome.capture.id, outcome.inserted, count)
         } catch (t: Throwable) {
             Log.w(TAG, "ingest failed", t)
@@ -117,26 +133,42 @@ class CaptureIngestProvider : ContentProvider() {
      * 阶段一（组合 B）：支出/收入/转账/还款/退款都写入待记，并带上本地类型；
      * 规则命中但本地类型无法判断（如 Expend+退款）时不写类型字段，标记待分类。
      */
-    private fun enrichWithRules(payload: CapturePayload): CapturePayload? {
-        val raw = payload.rawJson ?: return payload
-        if (raw.isBlank()) return payload
+    private data class Enriched(
+        val payload: CapturePayload?,
+        val matched: Boolean,
+        val ruleName: String?,
+        val autoType: String?,
+        val channel: String?,
+    )
+
+    private fun enrichWithRules(payload: CapturePayload): Enriched {
+        val raw = payload.rawJson
+        if (raw.isNullOrBlank()) {
+            return Enriched(payload, matched = false, ruleName = null, autoType = null, channel = null)
+        }
 
         val outcome = try {
             AutoAccountingRuleEngine.parse(payload.source, payload.rawType, raw)
         } catch (t: Throwable) {
             Log.w(TAG, "rule engine failed", t)
-            return payload.takeIf { it.billType != null }
+            return Enriched(
+                payload.takeIf { it.billType != null },
+                matched = false,
+                ruleName = null,
+                autoType = null,
+                channel = null,
+            )
         }
 
         return when (outcome) {
             is AutoAccountingRuleEngine.ParseOutcome.NoMatch -> {
                 if (payload.billType == null) {
-                    Log.i(TAG, "rule no match, raw event ignored (not a pending bill)")
-                    null
+                    Log.i(TAG, "rule no match, raw event recorded but no pending bill")
+                    Enriched(null, matched = false, ruleName = null, autoType = null, channel = null)
                 } else {
                     // 合成/探针显式给了类型，仍允许入库，便于调试。
                     Log.i(TAG, "rule no match, keep explicit type=${payload.billType}")
-                    payload
+                    Enriched(payload, matched = false, ruleName = null, autoType = null, channel = null)
                 }
             }
 
@@ -165,7 +197,13 @@ class CaptureIngestProvider : ContentProvider() {
                         "local=${parsed.localType ?: "-"}/${parsed.localSubType ?: "-"} " +
                         "refundLink=${enriched.needsRefundLink} amount=${amount}",
                 )
-                enriched
+                Enriched(
+                    payload = enriched,
+                    matched = true,
+                    ruleName = parsed.ruleName,
+                    autoType = parsed.type,
+                    channel = parsed.channel,
+                )
             }
         }
     }

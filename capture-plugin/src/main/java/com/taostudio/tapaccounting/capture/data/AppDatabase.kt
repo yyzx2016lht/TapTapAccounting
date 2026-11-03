@@ -8,12 +8,13 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
-    entities = [PaymentCapture::class],
-    version = 4,
+    entities = [PaymentCapture::class, CaptureEvent::class],
+    version = 5,
     exportSchema = false,
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun paymentCaptureDao(): PaymentCaptureDao
+    abstract fun captureEventDao(): CaptureEventDao
 
     companion object {
         /**
@@ -47,6 +48,39 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /** v4 -> v5：AutoAccounting AppDataModel 等价的原始事件历史表。 */
+        val MIGRATION_4_5: Migration = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """CREATE TABLE IF NOT EXISTS `capture_events` (
+                        `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        `source` TEXT NOT NULL,
+                        `rawType` TEXT NOT NULL,
+                        `rawJson` TEXT NOT NULL,
+                        `receivedAt` INTEGER NOT NULL,
+                        `matched` INTEGER NOT NULL,
+                        `ruleName` TEXT,
+                        `autoType` TEXT,
+                        `localType` INTEGER,
+                        `localSubType` INTEGER,
+                        `amountCents` INTEGER,
+                        `merchant` TEXT,
+                        `categoryName` TEXT,
+                        `channel` TEXT,
+                        `rawHash` TEXT NOT NULL
+                    )""".trimIndent()
+                )
+                db.execSQL(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS `index_capture_events_rawHash` " +
+                        "ON `capture_events` (`rawHash`)"
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_capture_events_receivedAt` " +
+                        "ON `capture_events` (`receivedAt`)"
+                )
+            }
+        }
+
         @Volatile
         private var instance: AppDatabase? = null
 
@@ -57,7 +91,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "capture.db",
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
                     .build()
                     .also { instance = it }
             }

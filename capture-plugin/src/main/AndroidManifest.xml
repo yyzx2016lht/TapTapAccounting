@@ -3,6 +3,8 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- 仅用于从同机 AutoAccounting 本地服务 127.0.0.1:52045 导入历史原始数据。 -->
+    <uses-permission android:name="android.permission.INTERNET" />
     <!-- App 桥接是 signature 级：插件与敲敲记账必须同签名（debug 共用 debug keystore）。 -->
     <uses-permission android:name="com.taostudio.tapaccounting.permission.CAPTURE_BRIDGE" />
 
@@ -19,6 +21,7 @@
         android:icon="@drawable/ic_capture"
         android:label="@string/app_name"
         android:supportsRtl="true"
+        android:usesCleartextTraffic="true"
         android:theme="@android:style/Theme.Material.Light.NoActionBar">
 
         <activity
@@ -31,6 +34,12 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <activity
+            android:name=".ui.CaptureHistoryActivity"
+            android:exported="false"
+            android:label="历史数据"
+            android:theme="@android:style/Theme.Material.Light.NoActionBar" />
 
         <!--
           hook 进程在微信/支付宝 UID，拿不到插件的 signature 权限，

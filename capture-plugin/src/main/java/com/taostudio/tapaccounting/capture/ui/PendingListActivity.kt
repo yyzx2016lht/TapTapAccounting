@@ -2,6 +2,7 @@ package com.taostudio.tapaccounting.capture.ui
 
 import android.app.Activity
 import android.app.AlertDialog
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color
 import android.graphics.Typeface
@@ -163,6 +164,19 @@ class PendingListActivity : Activity() {
         }
         scroll.addView(listContainer)
 
+        val history = Button(this).apply {
+            text = "历史数据"
+            isAllCaps = false
+            textSize = 14f
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                dp(48),
+            ).apply { topMargin = dp(6) }
+            setOnClickListener {
+                startActivity(Intent(this@PendingListActivity, CaptureHistoryActivity::class.java))
+            }
+        }
+
         val refresh = Button(this).apply {
             text = "刷新"
             isAllCaps = false
@@ -182,6 +196,7 @@ class PendingListActivity : Activity() {
             ),
         )
         root.addView(scroll)
+        root.addView(history)
         root.addView(refresh)
         return root
     }

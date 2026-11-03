@@ -3,6 +3,7 @@ package com.taostudio.tapaccounting.capture
 import android.app.Application
 import android.content.Context
 import com.taostudio.tapaccounting.capture.data.AppDatabase
+import com.taostudio.tapaccounting.capture.data.CaptureEventRepository
 import com.taostudio.tapaccounting.capture.data.CaptureRepository
 import com.taostudio.tapaccounting.capture.notify.CaptureNotifier
 import com.taostudio.tapaccounting.capture.parse.AutoAccountingRuleEngine
@@ -10,6 +11,9 @@ import com.taostudio.tapaccounting.capture.parse.AutoAccountingRuleEngine
 class CaptureApp : Application() {
     val database: AppDatabase by lazy { AppDatabase.get(this) }
     val repository: CaptureRepository by lazy { CaptureRepository(database.paymentCaptureDao()) }
+    val eventRepository: CaptureEventRepository by lazy {
+        CaptureEventRepository(database.captureEventDao())
+    }
 
     override fun onCreate() {
         super.onCreate()

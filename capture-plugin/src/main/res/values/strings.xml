@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">敲敲待记</string>
+    <string name="xposed_description">捕获微信 / 支付宝支付并生成待记（P0 探针，只记录日志，不建待记）</string>
+
+    <string name="notify_channel_pending">待记提醒</string>
+    <string name="notify_channel_pending_desc">显示待记数量，点击进入待记列表</string>
+    <string name="notify_pending_title">%1$d 笔待记</string>
+    <string name="notify_pending_text">点开查看</string>
+</resources>

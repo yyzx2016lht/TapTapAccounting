@@ -14,9 +14,17 @@
 
 - [`bill-search.md`](bill-search.md)：对标钱迹的搜索页实现（过滤面板、汇总口径、分组排序、弹窗复用、与钱迹的差异）
 
+## 需求与设计
+
+- [`pending-expense-capture.md`](pending-expense-capture.md)：独立 Xposed 插件捕获微信/支付宝支出，插件内维护待记收件箱，通过桥接接口写入敲敲记账（需求确认稿，未实现）
+- [`pending-expense-capture-handoff.md`](pending-expense-capture-handoff.md)：上述方案的技术交接（两份源码摘录、token 鉴权、App AI 代理、ID 导入契约、hook 选型、风险与评审问题）
+
 ## 运维与发布
 
 - [`release-regression-checklist.md`](operations/release-regression-checklist.md)
+- [`capture-plugin-p0-test.md`](operations/capture-plugin-p0-test.md)：支付捕获插件 P0 的安装、闭环测试与微信/支付宝探针步骤
+- [`capture-plugin-handoff-2026-11-02.md`](operations/capture-plugin-handoff-2026-11-02.md)：支付捕获插件当前进度、已拉取的 AutoAccounting 规则、样本解析与下一步交接
+- [`autoaccounting-wechat-alipay-hooks.md`](operations/autoaccounting-wechat-alipay-hooks.md)：AutoAccounting 微信/支付宝 hook 接入代码参考
 
 ## 代码审阅
 

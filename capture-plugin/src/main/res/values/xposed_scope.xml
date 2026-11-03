@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- LSPosed 作用域：只勾微信 / 支付宝，不勾敲敲记账。 -->
+    <string-array name="xposed_scope">
+        <item>com.tencent.mm</item>
+        <item>com.eg.android.AlipayGphone</item>
+    </string-array>
+</resources>

@@ -20,8 +20,12 @@ dependencyResolutionManagement {
         google()
         mavenCentral()
         maven { setUrl("https://jitpack.io") }
+        // Xposed API（de.robv.android.xposed:api）只在这里发布
+        maven { url = uri("https://api.xposed.info/") }
     }
 }
 
 rootProject.name = "TapTapAccounting"
 include(":app")
+include(":capture-contract")
+include(":capture-plugin")

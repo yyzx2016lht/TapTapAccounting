@@ -117,6 +117,9 @@ dependencies {
     implementation(libs.room.ktx)
     ksp(libs.room.compiler)
 
+    // 支付捕获桥接的共享契约（authority/权限/extra 常量）。
+    implementation(project(":capture-contract"))
+
     // 本地语音识别：显式引入 AAR，避免 fileTree 对 AAR 的处理不稳定
     // 必须是 16KB 对齐的版本（>= v1.12.x，见 k2-fsa/sherpa-onnx#2520）；
     // 旧版 libonnxruntime.so / libsherpa-onnx-*.so 只有 4KB LOAD 对齐，

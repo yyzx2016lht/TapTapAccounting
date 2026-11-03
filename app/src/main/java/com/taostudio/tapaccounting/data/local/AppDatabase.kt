@@ -15,6 +15,7 @@ import com.taostudio.tapaccounting.data.local.dao.BudgetDao
 import com.taostudio.tapaccounting.data.local.dao.CategoryDao
 import com.taostudio.tapaccounting.data.local.dao.ChatMessageDao
 import com.taostudio.tapaccounting.data.local.dao.DeletedBillDao
+import com.taostudio.tapaccounting.data.local.dao.ExternalImportDao
 import com.taostudio.tapaccounting.data.local.dao.InvestmentLotDao
 import com.taostudio.tapaccounting.data.local.dao.RecurringPatternDao
 import com.taostudio.tapaccounting.data.local.dao.SharedLedgerDao
@@ -31,6 +32,7 @@ import com.taostudio.tapaccounting.data.local.entity.Budget
 import com.taostudio.tapaccounting.data.local.entity.Category
 import com.taostudio.tapaccounting.data.local.entity.ChatMessage
 import com.taostudio.tapaccounting.data.local.entity.DeletedBill
+import com.taostudio.tapaccounting.data.local.entity.ExternalImport
 import com.taostudio.tapaccounting.data.local.entity.InvestmentLot
 import com.taostudio.tapaccounting.data.local.entity.RecurringPattern
 import com.taostudio.tapaccounting.data.local.entity.SharedLedger
@@ -42,7 +44,7 @@ import com.taostudio.tapaccounting.data.local.entity.SyncedRemoteFile
 import com.taostudio.tapaccounting.logic.InvestmentInterestService
 
 /** 与 backupIfDowngrade 第三个参数保持同步。 */
-private const val DB_VERSION = 39
+private const val DB_VERSION = 40
 
 /**
  * Room 主库。改 schema 前请先读本节，避免误用破坏性迁移或漏改版本号。
@@ -73,7 +75,8 @@ private const val DB_VERSION = 39
         ChatMessage::class, InvestmentLot::class, DeletedBill::class,
         Budget::class, RecurringPattern::class, Book::class,
         SharedLedger::class, SharedMember::class, SyncOperation::class,
-        SyncQueue::class, SyncState::class, SyncedRemoteFile::class
+        SyncQueue::class, SyncState::class, SyncedRemoteFile::class,
+        ExternalImport::class
     ],
     version = DB_VERSION,
     exportSchema = false
@@ -88,6 +91,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun chatMessageDao(): ChatMessageDao
     abstract fun investmentLotDao(): InvestmentLotDao
     abstract fun deletedBillDao(): DeletedBillDao
+    abstract fun externalImportDao(): ExternalImportDao
     abstract fun budgetDao(): BudgetDao
     abstract fun recurringPatternDao(): RecurringPatternDao
     abstract fun sharedLedgerDao(): SharedLedgerDao
@@ -737,6 +741,24 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /** v40：支付捕获插件的导入回执（captureId -> billId），与账单写入同事务。 */
+        val MIGRATION_39_40 = object : Migration(39, 40) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL(
+                    """CREATE TABLE IF NOT EXISTS `external_imports` (
+                        `captureId` TEXT NOT NULL,
+                        `billId` INTEGER NOT NULL,
+                        `requestId` TEXT,
+                        `createdAt` INTEGER NOT NULL,
+                        PRIMARY KEY(`captureId`)
+                    )"""
+                )
+                database.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_external_imports_billId` ON `external_imports` (`billId`)"
+                )
+            }
+        }
+
         fun getDatabase(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 val appCtx = context.applicationContext
@@ -786,7 +808,8 @@ abstract class AppDatabase : RoomDatabase() {
                         MIGRATION_35_36,
                         MIGRATION_36_37,
                         MIGRATION_37_38,
-                        MIGRATION_38_39
+                        MIGRATION_38_39,
+                        MIGRATION_39_40
                     )
                     // 仅处理降级：清库并按当前代码 schema 重建。升级缺迁移时仍应抛异常，不要改成 fallbackToDestructiveMigration()。
                     .fallbackToDestructiveMigrationOnDowngrade()

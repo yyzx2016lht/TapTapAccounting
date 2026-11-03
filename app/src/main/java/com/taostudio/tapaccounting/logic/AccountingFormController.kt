@@ -50,9 +50,22 @@ class AccountingFormController(
     /** 当容器高度锁定后回调（悬浮窗需要同步更新 WindowManager params 高度，防止跳动） */
     val onHeightLocked: ((lockedHeight: Int) -> Unit)? = null,
     /** 「记一笔」的默认时间；null 表示用当前时间（见 BillEntryDefaults） */
-    private val defaultTimeMillis: Long? = null
+    private val defaultTimeMillis: Long? = null,
+    /** 支付捕获插件的幂等键；普通记账为 null（见 :capture-contract）。 */
+    private var captureId: String? = null,
+    /** 批次追踪 id，只做日志，不参与幂等。 */
+    private var requestId: String? = null
 ) {
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
+
+    /**
+     * 悬浮窗被复用时（表单已经打开，插件又点“自己记”）更新本次捕获的幂等键。
+     * 只在新增分支使用；编辑/退款路径不会写 external_imports。
+     */
+    fun updateCaptureContext(captureId: String?, requestId: String?) {
+        this.captureId = captureId
+        this.requestId = requestId
+    }
 
     /** P1-29: 界面销毁时取消协程。 */
     fun destroy() {
@@ -1937,10 +1950,15 @@ class AccountingFormController(
                         BillMutationService.upsertBillAndApplyImpact(
                             db = db,
                             bill = rBill,
-                            applyAssetImpact = true
+                            applyAssetImpact = true,
+                            captureId = captureId,
+                            requestId = requestId
                         )
                     }
                 }
+                // 本次捕获已消费：表单可能继续留着记下一笔，不能复用同一个 captureId。
+                captureId = null
+                requestId = null
             }
 
             withContext(Dispatchers.Main) {

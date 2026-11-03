@@ -11,6 +11,8 @@ import android.hardware.SensorManager
 import android.os.*
 import androidx.core.content.ContextCompat
 import kotlinx.coroutines.*
+import org.json.JSONObject
+import com.taostudio.tapaccounting.capture.contract.CaptureContract
 import com.taostudio.tapaccounting.tap.TapDetectionState
 import com.taostudio.tapaccounting.tap.TapDetector
 
@@ -28,6 +30,11 @@ class OverlayService : Service() {
         const val ACTION_START_DOUBLE_TAP = "ACTION_START_DOUBLE_TAP"
         const val ACTION_STOP_DOUBLE_TAP = "ACTION_STOP_DOUBLE_TAP"
         const val ACTION_RESTART_DOUBLE_TAP = "ACTION_RESTART_DOUBLE_TAP"
+
+        // 支付捕获插件“自己记”的桥接 extras（与 :capture-contract 共用常量）。
+        const val EXTRA_PREFILL: String = CaptureContract.EXTRA_PREFILL
+        const val EXTRA_CAPTURE_ID: String = CaptureContract.EXTRA_CAPTURE_ID
+        const val EXTRA_REQUEST_ID: String = CaptureContract.EXTRA_REQUEST_ID
 
         @Volatile
         var isServiceRunning = false
@@ -463,7 +470,16 @@ class OverlayService : Service() {
                     stopTapDetection()
                 }
             }
-            ACTION_SHOW_OVERLAY -> overlayManager.showOverlay()
+            ACTION_SHOW_OVERLAY -> {
+                val prefill = intent?.getStringExtra(EXTRA_PREFILL)?.let { raw ->
+                    runCatching { JSONObject(raw) }.getOrNull()
+                }
+                overlayManager.showOverlay(
+                    prefill = prefill,
+                    captureId = intent?.getStringExtra(EXTRA_CAPTURE_ID)?.trim()?.takeIf { it.isNotEmpty() },
+                    requestId = intent?.getStringExtra(EXTRA_REQUEST_ID)?.trim()?.takeIf { it.isNotEmpty() }
+                )
+            }
             ACTION_SHOW_AI_INPUT -> overlayManager.showAiInputPanel()
             ACTION_SCREEN_CAPTURE -> overlayManager.startScreenCaptureFromTap()
             ACTION_HIDE_OVERLAY -> {

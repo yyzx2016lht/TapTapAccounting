@@ -1,15 +1,25 @@
 package com.taostudio.tapaccounting.logic
 
+import android.content.Intent
 import androidx.room.withTransaction
 import com.taostudio.tapaccounting.TapApplication
 import com.taostudio.tapaccounting.Logger
 import com.taostudio.tapaccounting.Prefs
+import com.taostudio.tapaccounting.capture.contract.CaptureContract
 import com.taostudio.tapaccounting.data.local.AppDatabase
 import com.taostudio.tapaccounting.data.local.entity.Asset
 import com.taostudio.tapaccounting.data.local.entity.Bill
+import com.taostudio.tapaccounting.data.local.entity.ExternalImport
 import com.taostudio.tapaccounting.data.repository.CategoryRepository
 import com.taostudio.tapaccounting.data.sync.SharedMutationHooks
 import com.taostudio.tapaccounting.widget.ExpenseWidgetUpdater
+
+/** 同一 captureId 在事务内被抢先写入：可识别重复，调用方应返回已有账单。 */
+class DuplicateCaptureException(
+    val captureId: String,
+    val existingBillId: Long
+) : IllegalStateException("duplicate captureId: $captureId (billId=$existingBillId)")
+
 
 object BillMutationService {
 
@@ -157,10 +167,25 @@ object BillMutationService {
     suspend fun insertBillAndApplyImpact(
         db: AppDatabase,
         bill: Bill,
-        applyAssetImpact: Boolean = true
+        applyAssetImpact: Boolean = true,
+        captureId: String? = null,
+        requestId: String? = null
     ): Bill {
-        logFull("BILL_MUTATION", "insert:start type=${bill.type}, amount=${bill.amount}, account=${bill.accountName}, to=${bill.toAccountName}, assetImpact=$applyAssetImpact")
-        return db.withTransaction {
+        logFull("BILL_MUTATION", "insert:start type=${bill.type}, amount=${bill.amount}, account=${bill.accountName}, to=${bill.toAccountName}, assetImpact=$applyAssetImpact, captureId=$captureId")
+        var capturedBill: Bill? = null
+        val result = db.withTransaction {
+            if (captureId != null) {
+                val existing = db.externalImportDao().getByCaptureId(captureId)
+                if (existing != null) {
+                    val existingBill = db.billDao().getBillById(existing.billId)
+                    if (existingBill != null) {
+                        logFull("BILL_MUTATION", "insert:duplicate captureId=$captureId -> billId=${existingBill.id}")
+                        return@withTransaction existingBill
+                    }
+                    // 账单已被删除：回执失效，允许这次重新入账。
+                    db.externalImportDao().deleteByCaptureId(captureId)
+                }
+            }
             val normalizedInput = normalizeBillCategoryName(db, SharedMutationHooks.prepareLocalBill(db, bill))
             if (applyAssetImpact) {
                 validateRequiredRatesForBill(db, normalizedInput)
@@ -172,20 +197,72 @@ object BillMutationService {
                     logWarn("BILL_GUARD", "（警告）insert 已写账单但资产未变化，billId=${savedBill.id}, type=${savedBill.type}, asset=${savedBill.accountName}, toAsset=${savedBill.toAccountName}")
                 }
             }
+            if (captureId != null) {
+                val inserted = db.externalImportDao().insertIgnore(
+                    ExternalImport(
+                        captureId = captureId,
+                        billId = savedBill.id,
+                        requestId = requestId,
+                        createdAt = System.currentTimeMillis()
+                    )
+                )
+                if (inserted == -1L) {
+                    // 并发/重入：回执已被别人写走，整笔事务回滚，让调用方按重复处理。
+                    val existing = db.externalImportDao().getByCaptureId(captureId)
+                    throw DuplicateCaptureException(captureId, existing?.billId ?: savedBill.id)
+                }
+                capturedBill = savedBill
+            }
             logFull("BILL_MUTATION", "insert:done id=${savedBill.id}, type=${savedBill.type}, amount=${savedBill.amount}, accountId=${savedBill.accountId}, toAccountId=${savedBill.toAccountId}")
             auditBill("insert", savedBill)
             SharedMutationHooks.enqueueSaved(db, savedBill)
             matchRecurringQuietly(db, savedBill)
             db.billDao().getBillById(savedBill.id) ?: savedBill
-        }.also { notifyWidgetsChanged() }
+        }
+        notifyWidgetsChanged()
+        // 广播必须在事务提交之后；显式 setPackage，避免 Android 11+ 包可见性/隐式广播限制。
+        capturedBill?.let { broadcastBillCreated(it, captureId!!) }
+        return result
+    }
+
+    /** 账单提交后通知插件（只加速；插件仍可用 getImportStatus 对账）。 */
+    private fun broadcastBillCreated(bill: Bill, captureId: String) {
+        val ctx = runCatching { TapApplication.app() }.getOrNull() ?: return
+        runCatching {
+            val intent = Intent(CaptureContract.ACTION_BILL_CREATED).apply {
+                setPackage(CaptureContract.PLUGIN_PACKAGE)
+                putExtra(CaptureContract.EXTRA_BILL_ID, bill.id)
+                putExtra(CaptureContract.EXTRA_CAPTURE_ID, captureId)
+                putExtra(CaptureContract.EXTRA_AMOUNT_CENTS, Math.round(bill.amount * 100.0))
+                putExtra(CaptureContract.EXTRA_PAID_AT, bill.time)
+                bill.accountId?.let { putExtra(CaptureContract.EXTRA_ACCOUNT_ID, it) }
+                putExtra(CaptureContract.EXTRA_ACCOUNT_NAME, bill.accountName)
+            }
+            ctx.sendBroadcast(intent)
+        }.onFailure {
+            logWarn("BILL_MUTATION", "BILL_CREATED 广播失败（不影响已落库账单）：${it.message}")
+        }
     }
 
     suspend fun insertBillWithinActiveTransaction(
         db: AppDatabase,
         bill: Bill,
-        applyAssetImpact: Boolean = true
+        applyAssetImpact: Boolean = true,
+        captureId: String? = null,
+        requestId: String? = null
     ): Bill {
-        logFull("BILL_MUTATION", "insertTx:start type=${bill.type}, amount=${bill.amount}, account=${bill.accountName}, to=${bill.toAccountName}, assetImpact=$applyAssetImpact")
+        logFull("BILL_MUTATION", "insertTx:start type=${bill.type}, amount=${bill.amount}, account=${bill.accountName}, to=${bill.toAccountName}, assetImpact=$applyAssetImpact, captureId=$captureId")
+        if (captureId != null) {
+            val existing = db.externalImportDao().getByCaptureId(captureId)
+            if (existing != null) {
+                val existingBill = db.billDao().getBillById(existing.billId)
+                if (existingBill != null) {
+                    logFull("BILL_MUTATION", "insertTx:duplicate captureId=$captureId -> billId=${existingBill.id}")
+                    return existingBill
+                }
+                db.externalImportDao().deleteByCaptureId(captureId)
+            }
+        }
         val normalizedInput = normalizeBillCategoryName(db, SharedMutationHooks.prepareLocalBill(db, bill))
         if (applyAssetImpact) {
             validateRequiredRatesForBill(db, normalizedInput)
@@ -195,6 +272,20 @@ object BillMutationService {
             val impacted = BillAssetImpactService.applyBillBalanceImpact(db, savedBill)
             if (impacted == 0 && savedBill.type in setOf(Bill.TYPE_EXPENSE, Bill.TYPE_INCOME, Bill.TYPE_TRANSFER)) {
                 logWarn("BILL_GUARD", "（警告）insertTx 已写账单但资产未变化，billId=${savedBill.id}, type=${savedBill.type}, asset=${savedBill.accountName}, toAsset=${savedBill.toAccountName}")
+            }
+        }
+        if (captureId != null) {
+            val inserted = db.externalImportDao().insertIgnore(
+                ExternalImport(
+                    captureId = captureId,
+                    billId = savedBill.id,
+                    requestId = requestId,
+                    createdAt = System.currentTimeMillis()
+                )
+            )
+            if (inserted == -1L) {
+                val existing = db.externalImportDao().getByCaptureId(captureId)
+                throw DuplicateCaptureException(captureId, existing?.billId ?: savedBill.id)
             }
         }
         logFull("BILL_MUTATION", "insertTx:done id=${savedBill.id}, type=${savedBill.type}, amount=${savedBill.amount}")
@@ -239,9 +330,11 @@ object BillMutationService {
     suspend fun upsertBillAndApplyImpact(
         db: AppDatabase,
         bill: Bill,
-        applyAssetImpact: Boolean = true
+        applyAssetImpact: Boolean = true,
+        captureId: String? = null,
+        requestId: String? = null
     ): Bill {
-        return insertBillAndApplyImpact(db, bill, applyAssetImpact)
+        return insertBillAndApplyImpact(db, bill, applyAssetImpact, captureId, requestId)
     }
 
     suspend fun replaceBill(

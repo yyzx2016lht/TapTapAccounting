@@ -102,6 +102,9 @@ class OverlayManager(private val ctx: Context) {
     private val aiAssistant = AiAssistant(ctx)
     private var formController: AccountingFormController? = null
     private var voiceHandler: VoiceInputHandler? = null
+    /** 支付捕获插件“自己记”的幂等键；普通敲击记账为 null。 */
+    private var pendingCaptureId: String? = null
+    private var pendingRequestId: String? = null
 
     fun isShowing(): Boolean = overlayView != null
 
@@ -212,12 +215,32 @@ class OverlayManager(private val ctx: Context) {
         }
     }
 
-    fun showOverlay(prefill: JSONObject? = null, showSaveOnly: Boolean = false): Boolean {
-        if (overlayView != null) return true
+    fun showOverlay(
+        prefill: JSONObject? = null,
+        showSaveOnly: Boolean = false,
+        captureId: String? = null,
+        requestId: String? = null
+    ): Boolean {
+        if (overlayView != null) {
+            // 插件在表单已打开时又点“自己记”：不重建窗口，更新幂等键并填现有表单。
+            pendingCaptureId = captureId
+            pendingRequestId = requestId
+            formController?.updateCaptureContext(captureId, requestId)
+            if (prefill != null) {
+                formController?.fillDataToUi(
+                    prefill,
+                    showToast = false,
+                    forceMultiMode = prefill.has("bills")
+                )
+            }
+            return true
+        }
         if (isRemovingOverlay) {
             Utils.toast(ctx, ctx.getString(R.string.toast_overlay_closing))
             return false
         }
+        pendingCaptureId = captureId
+        pendingRequestId = requestId
         Logger.i(ctx, "OverlayManager", "Showing Overlay")
 
         val themeContext = android.view.ContextThemeWrapper(ctx, R.style.Theme_TapAccounting)
@@ -260,7 +283,7 @@ class OverlayManager(private val ctx: Context) {
             windowAnimations = 0
         }
 
-        setupLogic(overlayView!!, prefill, showSaveOnly)
+        setupLogic(overlayView!!, prefill, showSaveOnly, captureId, requestId)
 
         val view = overlayView!!
         val enterOffsetPx = OVERLAY_ENTER_TRANSLATION_DP * ctx.resources.displayMetrics.density
@@ -300,7 +323,13 @@ class OverlayManager(private val ctx: Context) {
         return true
     }
 
-    private fun setupLogic(view: View, prefill: JSONObject?, showSaveOnly: Boolean) {
+    private fun setupLogic(
+        view: View,
+        prefill: JSONObject?,
+        showSaveOnly: Boolean,
+        captureId: String?,
+        requestId: String?
+    ) {
         view.isFocusable = true
         view.isFocusableInTouchMode = true
         view.setOnKeyListener { _, keyCode, event ->
@@ -320,7 +349,9 @@ class OverlayManager(private val ctx: Context) {
         formController = AccountingFormController(
             ctx = ctx,
             rootView = view,
-            onCloseRequest = { isSaved -> removeOverlay(isSaved) }
+            onCloseRequest = { isSaved -> removeOverlay(isSaved) },
+            captureId = captureId,
+            requestId = requestId
         )
 
         if (prefill != null) {
@@ -1170,10 +1201,15 @@ class OverlayManager(private val ctx: Context) {
     fun destroy() {
         formController?.destroy()
         formController = null
+        pendingCaptureId = null
+        pendingRequestId = null
         aiAssistant.shutdown()
     }
 
     fun removeOverlay(isSaved: Boolean = true) {
+        // 表单已关闭：本次“自己记”的幂等键随之失效，下一条不能复用。
+        pendingCaptureId = null
+        pendingRequestId = null
         // 若仍挂着「未进入记账」的截屏，关掉悬浮层时一并删掉
         discardPendingScreenCapture()
         hideScreenCaptureLoadingOverlay()

@@ -80,9 +80,14 @@ internal object WechatEnvelope {
                 ?.optJSONObject("appmsg")
                 ?.optJSONObject("wcpayinfo")
                 ?: return null
-            sequenceOf("transcationid", "transferid")
+            val base = sequenceOf("transcationid", "transferid")
                 .map { wc.optString(it, "").trim() }
                 .firstOrNull { it.isNotEmpty() && it != "0" }
+                ?: return null
+            // 同一笔转账的“付款/退款”共享 transferid，必须把 paysubtype 纳入幂等键；
+            // 否则退款会被当成重复的转账丢掉。
+            val subtype = wc.optString("paysubtype", "").trim().ifEmpty { "0" }
+            "$base:$subtype"
         }.getOrNull()
     }
 

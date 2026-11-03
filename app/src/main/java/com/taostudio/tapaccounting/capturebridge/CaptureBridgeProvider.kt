@@ -405,10 +405,22 @@ class CaptureBridgeProvider : ContentProvider() {
         import: ImportBill,
         requestId: String?
     ): Triple<String, Long, String> {
-        val relatedId = import.relatedBillId
-            ?: throw IllegalArgumentException("needs_refund_link")
-        val original = db.billDao().getBillById(relatedId)
-            ?: throw IllegalArgumentException("refund_source_not_found")
+        val original = import.relatedBillId?.let { relatedId ->
+            db.billDao().getBillById(relatedId)
+                ?: throw IllegalArgumentException("refund_source_not_found")
+        } ?: run {
+            // 没有显式关联时，按分类/金额/时间找唯一候选；找不到就留在“待关联”。
+            val probe = Bill(
+                type = Bill.TYPE_EXPENSE,
+                subType = Bill.SUBTYPE_REFUND,
+                amount = import.amountCents / 100.0,
+                originalAmount = import.amountCents / 100.0,
+                categoryName = import.categoryName.orEmpty(),
+                time = normalizeMillis(import.paidAt),
+            )
+            BillMutationService.resolveRefundSourceBill(db, probe)
+                ?: throw IllegalArgumentException("needs_refund_link")
+        }
         require(original.type == Bill.TYPE_EXPENSE && original.subType != Bill.SUBTYPE_REFUND) {
             "refund_source_not_expense"
         }

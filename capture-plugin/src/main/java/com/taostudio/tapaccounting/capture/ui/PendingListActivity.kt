@@ -232,7 +232,7 @@ class PendingListActivity : Activity() {
         actions.addView(
             actionButton(
                 "入账",
-                actionable && item.billType != null && !isRefund(item),
+                actionable && item.billType != null,
             ) { directImport(item) },
         )
         actions.addView(actionButton("自己记", actionable) { openQuickRecord(item) })
@@ -511,10 +511,6 @@ class PendingListActivity : Activity() {
             toast("这条还没有类型，请先点“自己记”选择类型")
             return
         }
-        if (isRefund(item)) {
-            toast("退款需要关联原支出，暂不能直接入账")
-            return
-        }
         if ((item.amountCents ?: 0L) <= 0L) {
             toast("金额缺失，不能直接入账")
             return
@@ -534,12 +530,16 @@ class PendingListActivity : Activity() {
             remarks = item.note ?: "",
             bookName = item.bookName,
         )
+        val message = if (isRefund(item)) {
+            "退款 ${formatAmount(bill.amountCents)}\n" +
+                "会尝试按分类/金额/时间匹配原支出；匹配不到会留在“待关联”，不会写成普通收入。"
+        } else {
+            "${billTypeLabel(item)} ${formatAmount(bill.amountCents)}\n" +
+                "会按当前类型和资产直接写入敲敲记账，分类可能为空。"
+        }
         AlertDialog.Builder(this)
             .setTitle("直接入账")
-            .setMessage(
-                "${billTypeLabel(item)} ${formatAmount(bill.amountCents)}\n" +
-                    "会按当前类型和资产直接写入敲敲记账，分类可能为空。",
-            )
+            .setMessage(message)
             .setPositiveButton("入账") { _, _ -> performDirectImport(item, bill) }
             .setNegativeButton("取消", null)
             .show()
@@ -566,7 +566,12 @@ class PendingListActivity : Activity() {
                 else -> {
                     val error = first?.optString("error").orEmpty()
                         .ifBlank { result.optString("error", "未知错误") }
-                    toast("入账失败：$error")
+                    val friendly = if (error == "needs_refund_link") {
+                        "没有匹配到原支出，已留在待关联"
+                    } else {
+                        "入账失败：$error"
+                    }
+                    toast(friendly)
                 }
             }
         }

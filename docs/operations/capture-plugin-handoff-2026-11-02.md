@@ -1,27 +1,27 @@
 # 支付捕获插件交接（2026-11-02）
 
-## 2026-11-03 组合 B 第一阶段（未安装）
+## 2026-11-03 组合 B 已落地（最新）
 
-> 本轮未 commit、未改 `app/` 业务代码、未动 `.tmp_autoaccounting_pull/` 里的真实数据。
 > 详细口径/映射/测试见 `docs/operations/bill-type-localization.md`。
+> 本轮已 commit 多个 checkpoint；备用机 `172.20.1.22:41103` 无 root，用合成数据验证，不依赖真实 hook。
 
 ### 结论
 
-- 用户确认**组合 B**：日常使用需要支出、收入、退款、转账、还款都进账本，不再只记支出。
-- `BillTypeLocalizer` 已按 B 修改：`Income + 还款` → 普通收入 `1/0`；退款 `1/2` + `needsRefundLink`；还款仍 `2/1`；群收款仍 `0/0`。
-- `AutoAccountingRuleEngine.parse()` 返回 `ParseOutcome`（`Matched` / `NoMatch`），非支出不再直接 null；命中但无法判断类型时 `localType=null`，保留金额/商户等字段。
-- 契约和插件数据新增 `billType/subType/needsRefundLink`；插件 Room 升 **v2**，`MIGRATION_1_2` 用 `ALTER TABLE` 保留现有行。
-- `CaptureIngestProvider` 已按支出/收入/转账/还款/退款/待分类分流：所有识别出的类型都插入待记；未命中/未知类型插入为“待分类”，不编造型。
-- 待记列表显示本地类型标签；“自己记”按类型预填，待分类不写 `type`，退款先提示“待关联原支出”。
+- 用户确认**组合 B**：支出、收入、退款、转账、还款都进账本。
+- `BillTypeLocalizer`：`Income + 还款` → `1/0`；退款 `1/2 + needsRefundLink`；还款 `2/1`；出账转账 `0/0`；群收款 `0/0`。
+- 规则引擎返回 `ParseOutcome`，非支出不再直接 null；契约/插件 Room 升到 **v4**，新增 `billType/subType/needsRefundLink/toAssetName/categoryName`，migration 保留旧数据。
+- Provider 按类型分流；待记列表显示类型，支持“自己记”和“入账”。
+- App `importBills` 已实现；`AssetNameResolver` 把“零钱/招商银行储蓄卡(4852)”折成本地资产；`CategoryNameResolver` 折成本地分类；退款直接入账会尝试匹配原支出，匹配不到留在待关联。
+- 备用机合成数据验证：收入/转账/还款/退款/待分类 5/5 入库；转账、还款通过悬浮窗保存成功；转账通过“入账”直接写入 App；退款无原支出时正确返回 `needs_refund_link`。测试后 DB 已恢复。
 
-### 还没做（第二阶段）
+### 剩余优化
 
-1. App `importBills` 仍是 `not_implemented`；收入/转账/还款/退款还不能真正写入 App 账本。
-2. 分类映射、退款“退款：”前缀/原分类、还款分类未做。
-3. 转账/还款的资产两端（`accountId` + `toAccountId`）未做。
-4. 退款原账单关联未做；当前只保证 `needsRefundLink=true` 并留在待记。
-5. App 表单对退款 `subType` 的处理、资产功能关闭时转账降级，需要后续处理。
-6. 尚未安装到设备，也未跑 v1→v2 真机 migration 回归。
+1. 分类别名是保守映射，未知分类留空；后续用真实命中统计补齐。
+2. 退款自动匹配依赖 App `findLikelyRefundSourceBill`；部分退款/多候选需要 UI。
+3. 还款识别仍靠规则名含“还款”，部分信用卡规则可能漏。
+4. 导入状态机、失败重试、旧行自动回填未做。
+5. 真实微信/支付宝 hook 仍未在 root 设备验证；备用机只能合成数据。
+6. UI 仍是功能骨架，资产/分类手选可继续压缩。
 
 ---
 

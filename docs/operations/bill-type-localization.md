@@ -1,8 +1,9 @@
 # 账单类型本地化（支付捕获插件）
 
 > 2026-11-03。范围：AutoAccounting 规则输出 → 敲敲记账本地账单类型/子类型。
-> 当前阶段为**组合 B 第一阶段**：支出、收入、退款、转账、还款都进待记账本，不再只记支出。
-> 不做 App `importBills`、分类名/资产名映射、AI、截图、复杂新 UI。
+> 当前阶段为**组合 B**：支出、收入、退款、转账、还款都进待记账本，不再只记支出。
+> App 侧已接入 `importBills`、资产名折算、分类名折算和直接入账；退款会尝试匹配原支出，匹配不到留在“待关联”。
+> 不做 AI、截图、复杂新 UI。
 > 本文示例规则名、金额均为手写假数据；真实样本只留在本机 `.tmp_autoaccounting_pull/`。
 
 ## 1. 当前结论
@@ -10,9 +11,11 @@
 - 组合 B 已确认：日常使用需要支出、收入、退款、转账、还款都进账本。
 - `BillTypeLocalizer` 已按 B 口径完成；`Income + 还款` 现在是普通收入 `1/0`，不再返回 null。
 - `AutoAccountingRuleEngine.parse()` 改为返回 `ParseOutcome`：规则命中即带回 AutoAccounting 类型、本地类型/子类型、`needsRefundLink`；本地类型无法判断时 `localType=null`（待分类），不再对非支出直接返回 null。
-- `CapturePayload` / `PaymentCapture` 增加 `billType` / `subType` / `needsRefundLink`；插件 Room 升到 **v2**，提供 `Migration(1,2)`，保留现有测试数据。
+- `CapturePayload` / `PaymentCapture` 增加 `billType` / `subType` / `needsRefundLink` / `toAssetName` / `categoryName`；插件 Room 升到 **v4**，提供 `Migration(1,2)`、`(2,3)`、`(3,4)`，保留现有测试数据。
 - `CaptureIngestProvider` 按“支出 / 收入 / 转账 / 还款 / 退款 / 待分类”分流：识别出的类型都插入待记；未命中/未知类型插入为“待分类”，不编造型。
-- **App 端完整导入还没做**：`importBills` 仍是 `not_implemented`，分类映射、资产两端、退款原账单关联属于第二阶段。当前只保证类型在插件内被识别、落库、显示，并能以最小预填打开“自己记”。
+- **App 端已接入 `importBills`**：支出/收入/转账/还款/退款都走同一契约；转账/还款要求两端资产；退款可显式传 `relatedBillId`，不传时按分类/金额/时间尝试匹配，匹配不到返回 `needs_refund_link`，不会写成普通收入。
+- **资产名已本地化**：`AssetNameResolver` 把“零钱/招商银行储蓄卡(4852)”折成本地“微信/招商银行”；**分类名已本地化**：`CategoryNameResolver` 把 AA 分类折成本地分类，未知分类不硬塞。
+- 待记列表新增“入账”按钮：类型明确的条目可直接写入 App；退款也走该按钮，但匹配不到原支出会留在待关联。
 
 ## 2. 两套类型模型
 
@@ -139,7 +142,7 @@ matched rule=支付宝花呗主动还款 type=Transfer money=10000 local=2/1 ref
 matched-but-unclassified rule=某笔退款 type=Expend money=500 local=-/- refundLink=false merchant=- channel=-
 ```
 
-### 5.3 契约字段与插件 Room v2
+### 5.3 契约字段与插件 Room v4
 
 `CapturePayload` / `PaymentCapture` 新增：
 
@@ -148,23 +151,18 @@ matched-but-unclassified rule=某笔退款 type=Expend money=500 local=-/- refun
 | `billType` | `Int?` | 本地主类型 0/1/2；null = 待分类 |
 | `subType` | `Int?` | 本地子类型 0/1/2；null = 未识别 |
 | `needsRefundLink` | `Boolean` | 退款必须关联原支出 |
+| `toAssetName` | `String?` | 转账/还款的转入资产名 |
+| `categoryName` | `String?` | AutoAccounting category.js 推断的分类名 |
 
-插件数据库 `capture.db` 升到 v2：
+插件数据库 `capture.db` 升到 v4：
 
 ```kotlin
-val MIGRATION_1_2 = object : Migration(1, 2) {
-    override fun migrate(db: SupportSQLiteDatabase) {
-        db.execSQL("ALTER TABLE payment_captures ADD COLUMN billType INTEGER")
-        db.execSQL("ALTER TABLE payment_captures ADD COLUMN subType INTEGER")
-        db.execSQL(
-            "ALTER TABLE payment_captures ADD COLUMN needsRefundLink " +
-                "INTEGER NOT NULL DEFAULT 0",
-        )
-    }
-}
+MIGRATION_1_2: billType / subType / needsRefundLink
+MIGRATION_2_3: toAssetName
+MIGRATION_3_4: categoryName
 ```
 
-现有行保持 `NULL / NULL / 0`，不重算、不丢数据；旧行在 UI 上显示为“待分类”。当前没有自动回填，后续可一次性重跑规则或手动选类型。`CaptureRepository.toEntity` 已映射这三个字段。
+现有行保持旧值，不重算、不丢数据；旧行在 UI 上显示为“待分类”。当前没有自动回填，后续可一次性重跑规则或手动选类型。`CaptureRepository.toEntity` 已映射这些字段。
 
 ### 5.4 Provider 分流
 
@@ -179,8 +177,8 @@ val MIGRATION_1_2 = object : Migration(1, 2) {
 - 所有识别出的类型都插入 `PENDING`，不再只允许 Expend。
 - 支出仍走原来的规则解析/金额/商户/时间路径；87 条支出的行为不变。
 - 未命中/未知类型插入为“待分类”，不会因为无法判断被丢弃。
-- 退款命中后 `needsRefundLink=true`；第一阶段不会自动找原账单，等第二阶段。
-- 插件本地状态仍是 `PENDING`；`IMPORTING/RECORDED` 由后续 App 导入/对账推进。
+- 退款命中后 `needsRefundLink=true`；直接入账时 App 会尝试按分类/金额/时间匹配原支出，匹配不到返回 `needs_refund_link`，留在待关联。
+- 插件本地状态仍是 `PENDING`；“入账”/App 回执推进为 `RECORDED`。
 
 ### 5.5 待记列表与“自己记”
 
@@ -193,7 +191,8 @@ val MIGRATION_1_2 = object : Migration(1, 2) {
   - 收入 → App 表单收入；
   - 转账 / 还款 → App 表单转账（还款为转账+还款子类型），并提示确认转账/还款类型与两端资产；若 App 资产功能关闭会退回支出，需要第二阶段处理；
   - 待分类 → **不写 `type`**，并在提示里要求用户在悬浮窗手动选择，避免强行打开成支出；
-  - 退款 → 先弹“退款待关联”，不从待记直接生成无关联的普通收入。
+  - 退款 → “自己记”仍先弹“退款待关联”，不从悬浮窗生成无关联普通收入。
+- 每行新增“入账”：类型明确时直接调 App `importBills`；转账/还款要求两端资产可匹配；退款会尝试自动匹配原支出，匹配不到留在待关联。
 - “备注 / 忽略 / 模拟 / 刷新”保持原行为。
 
 ## 6. 测试与构建
@@ -227,6 +226,17 @@ val MIGRATION_1_2 = object : Migration(1, 2) {
 
 结果：`BUILD SUCCESSFUL`，1 个测试、0 失败。
 
+### 备用机合成数据回归
+
+备用机 `172.20.1.22:41103` 无 root，不走微信/支付宝 hook；用插件 `CaptureIngestProvider` 直接注入合成事件：
+
+- 合成收入/转账/还款/退款/待分类各 1 条，5/5 入库，列表类型标签正确。
+- 转账打开“自己记”：类型=转账，资产自动折成“招商银行”→“微信”，保存成功，App 生成 type=2 账单。
+- 还款打开“自己记”：类型=还款，资产“招商银行”→“花呗”，保存成功，App 生成 type=2/subType=1。
+- “入账”直接调 App `importBills`：合成转账成功生成 type=2 账单并写 `external_imports`。
+- 退款“入账”在找不到原支出时返回 `needs_refund_link`，留在待关联；没有写成普通收入。
+- 测试后 App/插件 DB 均恢复到测试前，未留下合成账单。
+
 ### 构建
 
 ```powershell
@@ -237,22 +247,22 @@ val MIGRATION_1_2 = object : Migration(1, 2) {
 
 本轮没有安装到设备，也没有重跑 2 月 87 条真实样本；87 条支出的保证来自“这些规则名都映射 0/0 + 支出分支未改”。测试全部使用手写假规则名/假金额，没有复制 `.tmp_autoaccounting_pull/` 里的真实个人数据。
 
-## 7. 第二阶段待办
+## 7. 已完成与剩余优化
 
-1. **App `importBills`**：当前 `CaptureBridgeProvider` 对 `importBills` 返回 `not_implemented`。需要按 `ImportBill.type/subType/needsRefundLink` 分流：
-   - 支出 `0/0` → 现有快速记账/导入；
-   - 收入 `1/0` → 分类映射后入账；
-   - 转账 `2/0` → 资产两端后入账；
-   - 还款 `2/1` → 资产两端（信用账户/花呗等）后入账；
-   - 退款 `1/2` → 先找原支出，走 `saveRefundBill` 等价逻辑；找不到就留在“待关联退款”。
-2. **分类映射**：收入分类、退款“退款：”前缀/继承原支出分类、还款分类；分类规则来自 AutoAccounting `category.js`。
-3. **资产映射**：转账/还款需要 `accountId` + `toAccountId`；把 `accountNameFrom/To` 映射到 App 资产；资产功能关闭时的降级策略。
-4. **退款原账单关联**：按金额/时间/商户/分类查找原支出；支持多笔部分退款；保留未关联退款在待记，不丢弃。
-5. **App 表单退款语义**：`fillDataToUi` 目前只处理 `type`，不处理退款 `subType`；需要阻止把退款保存成普通收入，或在保存时强制选择原账单。
-6. **导入状态机**：`IMPORTING → RECORDED/FAILED`、幂等回执、`external_imports` 对账。
-7. **真实设备回归**：安装新插件，确认 v1→v2 migration 不丢现有测试数据；跑真实样本（只计数，不入库）。
-8. **旧行/重复事件回填**：`insert` 命中 `sourceTxnId` 幂等时直接返回已有行，不会补写类型；migration 后的旧行也保持 `NULL`。需要一次性回填或允许“已有行类型为空时更新”。
-9. **文档/旧口径清理**：把仍写“P0 只记支出”的旧文档改成组合 B，避免后来的人按旧口径改回去。
+已完成：
+- App `importBills` 已按 `type/subType/needsRefundLink` 分流；支出/收入/转账/还款/退款都可写。
+- `AssetNameResolver` 把渠道户名折成本地资产；`CategoryNameResolver` 把 AA 分类折成本地分类。
+- 退款直接入账会尝试匹配原支出；匹配不到返回 `needs_refund_link`，留在待关联。
+- 插件“入账”按钮直接调 App `importBills`；转账/还款要求两端资产。
+- 插件 Room v1→v4 迁移、旧数据保留；备用机合成数据验证通过。
+
+剩余优化：
+1. 分类别名表目前是保守映射，未知分类留空；后续用真实规则命中的分类统计再补。
+2. 退款自动匹配依赖 App `findLikelyRefundSourceBill`；部分退款/多笔候选需要更明确的 UI。
+3. 还款规则识别仍靠规则名含“还款”，部分信用卡规则可能漏。
+4. 导入状态机、失败重试、旧行自动回填仍未做。
+5. 真实微信/支付宝 hook 仍未在 root 设备验证；备用机无 root，只能用合成数据。
+6. UI 仍是功能骨架，资产/分类手选流程可继续压缩。
 
 ## 8. 改动文件
 

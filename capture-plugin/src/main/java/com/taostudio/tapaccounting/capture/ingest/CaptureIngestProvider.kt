@@ -53,6 +53,13 @@ class CaptureIngestProvider : ContentProvider() {
                 ?: return ackError("provider not attached")
             AutoAccountingRuleEngine.init(app)
             val enriched = enrichWithRules(payload)
+            if (enriched == null) {
+                // 与 AutoAccounting 一致：规则未命中的原始数据可以留在调试日志，
+                // 但不能生成“待记账单”。否则丰巢取件/群通知等会污染收件箱。
+                val count = runBlocking(Dispatchers.IO) { app.repository.countPending() }
+                CaptureNotifier.refresh(app, count)
+                return ackIgnored(payload.captureId, count)
+            }
 
             val (outcome, count) = runBlocking(Dispatchers.IO) {
                 val result = app.repository.insert(enriched)
@@ -78,6 +85,17 @@ class CaptureIngestProvider : ContentProvider() {
                 .toString(),
         )
 
+    private fun ackIgnored(captureId: String, count: Int): Bundle =
+        bundleOf(
+            JSONObject()
+                .put("ok", true)
+                .put("contractVersion", CaptureContract.VERSION)
+                .put("captureId", captureId)
+                .put("ignored", true)
+                .put("count", count)
+                .toString(),
+        )
+
     private fun ackError(message: String): Bundle =
         bundleOf(
             JSONObject()
@@ -99,7 +117,7 @@ class CaptureIngestProvider : ContentProvider() {
      * 阶段一（组合 B）：支出/收入/转账/还款/退款都写入待记，并带上本地类型；
      * 规则命中但本地类型无法判断（如 Expend+退款）时不写类型字段，标记待分类。
      */
-    private fun enrichWithRules(payload: CapturePayload): CapturePayload {
+    private fun enrichWithRules(payload: CapturePayload): CapturePayload? {
         val raw = payload.rawJson ?: return payload
         if (raw.isBlank()) return payload
 
@@ -107,13 +125,19 @@ class CaptureIngestProvider : ContentProvider() {
             AutoAccountingRuleEngine.parse(payload.source, payload.rawType, raw)
         } catch (t: Throwable) {
             Log.w(TAG, "rule engine failed", t)
-            return payload
+            return payload.takeIf { it.billType != null }
         }
 
         return when (outcome) {
             is AutoAccountingRuleEngine.ParseOutcome.NoMatch -> {
-                Log.i(TAG, "rule no match, keep payload type=${payload.billType ?: "unclassified"}")
-                payload
+                if (payload.billType == null) {
+                    Log.i(TAG, "rule no match, raw event ignored (not a pending bill)")
+                    null
+                } else {
+                    // 合成/探针显式给了类型，仍允许入库，便于调试。
+                    Log.i(TAG, "rule no match, keep explicit type=${payload.billType}")
+                    payload
+                }
             }
 
             is AutoAccountingRuleEngine.ParseOutcome.Matched -> {

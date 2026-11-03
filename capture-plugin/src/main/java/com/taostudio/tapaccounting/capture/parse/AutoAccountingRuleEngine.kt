@@ -6,6 +6,7 @@ import com.shiqi.quickjs.JSContext
 import com.shiqi.quickjs.QuickJS
 import com.taostudio.tapaccounting.capture.contract.BillTypeLocalizer
 import com.taostudio.tapaccounting.capture.contract.CaptureSource
+import com.taostudio.tapaccounting.capture.contract.LocalBillType
 import com.taostudio.tapaccounting.capture.contract.LocalBillTypeMapping
 import org.json.JSONArray
 import org.json.JSONObject
@@ -202,7 +203,20 @@ object AutoAccountingRuleEngine {
                         }
                         // 本地化：AA 只有 3 种类型，还款/退款/收入关键词要额外识别；
                         // local 为 null 只表示“待分类”，不影响金额/商户等字段入库。
-                        val local = BillTypeLocalizer.localize(billType, rule.name)
+                        var local = BillTypeLocalizer.localize(billType, rule.name)
+                        // 微信“转账退款”和普通转账共用规则名“微信转账”，
+                        // 但规则生成的 channel 会带“退款”；以 channel 纠正为退款子类型。
+                        val channel = obj.optString("channel", "").trim()
+                        if (local?.type == LocalBillType.TYPE_INCOME &&
+                            local.subType != LocalBillType.SUBTYPE_REFUND &&
+                            channel.contains("退款")
+                        ) {
+                            local = LocalBillTypeMapping(
+                                type = LocalBillType.TYPE_INCOME,
+                                subType = LocalBillType.SUBTYPE_REFUND,
+                                needsRefundLink = true,
+                            )
+                        }
 
                         val money = obj.optDouble("money", Double.NaN)
                         if (money.isNaN() || money <= 0.0) {

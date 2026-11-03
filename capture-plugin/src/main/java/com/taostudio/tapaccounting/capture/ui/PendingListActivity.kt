@@ -23,6 +23,8 @@ import com.taostudio.tapaccounting.capture.bridge.CaptureReconciler
 import com.taostudio.tapaccounting.capture.contract.CapturePayload
 import com.taostudio.tapaccounting.capture.contract.CaptureSource
 import com.taostudio.tapaccounting.capture.contract.CaptureStatus
+import com.taostudio.tapaccounting.capture.contract.ImportBill
+import com.taostudio.tapaccounting.capture.contract.ImportItemStatus
 import com.taostudio.tapaccounting.capture.contract.LocalBillType
 import com.taostudio.tapaccounting.capture.data.CaptureRepository
 import com.taostudio.tapaccounting.capture.data.PaymentCapture
@@ -227,6 +229,12 @@ class PendingListActivity : Activity() {
         val actionable = item.status != CaptureStatus.RECORDED &&
             item.status != CaptureStatus.IGNORED &&
             item.status != CaptureStatus.DUPLICATE
+        actions.addView(
+            actionButton(
+                "入账",
+                actionable && item.billType != null && !isRefund(item),
+            ) { directImport(item) },
+        )
         actions.addView(actionButton("自己记", actionable) { openQuickRecord(item) })
         actions.addView(actionButton("备注", true) { editNote(item) })
         actions.addView(actionButton("忽略", actionable) { ignore(item) })
@@ -490,6 +498,78 @@ class PendingListActivity : Activity() {
     }
 
     // ---------------- 自己记 ----------------
+
+    /**
+     * 直接把已识别类型的待记交给 App 入账。
+     *
+     * 和“自己记”的区别：不打开悬浮窗；类型/资产用规则结果，分类先去空。
+     * 转账/还款要求两端资产能匹配，否则 App 会返回错误，不会写一条错账。
+     */
+    private fun directImport(item: PaymentCapture) {
+        val type = item.billType
+        if (type == null) {
+            toast("这条还没有类型，请先点“自己记”选择类型")
+            return
+        }
+        if (isRefund(item)) {
+            toast("退款需要关联原支出，暂不能直接入账")
+            return
+        }
+        if ((item.amountCents ?: 0L) <= 0L) {
+            toast("金额缺失，不能直接入账")
+            return
+        }
+
+        val bill = ImportBill(
+            captureId = item.id,
+            type = type,
+            subType = item.subType ?: LocalBillType.SUBTYPE_NORMAL,
+            needsRefundLink = item.needsRefundLink,
+            amountCents = item.amountCents ?: 0L,
+            currency = item.currency,
+            paidAt = item.paidAt,
+            assetName = item.assetName ?: item.paymentMethodRaw,
+            toAssetName = item.toAssetName,
+            remarks = item.note ?: "",
+            bookName = item.bookName,
+        )
+        AlertDialog.Builder(this)
+            .setTitle("直接入账")
+            .setMessage(
+                "${billTypeLabel(item)} ${formatAmount(bill.amountCents)}\n" +
+                    "会按当前类型和资产直接写入敲敲记账，分类可能为空。",
+            )
+            .setPositiveButton("入账") { _, _ -> performDirectImport(item, bill) }
+            .setNegativeButton("取消", null)
+            .show()
+    }
+
+    private fun performDirectImport(item: PaymentCapture, bill: ImportBill) {
+        val requestId = UUID.randomUUID().toString()
+        scope.launch {
+            val result = bridge.importBills(listOf(bill), requestId)
+            if (result == null) {
+                toast("App 桥接不可用，未入账")
+                return@launch
+            }
+            val first = result.optJSONArray("results")?.optJSONObject(0)
+            when (first?.optString("status")) {
+                ImportItemStatus.CREATED, ImportItemStatus.DUPLICATE -> {
+                    withContext(Dispatchers.IO) {
+                        CaptureApp.from(this@PendingListActivity).repository
+                            .updateStatus(item.id, CaptureStatus.RECORDED)
+                    }
+                    toast("已入账")
+                    load()
+                }
+                else -> {
+                    val error = first?.optString("error").orEmpty()
+                        .ifBlank { result.optString("error", "未知错误") }
+                    toast("入账失败：$error")
+                }
+            }
+        }
+    }
 
     private fun openQuickRecord(item: PaymentCapture) {
         // 退款不能按普通收入入账；阶段一还没有“关联原支出”的入口，

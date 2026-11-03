@@ -5,6 +5,7 @@ import android.net.Uri
 import android.os.Bundle
 import android.util.Log
 import com.taostudio.tapaccounting.capture.contract.CaptureContract
+import com.taostudio.tapaccounting.capture.contract.ImportBill
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
@@ -93,6 +94,50 @@ class CaptureBridgeClient(context: Context) {
         val json = callForObject(CaptureContract.METHOD_OPEN_QUICK_RECORD, null, extras)
             ?: return@withContext false
         json.optBoolean("ok", false)
+    }
+
+    /**
+     * 把插件里已经确认好类型的待记直接交给 App 写入账本。
+     *
+     * 返回 App 的原始结果 JSON（`ok`、`results`）；桥接不可用返回 null。
+     * 退款必须带 relatedBillId，否则 App 会返回 needs_refund_link。
+     */
+    suspend fun importBills(
+        bills: List<ImportBill>,
+        requestId: String?,
+    ): JSONObject? = withContext(Dispatchers.IO) {
+        if (bills.isEmpty()) return@withContext null
+        val array = JSONArray()
+        bills.forEach { bill ->
+            array.put(
+                JSONObject().apply {
+                    put("captureId", bill.captureId)
+                    put("type", bill.type)
+                    put("subType", bill.subType)
+                    put("needsRefundLink", bill.needsRefundLink)
+                    put("amountCents", bill.amountCents)
+                    put("currency", bill.currency)
+                    put("paidAt", bill.paidAt)
+                    putOpt("assetId", bill.assetId)
+                    putOpt("assetName", bill.assetName)
+                    putOpt("toAssetId", bill.toAssetId)
+                    putOpt("toAssetName", bill.toAssetName)
+                    putOpt("categoryId", bill.categoryId)
+                    putOpt("categoryName", bill.categoryName)
+                    put("remarks", bill.remarks)
+                    putOpt("bookName", bill.bookName)
+                    put("feeCents", bill.feeCents)
+                    putOpt("relatedBillId", bill.relatedBillId)
+                }
+            )
+        }
+        val extras = Bundle().apply {
+            putString("bills", array.toString())
+            if (!requestId.isNullOrBlank()) {
+                putString(CaptureContract.EXTRA_REQUEST_ID, requestId)
+            }
+        }
+        callForObject(CaptureContract.METHOD_IMPORT_BILLS, null, extras)
     }
 
     // ---------------- 底层调用 ----------------

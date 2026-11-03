@@ -530,6 +530,7 @@ class PendingListActivity : Activity() {
             paidAt = item.paidAt,
             assetName = item.assetName ?: item.paymentMethodRaw,
             toAssetName = item.toAssetName,
+            categoryName = item.categoryName,
             remarks = item.note ?: "",
             bookName = item.bookName,
         )
@@ -598,6 +599,7 @@ class PendingListActivity : Activity() {
             // assetName 是已经映射过的权威值，有则优先。
             (item.assetName ?: item.paymentMethodRaw)?.let { put("asset_name", it) }
             item.toAssetName?.let { put("to_asset_name", it) }
+            item.categoryName?.let { put("category_name", it) }
             put("time", prefillTimeFormat.format(Date(item.paidAt)))
             put("remarks", item.note ?: "")
             item.bookName?.let { put("book_name", it) }

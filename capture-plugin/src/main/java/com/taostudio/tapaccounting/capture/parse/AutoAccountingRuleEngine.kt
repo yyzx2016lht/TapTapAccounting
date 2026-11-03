@@ -9,6 +9,8 @@ import com.taostudio.tapaccounting.capture.contract.CaptureSource
 import com.taostudio.tapaccounting.capture.contract.LocalBillTypeMapping
 import org.json.JSONArray
 import org.json.JSONObject
+import java.text.SimpleDateFormat
+import java.util.Date
 import java.util.Locale
 import kotlin.math.roundToLong
 
@@ -33,6 +35,7 @@ object AutoAccountingRuleEngine {
 
     private const val TAG = "TapCaptureRule"
     private const val ASSET_NAME = "autoaccounting_rules.json"
+    private const val CATEGORY_ASSET_NAME = "autoaccounting_category.js"
     private const val SECONDS_THRESHOLD = 10_000_000_000L
     private const val DEFAULT_CURRENCY = "CNY"
     private const val MAX_FAILURE_LOGS = 3
@@ -77,6 +80,8 @@ object AutoAccountingRuleEngine {
         val feeCents: Long,
         val currency: String,
         val channel: String?,
+        /** AutoAccounting category.js 推断的分类名；无法推断为 null。 */
+        val categoryName: String? = null,
     )
 
     private data class RuleDef(
@@ -88,6 +93,8 @@ object AutoAccountingRuleEngine {
 
     private data class RuleSet(
         val common: String,
+        /** AutoAccounting category.js；为空表示不做分类推断。 */
+        val category: String,
         /** key = "$app|$type"（type 已是 DATA/NOTICE）。 */
         val byKey: Map<String, List<RuleDef>>,
     )
@@ -152,6 +159,14 @@ object AutoAccountingRuleEngine {
                         log("common.js failed: ${describe(t)}")
                         return ParseOutcome.NoMatch
                     }
+                    if (rules.category.isNotBlank()) {
+                        try {
+                            ctx.evaluate(rules.category, "category.js")
+                        } catch (t: Throwable) {
+                            // 分类是增强项，失败不影响金额/类型。
+                            log("category.js failed: ${describe(t)}")
+                        }
+                    }
 
                     for (rule in candidates) {
                         executed++
@@ -200,21 +215,26 @@ object AutoAccountingRuleEngine {
                             log("rule ${rule.name} matched but amount rounded to 0")
                             continue
                         }
+                        val enriched = parsed.copy(
+                            categoryName = parseCategory(ctx, parsed, rules.category),
+                        )
                         if (local == null) {
                             log(
                                 "matched-but-unclassified rule=${rule.name} type=$billType " +
-                                    "money=${parsed.amountCents} merchant=${parsed.merchant ?: "-"} " +
-                                    "channel=${parsed.channel ?: "-"}",
+                                    "money=${enriched.amountCents} merchant=${enriched.merchant ?: "-"} " +
+                                    "category=${enriched.categoryName ?: "-"} " +
+                                    "channel=${enriched.channel ?: "-"}",
                             )
                         } else {
                             log(
-                                "matched rule=${rule.name} type=$billType money=${parsed.amountCents} " +
-                                    "local=${parsed.localType}/${parsed.localSubType} " +
-                                    "refundLink=${parsed.needsRefundLink} " +
-                                    "merchant=${parsed.merchant ?: "-"} channel=${parsed.channel ?: "-"}",
+                                "matched rule=${rule.name} type=$billType money=${enriched.amountCents} " +
+                                    "local=${enriched.localType}/${enriched.localSubType} " +
+                                    "refundLink=${enriched.needsRefundLink} " +
+                                    "category=${enriched.categoryName ?: "-"} " +
+                                    "merchant=${enriched.merchant ?: "-"} channel=${enriched.channel ?: "-"}",
                             )
                         }
-                        return ParseOutcome.Matched(parsed)
+                        return ParseOutcome.Matched(enriched)
                     }
                     ParseOutcome.NoMatch
                 }
@@ -236,6 +256,37 @@ object AutoAccountingRuleEngine {
         val global = ctx.globalObject
         global.setProperty("print", ctx.createJSFunction { _, _ -> ctx.createJSUndefined() })
         global.setProperty("data", ctx.createJSString(rawJson))
+    }
+
+    /**
+     * 调 AutoAccounting category.js。
+     *
+     * 它使用 `a_r_channel` 组合文本做关键词匹配，并按小时判断“早餐/午餐/晚餐”。
+     * 分类失败只返回 null，不影响账单本身。
+     */
+    private fun parseCategory(
+        ctx: JSContext,
+        parsed: ParsedRule,
+        categoryCode: String,
+    ): String? {
+        if (categoryCode.isBlank()) return null
+        val time = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(parsed.paidAt))
+        val expression = "JSON.stringify(category.get('', " +
+            "${JSONObject.quote(parsed.type)}, " +
+            "${JSONObject.quote(parsed.merchant.orEmpty())}, " +
+            "${JSONObject.quote(parsed.shopItem.orEmpty())}, " +
+            "${JSONObject.quote(time)}, " +
+            "${JSONObject.quote(parsed.channel.orEmpty())}))"
+        return try {
+            val raw = ctx.evaluate(expression, "category-call.js", String::class.java)
+            if (raw.isNullOrBlank() || raw == "null" || raw == "undefined") return null
+            JSONObject(raw).optString("category", "")
+                .trim()
+                .takeIf { it.isNotEmpty() }
+        } catch (t: Throwable) {
+            log("category call failed: ${describe(t)}")
+            null
+        }
     }
 
     private fun buildParsed(
@@ -290,6 +341,12 @@ object AutoAccountingRuleEngine {
         val root = JSONObject(text)
         val common = root.optString("common")
         require(common.isNotBlank()) { "rules asset missing common.js" }
+        val category = runCatching {
+            context.assets.open(CATEGORY_ASSET_NAME).bufferedReader().use { it.readText() }
+        }.getOrElse {
+            log("category asset missing: ${describe(it)}")
+            ""
+        }
 
         val rules = root.optJSONArray("rules") ?: JSONArray()
         val byKey = LinkedHashMap<String, MutableList<RuleDef>>()
@@ -312,8 +369,8 @@ object AutoAccountingRuleEngine {
             byKey.getOrPut("$app|$type") { ArrayList() }
                 .add(RuleDef(name = name, systemRuleName = systemRuleName, code = code))
         }
-        log("rules loaded total=${rules.length()} skipped=$skipped")
-        return RuleSet(common = common, byKey = byKey)
+        log("rules loaded total=${rules.length()} skipped=$skipped category=${category.isNotBlank()}")
+        return RuleSet(common = common, category = category, byKey = byKey)
     }
 
     private fun packageForSource(source: String): String? = when (source.trim().uppercase(Locale.US)) {

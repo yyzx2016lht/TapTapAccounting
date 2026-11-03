@@ -19,6 +19,8 @@ data class CapturePayload(
     val amountCents: Long? = null,
     val currency: String = "CNY",
     val merchant: String? = null,
+    /** AutoAccounting category.js 推断出的分类名；本地映射前原样保存。 */
+    val categoryName: String? = null,
     /** 原始支付方式，如“零钱”“招商银行储蓄卡(1234)”。 */
     val paymentMethodRaw: String? = null,
     /** 转账/还款的转入资产名；规则里的 accountNameTo。 */

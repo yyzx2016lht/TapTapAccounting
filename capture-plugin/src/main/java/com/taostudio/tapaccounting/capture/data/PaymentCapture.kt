@@ -26,6 +26,8 @@ data class PaymentCapture(
     val amountCents: Long? = null,
     val currency: String = "CNY",
     val merchant: String? = null,
+    /** AutoAccounting category.js 推断出的分类名；null 表示未推断。 */
+    val categoryName: String? = null,
     val paymentMethodRaw: String? = null,
     val assetId: Long? = null,
     val assetName: String? = null,

@@ -47,6 +47,7 @@ class CaptureRepository(private val dao: PaymentCaptureDao) {
         amountCents = amountCents,
         currency = currency.ifBlank { "CNY" },
         merchant = merchant?.takeIf { it.isNotBlank() },
+        categoryName = categoryName?.takeIf { it.isNotBlank() },
         paymentMethodRaw = paymentMethodRaw?.takeIf { it.isNotBlank() },
         toAssetName = toAssetName?.takeIf { it.isNotBlank() },
         billType = billType,

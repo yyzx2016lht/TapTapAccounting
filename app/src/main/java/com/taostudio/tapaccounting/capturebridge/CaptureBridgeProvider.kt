@@ -24,6 +24,7 @@ import com.taostudio.tapaccounting.data.local.entity.Bill
 import com.taostudio.tapaccounting.data.local.entity.ExternalImport
 import com.taostudio.tapaccounting.logic.AssetNameResolver
 import com.taostudio.tapaccounting.logic.BillMutationService
+import com.taostudio.tapaccounting.logic.CategoryNameResolver
 import com.taostudio.tapaccounting.logic.DuplicateCaptureException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
@@ -354,11 +355,20 @@ class CaptureBridgeProvider : ContentProvider() {
             require(asset.id != toAsset.id) { "same_asset" }
         }
 
+        val resolvedCategory = if (type in setOf(Bill.TYPE_EXPENSE, Bill.TYPE_INCOME)) {
+            CategoryNameResolver.resolve(
+                db.categoryDao().getAllCategoriesList(),
+                import.categoryName,
+                type,
+            )
+        } else {
+            null
+        }
         val categoryName = when {
             type == Bill.TYPE_TRANSFER && subType == Bill.SUBTYPE_REPAYMENT ->
                 "还款到${toAsset?.name.orEmpty()}"
             type == Bill.TYPE_TRANSFER -> "转账到${toAsset?.name.orEmpty()}"
-            else -> import.categoryName
+            else -> resolvedCategory?.name.orEmpty()
         }
 
         val bill = Bill(
@@ -367,8 +377,8 @@ class CaptureBridgeProvider : ContentProvider() {
             amount = import.amountCents / 100.0,
             originalAmount = import.amountCents / 100.0,
             currency = import.currency.ifBlank { "CNY" },
-            categoryId = import.categoryId,
-            categoryName = categoryName.orEmpty(),
+            categoryId = import.categoryId ?: resolvedCategory?.id,
+            categoryName = categoryName,
             accountId = asset?.id,
             accountName = asset?.name.orEmpty(),
             toAccountId = toAsset?.id,
@@ -459,12 +469,25 @@ class CaptureBridgeProvider : ContentProvider() {
      * 在 App 边界折成本地资产名，避免编辑器里选中一个不存在的资产。
      */
     private suspend fun normalizePrefillAssets(ctx: Context, source: JSONObject): JSONObject {
-        val assets = AppDatabase.getDatabase(ctx).assetDao().getAllAssetsList()
+        val db = AppDatabase.getDatabase(ctx)
+        val assets = db.assetDao().getAllAssetsList()
+        val categories = db.categoryDao().getAllCategoriesList()
         val out = JSONObject(source.toString())
         for (key in listOf("asset_name", "to_asset_name")) {
             val raw = out.optString(key, "").trim()
             if (raw.isEmpty()) continue
             AssetNameResolver.resolve(assets, raw)?.let { out.put(key, it.name) }
+        }
+        val rawCategory = out.optString("category_name", "").trim()
+        if (rawCategory.isNotEmpty()) {
+            val type = out.optInt("type", 0).coerceIn(0, 1)
+            val category = CategoryNameResolver.resolve(categories, rawCategory, type)
+            if (category != null) {
+                out.put("category_name", category.name)
+            } else {
+                // 陌生分类不硬塞进本地分类；让用户在悬浮窗自己选。
+                out.remove("category_name")
+            }
         }
         return out
     }

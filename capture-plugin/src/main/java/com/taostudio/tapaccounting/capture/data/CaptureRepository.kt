@@ -22,16 +22,25 @@ class CaptureRepository(private val dao: PaymentCaptureDao) {
         payload.sourceTxnId?.takeIf { it.isNotBlank() }?.let { txn ->
             dao.findBySourceTxn(payload.source, txn)?.let { existing ->
                 // 同一笔转账会从 WCDB message 与 AppMessage 各来一次：
-                // 先到的可能没有 isSend、无法分类；后到的带类型时补全，不能只丢弃。
-                if (existing.billType == null && payload.billType != null) {
+                // 先到的可能没有 isSend、无法分类，或者商户名是脏的“待xxx确认收款”；后到的补全更新。
+                val incomingMerchant = payload.merchant?.takeIf { it.isNotBlank() }
+                val shouldUpgradeMerchant = incomingMerchant != null && (
+                    existing.merchant.isNullOrBlank() ||
+                        existing.merchant.startsWith("待") ||
+                        existing.merchant.startsWith("wxid_")
+                    )
+                if ((existing.billType == null && payload.billType != null) ||
+                    shouldUpgradeMerchant ||
+                    (existing.paymentMethodRaw == null && payload.paymentMethodRaw != null)
+                ) {
                     val merged = existing.copy(
                         amountCents = payload.amountCents ?: existing.amountCents,
-                        merchant = payload.merchant?.takeIf { it.isNotBlank() } ?: existing.merchant,
+                        merchant = if (shouldUpgradeMerchant) incomingMerchant else (existing.merchant ?: incomingMerchant),
                         categoryName = payload.categoryName ?: existing.categoryName,
                         paymentMethodRaw = payload.paymentMethodRaw ?: existing.paymentMethodRaw,
                         assetName = payload.assetName ?: existing.assetName,
                         toAssetName = payload.toAssetName ?: existing.toAssetName,
-                        billType = payload.billType,
+                        billType = payload.billType ?: existing.billType,
                         subType = payload.subType ?: existing.subType,
                         needsRefundLink = existing.needsRefundLink || payload.needsRefundLink,
                         rawJson = payload.rawJson ?: existing.rawJson,
@@ -56,17 +65,37 @@ class CaptureRepository(private val dao: PaymentCaptureDao) {
 
     suspend fun findById(id: String): PaymentCapture? = dao.findById(id)
 
-    suspend fun list(limit: Int = 200): List<PaymentCapture> = dao.listRecent(limit)
+    suspend fun list(limit: Int = 200): List<PaymentCapture> =
+        dao.listRecent(limit).map { normalizeHistoricalRow(it) }
 
     suspend fun listPending(limit: Int = 100, onlyExpense: Boolean = false): List<PaymentCapture> {
         val rows = dao.listByStatuses(CaptureStatus.PENDING_COUNT_STATUSES.toList(), limit)
+            .map { normalizeHistoricalRow(it) }
         return if (onlyExpense) {
             rows.filter {
-                (it.billType == null || it.billType == LocalBillType.TYPE_EXPENSE) && !it.needsRefundLink
+                it.billType == null ||
+                    it.billType == LocalBillType.TYPE_EXPENSE ||
+                    it.subType == LocalBillType.SUBTYPE_REFUND ||
+                    it.needsRefundLink
             }
         } else {
             rows
         }
+    }
+
+    private suspend fun normalizeHistoricalRow(row: PaymentCapture): PaymentCapture {
+        val cleanedMerchant = row.merchant?.let { raw ->
+            Regex("""^待(.+?)确认收款$""").matchEntire(raw.trim())?.groupValues?.getOrNull(1)?.trim()
+                ?: raw
+        }
+        val isRefund = row.subType == LocalBillType.SUBTYPE_REFUND || row.needsRefundLink
+        val cleanedCategory = if (isRefund && row.categoryName == "收红包") "退款" else row.categoryName
+        if (cleanedMerchant != row.merchant || cleanedCategory != row.categoryName) {
+            val fixed = row.copy(merchant = cleanedMerchant, categoryName = cleanedCategory)
+            runCatching { dao.update(fixed) }
+            return fixed
+        }
+        return row
     }
 
     suspend fun countPending(onlyExpense: Boolean = false): Int {

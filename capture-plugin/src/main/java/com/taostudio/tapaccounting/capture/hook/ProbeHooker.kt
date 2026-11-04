@@ -74,6 +74,7 @@ internal object ProbeHooker {
 
     private val alipayInjectedAt = ConcurrentHashMap<String, Long>()
     private val alipayPolling = ConcurrentHashMap.newKeySet<String>()
+    private val wechatContactCache = ConcurrentHashMap<String, String>()
 
     fun install(lpparam: XC_LoadPackage.LoadPackageParam) {
         when (lpparam.packageName) {
@@ -140,7 +141,7 @@ internal object ProbeHooker {
                         try {
                             val table = param.args.getOrNull(0) as? String ?: return
                             val values = param.args.getOrNull(1) as? ContentValues ?: return
-                            handleWechatWrite(table, values)
+                            handleWechatWrite(param.thisObject, table, values)
                         } catch (t: Throwable) {
                             log("wcdb update handle failed: ${t.javaClass.name}: ${t.message}")
                         }
@@ -156,10 +157,10 @@ internal object ProbeHooker {
     private fun handleWechatInsert(param: XC_MethodHook.MethodHookParam) {
         val table = param.args.getOrNull(0) as? String ?: return
         val values = param.args.getOrNull(2) as? ContentValues ?: return
-        handleWechatWrite(table, values)
+        handleWechatWrite(param.thisObject, table, values)
     }
 
-    private fun handleWechatWrite(table: String, values: ContentValues) {
+    private fun handleWechatWrite(db: Any?, table: String, values: ContentValues) {
         if (table != TABLE_MESSAGE && table != TABLE_APP_MESSAGE) return
         val type = readInt(values, "type") ?: return
 
@@ -183,7 +184,15 @@ internal object ProbeHooker {
         val now = System.currentTimeMillis()
         val content = readString(values, "content").orEmpty()
         val xml = readString(values, "xml").orEmpty()
-        val talker = readString(values, "talker")
+        val xmlSource = xml.ifBlank { content }
+        if (table == TABLE_MESSAGE && type == MSG_TYPE_GROUP_SYSTEM && !content.contains("群收款")) {
+            return
+        }
+
+        val rawTalker = readString(values, "talker")
+            ?: ProbeText.xmlTagText(xmlSource, "receiver_username")
+            ?: ProbeText.xmlTagText(xmlSource, "payer_username")
+        val talker = resolveWechatDisplayName(db, rawTalker) ?: rawTalker
         val isSend = readInt(values, "isSend")
         val cache = WechatRichCache.snapshot(now)
         val fallbackTxnId = readString(values, "msgSvrId", "msgId")
@@ -201,7 +210,7 @@ internal object ProbeHooker {
                 WechatEnvelope.transferFromXml(content, isSend, cache, talker, now)
 
             table == TABLE_APP_MESSAGE && type == APPMSG_TYPE_TRANSFER ->
-                WechatEnvelope.transferFromXml(xml.ifBlank { content }, isSend, cache, talker, now)
+                WechatEnvelope.transferFromXml(xmlSource, isSend, cache, talker, now)
 
             table == TABLE_MESSAGE && type == MSG_TYPE_RED_PACKAGE ->
                 WechatEnvelope.redPacketFromXml(content, isSend, cache, talker, now)
@@ -212,6 +221,10 @@ internal object ProbeHooker {
             else -> ""
         }
         if (rawJson.isBlank()) return
+
+        if (isSend == 1 && (type == MSG_TYPE_TRANSFER || type == APPMSG_TYPE_TRANSFER || type == MSG_TYPE_RED_PACKAGE)) {
+            WechatRichCache.clearShop()
+        }
 
         val txnId = when {
             table == TABLE_MESSAGE && type == MSG_TYPE_RED_PACKAGE ->
@@ -225,9 +238,9 @@ internal object ProbeHooker {
         }
 
         val text = listOfNotNull(
-            ProbeText.xmlTagText(content, "des"),
-            ProbeText.xmlTagText(content, "title"),
-            content,
+            ProbeText.xmlTagText(xmlSource, "des"),
+            ProbeText.xmlTagText(xmlSource, "title"),
+            xmlSource,
             cache?.payMoney,
             cache?.payTools,
             cache?.payShop,
@@ -241,10 +254,11 @@ internal object ProbeHooker {
             ?.let { ProbeText.findPaymentMethod(it) }
             ?: ProbeText.findPaymentMethod(text)
         val merchant = ProbeText.cleanMerchant(
+            talker?.takeIf { type == MSG_TYPE_TRANSFER || type == APPMSG_TYPE_TRANSFER || type == MSG_TYPE_RED_PACKAGE },
             cache?.payShop,
-            ProbeText.xmlTagText(content, "display_name"),
-            ProbeText.xmlTagText(content, "nickname"),
-            ProbeText.xmlTagText(content, "title"),
+            ProbeText.xmlTagText(xmlSource, "display_name"),
+            ProbeText.xmlTagText(xmlSource, "nickname"),
+            ProbeText.xmlTagText(xmlSource, "title"),
         )
 
         log(
@@ -261,6 +275,46 @@ internal object ProbeHooker {
             amountCents = amountCents,
             dataType = "DATA",
         )
+    }
+
+    /**
+     * 从当前正在写入的 EnMicroMsg.db (rcontact 表) 把 wxid_xxx 解析成微信备注名或昵称，
+     * 解决转账/退款/收红包时商户名变成裸 wxid_xxx 的问题。
+     */
+    private fun resolveWechatDisplayName(db: Any?, wxid: String?): String? {
+        val id = wxid?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+        if (!id.startsWith("wxid_") && !id.endsWith("@chatroom") && !id.contains("_")) {
+            return id
+        }
+        wechatContactCache[id]?.let { return it }
+        if (db == null) return null
+
+        val cursor = try {
+            XposedHelpers.callMethod(
+                db,
+                "rawQuery",
+                "SELECT conRemark, nickname FROM rcontact WHERE username = ? LIMIT 1",
+                arrayOf(id),
+            )
+        } catch (_: Throwable) {
+            null
+        } ?: return null
+
+        return try {
+            val moved = XposedHelpers.callMethod(cursor, "moveToFirst") as? Boolean ?: false
+            if (!moved) return null
+            val remark = (XposedHelpers.callMethod(cursor, "getString", 0) as? String)?.trim().orEmpty()
+            val nickname = (XposedHelpers.callMethod(cursor, "getString", 1) as? String)?.trim().orEmpty()
+            val resolved = remark.ifEmpty { nickname }.takeIf { it.isNotEmpty() }
+            if (resolved != null) {
+                wechatContactCache[id] = resolved
+            }
+            resolved
+        } catch (_: Throwable) {
+            null
+        } finally {
+            runCatching { XposedHelpers.callMethod(cursor, "close") }
+        }
     }
 
     /**

@@ -293,20 +293,31 @@ object AutoAccountingRuleEngine {
             else -> "数据"
         }
         // 与 AutoAccounting BillService.categorize 对齐：
-        // category.get(money, type, sanitizedShopName, sanitizedShopItem, HH:mm, 规则名)
+        // category.get(money, type, sanitizedShopName, sanitizedShopItem, HH:mm, 规则名+渠道)
+        val ruleAndChannel = buildString {
+            append(prefix).append('·').append(parsed.ruleName)
+            parsed.channel?.takeIf { it.isNotBlank() }?.let { append(' ').append(it) }
+        }
         val expression = "JSON.stringify(category.get(" +
             "$money, " +
             "${JSONObject.quote(parsed.type)}, " +
             "${JSONObject.quote(sanitizeCategoryMeta(parsed.merchant.orEmpty()))}, " +
             "${JSONObject.quote(sanitizeCategoryMeta(parsed.shopItem.orEmpty()))}, " +
             "${JSONObject.quote(time)}, " +
-            "${JSONObject.quote("$prefix·${parsed.ruleName}")}))"
+            "${JSONObject.quote(ruleAndChannel)}))"
         return try {
             val raw = ctx.evaluate(expression, "category-call.js", String::class.java)
             if (raw.isNullOrBlank() || raw == "null" || raw == "undefined") return null
-            JSONObject(raw).optString("category", "")
+            val cat = JSONObject(raw).optString("category", "")
                 .trim()
                 .takeIf { it.isNotEmpty() }
+            if ((parsed.needsRefundLink || parsed.localSubType == LocalBillType.SUBTYPE_REFUND) &&
+                (cat == null || cat == "收红包" || cat == "其他")
+            ) {
+                "退款"
+            } else {
+                cat
+            }
         } catch (t: Throwable) {
             log("category call failed: ${describe(t)}")
             null
@@ -342,6 +353,12 @@ object AutoAccountingRuleEngine {
         }
         val feeCents = (obj.optDouble("fee", 0.0) * 100.0).roundToLong()
 
+        val rawShopName = obj.stringOrNull("shopName")
+        val cleanedShopName = rawShopName?.let { raw ->
+            Regex("""^待(.+?)确认收款$""").matchEntire(raw)?.groupValues?.getOrNull(1)?.trim()
+                ?: raw
+        }
+
         return ParsedRule(
             ruleName = ruleName,
             type = autoType,
@@ -350,7 +367,7 @@ object AutoAccountingRuleEngine {
             needsRefundLink = local?.needsRefundLink ?: false,
             amountCents = cents,
             paidAt = paidAt,
-            merchant = obj.stringOrNull("shopName"),
+            merchant = cleanedShopName,
             shopItem = obj.stringOrNull("shopItem"),
             accountNameFrom = obj.stringOrNull("accountNameFrom"),
             accountNameTo = obj.stringOrNull("accountNameTo"),

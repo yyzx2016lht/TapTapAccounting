@@ -105,7 +105,8 @@ object CapturePluginClient {
                     }
                     val rawCat = obj.optString("categoryName", "").trim()
                     val resolvedCat = if (rawCat.isNotEmpty()) {
-                        CategoryNameResolver.resolve(localCategories, rawCat, billType.coerceIn(0, 1))
+                        (CategoryNameResolver.resolve(localCategories, rawCat, billType.coerceIn(0, 1))
+                            ?: CategoryNameResolver.resolve(localCategories, rawCat, 0))
                             ?.let { CategoryNameResolver.displayPath(localCategories, it) }
                     } else {
                         null
@@ -172,9 +173,10 @@ object CapturePluginClient {
             val localCategories = runCatching {
                 AppDatabase.getDatabase(context).categoryDao().getAllCategoriesList()
             }.getOrDefault(emptyList())
-            CategoryNameResolver.resolve(localCategories, rawCat, 0)?.let {
-                CategoryNameResolver.displayPath(localCategories, it)
-            } ?: rawCat
+            (CategoryNameResolver.resolve(localCategories, rawCat, 0)
+                ?: CategoryNameResolver.resolve(localCategories, rawCat, 1))
+                ?.let { CategoryNameResolver.displayPath(localCategories, it) }
+                ?: rawCat
         } else {
             null
         }

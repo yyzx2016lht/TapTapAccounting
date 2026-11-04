@@ -4,6 +4,9 @@ import android.app.AndroidAppHelper
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
+import android.os.Build
+import android.os.Bundle
 import android.util.Log
 import com.taostudio.tapaccounting.capture.BuildConfig
 import com.taostudio.tapaccounting.capture.contract.CaptureContract
@@ -87,50 +90,51 @@ internal object CaptureForwarder {
                 now = now,
             )
 
-            // 首选常驻 relay：不依赖插件进程是否存活/被冻结。
-            if (tryRelay(payload, captureId)) {
+            // 1. 首选直连插件进程内 TCP 端口（127.0.0.1:52047）：
+            //    绕过 ColorOS 后台 FGS 启动拦截与广播排队，1~5ms 内直接完成入库与弹窗。
+            if (trySocketDeliver(CaptureContract.PLUGIN_DIRECT_PORT, payload, captureId, connectTimeoutMs = 250)) {
+                log("forward direct delivered source=$source captureId=$captureId")
+                return@launch
+            }
+
+            // 2. 插件进程可能尚未启动或被冻结：尝试用当前前台宿主（微信/支付宝）直接唤醒插件。
+            val context = contextOverride ?: appContext()
+            if (context != null) {
+                if (tryProviderDeliver(context, payload)) {
+                    log("forward provider delivered source=$source captureId=$captureId")
+                    return@launch
+                }
+                wakePluginViaContext(context, payload, captureId)
+            }
+
+            // 3. 同时投递常驻 relay 落盘兜底（插件一旦唤醒会立即消费并回 ack）。
+            if (trySocketDeliver(CaptureContract.RELAY_PORT, payload, captureId, connectTimeoutMs = 600)) {
                 log("forward relay queued source=$source captureId=$captureId")
                 return@launch
             }
 
-            // relay 不可用时退回显式广播（旧路径，作为兜底）。
-            try {
-                val context = contextOverride ?: appContext()
-                if (context == null) {
-                    log("forward failed source=$source: relay down and no application context")
-                    seen.remove(dedupKey)
-                    return@launch
-                }
-
-                val intent = Intent(CaptureContract.ACTION_INGEST).apply {
-                    component = ComponentName(
-                        CaptureContract.PLUGIN_PACKAGE,
-                        CaptureContract.INGEST_RECEIVER_CLASS,
-                    )
-                    putExtra(CaptureContract.EXTRA_TOKEN, BuildConfig.CAPTURE_INGEST_TOKEN)
-                    putExtra(CaptureContract.EXTRA_PAYLOAD, payload)
-                    addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
-                }
-                context.sendBroadcast(intent)
-                log("forward broadcast sent source=$source captureId=$captureId")
-            } catch (t: Throwable) {
+            if (context == null) {
+                log("forward failed source=$source: direct/relay down and no application context")
                 seen.remove(dedupKey)
-                // 宿主进程里绝不能因为投递失败而崩溃；只留日志。
-                log("forward failed source=$source: ${t.javaClass.name}: ${t.message}")
             }
         }
     }
 
     /**
      * 长度前缀 + UTF-8 JSON 的 localhost 协议；不需要 Android Context，
-     * 因此 system_server 也能直接用。
+     * 因此 system_server 与微信/支付宝都能直接用。
      */
-    private fun tryRelay(payload: String, captureId: String): Boolean {
+    private fun trySocketDeliver(
+        port: Int,
+        payload: String,
+        captureId: String,
+        connectTimeoutMs: Int,
+    ): Boolean {
         return try {
             Socket().use { socket ->
                 socket.connect(
-                    InetSocketAddress("127.0.0.1", CaptureContract.RELAY_PORT),
-                    800,
+                    InetSocketAddress("127.0.0.1", port),
+                    connectTimeoutMs,
                 )
                 socket.soTimeout = 1_500
                 val out = DataOutputStream(socket.getOutputStream())
@@ -151,8 +155,64 @@ internal object CaptureForwarder {
                 JSONObject(String(response, Charsets.UTF_8)).optBoolean("ok", false)
             }
         } catch (t: Throwable) {
-            log("relay unavailable: ${t.javaClass.simpleName}: ${t.message}")
+            log("socket($port) unavailable: ${t.javaClass.simpleName}: ${t.message}")
             false
+        }
+    }
+
+    private fun tryProviderDeliver(context: Context, payload: String): Boolean {
+        return try {
+            val extras = Bundle().apply {
+                putString(CaptureContract.EXTRA_TOKEN, BuildConfig.CAPTURE_INGEST_TOKEN)
+                putString(CaptureContract.EXTRA_PAYLOAD, payload)
+            }
+            val res = context.contentResolver.call(
+                Uri.parse("content://${CaptureContract.INGEST_AUTHORITY}"),
+                CaptureContract.INGEST_METHOD,
+                BuildConfig.CAPTURE_INGEST_TOKEN,
+                extras,
+            )
+            val ack = res?.getString(CaptureContract.ACK_RESULT) ?: return false
+            JSONObject(ack).optBoolean("ok", false)
+        } catch (_: Throwable) {
+            false
+        }
+    }
+
+    private fun wakePluginViaContext(context: Context, payload: String, captureId: String) {
+        try {
+            // 宿主当前处于前台（PROC_STATE_TOP）时，直接拉起前台服务可满足 ColorOS mAllowStart_noBinding=PROC_STATE_TOP
+            val serviceIntent = Intent(CaptureContract.ACTION_SERVICE_INGEST).apply {
+                component = ComponentName(
+                    CaptureContract.PLUGIN_PACKAGE,
+                    CaptureContract.INGEST_SERVICE_CLASS,
+                )
+                putExtra(CaptureContract.EXTRA_TOKEN, BuildConfig.CAPTURE_INGEST_TOKEN)
+                putExtra(CaptureContract.EXTRA_PAYLOAD, payload)
+                putExtra(CaptureContract.EXTRA_RELAY_ID, captureId)
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                runCatching { context.startForegroundService(serviceIntent) }
+            } else {
+                runCatching { context.startService(serviceIntent) }
+            }
+        } catch (_: Throwable) {
+        }
+
+        try {
+            val broadcastIntent = Intent(CaptureContract.ACTION_INGEST).apply {
+                component = ComponentName(
+                    CaptureContract.PLUGIN_PACKAGE,
+                    CaptureContract.INGEST_RECEIVER_CLASS,
+                )
+                putExtra(CaptureContract.EXTRA_TOKEN, BuildConfig.CAPTURE_INGEST_TOKEN)
+                putExtra(CaptureContract.EXTRA_PAYLOAD, payload)
+                addFlags(Intent.FLAG_RECEIVER_FOREGROUND or Intent.FLAG_INCLUDE_STOPPED_PACKAGES)
+            }
+            context.sendBroadcast(broadcastIntent)
+            log("forward wake broadcast sent source captureId=$captureId")
+        } catch (t: Throwable) {
+            log("forward wake broadcast failed: ${t.javaClass.simpleName}: ${t.message}")
         }
     }
 

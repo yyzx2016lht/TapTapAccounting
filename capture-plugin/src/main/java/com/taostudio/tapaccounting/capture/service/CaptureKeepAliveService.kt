@@ -7,6 +7,7 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
 import android.util.Log
@@ -42,10 +43,13 @@ class CaptureKeepAliveService : Service() {
 
     override fun onCreate() {
         super.onCreate()
-        startForeground(NOTIFICATION_ID, buildNotification())
+        PluginDirectServer.ensureStarted(this)
+        promoteForeground()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        PluginDirectServer.ensureStarted(this)
+        promoteForeground()
         if (intent?.action == CaptureContract.ACTION_SERVICE_INGEST) {
             val token = intent.getStringExtra(CaptureContract.EXTRA_TOKEN)
             val payload = intent.getStringExtra(CaptureContract.EXTRA_PAYLOAD)
@@ -68,6 +72,23 @@ class CaptureKeepAliveService : Service() {
         }
         // 被系统杀掉后尽量重启；重启失败时 relay/广播仍能唤醒进程。
         return START_STICKY
+    }
+
+    private fun promoteForeground() {
+        try {
+            val notification = buildNotification()
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                startForeground(
+                    NOTIFICATION_ID,
+                    notification,
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE,
+                )
+            } else {
+                startForeground(NOTIFICATION_ID, notification)
+            }
+        } catch (t: Throwable) {
+            Log.w(TAG, "promoteForeground failed: ${t.javaClass.simpleName}: ${t.message}")
+        }
     }
 
     /** 入库完成后通过同一个 localhost 端口回 ack，relay 删除队列文件。 */

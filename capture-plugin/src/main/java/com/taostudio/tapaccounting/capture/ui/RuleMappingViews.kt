@@ -766,13 +766,13 @@ internal class RuleMappingViews(
                 layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
             }
             textCol.addView(TextView(activity).apply {
-                text = "纯净支出模式（推荐开启）"
+                text = "仅提醒支出与退款（忽略普通收入）"
                 textSize = 15f
                 setTypeface(typeface, Typeface.BOLD)
                 setTextColor(CaptureUi.TEXT_PRIMARY)
             })
             textCol.addView(TextView(activity).apply {
-                text = "只提醒与展示日常支出，自动过滤复杂的退款待关联与内部转账"
+                text = "默认关闭（同时捕获支出、微信转账收款、转账退款与红包）；开启后忽略普通收款"
                 textSize = 12f
                 setTextColor(CaptureUi.TEXT_SECONDARY)
                 setPadding(0, dp(2), 0, 0)
@@ -855,11 +855,16 @@ internal class RuleMappingViews(
         return scroll
     }
 
-    fun buildCategoryDisplayList(ctx: AccountingContext?): List<String> {
-        val cats = ctx?.categories?.filter { it.type == 0 }.orEmpty()
-        if (cats.isEmpty()) return emptyList()
-        val byId = cats.associateBy { it.id }
-        return cats.map { cat ->
+    fun buildCategoryDisplayList(ctx: AccountingContext?, billType: Int? = null): List<String> {
+        val allCats = ctx?.categories.orEmpty()
+        if (allCats.isEmpty()) return emptyList()
+        val byId = allCats.associateBy { it.id }
+        val filtered = if (billType != null) {
+            allCats.filter { it.type == billType }.ifEmpty { allCats }
+        } else {
+            allCats
+        }
+        return filtered.map { cat ->
             val parent = cat.parentId?.let { byId[it] }
             if (parent != null) "${parent.name} - ${cat.name}" else cat.name
         }.distinct().sorted()

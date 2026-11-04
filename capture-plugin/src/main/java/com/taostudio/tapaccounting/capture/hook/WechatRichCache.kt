@@ -53,4 +53,11 @@ internal object WechatRichCache {
             return Snapshot(currentMoney, currentTools, currentShop, now)
         }
     }
+
+    /** 消费掉当前缓存的收款方名称，避免数十秒后的退款或群消息误用旧收款方。 */
+    fun clearShop() {
+        synchronized(lock) {
+            shop = null
+        }
+    }
 }

@@ -45,23 +45,47 @@ internal object WechatEnvelope {
         talker: String?,
         now: Long,
     ): String {
+        val wcpayInfo = extractWcpayInfo(content)
+        if (wcpayInfo.length() == 0) return ""
+
+        val paysubtype = wcpayInfo.optString("paysubtype", "").trim()
+        val effectiveIsSend = isSend ?: when (paysubtype) {
+            "4" -> 0 // 转账退还（收款/退款方向）
+            "3" -> 1 // 确认收款
+            else -> null
+        }
+
+        // paysubtype=4（退款）或 isSend=0（收款）时，不能让之前残留的“待xxx确认收款”覆盖真实联系人名
+        val isIncomingOrRefund = paysubtype in setOf("3", "4") || effectiveIsSend == 0
+        val cleanTalker = talker?.trim()?.takeIf {
+            it.isNotEmpty() && !it.startsWith("wxid_") && !it.endsWith("@chatroom")
+        }
+        val cleanCachedShop = ProbeText.cleanCounterparty(cache?.payShop)
+        val hookerUser = if (isIncomingOrRefund) {
+            cleanTalker ?: cleanCachedShop ?: talker?.trim().orEmpty()
+        } else {
+            cache?.payShop?.takeIf { !ProbeText.isTransferStatusNoise(it) }
+                ?: cleanTalker
+                ?: talker?.trim().orEmpty()
+        }
+
         val contentJson = JSONObject().put(
             "msg",
             JSONObject().put(
                 "appmsg",
                 JSONObject()
-                    .put("wcpayinfo", extractWcpayInfo(content))
+                    .put("wcpayinfo", wcpayInfo)
                     .put("title", "微信转账")
                     .put("type", "2000"),
             ),
         )
         return JSONObject().apply {
             put("type", "transfer")
-            isSend?.let { put("isSend", it) }
+            effectiveIsSend?.let { put("isSend", it) }
             put("content", contentJson.toString())
-            put("hookerUser", cache?.payShop ?: talker ?: "")
+            put("hookerUser", hookerUser)
             put("t", now)
-            putCacheFields(this, cache)
+            putCacheFields(this, if (isIncomingOrRefund) null else cache)
         }.toString()
     }
 
@@ -69,7 +93,7 @@ internal object WechatEnvelope {
     fun transferTxnId(rawJson: String): String? {
         return runCatching {
             val root = JSONObject(rawJson)
-            val wc = root.optJSONObject("content")
+            val wc = parseContentObject(root)
                 ?.optJSONObject("msg")
                 ?.optJSONObject("appmsg")
                 ?.optJSONObject("wcpayinfo")
@@ -90,7 +114,7 @@ internal object WechatEnvelope {
     fun redPacketTxnId(rawJson: String): String? {
         return runCatching {
             val root = JSONObject(rawJson)
-            val wc = root.optJSONObject("content")
+            val wc = parseContentObject(root)
                 ?.optJSONObject("msg")
                 ?.optJSONObject("appmsg")
                 ?.optJSONObject("wcpayinfo")
@@ -109,21 +133,32 @@ internal object WechatEnvelope {
         talker: String?,
         now: Long,
     ): String {
+        val wcpayInfo = extractWcpayInfo(content)
+        if (wcpayInfo.length() == 0) return ""
         val contentJson = JSONObject().put(
             "msg",
             JSONObject().put(
                 "appmsg",
-                JSONObject().put("wcpayinfo", extractWcpayInfo(content)),
+                JSONObject().put("wcpayinfo", wcpayInfo),
             ),
         )
         return JSONObject().apply {
             put("type", "redPackage")
             isSend?.let { put("isSend", it) }
             put("content", contentJson.toString())
-            put("hookerUser", cache?.payShop ?: talker ?: "")
+            put("hookerUser", cache?.payShop?.takeIf { !ProbeText.isTransferStatusNoise(it) } ?: talker ?: "")
             put("t", now)
             putCacheFields(this, cache)
         }.toString()
+    }
+
+    private fun parseContentObject(root: JSONObject): JSONObject? {
+        root.optJSONObject("content")?.let { return it }
+        val raw = root.optString("content", "").trim()
+        if (raw.startsWith("{")) {
+            return runCatching { JSONObject(raw) }.getOrNull()
+        }
+        return null
     }
 
     /** 微信群收款 -> {"type":"groupCollection","content":{"mMap":{"content":"..."}}} */

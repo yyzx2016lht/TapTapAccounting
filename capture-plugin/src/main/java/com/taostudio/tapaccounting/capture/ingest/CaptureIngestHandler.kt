@@ -111,8 +111,11 @@ internal object CaptureIngestHandler {
 
             if (outcome != null && outcome.inserted) {
                 val cap = outcome.capture
-                val isExpenseLike = cap.billType == null || cap.billType == LocalBillType.TYPE_EXPENSE
-                if ((!CapturePrefs.isOnlyExpense(app) || isExpenseLike) &&
+                val isExpenseOrRefund = cap.billType == null ||
+                    cap.billType == LocalBillType.TYPE_EXPENSE ||
+                    cap.subType == LocalBillType.SUBTYPE_REFUND ||
+                    cap.needsRefundLink
+                if ((!CapturePrefs.isOnlyExpense(app) || isExpenseOrRefund) &&
                     CapturePrefs.getPromptMode(app) == CapturePrefs.MODE_BUBBLE
                 ) {
                     CaptureBubbleManager.showBubble(app, cap, count.coerceAtLeast(1))

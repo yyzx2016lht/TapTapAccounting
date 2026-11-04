@@ -31,9 +31,12 @@ object CaptureContract {
     /** 接收 [ACTION_INGEST] 的 Receiver 类名。 */
     const val INGEST_RECEIVER_CLASS: String = "$PLUGIN_PACKAGE.ingest.CaptureIngestReceiver"
 
-    // ---- 常驻 relay：hook 进程 -> localhost TCP -> 队列 -> 插件前台服务 ----
+    // ---- 常驻 relay & 插件直连：hook 进程 -> localhost TCP -> 插件 ----
     /** relay 监听端口（仅 127.0.0.1）。 */
     const val RELAY_PORT: Int = 52046
+
+    /** 插件进程内直连监听端口（仅 127.0.0.1），毫秒级零延迟投递，绕过 ColorOS 后台广播/FGS 拦截。 */
+    const val PLUGIN_DIRECT_PORT: Int = 52047
 
     /** relay 拉起插件前台服务时使用的 action。 */
     const val ACTION_SERVICE_INGEST: String = "$PLUGIN_PACKAGE.action.SERVICE_INGEST"

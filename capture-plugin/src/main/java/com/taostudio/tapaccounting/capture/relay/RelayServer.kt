@@ -5,7 +5,9 @@ import android.app.Application
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.os.Build
+import android.os.Bundle
 import com.taostudio.tapaccounting.capture.BuildConfig
 import com.taostudio.tapaccounting.capture.contract.CaptureContract
 import de.robv.android.xposed.XC_MethodHook
@@ -213,9 +215,11 @@ internal object RelayServer {
                 }
                 val file = File(dir, safeName(captureId) + ".json")
                 writeAtomic(file, obj.toString())
-                inFlight.remove(captureId)
+                inFlight[captureId] = System.currentTimeMillis()
                 respond(output, true, null)
                 log("queued id=$captureId size=${bytes.size}")
+                // 立即异步投递，不等待 1000ms 的 workerLoop 轮询！
+                executor.execute { startPluginService(file, captureId) }
             } catch (t: Throwable) {
                 log("client failed: ${t.javaClass.simpleName}: ${t.message}")
             }
@@ -264,6 +268,36 @@ internal object RelayServer {
             return
         }
 
+        // 1. 首选通过插件进程内直连 TCP（127.0.0.1:52047）投递，绕过 ColorOS 对后台 startForegroundService 的拦截
+        if (tryDirectPlugin(payload, relayId)) {
+            deleteQueued(relayId)
+            log("delivered via direct tcp id=$relayId")
+            return
+        }
+
+        // 2. 次选通过 ContentProvider.call 唤醒并投递（ColorOS Hans 允许 Provider 立即解冻进程）
+        if (tryProviderCall(ctx, payload)) {
+            deleteQueued(relayId)
+            log("delivered via provider id=$relayId")
+            return
+        }
+
+        // 3. 发送显式高优广播 + 尝试启动前台服务
+        try {
+            val broadcastIntent = Intent(CaptureContract.ACTION_INGEST).apply {
+                component = ComponentName(
+                    CaptureContract.PLUGIN_PACKAGE,
+                    CaptureContract.INGEST_RECEIVER_CLASS,
+                )
+                putExtra(CaptureContract.EXTRA_TOKEN, BuildConfig.CAPTURE_INGEST_TOKEN)
+                putExtra(CaptureContract.EXTRA_PAYLOAD, payload)
+                addFlags(Intent.FLAG_RECEIVER_FOREGROUND or Intent.FLAG_INCLUDE_STOPPED_PACKAGES)
+            }
+            ctx.sendBroadcast(broadcastIntent)
+        } catch (t: Throwable) {
+            log("broadcast plugin failed id=$relayId: ${t.javaClass.simpleName}")
+        }
+
         val intent = Intent(CaptureContract.ACTION_SERVICE_INGEST).apply {
             component = ComponentName(
                 CaptureContract.PLUGIN_PACKAGE,
@@ -285,6 +319,56 @@ internal object RelayServer {
             // Android 12+ 后台 FGS 限制；等下一次 worker tick 再试。
             log("start plugin failed id=$relayId: ${t.javaClass.simpleName}: ${t.message}")
             inFlight.remove(relayId)
+        }
+    }
+
+    private fun tryDirectPlugin(payload: String, relayId: String): Boolean {
+        return try {
+            Socket().use { socket ->
+                socket.connect(
+                    InetSocketAddress("127.0.0.1", CaptureContract.PLUGIN_DIRECT_PORT),
+                    300,
+                )
+                socket.soTimeout = 1_500
+                val out = DataOutputStream(socket.getOutputStream())
+                val envelope = JSONObject()
+                    .put("token", BuildConfig.CAPTURE_INGEST_TOKEN)
+                    .put("captureId", relayId)
+                    .put(CaptureContract.EXTRA_RELAY_ID, relayId)
+                    .put("payload", payload)
+                val bytes = envelope.toString().toByteArray(Charsets.UTF_8)
+                out.writeInt(bytes.size)
+                out.write(bytes)
+                out.flush()
+
+                val input = DataInputStream(socket.getInputStream())
+                val length = input.readInt()
+                if (length <= 0 || length > 64 * 1024) return false
+                val response = ByteArray(length)
+                input.readFully(response)
+                JSONObject(String(response, Charsets.UTF_8)).optBoolean("ok", false)
+            }
+        } catch (_: Throwable) {
+            false
+        }
+    }
+
+    private fun tryProviderCall(ctx: Context, payload: String): Boolean {
+        return try {
+            val extras = Bundle().apply {
+                putString(CaptureContract.EXTRA_TOKEN, BuildConfig.CAPTURE_INGEST_TOKEN)
+                putString(CaptureContract.EXTRA_PAYLOAD, payload)
+            }
+            val bundle = ctx.contentResolver.call(
+                Uri.parse("content://${CaptureContract.INGEST_AUTHORITY}"),
+                CaptureContract.INGEST_METHOD,
+                BuildConfig.CAPTURE_INGEST_TOKEN,
+                extras,
+            )
+            val ack = bundle?.getString(CaptureContract.ACK_RESULT) ?: return false
+            JSONObject(ack).optBoolean("ok", false)
+        } catch (_: Throwable) {
+            false
         }
     }
 

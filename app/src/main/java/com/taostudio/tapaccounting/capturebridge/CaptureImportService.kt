@@ -110,9 +110,35 @@ internal object CaptureImportService {
         }
 
         if (subType == Bill.SUBTYPE_REFUND || import.needsRefundLink) {
-            return importRefund(db, import, requestId)
+            tryLinkedRefund(db, import, requestId, defaultBook)?.let { return it }
+            // 若原支出账单尚未入账或分类不同无法自动关联，退化为普通收入入账，绝不卡死用户。
+            return importAsNormalBill(
+                ctx = ctx,
+                db = db,
+                import = import.copy(
+                    type = Bill.TYPE_INCOME,
+                    subType = Bill.SUBTYPE_NORMAL,
+                    needsRefundLink = false,
+                ),
+                type = Bill.TYPE_INCOME,
+                subType = Bill.SUBTYPE_NORMAL,
+                requestId = requestId,
+                defaultBook = defaultBook,
+            )
         }
 
+        return importAsNormalBill(ctx, db, import, type, subType, requestId, defaultBook)
+    }
+
+    private suspend fun importAsNormalBill(
+        ctx: Context,
+        db: AppDatabase,
+        import: ImportBill,
+        type: Int,
+        subType: Int,
+        requestId: String?,
+        defaultBook: String,
+    ): Triple<String, Long, String> {
         val asset = resolveAsset(db, import.assetId, import.assetName)
         val toAsset = resolveAsset(db, import.toAssetId, import.toAssetName)
         if (type == Bill.TYPE_TRANSFER) {
@@ -126,6 +152,13 @@ internal object CaptureImportService {
         val resolvedCategory = if (type in setOf(Bill.TYPE_EXPENSE, Bill.TYPE_INCOME)) {
             import.categoryId?.let { id -> allCategories.firstOrNull { it.id == id } }
                 ?: CategoryNameResolver.resolve(allCategories, import.categoryName, type)
+                ?: if (type == Bill.TYPE_INCOME) {
+                    CategoryNameResolver.resolve(allCategories, "退款", Bill.TYPE_INCOME)
+                        ?: CategoryNameResolver.resolve(allCategories, "其他", Bill.TYPE_INCOME)
+                        ?: allCategories.firstOrNull { it.type == Bill.TYPE_INCOME }
+                } else {
+                    null
+                }
         } else {
             null
         }
@@ -172,26 +205,29 @@ internal object CaptureImportService {
         return Triple(import.captureId, saved.id, ImportItemStatus.CREATED)
     }
 
-    private suspend fun importRefund(
+    private suspend fun tryLinkedRefund(
         db: AppDatabase,
         import: ImportBill,
-        requestId: String?
-    ): Triple<String, Long, String> {
+        requestId: String?,
+        defaultBook: String,
+    ): Triple<String, Long, String>? {
+        val resolvedAsset = runCatching { resolveAsset(db, import.assetId, import.assetName) }.getOrNull()
         val original = import.relatedBillId?.let { relatedId ->
             db.billDao().getBillById(relatedId)
                 ?: throw IllegalArgumentException("refund_source_not_found")
         } ?: run {
-            // 没有显式关联时，按分类/金额/时间找唯一候选；找不到就留在“待关联”。
             val probe = Bill(
                 type = Bill.TYPE_EXPENSE,
                 subType = Bill.SUBTYPE_REFUND,
                 amount = import.amountCents / 100.0,
                 originalAmount = import.amountCents / 100.0,
                 categoryName = import.categoryName.orEmpty(),
+                accountName = resolvedAsset?.name ?: import.assetName.orEmpty(),
+                bookName = import.bookName?.takeIf { it.isNotBlank() } ?: defaultBook,
                 time = normalizeMillis(import.paidAt),
             )
             BillMutationService.resolveRefundSourceBill(db, probe)
-                ?: throw IllegalArgumentException("needs_refund_link")
+                ?: return null
         }
         require(original.type == Bill.TYPE_EXPENSE && original.subType != Bill.SUBTYPE_REFUND) {
             "refund_source_not_expense"
@@ -314,10 +350,12 @@ internal object CaptureImportService {
             val merchant = item.optString("merchant", "").trim()
             val note = item.optString("note", "").trim()
             val asset = item.optString("assetName", "").ifBlank { item.optString("paymentMethodRaw", "") }.trim()
+            val billType = item.optInt("billType", Bill.TYPE_EXPENSE)
+            val typeLabel = if (billType == Bill.TYPE_INCOME) "收入" else "支出"
             promptLines.add(
                 buildString {
                     append("第").append(i + 1).append("笔：")
-                    append(timeStr).append(" 支出 ¥").append(amountYuan)
+                    append(timeStr).append(' ').append(typeLabel).append(" ¥").append(amountYuan)
                     if (asset.isNotEmpty()) append(" 账户[").append(asset).append("]")
                     if (merchant.isNotEmpty()) append(" 商户[").append(merchant).append("]")
                     if (note.isNotEmpty()) append(" 备注[").append(note).append("]")
@@ -344,9 +382,11 @@ internal object CaptureImportService {
         for (i in 0 until array.length()) {
             val src = array.optJSONObject(i) ?: continue
             val captureId = src.optString("captureId", "").trim()
+            val billType = src.optInt("billType", Bill.TYPE_EXPENSE).coerceIn(0, 1)
             val aiBill = aiBills.optJSONObject(i)
             val rawCat = aiBill?.optString("category_name", "")?.trim().orEmpty()
-            val resolved = CategoryNameResolver.resolve(allCategories, rawCat, Bill.TYPE_EXPENSE)
+            val resolved = CategoryNameResolver.resolve(allCategories, rawCat, billType)
+                ?: CategoryNameResolver.resolve(allCategories, rawCat, Bill.TYPE_EXPENSE)
             val userNote = src.optString("note", "").trim()
             val merchant = src.optString("merchant", "").trim()
             val aiRemark = aiBill?.optString("remarks", "")?.trim().orEmpty()

@@ -232,7 +232,13 @@ class PendingListActivity : Activity() {
                     val onlyExpense = CapturePrefs.isOnlyExpense(this@PendingListActivity)
                     val pendingItems = refreshed.filter { item ->
                         item.status in CaptureStatus.PENDING_COUNT_STATUSES &&
-                            (!onlyExpense || ((item.billType == null || item.billType == LocalBillType.TYPE_EXPENSE) && !item.needsRefundLink))
+                            (
+                                !onlyExpense ||
+                                    item.billType == null ||
+                                    item.billType == LocalBillType.TYPE_EXPENSE ||
+                                    item.subType == LocalBillType.SUBTYPE_REFUND ||
+                                    item.needsRefundLink
+                                )
                     }
                     val ping = bridge.pingDetail()
                     val accountingCtx = if (ping.ok) bridge.getAccountingContext() else null
@@ -322,7 +328,14 @@ class PendingListActivity : Activity() {
     }
 
     private fun buildSummaryHeroCard(items: List<PaymentCapture>): View {
-        val totalCents = items.mapNotNull { it.amountCents }.sum()
+        val expenseCents = items
+            .filter { it.billType == null || it.billType == LocalBillType.TYPE_EXPENSE }
+            .mapNotNull { it.amountCents }
+            .sum()
+        val incomeCents = items
+            .filter { it.billType == LocalBillType.TYPE_INCOME || it.subType == LocalBillType.SUBTYPE_REFUND }
+            .mapNotNull { it.amountCents }
+            .sum()
         val readyItems = items.filter { !it.categoryName.isNullOrBlank() && (it.amountCents ?: 0L) > 0L }
         val unmappedCount = items.count { it.categoryName.isNullOrBlank() }
 
@@ -371,14 +384,19 @@ class PendingListActivity : Activity() {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.END
         }
+        val showIncomePrimary = expenseCents == 0L && incomeCents > 0L
         rightCol.addView(TextView(this).apply {
-            text = formatAmount(totalCents)
-            textSize = 21f
+            text = if (showIncomePrimary) "+${formatAmount(incomeCents)}" else "-${formatAmount(expenseCents)}"
+            textSize = 20f
             setTypeface(typeface, Typeface.BOLD)
-            setTextColor(CaptureUi.TEXT_PRIMARY)
+            setTextColor(if (showIncomePrimary) CaptureUi.SUCCESS else CaptureUi.TEXT_PRIMARY)
         })
         rightCol.addView(TextView(this).apply {
-            text = "合计支出"
+            text = when {
+                showIncomePrimary -> "合计收入/退款"
+                incomeCents > 0L -> "支出 · 另有收入/退款 +${formatAmount(incomeCents)}"
+                else -> "合计支出"
+            }
             textSize = 11f
             setTextColor(CaptureUi.TEXT_MUTED)
         })
@@ -532,6 +550,48 @@ class PendingListActivity : Activity() {
         })
         topRow.addView(titleCol)
 
+        val isRefund = item.subType == LocalBillType.SUBTYPE_REFUND || item.needsRefundLink
+        val isIncome = item.billType == LocalBillType.TYPE_INCOME
+        val isTransfer = item.billType == LocalBillType.TYPE_TRANSFER
+        when {
+            isRefund -> topRow.addView(TextView(this).apply {
+                text = "退款"
+                textSize = 10.5f
+                setTypeface(typeface, Typeface.BOLD)
+                setTextColor(CaptureUi.SUCCESS)
+                setPadding(dp(6), dp(2), dp(6), dp(2))
+                background = CaptureUi.roundedBg(CaptureUi.SUCCESS_SOFT, dp(6), dp(1), CaptureUi.SUCCESS_BORDER)
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                ).apply { marginEnd = dp(6) }
+            })
+            isIncome -> topRow.addView(TextView(this).apply {
+                text = "收入"
+                textSize = 10.5f
+                setTypeface(typeface, Typeface.BOLD)
+                setTextColor(CaptureUi.SUCCESS)
+                setPadding(dp(6), dp(2), dp(6), dp(2))
+                background = CaptureUi.roundedBg(CaptureUi.SUCCESS_SOFT, dp(6), dp(1), CaptureUi.SUCCESS_BORDER)
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                ).apply { marginEnd = dp(6) }
+            })
+            isTransfer -> topRow.addView(TextView(this).apply {
+                text = "转账"
+                textSize = 10.5f
+                setTypeface(typeface, Typeface.BOLD)
+                setTextColor(CaptureUi.BRAND_DARK)
+                setPadding(dp(6), dp(2), dp(6), dp(2))
+                background = CaptureUi.roundedBg(CaptureUi.BRAND_SOFT, dp(6), dp(1), CaptureUi.BRAND_BORDER)
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                ).apply { marginEnd = dp(6) }
+            })
+        }
+
         if (item.status == CaptureStatus.POSSIBLE_DUPLICATE) {
             topRow.addView(TextView(this).apply {
                 text = "可能已记"
@@ -547,11 +607,16 @@ class PendingListActivity : Activity() {
             })
         }
 
+        val amountPrefix = when {
+            isIncome || isRefund -> "+"
+            isTransfer -> ""
+            else -> "-"
+        }
         topRow.addView(TextView(this).apply {
-            text = "-${formatAmount(item.amountCents)}"
+            text = "$amountPrefix${formatAmount(item.amountCents)}"
             textSize = 17.5f
             setTypeface(typeface, Typeface.BOLD)
-            setTextColor(CaptureUi.TEXT_PRIMARY)
+            setTextColor(if (isIncome || isRefund) CaptureUi.SUCCESS else CaptureUi.TEXT_PRIMARY)
         })
         card.addView(topRow)
 
@@ -765,7 +830,9 @@ class PendingListActivity : Activity() {
     }
 
     private fun showCategoryPickerDialog(item: PaymentCapture, ctx: AccountingContext?) {
-        val categories = ruleViews.buildCategoryDisplayList(ctx)
+        val isRefund = item.subType == LocalBillType.SUBTYPE_REFUND || item.needsRefundLink
+        val targetType = if (isRefund) null else item.billType?.takeIf { it in 0..1 }
+        val categories = ruleViews.buildCategoryDisplayList(ctx, targetType)
         if (categories.isEmpty()) {
             toast("尚未从敲敲记账读取到分类列表，请确认敲敲记账已安装")
             return

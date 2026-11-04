@@ -205,8 +205,18 @@ object CaptureNotifier {
             CaptureSource.ALIPAY -> "支付宝"
             else -> item.source
         }
+        val isRefund = item.subType == com.taostudio.tapaccounting.capture.contract.LocalBillType.SUBTYPE_REFUND ||
+            item.needsRefundLink
+        val isIncome = item.billType == com.taostudio.tapaccounting.capture.contract.LocalBillType.TYPE_INCOME
+        val typeTag = when {
+            isRefund -> "[退款]"
+            isIncome -> "[收入]"
+            item.billType == com.taostudio.tapaccounting.capture.contract.LocalBillType.TYPE_TRANSFER -> "[转账]"
+            else -> ""
+        }
+        val amtPrefix = if (isIncome || isRefund) "+¥" else "¥"
         val amt = item.amountCents?.let {
-            String.format(Locale.CHINA, "¥%.2f", it / 100.0)
+            String.format(Locale.CHINA, "%s%.2f", amtPrefix, it / 100.0)
         } ?: "待补金额"
         val asset = item.assetName ?: item.paymentMethodRaw
         val merchant = item.merchant?.takeIf { it.isNotBlank() }
@@ -214,7 +224,7 @@ object CaptureNotifier {
         val cat = item.categoryName?.takeIf { it.isNotBlank() }
         return buildString {
             append(timeFmt.format(Date(item.paidAt))).append(' ')
-            append(src).append(' ').append(amt)
+            append(src).append(typeTag).append(' ').append(amt)
             if (asset != null) append(" · ").append(asset)
             if (merchant != null) append(" · ").append(merchant)
             if (note != null) append(" [备注:").append(note).append(']')

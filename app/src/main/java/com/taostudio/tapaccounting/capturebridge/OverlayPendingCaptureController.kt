@@ -465,11 +465,18 @@ class OverlayPendingCaptureController(
             layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
         })
 
+        val isRefund = item.subType == LocalBillType.SUBTYPE_REFUND || item.needsRefundLink
+        val isIncome = item.billType == LocalBillType.TYPE_INCOME
+        val amtPrefix = when {
+            isIncome || isRefund -> "+"
+            item.billType == LocalBillType.TYPE_TRANSFER -> ""
+            else -> "-"
+        }
         topLine.addView(TextView(ctx).apply {
-            text = "-${item.formattedAmount()}"
+            text = "$amtPrefix${item.formattedAmount()}"
             textSize = 15f
             setTypeface(typeface, Typeface.BOLD)
-            setTextColor(Color.parseColor("#0F172A"))
+            setTextColor(Color.parseColor(if (isIncome || isRefund) "#059669" else "#0F172A"))
         })
         card.addView(topLine)
 

@@ -77,15 +77,24 @@ object CaptureBubbleManager {
             gravity = Gravity.CENTER_VERTICAL
         }
 
+        val isRefund = capture.subType == com.taostudio.tapaccounting.capture.contract.LocalBillType.SUBTYPE_REFUND ||
+            capture.needsRefundLink
+        val isIncome = capture.billType == com.taostudio.tapaccounting.capture.contract.LocalBillType.TYPE_INCOME
+        val typeSuffix = when {
+            isRefund -> "·退款"
+            isIncome -> "·收入"
+            capture.billType == com.taostudio.tapaccounting.capture.contract.LocalBillType.TYPE_TRANSFER -> "·转账"
+            else -> ""
+        }
         val badgeColor = when (capture.source) {
             CaptureSource.WECHAT -> "#07C160"
             CaptureSource.ALIPAY -> "#1677FF"
             else -> "#3B82F6"
         }
         val badgeText = when (capture.source) {
-            CaptureSource.WECHAT -> "微信"
-            CaptureSource.ALIPAY -> "支付宝"
-            else -> "支付"
+            CaptureSource.WECHAT -> "微信$typeSuffix"
+            CaptureSource.ALIPAY -> "支付宝$typeSuffix"
+            else -> "支付$typeSuffix"
         }
 
         val badge = TextView(app).apply {
@@ -101,8 +110,9 @@ object CaptureBubbleManager {
         }
         topRow.addView(badge)
 
+        val amountPrefix = if (isIncome || isRefund) "+¥" else "¥"
         val amountStr = capture.amountCents?.let {
-            String.format(Locale.CHINA, "¥%.2f", it / 100.0)
+            String.format(Locale.CHINA, "%s%.2f", amountPrefix, it / 100.0)
         } ?: "金额待补"
         val assetStr = capture.assetName ?: capture.paymentMethodRaw
         val merchantStr = capture.merchant

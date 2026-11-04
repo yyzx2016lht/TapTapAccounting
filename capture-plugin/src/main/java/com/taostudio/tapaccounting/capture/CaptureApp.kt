@@ -7,6 +7,7 @@ import com.taostudio.tapaccounting.capture.data.CaptureEventRepository
 import com.taostudio.tapaccounting.capture.data.CaptureRepository
 import com.taostudio.tapaccounting.capture.notify.CaptureNotifier
 import com.taostudio.tapaccounting.capture.parse.AutoAccountingRuleEngine
+import com.taostudio.tapaccounting.capture.service.PluginDirectServer
 
 class CaptureApp : Application() {
     val database: AppDatabase by lazy { AppDatabase.get(this) }
@@ -21,6 +22,8 @@ class CaptureApp : Application() {
         AutoAccountingRuleEngine.init(this)
         // 渠道在进程启动时创建；即使通知权限被拒，也只是不显示，不影响落库。
         CaptureNotifier.ensureChannel(this)
+        // 启动插件进程内直连 TCP 服务（127.0.0.1:52047），供微信/支付宝毫秒级零延迟投递。
+        PluginDirectServer.ensureStarted(this)
     }
 
     companion object {

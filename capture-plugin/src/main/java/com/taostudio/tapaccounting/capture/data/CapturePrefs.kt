@@ -5,7 +5,7 @@ import android.content.Context
 object CapturePrefs {
     private const val PREF_NAME = "capture_plugin_prefs"
     private const val KEY_PROMPT_MODE = "prompt_mode"
-    private const val KEY_ONLY_EXPENSE = "only_expense"
+    private const val KEY_ONLY_EXPENSE = "only_expense_v2"
     private const val KEY_SEEDED_DEFAULTS = "seeded_defaults_v1"
 
     /** 付款时弹出底部轻气泡 + 通知栏 */
@@ -25,9 +25,9 @@ object CapturePrefs {
         prefs(context).edit().putString(KEY_PROMPT_MODE, mode).apply()
     }
 
-    /** 是否默认只处理支出（忽略或折叠收入/转账/退款）。默认开启，让菜市场/日常消费收件箱极其干净。 */
+    /** 是否只处理支出（忽略收入与转账）。默认关闭，保证微信转账收款、转账退款、收红包全部正常提醒与展示。 */
     fun isOnlyExpense(context: Context): Boolean =
-        prefs(context).getBoolean(KEY_ONLY_EXPENSE, true)
+        prefs(context).getBoolean(KEY_ONLY_EXPENSE, false)
 
     fun setOnlyExpense(context: Context, enabled: Boolean) {
         prefs(context).edit().putBoolean(KEY_ONLY_EXPENSE, enabled).apply()

@@ -52,9 +52,14 @@ internal object ProbeText {
         "付款给",
         "收款方",
         "商户",
-        "收款",
-        "消费",
     )
+
+    private val TRANSFER_STATUS_NOISE = Regex(
+        """^(?:待.*确认(?:收款)?|已收款|已退还|已被退还|已被接收|已过期|你已领取.*|对方已.*)$""",
+    )
+
+    private val WAITING_CONFIRM_REGEX = Regex("""^待(.+?)确认收款$""")
+    private val TRANSFER_TO_REGEX = Regex("""^(?:向|给)(.+?)转账$""")
 
     fun parseAmountCents(text: String, requireCurrency: Boolean = true): Long? {
         CURRENCY_AMOUNT.find(text)?.groupValues?.getOrNull(1)?.let { value ->
@@ -84,8 +89,32 @@ internal object ProbeText {
     fun findPaymentMethod(text: String): String? =
         PAY_METHODS.firstOrNull { text.contains(it) }
 
-    fun looksLikeShop(text: String): Boolean =
-        SHOP_HINTS.any { text.contains(it) }
+    fun looksLikeShop(text: String): Boolean {
+        val trimmed = text.trim()
+        if (trimmed.isEmpty() || isTransferStatusNoise(trimmed)) return false
+        return SHOP_HINTS.any { trimmed.contains(it) }
+    }
+
+    fun isTransferStatusNoise(text: String?): Boolean {
+        val trimmed = text?.trim().orEmpty()
+        if (trimmed.isEmpty()) return false
+        return TRANSFER_STATUS_NOISE.matches(trimmed)
+    }
+
+    /** 把“待柳桥确认收款”“向柳桥(**杰)转账”还原成干净的对方名称。 */
+    fun cleanCounterparty(raw: String?): String? {
+        val text = raw?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+        WAITING_CONFIRM_REGEX.matchEntire(text)?.groupValues?.getOrNull(1)?.trim()
+            ?.takeIf { it.isNotEmpty() }
+            ?.let { return it }
+        TRANSFER_TO_REGEX.matchEntire(text)?.groupValues?.getOrNull(1)?.trim()
+            ?.takeIf { it.isNotEmpty() }
+            ?.let { return it }
+        if (isTransferStatusNoise(text) || text.startsWith("wxid_") || text.endsWith("@chatroom")) {
+            return null
+        }
+        return text
+    }
 
     /** 微信消息 XML 里取一个标签的文本（支持 CDATA）；失败返回 null。 */
     fun xmlTagText(xml: String, tag: String): String? {
@@ -100,12 +129,22 @@ internal object ProbeText {
             ?.let(::decodeXmlEntities)
     }
 
-    /** 过滤掉“微信支付”这类不是商户名的候选。 */
+    /** 过滤掉“微信支付”这类不是商户名的候选，并清理转账状态词。 */
     fun cleanMerchant(vararg candidates: String?): String? {
         val rejected = listOf("微信支付", "微信转账", "支付宝", "￥", "¥")
         return candidates.asSequence()
-            .mapNotNull { it?.trim() }
-            .filter { it.isNotEmpty() && it.length <= 80 }
+            .mapNotNull { candidate ->
+                val trimmed = candidate?.trim()?.takeIf { it.isNotEmpty() } ?: return@mapNotNull null
+                WAITING_CONFIRM_REGEX.matchEntire(trimmed)?.groupValues?.getOrNull(1)?.trim()
+                    ?: trimmed
+            }
+            .filter {
+                it.isNotEmpty() &&
+                    it.length <= 80 &&
+                    !isTransferStatusNoise(it) &&
+                    !it.startsWith("wxid_") &&
+                    !it.endsWith("@chatroom")
+            }
             .firstOrNull { candidate -> rejected.none { candidate.contains(it) } }
     }
 

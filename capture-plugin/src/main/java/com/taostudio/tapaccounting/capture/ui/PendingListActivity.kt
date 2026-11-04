@@ -34,6 +34,7 @@ import com.taostudio.tapaccounting.capture.hook.WechatEnvelope
 import com.taostudio.tapaccounting.capture.hook.WechatRichCache
 import com.taostudio.tapaccounting.capture.notify.CaptureNotifier
 import com.taostudio.tapaccounting.capture.parse.AutoAccountingRuleEngine
+import com.taostudio.tapaccounting.capture.service.CaptureKeepAliveService
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -67,6 +68,7 @@ class PendingListActivity : Activity() {
         super.onCreate(savedInstanceState)
         setContentView(buildRoot())
         requestNotificationPermissionIfNeeded()
+        CaptureKeepAliveService.start(this)
     }
 
     override fun onResume() {

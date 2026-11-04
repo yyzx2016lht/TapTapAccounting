@@ -14,6 +14,8 @@ local.properties
 # ===== 签名密钥 =====
 release-keystore.jks
 key.properties
+*.jks
+*.keystore
 
 # ===== 数据库（重点！不提交）=====
 *.db

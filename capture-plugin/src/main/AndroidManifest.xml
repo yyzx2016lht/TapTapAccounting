@@ -3,6 +3,10 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- 保活前台服务：ColorOS 会把后台插件进程冻结，导致广播延迟。 -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <!-- 仅用于从同机 AutoAccounting 本地服务 127.0.0.1:52045 导入历史原始数据。 -->
     <uses-permission android:name="android.permission.INTERNET" />
     <!-- App 桥接是 signature 级：插件与敲敲记账必须同签名（debug 共用 debug keystore）。 -->
@@ -42,6 +46,33 @@
             android:theme="@android:style/Theme.Material.Light.NoActionBar" />
 
         <!--
+          前台保活服务；specialUse 与 AutoAccounting 的 CoreService 一致。
+          启动失败（Android 12+ 后台限制）只影响及时性，不影响广播落库。
+        -->
+        <!--
+          exported=true 是为了让常驻 relay（com.android.phone / system_server / 微信）
+          能通过显式 startForegroundService 拉起插件进程；onStartCommand 用 token 校验。
+        -->
+        <service
+            android:name=".service.CaptureKeepAliveService"
+            android:exported="true"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="payment capture" />
+        </service>
+
+        <receiver
+            android:name=".service.BootReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.LOCKED_BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
+
+        <!--
           hook 进程在微信/支付宝 UID，拿不到插件的 signature 权限，
           因此这里 exported + token 校验（BuildConfig.CAPTURE_INGEST_TOKEN）。
           只暴露 call() 的 ingest 方法。
@@ -52,6 +83,20 @@
             android:exported="true"
             android:grantUriPermissions="false"
             tools:ignore="ExportedContentProvider" />
+
+        <!--
+          hook 的主力入口：显式广播。
+          微信/支付宝的 manifest 没有声明本插件，Android 11+ 包可见性会让它们解析不到
+          上面的 Provider；显式广播不受这个限制。token 校验防止其他应用随意写入。
+        -->
+        <receiver
+            android:name=".ingest.CaptureIngestReceiver"
+            android:exported="true"
+            tools:ignore="ExportedReceiver">
+            <intent-filter>
+                <action android:name="com.taostudio.tapaccounting.capture.action.INGEST" />
+            </intent-filter>
+        </receiver>
 
         <!--
           App 保存“自己记”后广播 BILL_CREATED（setPackage 到本插件）。跨 UID 投递必须 exported；

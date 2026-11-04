@@ -15,13 +15,40 @@ object CaptureContract {
     const val PLUGIN_PACKAGE: String = "com.taostudio.tapaccounting.capture"
     const val APP_PACKAGE: String = "com.taostudio.tapaccounting"
 
-    // ---- hook -> 插件：CaptureIngestProvider（token 鉴权） ----
-    /** 插件导出的 ingestion Provider authority。 */
+    // ---- hook -> 插件：显式广播（token 鉴权） ----
+    /**
+     * 插件导出的 ingestion Provider authority。
+     *
+     * 注意：Android 11+ 的包可见性会过滤未在宿主 manifest 中声明的 authority；
+     * 微信/支付宝 hook 进程应优先用 [ACTION_INGEST] 显式广播。
+     */
     const val INGEST_AUTHORITY: String = "$PLUGIN_PACKAGE.ingest"
     const val INGEST_METHOD: String = "ingest"
 
-    /** Provider 不可用时的显式广播兜底。 */
+    /** hook -> 插件的显式广播；不受包可见性过滤。 */
     const val ACTION_INGEST: String = "$PLUGIN_PACKAGE.action.INGEST"
+
+    /** 接收 [ACTION_INGEST] 的 Receiver 类名。 */
+    const val INGEST_RECEIVER_CLASS: String = "$PLUGIN_PACKAGE.ingest.CaptureIngestReceiver"
+
+    // ---- 常驻 relay：hook 进程 -> localhost TCP -> 队列 -> 插件前台服务 ----
+    /** relay 监听端口（仅 127.0.0.1）。 */
+    const val RELAY_PORT: Int = 52046
+
+    /** relay 拉起插件前台服务时使用的 action。 */
+    const val ACTION_SERVICE_INGEST: String = "$PLUGIN_PACKAGE.action.SERVICE_INGEST"
+
+    /** 插件前台服务类名（跨进程启动时用 ComponentName）。 */
+    const val INGEST_SERVICE_CLASS: String = "$PLUGIN_PACKAGE.service.CaptureKeepAliveService"
+
+    /** relay 队列 id；插件入库完成后用它回 ack。 */
+    const val EXTRA_RELAY_ID: String = "relayId"
+
+    /** TCP ack 的 JSON 字段名。 */
+    const val RELAY_ACK_FIELD: String = "ack"
+
+    /** relay 单条消息上限，防止异常大包拖垮宿主。 */
+    const val RELAY_MAX_BYTES: Int = 2 * 1024 * 1024
 
     /** token 既可以放在 call() 的 arg，也可以放在 extras 里。 */
     const val EXTRA_TOKEN: String = "token"

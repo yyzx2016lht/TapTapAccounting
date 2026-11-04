@@ -180,7 +180,12 @@ class SharedSyncEngine(private val context: Context, private val db: AppDatabase
         config: SharedWebDavClient.Config
     ) {
         val bills = db.billDao().getAllByBookName(bookName)
-            .filter { it.isShared && it.memberId == localMemberId && it.sharedId != null }
+            .filter {
+                it.isShared &&
+                    it.memberId == localMemberId &&
+                    it.sharedId != null &&
+                    SharedLedgerService.run { it.isShareable() }
+            }
             .sortedWith(compareBy<Bill> { it.time }.thenBy { it.sharedId })
             .map { bill ->
                 bill.copy(

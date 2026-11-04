@@ -137,6 +137,7 @@ dependencies {
     implementation("dev.rikka.shizuku:api:13.1.5")
     implementation("dev.rikka.shizuku:provider:13.1.5")
     implementation("androidx.swiperefreshlayout:swiperefreshlayout:1.1.0")
+    implementation("androidx.recyclerview:recyclerview:1.3.1")
     // 首启引导页的分页容器
     implementation("androidx.viewpager2:viewpager2:1.1.0")
     implementation("com.github.PhilJay:MPAndroidChart:v3.1.0")

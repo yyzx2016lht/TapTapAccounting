@@ -1,7 +1,9 @@
 package com.taostudio.tapaccounting.data.sync
 
 import com.taostudio.tapaccounting.data.sync.protocol.Operation
+import com.taostudio.tapaccounting.data.local.entity.Bill
 import com.taostudio.tapaccounting.data.local.entity.SyncOperation
+import com.taostudio.tapaccounting.data.sync.SharedLedgerService.Companion.isShareable
 import com.google.gson.JsonObject
 import org.junit.Assert.*
 import org.junit.Test
@@ -71,5 +73,48 @@ class SharedOperationCodecTest {
         )
 
         assertFalse(SharedSyncEngine.wins(old, incoming))
+    }
+
+    @Test fun `isShareable only allows normal income-expense and refund and aligns with snapshot codec`() {
+        val ledgerId = "123e4567-e89b-42d3-a456-426614174000"
+        val memberId = "123e4567-e89b-42d3-a456-426614174001"
+        val deviceId = "123e4567-e89b-42d3-a456-426614174002"
+
+        val allTypes = listOf(Bill.TYPE_EXPENSE, Bill.TYPE_INCOME, Bill.TYPE_TRANSFER, Bill.TYPE_REPAYMENT)
+        val allSubTypes = listOf(
+            Bill.SUBTYPE_NORMAL,
+            Bill.SUBTYPE_REPAYMENT,
+            Bill.SUBTYPE_REFUND,
+            Bill.SUBTYPE_BALANCE_ADJUSTMENT,
+            Bill.SUBTYPE_BALANCE_ADJUSTMENT_EXCLUDED,
+            Bill.SUBTYPE_INVESTMENT_ESTIMATE
+        )
+
+        for (type in allTypes) {
+            for (subType in allSubTypes) {
+                val bill = Bill(
+                    type = type,
+                    subType = subType,
+                    amount = 10.0,
+                    time = 1000L,
+                    sharedId = "123e4567-e89b-42d3-a456-426614174099",
+                    memberId = memberId,
+                    isShared = true
+                )
+                val expectedShareable = type in setOf(Bill.TYPE_EXPENSE, Bill.TYPE_INCOME) &&
+                    subType in setOf(Bill.SUBTYPE_NORMAL, Bill.SUBTYPE_REFUND)
+                assertEquals("type=$type subType=$subType", expectedShareable, bill.isShareable())
+
+                val snapshot = SharedBillSnapshot(
+                    ledgerId = ledgerId,
+                    memberId = memberId,
+                    deviceId = deviceId,
+                    generatedAt = 1000L,
+                    bills = listOf(bill)
+                )
+                val canEncodeSnapshot = runCatching { SharedBillSnapshotCodec.encode(snapshot) }.isSuccess
+                assertEquals("snapshot alignment for type=$type subType=$subType", expectedShareable, canEncodeSnapshot)
+            }
+        }
     }
 }

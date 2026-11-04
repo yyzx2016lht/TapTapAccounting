@@ -702,6 +702,38 @@
     <string name="search_pick_account_count_fmt">选择账户（%1$d）</string>
     <string name="search_selected_items_fmt">%1$d项</string>
     <string name="search_clear_all">清空</string>
+    <string name="search_filter_count_fmt">筛选 ·%1$d</string>
+    <string name="search_cap_time">时间</string>
+    <string name="search_cap_book">账本</string>
+    <string name="search_cap_filter">筛选</string>
+    <string name="search_filter_none">未筛选</string>
+    <string name="search_books_empty_hint">全不选 = 全部账本</string>
+    <string name="search_other">其它</string>
+    <string name="search_excluded_only">只看不计收支</string>
+    <string name="search_all_time">全部时间</string>
+    <string name="search_active_books">未收纳账本</string>
+    <string name="search_time_title">时间与分组</string>
+    <string name="search_time_hint">限定账单日期，选择结果的分组方式</string>
+    <string name="search_books_hint">可选择多个账本，确认后更新搜索范围</string>
+    <string name="search_books_selected_fmt">已选 %1$d / %2$d 个账本</string>
+    <string name="search_books_required">请至少选择一个账本</string>
+    <string name="search_books_collapsed_hint">已收纳账本需展开后选择，全选仅作用于当前展开范围</string>
+    <string name="search_collapsed_books_fmt">已收纳账本（%1$d）</string>
+    <string name="search_expand_books">展开已收纳账本</string>
+    <string name="search_collapse_books">收起已收纳账本</string>
+    <string name="search_book_selected">已选择</string>
+    <string name="search_book_unselected">未选择</string>
+    <string name="search_filter_hint">按类型、账户、分类或金额进一步查找</string>
+    <string name="search_show_results">查看结果</string>
+    <string name="search_clear_keyword">清空关键词</string>
+    <string name="search_sort_latest">最新在前</string>
+    <string name="search_sort_earliest">最早在前</string>
+    <string name="search_min_invalid">请输入有效的最小金额</string>
+    <string name="search_max_invalid">请输入有效的最大金额</string>
+    <string name="search_amount_range_invalid">最大金额不能小于最小金额</string>
+    <string name="search_reset_conditions">重置搜索条件</string>
+    <string name="search_panel_open">已展开</string>
+    <string name="search_panel_closed">点按展开</string>
 
     <!-- 聊天页面 -->
     <string name="subtotal">小计</string>

@@ -356,6 +356,8 @@ class SharedLedgerService(private val context: Context, private val db: AppDatab
     companion object {
         const val JIANGUOYUN_WEBDAV_URL = "https://dav.jianguoyun.com/dav/"
 
-        fun Bill.isShareable() = type in setOf(Bill.TYPE_EXPENSE, Bill.TYPE_INCOME) && subType !in setOf(Bill.SUBTYPE_BALANCE_ADJUSTMENT, Bill.SUBTYPE_BALANCE_ADJUSTMENT_EXCLUDED) && type != Bill.TYPE_REPAYMENT
+        fun Bill.isShareable() =
+            type in setOf(Bill.TYPE_EXPENSE, Bill.TYPE_INCOME) &&
+                subType in setOf(Bill.SUBTYPE_NORMAL, Bill.SUBTYPE_REFUND)
     }
 }

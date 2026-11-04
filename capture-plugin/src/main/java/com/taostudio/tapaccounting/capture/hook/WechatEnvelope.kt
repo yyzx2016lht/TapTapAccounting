@@ -24,21 +24,15 @@ internal object WechatEnvelope {
             ?: ""
         val source = ProbeText.xmlTagText(content, "appname") ?: ""
 
-        // 微信消息盒子里混有丰巢取件、快递、群通知等普通消息。
-        // 只有确认是支付/转账语义时才允许挂最近一次 RichText 缓存，
-        // 否则会把“丰巢取件提醒”错误拼成上一笔转账的金额/商户。
-        val cacheAllowed = sequenceOf(source, title, description).any { text ->
-            listOf("微信支付", "微信转账", "微信收款", "支付", "付款", "消费", "转账", "收款", "退款")
-                .any { text.contains(it) }
-        }
-
+        // AutoAccounting 的 handleMsgBox 对所有 mMap 都走同一套模板并附带
+        // PayTools 缓存；是否成单交给规则判断，这里不再预过滤。
         val mMap = JSONObject().apply {
             put("description", description)
             put("title", title)
             put("display_name", displayName)
             put("source", source)
             put("t", now)
-            if (cacheAllowed) putCacheFields(this, cache)
+            putCacheFields(this, cache)
         }
         return JSONObject().put("mMap", mMap).toString()
     }
@@ -85,9 +79,25 @@ internal object WechatEnvelope {
                 .firstOrNull { it.isNotEmpty() && it != "0" }
                 ?: return null
             // 同一笔转账的“付款/退款”共享 transferid，必须把 paysubtype 纳入幂等键；
-            // 否则退款会被当成重复的转账丢掉。
+            // 否则退款会被当成重复的转账丢掉。subtype=0/缺失时退回裸 id，
+            // 让 WCDB 与 remittance 回调在没有方向信息时也能合并。
             val subtype = wc.optString("paysubtype", "").trim().ifEmpty { "0" }
-            "$base:$subtype"
+            if (subtype == "0") base else "$base:$subtype"
+        }.getOrNull()
+    }
+
+    /** 微信红包的幂等键：优先 sendid，让 WCDB 外壳与 LuckMoney 回调合并。 */
+    fun redPacketTxnId(rawJson: String): String? {
+        return runCatching {
+            val root = JSONObject(rawJson)
+            val wc = root.optJSONObject("content")
+                ?.optJSONObject("msg")
+                ?.optJSONObject("appmsg")
+                ?.optJSONObject("wcpayinfo")
+                ?: return null
+            sequenceOf("sendid", "sendId", "transferid")
+                .map { wc.optString(it, "").trim() }
+                .firstOrNull { it.isNotEmpty() && it != "0" }
         }.getOrNull()
     }
 
@@ -150,6 +160,7 @@ internal object WechatEnvelope {
             "paysubtype",
             "transferid",
             "transcationid",
+            "sendid",
             "begintransfertime",
             "sendertitle",
             "payer_username",

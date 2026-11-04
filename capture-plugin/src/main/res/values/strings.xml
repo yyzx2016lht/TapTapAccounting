@@ -7,4 +7,9 @@
     <string name="notify_channel_pending_desc">显示待记数量，点击进入待记列表</string>
     <string name="notify_pending_title">%1$d 笔待记</string>
     <string name="notify_pending_text">点开查看</string>
+
+    <string name="notify_channel_service">后台监听</string>
+    <string name="notify_channel_service_desc">保持支付捕获进程运行，避免 ColorOS 冻结</string>
+    <string name="notify_service_title">敲敲待记正在监听支付</string>
+    <string name="notify_service_text">微信 / 支付宝支付会自动生成待记</string>
 </resources>

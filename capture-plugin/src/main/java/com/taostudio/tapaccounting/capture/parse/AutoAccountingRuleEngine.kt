@@ -230,7 +230,7 @@ object AutoAccountingRuleEngine {
                             continue
                         }
                         val enriched = parsed.copy(
-                            categoryName = parseCategory(ctx, parsed, rules.category),
+                            categoryName = parseCategory(ctx, parsed, rules.category, type),
                         )
                         if (local == null) {
                             log(
@@ -282,15 +282,25 @@ object AutoAccountingRuleEngine {
         ctx: JSContext,
         parsed: ParsedRule,
         categoryCode: String,
+        dataType: String,
     ): String? {
         if (categoryCode.isBlank()) return null
         val time = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(parsed.paidAt))
-        val expression = "JSON.stringify(category.get('', " +
+        val money = java.math.BigDecimal.valueOf(parsed.amountCents, 2).toPlainString()
+        val prefix = when (dataType) {
+            "NOTICE" -> "通知"
+            "OCR" -> "OCR"
+            else -> "数据"
+        }
+        // 与 AutoAccounting BillService.categorize 对齐：
+        // category.get(money, type, sanitizedShopName, sanitizedShopItem, HH:mm, 规则名)
+        val expression = "JSON.stringify(category.get(" +
+            "$money, " +
             "${JSONObject.quote(parsed.type)}, " +
-            "${JSONObject.quote(parsed.merchant.orEmpty())}, " +
-            "${JSONObject.quote(parsed.shopItem.orEmpty())}, " +
+            "${JSONObject.quote(sanitizeCategoryMeta(parsed.merchant.orEmpty()))}, " +
+            "${JSONObject.quote(sanitizeCategoryMeta(parsed.shopItem.orEmpty()))}, " +
             "${JSONObject.quote(time)}, " +
-            "${JSONObject.quote(parsed.channel.orEmpty())}))"
+            "${JSONObject.quote("$prefix·${parsed.ruleName}")}))"
         return try {
             val raw = ctx.evaluate(expression, "category-call.js", String::class.java)
             if (raw.isNullOrBlank() || raw == "null" || raw == "undefined") return null
@@ -301,6 +311,17 @@ object AutoAccountingRuleEngine {
             log("category call failed: ${describe(t)}")
             null
         }
+    }
+
+    /** 与 AutoAccounting 的 sanitizeCategoryMetaForRule 保持一致。 */
+    private fun sanitizeCategoryMeta(input: String): String {
+        if (input.isEmpty()) return input
+        return input
+            .replace(Regex("[¥\\$€£￥]\\s*\\d+(?:\\.\\d+)?"), "")
+            .replace(Regex("\\d+(?:\\.\\d+)?\\s*[元円块]"), "")
+            .replace(Regex("[A-Za-z]{6,}"), "")
+            .replace(Regex("[\\s\\-_/]+"), " ")
+            .trim()
     }
 
     private fun buildParsed(
@@ -387,10 +408,15 @@ object AutoAccountingRuleEngine {
         return RuleSet(common = common, category = category, byKey = byKey)
     }
 
-    private fun packageForSource(source: String): String? = when (source.trim().uppercase(Locale.US)) {
-        CaptureSource.WECHAT -> PACKAGE_WECHAT
-        CaptureSource.ALIPAY -> PACKAGE_ALIPAY
-        else -> source.trim().takeIf { it.contains('.') }
+    private fun packageForSource(source: String): String? {
+        val raw = source.trim()
+        return when (raw.uppercase(Locale.US)) {
+            CaptureSource.WECHAT -> PACKAGE_WECHAT
+            CaptureSource.ALIPAY -> PACKAGE_ALIPAY
+            // 通知/短信 hook 直接使用真实包名（cmb.pb、com.android.phone 等），
+            // 规则资产的 app 字段是小写包名，这里统一小写。
+            else -> raw.lowercase(Locale.US).takeIf { it.contains('.') }
+        }
     }
 
     private fun JSONObject.stringOrNull(key: String): String? {

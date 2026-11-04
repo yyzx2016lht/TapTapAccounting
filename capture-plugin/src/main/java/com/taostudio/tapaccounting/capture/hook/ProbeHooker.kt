@@ -72,19 +72,6 @@ internal object ProbeHooker {
         "outTradeNo",
     )
 
-    private val ALIPAY_PAY_KEYWORDS = listOf(
-        "支付",
-        "账单",
-        "交易",
-        "收款",
-        "付款",
-        "金额",
-        "消费",
-        "扣款",
-        "到账",
-        "退款",
-    )
-
     private val alipayInjectedAt = ConcurrentHashMap<String, Long>()
     private val alipayPolling = ConcurrentHashMap.newKeySet<String>()
 
@@ -95,11 +82,13 @@ internal object ProbeHooker {
                 hookWechatRichText(lpparam)
                 hookWechatWebView(lpparam)
                 hookWechatRemittance(lpparam)
+                hookWechatLuckyMoney(lpparam)
             }
 
             "com.eg.android.AlipayGphone" -> {
                 hookAlipaySyncMessage(lpparam)
                 hookAlipayWebView(lpparam)
+                hookAlipaySecurity(lpparam)
             }
 
             else -> Unit
@@ -174,6 +163,10 @@ internal object ProbeHooker {
         if (table != TABLE_MESSAGE && table != TABLE_APP_MESSAGE) return
         val type = readInt(values, "type") ?: return
 
+        // AutoAccounting DatabaseHooker 的完整类型集合：
+        // - message: 消息盒子 / 转账 / 红包 / 群系统消息
+        // - AppMessage: 文章(type=5) / 转账(type=2000)
+        // 不再按“是否支付关键词”预过滤：未命中的消息只进原始历史，不建待记。
         val keep = when (table) {
             TABLE_MESSAGE -> type in setOf(
                 MSG_TYPE_BOX,
@@ -182,17 +175,10 @@ internal object ProbeHooker {
                 MSG_TYPE_GROUP_SYSTEM,
             )
 
-            TABLE_APP_MESSAGE -> type == APPMSG_TYPE_TRANSFER
+            TABLE_APP_MESSAGE -> type in setOf(APPMSG_TYPE_ARTICLE, APPMSG_TYPE_TRANSFER)
             else -> false
         }
         if (!keep) return
-        if (table == TABLE_APP_MESSAGE && type == APPMSG_TYPE_ARTICLE) return
-        if (table == TABLE_MESSAGE && type == MSG_TYPE_GROUP_SYSTEM) {
-            val groupContent = readString(values, "content").orEmpty()
-            val isGroupCollection = listOf("群收款", "收款", "付款", "转账")
-                .any { groupContent.contains(it) }
-            if (!isGroupCollection) return
-        }
 
         val now = System.currentTimeMillis()
         val content = readString(values, "content").orEmpty()
@@ -205,6 +191,9 @@ internal object ProbeHooker {
         // 关键：按 AutoAccounting 规则的 envelope 构造 rawJson，
         // 规则引擎（143/157/156/138/155 等）才能直接命中。
         val rawJson = when {
+            table == TABLE_APP_MESSAGE && type == APPMSG_TYPE_ARTICLE ->
+                contentValuesToJson(values)
+
             table == TABLE_MESSAGE && type == MSG_TYPE_BOX ->
                 WechatEnvelope.mmapFromXml(content, now, cache)
 
@@ -224,18 +213,15 @@ internal object ProbeHooker {
         }
         if (rawJson.isBlank()) return
 
-        if (table == TABLE_MESSAGE && type == MSG_TYPE_BOX && !isPaymentMmap(content)) {
-            log("skip non-payment mMap source=${ProbeText.xmlTagText(content, "appname") ?: "-"}")
-            return
-        }
+        val txnId = when {
+            table == TABLE_MESSAGE && type == MSG_TYPE_RED_PACKAGE ->
+                WechatEnvelope.redPacketTxnId(rawJson) ?: fallbackTxnId
 
-        val txnId = if (
             table == TABLE_APP_MESSAGE ||
-            (table == TABLE_MESSAGE && type == MSG_TYPE_TRANSFER)
-        ) {
-            WechatEnvelope.transferTxnId(rawJson) ?: fallbackTxnId
-        } else {
-            fallbackTxnId
+                (table == TABLE_MESSAGE && type == MSG_TYPE_TRANSFER) ->
+                WechatEnvelope.transferTxnId(rawJson) ?: fallbackTxnId
+
+            else -> fallbackTxnId
         }
 
         val text = listOfNotNull(
@@ -284,13 +270,37 @@ internal object ProbeHooker {
      * `com.tencent.mm.plugin.remittance.model.*`，找 (int, String, JSONObject) 的 onGYNetEnd。
      * 只接收入账方向，避免与 WCDB 转出重复；入账/退款是 WCDB 最容易漏的路径。
      */
-    private fun hookWechatRemittance(lpparam: XC_LoadPackage.LoadPackageParam) {
-        val appInfo = lpparam.appInfo ?: return
-        val paths = buildList {
-            appInfo.sourceDir?.let { add(it) }
-            appInfo.splitSourceDirs?.forEach { add(it) }
+    /**
+     * 微信的 Dex 路径：base APK + split APK + Tinker 热补丁 dex。
+     *
+     * AutoAccounting 直接关闭 Tinker；这里选择不破坏宿主，改为把 patch 目录里的
+     * dex 也加入扫描。否则只会扫到 base APK 里的旧类（a0/a6），运行时真正的类
+     * 可能在 patch 里（h1/h6），hook 永远不会触发。
+     */
+    private fun wechatDexPaths(lpparam: XC_LoadPackage.LoadPackageParam): List<String> {
+        val appInfo = lpparam.appInfo ?: return emptyList()
+        val paths = LinkedHashSet<String>()
+        appInfo.sourceDir?.let { paths.add(it) }
+        appInfo.splitSourceDirs?.forEach { paths.add(it) }
+        val dataDir = appInfo.dataDir
+        if (!dataDir.isNullOrBlank()) {
+            val tinker = java.io.File(dataDir, "tinker")
+            if (tinker.isDirectory) {
+                tinker.listFiles()?.asSequence()
+                    ?.filter { it.isDirectory && it.name.startsWith("patch-") }
+                    ?.forEach { patch ->
+                        patch.walkTopDown()
+                            .filter { it.isFile && it.extension.equals("dex", ignoreCase = true) }
+                            .forEach { paths.add(it.absolutePath) }
+                    }
+            }
         }
-        for (path in paths) {
+        return paths.toList()
+    }
+
+    private fun hookWechatRemittance(lpparam: XC_LoadPackage.LoadPackageParam) {
+        var hooked = 0
+        for (path in wechatDexPaths(lpparam)) {
             try {
                 @Suppress("DEPRECATION")
                 val dex = DexFile(path)
@@ -308,48 +318,142 @@ internal object ProbeHooker {
                             it.parameterTypes[1] == String::class.java &&
                             it.parameterTypes[2] == JSONObject::class.java
                     } ?: continue
-                    XposedBridge.hookMethod(method, object : XC_MethodHook() {
-                        override fun afterHookedMethod(param: MethodHookParam) {
-                            try {
-                                val json = param.args.getOrNull(2) as? JSONObject ?: return
-                                if (!json.has("is_payer")) return
-                                val isPayer = json.optBoolean("is_payer", false)
-                                // 转出已由 WCDB 覆盖；这里只补齐入账/退款方向，避免双记。
-                                if (isPayer) return
-                                val nameKey = "receiver_name"
-                                val name = json.optString(nameKey, "").trim()
-                                json.put("hookerUser", name)
-                                val cache = WechatRichCache.snapshot(System.currentTimeMillis())
-                                cache?.payTools?.let { json.put("cachedPayTools", it) }
-                                cache?.payMoney?.let { json.put("cachedPayMoney", it) }
-                                cache?.payShop?.let { json.put("cachedPayShop", it) }
-                                json.put("t", System.currentTimeMillis())
-                                val raw = json.toString()
-                                val txn = sequenceOf("transcationid", "transferid", "transfer_id", "transferId")
-                                    .map { json.optString(it, "").trim() }
-                                    .firstOrNull { it.isNotEmpty() && it != "0" }
-                                CaptureForwarder.forward(
-                                    source = CaptureSource.WECHAT,
-                                    rawJson = raw,
-                                    merchant = name.takeIf { it.isNotEmpty() },
-                                    paymentMethodRaw = cache?.payTools,
-                                    sourceTxnId = txn?.let { "$it:in" },
-                                    dataType = "DATA",
-                                )
-                                log("remittance callback captured txn=${txn ?: "-"}")
-                            } catch (t: Throwable) {
-                                log("remittance callback failed: ${t.javaClass.name}: ${t.message}")
+                    val ok = runCatching {
+                        XposedBridge.hookMethod(method, object : XC_MethodHook() {
+                            override fun afterHookedMethod(param: MethodHookParam) {
+                                try {
+                                    val json = param.args.getOrNull(2) as? JSONObject ?: return
+                                    if (!json.has("is_payer")) return
+                                    val isPayer = json.optBoolean("is_payer", false)
+                                    // AutoAccounting 的 TransferHooker 两个方向都上报：
+                                    // is_payer=true 用 payer_name，false 用 receiver_name。
+                                    val nameKey = if (isPayer) "payer_name" else "receiver_name"
+                                    val name = json.optString(nameKey, "").trim()
+                                    // 规则 157 的转账详情分支用 hookUser；WCDB 分支用 hookerUser。
+                                    json.put("hookerUser", name)
+                                    json.put("hookUser", name)
+                                    val cache = WechatRichCache.snapshot(System.currentTimeMillis())
+                                    cache?.payTools?.let { json.put("cachedPayTools", it) }
+                                    cache?.payMoney?.let { json.put("cachedPayMoney", it) }
+                                    cache?.payShop?.let { json.put("cachedPayShop", it) }
+                                    json.put("t", System.currentTimeMillis())
+                                    val raw = json.toString()
+                                    val baseTxn = sequenceOf(
+                                        "transcationid",
+                                        "transferid",
+                                        "transfer_id",
+                                        "transferId",
+                                    )
+                                        .map { json.optString(it, "").trim() }
+                                        .firstOrNull { it.isNotEmpty() && it != "0" }
+                                    val subtype = json.optString("paysubtype", "").trim()
+                                    val txnKey = baseTxn?.let {
+                                        if (subtype.isEmpty()) it else "$it:$subtype"
+                                    }
+                                    // 与 AutoAccounting 一致：即使没有交易号也上报，
+                                    // 由插件侧去重/合并，不能在这里丢数据。
+                                    CaptureForwarder.forward(
+                                        source = CaptureSource.WECHAT,
+                                        rawJson = raw,
+                                        merchant = name.takeIf { it.isNotEmpty() },
+                                        paymentMethodRaw = cache?.payTools,
+                                        sourceTxnId = txnKey,
+                                        dataType = "DATA",
+                                    )
+                                    log(
+                                        "remittance callback isPayer=$isPayer " +
+                                            "name=$name txn=${txnKey ?: "-"}",
+                                    )
+                                } catch (t: Throwable) {
+                                    log("remittance callback failed: ${t.javaClass.name}: ${t.message}")
+                                }
                             }
-                        }
-                    })
-                    log("hook installed: remittance ${clazz.name}.onGYNetEnd")
-                    return
+                        })
+                    }.isSuccess
+                    if (ok) {
+                        hooked++
+                        log("hook installed: remittance ${clazz.name}.onGYNetEnd")
+                    }
                 }
             } catch (t: Throwable) {
                 log("remittance scan failed path=$path: ${t.javaClass.name}: ${t.message}")
             }
         }
+        log("remittance hooks total=$hooked")
     }
+
+    /**
+     * AutoAccounting 的 RedPackageHooker 等价物：红包详情回调 onGYNetEnd。
+     *
+     * WCDB 里的红包消息往往只有 XML 外壳，领取金额/发送人/领取记录在
+     * `com.tencent.mm.plugin.luckymoney.model.*.onGYNetEnd(int, String, JSONObject)`。
+     * 规则 154（收红包）直接读 `retcode/amount/record[0].receiveTime`，所以这里
+     * 原样上报 JSON，只在外面补 hookerUser 和缓存。
+     */
+    private fun hookWechatLuckyMoney(lpparam: XC_LoadPackage.LoadPackageParam) {
+        var hooked = 0
+        for (path in wechatDexPaths(lpparam)) {
+            try {
+                @Suppress("DEPRECATION")
+                val dex = DexFile(path)
+                val entries = dex.entries()
+                while (entries.hasMoreElements()) {
+                    val className = entries.nextElement()
+                    if (!className.startsWith("com.tencent.mm.plugin.luckymoney.model.")) continue
+                    val clazz = runCatching {
+                        XposedHelpers.findClassIfExists(className, lpparam.classLoader)
+                    }.getOrNull() ?: continue
+                    val method = clazz.declaredMethods.firstOrNull {
+                        it.name == "onGYNetEnd" &&
+                            it.parameterTypes.size == 3 &&
+                            it.parameterTypes[0] == Int::class.javaPrimitiveType &&
+                            it.parameterTypes[1] == String::class.java &&
+                            it.parameterTypes[2] == JSONObject::class.java
+                    } ?: continue
+                    val ok = runCatching {
+                        XposedBridge.hookMethod(method, object : XC_MethodHook() {
+                            override fun beforeHookedMethod(param: MethodHookParam) {
+                                try {
+                                    val json = param.args.getOrNull(2) as? JSONObject ?: return
+                                    // 只处理红包详情；同一包下还有其他 onGYNetEnd 回调。
+                                    if (!json.has("sendId") && !json.has("sendUserName")) return
+                                    val name = json.optString("sendUserName", "").trim()
+                                    json.put("hookerUser", name)
+                                    json.put("hookUser", name)
+                                    val cache = WechatRichCache.snapshot(System.currentTimeMillis())
+                                    cache?.payTools?.let { json.put("cachedPayTools", it) }
+                                    cache?.payMoney?.let { json.put("cachedPayMoney", it) }
+                                    cache?.payShop?.let { json.put("cachedPayShop", it) }
+                                    json.put("t", System.currentTimeMillis())
+                                    val sendId = json.optString("sendId", "").trim()
+                                        .takeIf { it.isNotEmpty() }
+                                    CaptureForwarder.forward(
+                                        source = CaptureSource.WECHAT,
+                                        rawJson = json.toString(),
+                                        merchant = name.takeIf { it.isNotEmpty() },
+                                        paymentMethodRaw = cache?.payTools,
+                                        sourceTxnId = sendId,
+                                        dataType = "DATA",
+                                    )
+                                    log("lucky money callback captured sendId=${sendId ?: "-"}")
+                                } catch (t: Throwable) {
+                                    log("lucky money callback failed: ${t.javaClass.name}: ${t.message}")
+                                }
+                            }
+                        })
+                    }.isSuccess
+                    if (ok) {
+                        hooked++
+                        log("hook installed: luckymoney ${clazz.name}.onGYNetEnd")
+                    }
+                }
+            } catch (t: Throwable) {
+                log("luckymoney scan failed path=$path: ${t.javaClass.name}: ${t.message}")
+            }
+        }
+        log("luckymoney hooks total=$hooked")
+    }
+
 
     /** 微信支付成功页的 RichText 文本节点（金额/支付方式常在这里）。只缓存，不单独上报。 */
     private fun hookWechatRichText(lpparam: XC_LoadPackage.LoadPackageParam) {
@@ -463,8 +567,83 @@ internal object ProbeHooker {
 
     // ---------------------------------------------------------------- 支付宝
 
-    /** 支付宝消息盒子：JSON 数组里逐条挑出支付相关消息。 */
+    /**
+     * 支付宝环境检测 bypass，等价于 AutoAccounting 的 SecurityHooker。
+     *
+     * 只处理 ScanAttack 这一层；Native/人脸检测仍可能生效。目的是避免 Xposed/root
+     * 环境让支付宝弹“登录异常/环境不安全”，不是绕过支付风控。
+     */
+    private fun hookAlipaySecurity(lpparam: XC_LoadPackage.LoadPackageParam) {
+        try {
+            val clazz = XposedHelpers.findClassIfExists(
+                "com.alipay.apmobilesecuritysdk.scanattack.common.ScanAttack",
+                lpparam.classLoader,
+            ) ?: run {
+                log("hook skipped: ScanAttack not found")
+                return
+            }
+
+            var hooked = 0
+            clazz.declaredMethods.forEach { method ->
+                try {
+                    XposedBridge.hookMethod(method, object : XC_MethodHook() {
+                        override fun afterHookedMethod(param: MethodHookParam) {
+                            // 所有 Boolean 检测结果统一返回 false。
+                            if (param.result is Boolean) param.result = false
+                        }
+                    })
+                    hooked++
+                } catch (_: Throwable) {
+                    // 单个方法 hook 失败不影响其他检测。
+                }
+            }
+
+            clazz.declaredMethods
+                .filter { it.name == "getAD104" && it.parameterTypes.size >= 3 }
+                .forEach { method ->
+                    try {
+                        XposedBridge.hookMethod(method, object : XC_MethodHook() {
+                            override fun beforeHookedMethod(param: MethodHookParam) {
+                                // 参数 2 是检测类型；4 = 只检测虚拟机。
+                                if (param.args.size > 2 && param.args[2] is Int) {
+                                    param.args[2] = 4
+                                }
+                            }
+                        })
+                    } catch (_: Throwable) {
+                        // 忽略。
+                    }
+                }
+            log("hook installed: ScanAttack methods=$hooked")
+        } catch (t: Throwable) {
+            log("hook unavailable: ScanAttack (${t.javaClass.name}: ${t.message})")
+        }
+    }
+
+    /** 支付宝消息盒子：JSON 数组里逐条上报，交给规则判断是否账单。 */
     private fun hookAlipaySyncMessage(lpparam: XC_LoadPackage.LoadPackageParam) {
+        // AutoAccounting 的 MessageBoxHooker 同时挂 toString：有些路径不会主动调用
+        // getData，只调用 toString 写日志；这里主动触发一次 getData，让统一入口处理。
+        try {
+            XposedHelpers.findAndHookMethod(
+                "com.alipay.mobile.rome.longlinkservice.syncmodel.SyncMessage",
+                lpparam.classLoader,
+                "toString",
+                object : XC_MethodHook() {
+                    override fun afterHookedMethod(param: MethodHookParam) {
+                        try {
+                            XposedHelpers.callMethod(param.thisObject, "getData")
+                        } catch (t: Throwable) {
+                            log("alipay toString->getData failed: ${t.javaClass.name}: ${t.message}")
+                        }
+                    }
+                },
+            )
+            log("hook installed: SyncMessage.toString")
+        } catch (t: Throwable) {
+            log("hook unavailable: SyncMessage.toString ($t)")
+        }
+
         try {
             XposedHelpers.findAndHookMethod(
                 "com.alipay.mobile.rome.longlinkservice.syncmodel.SyncMessage",
@@ -500,10 +679,10 @@ internal object ProbeHooker {
         for (index in 0 until array.length()) {
             val item = array.optJSONObject(index) ?: continue
             val text = item.toString()
-            // 支付宝消息盒子混有红包/营销/系统消息；P0 只收支付/账单相关。
-            if (ALIPAY_PAY_KEYWORDS.none { text.contains(it) }) continue
             // 规则 406/59 等按“JSON 数组”解析；AutoAccounting 的 MessageBoxHooker
             // 也是把单条包成单元素数组后上报，不能只发 item。
+            // 不做关键词预过滤：未命中的消息只进原始历史，不会建待记，
+            // 预过滤反而会漏掉银行/红包等规则需要的消息。
             val ruleInput = JSONArray().put(item).toString()
 
             forwarded++
@@ -696,27 +875,6 @@ internal object ProbeHooker {
         null
     }
 
-    /** 消息盒子 mMap 是否是支付/转账语义；丰巢取件、快递、群通知等直接跳过。 */
-    private fun isPaymentMmap(content: String): Boolean {
-        val text = listOfNotNull(
-            ProbeText.xmlTagText(content, "appname"),
-            ProbeText.xmlTagText(content, "title"),
-            ProbeText.xmlTagText(content, "des"),
-            ProbeText.xmlTagText(content, "display_name"),
-        ).joinToString("\n")
-        return listOf(
-            "微信支付",
-            "微信转账",
-            "微信收款",
-            "支付",
-            "付款",
-            "消费",
-            "转账",
-            "收款",
-            "退款",
-        ).any { text.contains(it) }
-    }
-
     private fun readString(values: ContentValues, vararg keys: String): String? {
         for (key in keys) {
             val value = try {
@@ -727,6 +885,13 @@ internal object ProbeHooker {
             if (!value.isNullOrBlank()) return value
         }
         return null
+    }
+
+    /** ContentValues -> JSON 字符串，等价于 AutoAccounting 的 Gson().toJson(contentValues)。 */
+    private fun contentValuesToJson(values: ContentValues): String {
+        val out = JSONObject()
+        copyContentValues(values, out)
+        return out.toString()
     }
 
     /** ContentValues -> 可读 JSON；byte[] 只记长度，避免日志/JSON 过大。 */

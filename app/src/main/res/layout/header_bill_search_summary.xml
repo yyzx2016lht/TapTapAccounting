@@ -1,0 +1,290 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 搜索页列表头：随列表滚动的账单汇总。 -->
+<com.google.android.material.card.MaterialCardView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginStart="16dp"
+    android:layout_marginTop="12dp"
+    android:layout_marginEnd="16dp"
+    android:layout_marginBottom="8dp"
+    app:cardBackgroundColor="@color/surface_card"
+    app:cardCornerRadius="16dp"
+    app:cardElevation="0dp"
+    app:strokeWidth="0dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:paddingBottom="8dp">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingStart="16dp">
+
+            <TextView
+                android:id="@+id/tv_search_count"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:ellipsize="end"
+                android:fontFamily="sans-serif-medium"
+                android:maxLines="1"
+                android:textColor="@color/text_primary"
+                android:textSize="14sp" />
+
+            <TextView
+                android:id="@+id/btn_search_sort"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:background="?attr/selectableItemBackground"
+                android:clickable="true"
+                android:focusable="true"
+                android:gravity="center"
+                android:maxLines="1"
+                android:minHeight="48dp"
+                android:paddingStart="12dp"
+                android:paddingEnd="16dp"
+                android:text="@string/search_sort_latest"
+                android:textColor="@color/text_secondary"
+                android:textSize="13sp" />
+        </LinearLayout>
+
+        <GridLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:columnCount="3"
+            android:paddingStart="8dp"
+            android:paddingEnd="8dp">
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_row="0"
+                android:layout_column="0"
+                android:layout_columnWeight="1"
+                android:layout_gravity="fill_horizontal"
+                android:gravity="center"
+                android:orientation="vertical"
+                android:paddingStart="8dp"
+                android:paddingTop="10dp"
+                android:paddingEnd="8dp"
+                android:paddingBottom="10dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/total_expense"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="12sp" />
+
+                <TextView
+                    android:id="@+id/tv_sum_expense"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    app:autoSizeMaxTextSize="20sp"
+                    app:autoSizeMinTextSize="12sp"
+                    app:autoSizeStepGranularity="1sp"
+                    app:autoSizeTextType="uniform"
+                    android:ellipsize="end"
+                    android:fontFamily="sans-serif-medium"
+                    android:gravity="center"
+                    android:maxLines="1"
+                    android:text="0.00"
+                    android:textColor="@color/expense_color"
+                    android:textSize="20sp" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_row="0"
+                android:layout_column="1"
+                android:layout_columnWeight="1"
+                android:layout_gravity="fill_horizontal"
+                android:gravity="center"
+                android:orientation="vertical"
+                android:paddingStart="8dp"
+                android:paddingTop="10dp"
+                android:paddingEnd="8dp"
+                android:paddingBottom="10dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/total_income"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="12sp" />
+
+                <TextView
+                    android:id="@+id/tv_sum_income"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    app:autoSizeMaxTextSize="20sp"
+                    app:autoSizeMinTextSize="12sp"
+                    app:autoSizeStepGranularity="1sp"
+                    app:autoSizeTextType="uniform"
+                    android:ellipsize="end"
+                    android:fontFamily="sans-serif-medium"
+                    android:gravity="center"
+                    android:maxLines="1"
+                    android:text="0.00"
+                    android:textColor="@color/income_color"
+                    android:textSize="20sp" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_row="0"
+                android:layout_column="2"
+                android:layout_columnWeight="1"
+                android:layout_gravity="fill_horizontal"
+                android:gravity="center"
+                android:orientation="vertical"
+                android:paddingStart="8dp"
+                android:paddingTop="10dp"
+                android:paddingEnd="8dp"
+                android:paddingBottom="10dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/balance"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="12sp" />
+
+                <TextView
+                    android:id="@+id/tv_sum_balance"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    app:autoSizeMaxTextSize="20sp"
+                    app:autoSizeMinTextSize="12sp"
+                    app:autoSizeStepGranularity="1sp"
+                    app:autoSizeTextType="uniform"
+                    android:ellipsize="end"
+                    android:fontFamily="sans-serif-medium"
+                    android:gravity="center"
+                    android:maxLines="1"
+                    android:text="0.00"
+                    android:textColor="@color/text_primary"
+                    android:textSize="20sp" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/cell_sum_transfer"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_row="1"
+                android:layout_column="0"
+                android:layout_columnWeight="1"
+                android:layout_gravity="fill_horizontal"
+                android:gravity="center"
+                android:orientation="vertical"
+                android:paddingStart="8dp"
+                android:paddingTop="10dp"
+                android:paddingEnd="8dp"
+                android:paddingBottom="10dp"
+                android:visibility="gone">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/transfer_repayment"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="12sp" />
+
+                <TextView
+                    android:id="@+id/tv_sum_transfer"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:ellipsize="end"
+                    android:gravity="center"
+                    android:maxLines="1"
+                    android:text="0.00"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="14sp" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/cell_sum_refund"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_row="1"
+                android:layout_column="1"
+                android:layout_columnWeight="1"
+                android:layout_gravity="fill_horizontal"
+                android:gravity="center"
+                android:orientation="vertical"
+                android:paddingStart="8dp"
+                android:paddingTop="10dp"
+                android:paddingEnd="8dp"
+                android:paddingBottom="10dp"
+                android:visibility="gone">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/refund"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="12sp" />
+
+                <TextView
+                    android:id="@+id/tv_sum_refund"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:ellipsize="end"
+                    android:gravity="center"
+                    android:maxLines="1"
+                    android:text="0.00"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="14sp" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/cell_sum_excluded"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_row="1"
+                android:layout_column="2"
+                android:layout_columnWeight="1"
+                android:layout_gravity="fill_horizontal"
+                android:gravity="center"
+                android:orientation="vertical"
+                android:paddingStart="8dp"
+                android:paddingTop="10dp"
+                android:paddingEnd="8dp"
+                android:paddingBottom="10dp"
+                android:visibility="gone">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/search_excluded_stats"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="12sp" />
+
+                <TextView
+                    android:id="@+id/tv_sum_excluded"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:ellipsize="end"
+                    android:gravity="center"
+                    android:maxLines="1"
+                    android:text="0.00"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="14sp" />
+            </LinearLayout>
+        </GridLayout>
+    </LinearLayout>
+</com.google.android.material.card.MaterialCardView>

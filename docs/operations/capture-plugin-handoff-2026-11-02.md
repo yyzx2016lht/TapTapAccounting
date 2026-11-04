@@ -1,6 +1,18 @@
 # 支付捕获插件交接（2026-11-02）
 
-## 2026-11-03 组合 B 已落地（最新）
+## 2026-11-05 最新进度（历史数据 / 规则导入 / 工作台）
+
+- 插件主界面已升级为工作台：`待记 / 资产映射 / 分类规则 / 设置`，顶部增加“历史”入口。
+- 原始事件历史表 `capture_events` 已随 Room v5/v6 落库；所有 hook 事件都留档，未命中事件不生成待记。
+- 历史页支持查看原始 JSON，并可从同机 AutoAccounting `127.0.0.1:52045` 导入微信/支付宝原始历史（只入历史表，不自动建账单）。
+- 设置页支持一键导入 AutoAccounting 的资产映射和分类规则。
+- 已补微信 `onGYNetEnd`（TransferHooker 等价）和 WCDB `updateWithOnConflict`；退款/入账方向优先从这些路径补齐。
+- 新增 `CaptureWakeActivity`、直接 TCP 投递和后台唤醒链路，避免 hook 时插件进程未启动导致事件丢失。
+- 构建通过：`:app:assembleDebug :capture-plugin:assembleDebug`；`CategoryNameResolverTest` 通过。
+- 设备 `100.110.1.7:6666` 最近安装版本包含历史页前的代码；最新 `f5a99b5` 需要重新安装后验证。设备当前离线，未能做最终真机回归。
+- 仍未在真实 root 设备验证退款全链路；AutoAccounting 的 `paysubtype=4` 退款在旧插件中被幂等键丢弃，需用包含 `transcationid:paysubtype` 的版本重测。
+
+## 2026-11-03 组合 B 已落地（上一阶段）
 
 > 详细口径/映射/测试见 `docs/operations/bill-type-localization.md`。
 > 本轮已 commit 多个 checkpoint；备用机 `172.20.1.22:41103` 无 root，用合成数据验证，不依赖真实 hook。

@@ -14,7 +14,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         AssetMappingRule::class,
         CategoryRule::class,
     ],
-    version = 6,
+    version = 7,
     exportSchema = false,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -123,6 +123,13 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /** v6 -> v7：分类来源（RULE / AI / MANUAL / null）。历史分类保留，不回溯清空。 */
+        val MIGRATION_6_7: Migration = object : Migration(6, 7) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE payment_captures ADD COLUMN categorySource TEXT")
+            }
+        }
+
         @Volatile
         private var instance: AppDatabase? = null
 
@@ -139,6 +146,7 @@ abstract class AppDatabase : RoomDatabase() {
                         MIGRATION_3_4,
                         MIGRATION_4_5,
                         MIGRATION_5_6,
+                        MIGRATION_6_7,
                     )
                     .build()
                     .also { instance = it }

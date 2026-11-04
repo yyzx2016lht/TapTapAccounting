@@ -6,8 +6,8 @@
 
 | ID | 功能 | 状态 | 子代理 session | 最近 commit | APK 目录 | 备注 |
 |---|---|---|---|---|---|---|
-| F01 | 文案与来源注册表 | DONE | ses_e589b0cf5ffeWniCQ36L46jkV0 | 待记录 | dist/long-task/F01-copy-source | 编译通过；capture-contract 测试 4 项通过；grep 无旧文案 |
-| F02 | 分类语义重构 | TODO | - | - | - | |
+| F01 | 文案与来源注册表 | DONE | ses_e589b0cf5ffeWniCQ36L46jkV0 | 91f4eba | dist/long-task/F01-copy-source | 编译通过；capture-contract 测试 4 项通过；grep 无旧文案 |
+| F02 | 分类语义重构 | DONE | ses_e5894643efferHVaaqFBhgRa9Z | 待记录 | dist/long-task/F02-classification-semantics | 编译通过；插件单测 6 项通过；DB v7 迁移加 categorySource，历史分类保留 |
 | F03 | 轻量智能归类与无备注跳过 | TODO | - | - | - | |
 | F04 | 气泡三态 + 直接记账 + 不计/恢复 | TODO | - | - | - | |
 | F05 | AI 规则学习 | TODO | - | - | - | |

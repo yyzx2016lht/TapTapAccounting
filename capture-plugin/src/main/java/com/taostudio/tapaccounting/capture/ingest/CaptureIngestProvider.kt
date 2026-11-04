@@ -15,6 +15,7 @@ import com.taostudio.tapaccounting.capture.bridge.CaptureReconciler
 import com.taostudio.tapaccounting.capture.contract.CaptureContract
 import com.taostudio.tapaccounting.capture.contract.CaptureStatus
 import com.taostudio.tapaccounting.capture.data.CapturePrefs
+import com.taostudio.tapaccounting.capture.data.CategorySource
 import com.taostudio.tapaccounting.capture.notify.CaptureNotifier
 import com.taostudio.tapaccounting.capture.parse.CaptureRuleMatcher
 import kotlinx.coroutines.Dispatchers
@@ -111,13 +112,12 @@ class CaptureIngestProvider : ContentProvider() {
                     val resolvedAsset = item.assetName
                         ?: CaptureRuleMatcher.resolveAssetName(app, item.paymentMethodRaw)
                     val resolvedCat = item.categoryName
-                        ?: CaptureRuleMatcher.resolveCategoryName(
-                            context = app,
-                            merchant = item.merchant,
-                            shopItem = null,
-                            note = item.note,
-                            fallbackCategory = null,
-                        )
+                        ?: CaptureRuleMatcher.resolveNoteCategory(app, item.note)
+                    val resolvedCatSource = when {
+                        item.categoryName != null -> item.categorySource
+                        resolvedCat != null -> CategorySource.RULE
+                        else -> null
+                    }
                     array.put(
                         JSONObject().apply {
                             put("id", item.id)
@@ -126,6 +126,7 @@ class CaptureIngestProvider : ContentProvider() {
                             put("currency", item.currency)
                             putOpt("merchant", item.merchant)
                             putOpt("categoryName", resolvedCat)
+                            putOpt("categorySource", resolvedCatSource)
                             putOpt("paymentMethodRaw", item.paymentMethodRaw)
                             putOpt("assetName", resolvedAsset)
                             putOpt("toAssetName", item.toAssetName)
@@ -152,6 +153,7 @@ class CaptureIngestProvider : ContentProvider() {
                 val note = extras?.getString("note")
                 val assetName = extras?.getString("assetName")
                 val categoryName = extras?.getString("categoryName")
+                val categorySource = extras?.getString("categorySource")
                 val rememberAsset = extras?.getBoolean("rememberAsset", false) ?: false
                 val rememberCategoryKeyword = extras?.getString("rememberCategoryKeyword")
                 val updated = repo.updateDraft(
@@ -160,6 +162,7 @@ class CaptureIngestProvider : ContentProvider() {
                     note = note,
                     assetName = assetName,
                     categoryName = categoryName,
+                    categorySource = categorySource,
                     rememberAssetMapping = rememberAsset,
                     rememberCategoryKeyword = rememberCategoryKeyword,
                 )
@@ -167,6 +170,7 @@ class CaptureIngestProvider : ContentProvider() {
                 JSONObject()
                     .put("ok", updated != null)
                     .putOpt("categoryName", updated?.categoryName)
+                    .putOpt("categorySource", updated?.categorySource)
                     .putOpt("assetName", updated?.assetName)
                     .putOpt("note", updated?.note)
                     .toString()

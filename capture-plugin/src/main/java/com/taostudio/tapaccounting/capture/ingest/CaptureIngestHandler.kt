@@ -78,19 +78,13 @@ internal object CaptureIngestHandler {
                         val mappedToAsset = item.toAssetName?.let { rawTo ->
                             CaptureRuleMatcher.resolveAssetName(app, rawTo) ?: rawTo
                         }
-                        val mappedCategory = CaptureRuleMatcher.resolveCategoryName(
-                            context = app,
-                            merchant = item.merchant,
-                            shopItem = analysis.shopItem,
-                            note = item.note,
-                            fallbackCategory = item.categoryName,
-                        )
                         // 不在入库与弹窗关键路径上同步跨进程调用主应用 ContentProvider（主应用冷启动或被冻结会阻塞 1~3 秒），
                         // 先以 PENDING 毫秒级落库并立即弹出悬浮窗，再去后台异步核对是否疑似重复。
+                        // 分类只认用户备注：hook 入库不推断分类，等用户在备注里写关键词或走智能归类。
                         item.copy(
                             assetName = mappedAsset,
                             toAssetName = mappedToAsset,
-                            categoryName = mappedCategory,
+                            categoryName = null,
                             status = CaptureStatus.PENDING,
                         )
                     }
@@ -110,7 +104,7 @@ internal object CaptureIngestHandler {
                             localSubType = enriched?.subType ?: payload.subType,
                             amountCents = enriched?.amountCents ?: payload.amountCents,
                             merchant = enriched?.merchant ?: payload.merchant,
-                            categoryName = enriched?.categoryName ?: payload.categoryName,
+                            categoryName = null,
                             channel = analysis.channel,
                         )
                     }
@@ -238,7 +232,6 @@ internal object CaptureIngestHandler {
                     amountCents = amount,
                     paidAt = parsed.paidAt.takeIf { it > 0L } ?: payload.paidAt,
                     merchant = parsed.merchant ?: payload.merchant,
-                    categoryName = parsed.categoryName ?: payload.categoryName,
                     paymentMethodRaw = parsed.accountNameFrom ?: payload.paymentMethodRaw,
                     toAssetName = parsed.accountNameTo ?: payload.toAssetName,
                     currency = parsed.currency,

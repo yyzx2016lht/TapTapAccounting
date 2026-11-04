@@ -79,4 +79,6 @@ dependencies {
 
     // LSPosed / Xposed API：只编译期需要，运行时由框架提供。
     compileOnly("de.robv.android.xposed:api:82")
+
+    testImplementation("junit:junit:4.13.2")
 }

@@ -36,6 +36,7 @@ import com.taostudio.tapaccounting.capture.data.AssetMappingRule
 import com.taostudio.tapaccounting.capture.data.CapturePrefs
 import com.taostudio.tapaccounting.capture.data.CaptureRepository
 import com.taostudio.tapaccounting.capture.data.CategoryRule
+import com.taostudio.tapaccounting.capture.data.CategorySource
 import com.taostudio.tapaccounting.capture.data.PaymentCapture
 import com.taostudio.tapaccounting.capture.hook.CaptureForwarder
 import com.taostudio.tapaccounting.capture.hook.WechatEnvelope
@@ -862,6 +863,7 @@ class PendingListActivity : Activity() {
                         note = item.note,
                         assetName = item.assetName,
                         categoryName = chosenCat,
+                        categorySource = CategorySource.MANUAL,
                         rememberCategoryKeyword = if (rememberBox.isChecked) candidateKeyword else null,
                     )
                 }
@@ -905,6 +907,7 @@ class PendingListActivity : Activity() {
                                 note = existing.note ?: d.remarks,
                                 assetName = existing.assetName ?: d.assetName,
                                 categoryName = cat,
+                                categorySource = CategorySource.AI,
                             )
                             updatedCount++
                         }
@@ -1115,13 +1118,6 @@ class PendingListActivity : Activity() {
             try {
                 val outcome = withContext(Dispatchers.IO) {
                     val mappedAsset = CaptureRuleMatcher.resolveAssetName(scopeCtx, "零钱")
-                    val matchedCategory = CaptureRuleMatcher.resolveCategoryName(
-                        context = scopeCtx,
-                        merchant = "示例支出",
-                        shopItem = null,
-                        note = null,
-                        fallbackCategory = null,
-                    )
                     val payload = CapturePayload(
                         captureId = UUID.randomUUID().toString(),
                         source = CaptureSource.WECHAT,
@@ -1130,7 +1126,7 @@ class PendingListActivity : Activity() {
                         merchant = "示例支出",
                         paymentMethodRaw = "零钱",
                         assetName = mappedAsset,
-                        categoryName = matchedCategory,
+                        categoryName = null,
                         paidAt = now,
                         capturedAt = now,
                         note = null,

@@ -409,7 +409,7 @@ internal class RuleMappingViews(
                 setTextColor(CaptureUi.TEXT_PRIMARY)
             })
             addView(TextView(activity).apply {
-                text = "付款或手写备注（如“咖啡”“打车”“房租”）时 0 毫秒优先匹配本地规则；点击下方任意关键词即可编辑或删除。"
+                text = "只按用户备注匹配分类；商户规则保留但不再自动命中。付款时可在备注里写“咖啡”“打车”“房租”等关键词。"
                 textSize = 12.5f
                 setTextColor(CaptureUi.TEXT_SECONDARY)
                 setLineSpacing(0f, 1.2f)
@@ -514,7 +514,7 @@ internal class RuleMappingViews(
                         setPadding(0, dp(3), 0, dp(3))
                     }
                     rowRules.forEach { rule ->
-                        val scopeTag = if (rule.matchField == CategoryRule.MATCH_MERCHANT) "商:" else ""
+                        val scopeTag = if (rule.matchField == CategoryRule.MATCH_MERCHANT) "不自动匹配: " else ""
                         val pill = CaptureUi.chip(
                             activity = activity,
                             text = "$scopeTag${rule.keyword}",

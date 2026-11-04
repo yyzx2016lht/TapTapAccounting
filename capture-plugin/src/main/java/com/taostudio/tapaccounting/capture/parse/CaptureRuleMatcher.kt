@@ -13,7 +13,7 @@ object CaptureRuleMatcher {
 
     /**
      * 首次启动或用户点击“恢复/导入预置映射与规则”时写入默认数据。
-     * 包含从自动记账导出的真实资产映射与高频商家/菜市场分类规则。
+     * 只补通用资产映射；分类规则默认为空，不会给新安装种商户规则。
      */
     suspend fun ensureSeeded(context: Context, force: Boolean = false) {
         if (!force && CapturePrefs.isDefaultsSeeded(context)) return
@@ -89,7 +89,40 @@ object CaptureRuleMatcher {
     }
 
     /**
+     * 只按“用户备注”匹配分类规则。
+     *
+     * 只执行 [CategoryRule.MATCH_NOTE] / [CategoryRule.MATCH_ANY]；
+     * 商户规则（[CategoryRule.MATCH_MERCHANT]）数据保留，但不再参与自动归类。
+     */
+    suspend fun resolveNoteCategory(context: Context, note: String?): String? {
+        val n = note?.trim().orEmpty()
+        if (n.isEmpty()) return null
+        ensureSeeded(context)
+        val rules = CaptureApp.from(context).database.categoryRuleDao().listEnabled()
+        return matchNoteCategory(rules, n)
+    }
+
+    /** 纯规则匹配，便于单测：只认备注，商户规则直接跳过。 */
+    internal fun matchNoteCategory(rules: List<CategoryRule>, note: String?): String? {
+        val n = note?.trim().orEmpty()
+        if (n.isEmpty()) return null
+        for (rule in rules) {
+            if (!rule.enabled) continue
+            if (rule.matchField != CategoryRule.MATCH_NOTE &&
+                rule.matchField != CategoryRule.MATCH_ANY
+            ) {
+                continue
+            }
+            if (matchesText(rule, n)) return rule.targetCategoryName
+        }
+        return null
+    }
+
+    /**
      * 根据 备注（最高优）、商户、商品名 匹配本地分类规则。
+     *
+     * 只供只读展示等历史场景使用；hook 入库与备注重分类路径必须用
+     * [resolveNoteCategory]，不得再用商户规则自动命中。
      */
     suspend fun resolveCategoryName(
         context: Context,
@@ -157,6 +190,7 @@ object CaptureRuleMatcher {
      * 开箱默认分类规则：保持纯净空列表。
      * 因为每位用户的敲敲记账账本分类体系（如父子分类、命名习惯）截然不同，
      * 绝不预置带有特定个人生活轨迹或特定商家/分类层级的规则。
+     * 新安装不种任何商户规则；已安装用户的既有规则（含商户规则）原样保留，
      * 老用户可随时通过【从自动记账导入】一键迁移自己原有的规则库。
      */
     private val DEFAULT_CATEGORY_RULES: List<Triple<String, String, String>> = emptyList()

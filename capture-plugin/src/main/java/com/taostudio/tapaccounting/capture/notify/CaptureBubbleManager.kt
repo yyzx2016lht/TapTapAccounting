@@ -24,6 +24,7 @@ import android.widget.Toast
 import com.taostudio.tapaccounting.capture.CaptureApp
 import com.taostudio.tapaccounting.capture.contract.CaptureSource
 import com.taostudio.tapaccounting.capture.contract.CaptureSources
+import com.taostudio.tapaccounting.capture.data.CategorySource
 import com.taostudio.tapaccounting.capture.data.PaymentCapture
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -162,7 +163,11 @@ object CaptureBubbleManager {
                     CaptureApp.from(app).repository.updateNoteAndReclassify(app, capture.id, noteText)
                 }
                 CaptureNotifier.refreshAll(app)
-                val catHint = updated?.categoryName?.let { " · 自动归类：$it" }.orEmpty()
+                val catHint = updated
+                    ?.takeIf { it.categorySource == CategorySource.RULE }
+                    ?.categoryName
+                    ?.let { " · 自动归类：$it" }
+                    .orEmpty()
                 Toast.makeText(
                     app,
                     if (noteText.isNotEmpty()) "已留底备注：$noteText$catHint" else "已保存",

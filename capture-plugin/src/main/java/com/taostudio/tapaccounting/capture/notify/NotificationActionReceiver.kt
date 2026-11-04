@@ -7,6 +7,7 @@ import android.content.Intent
 import android.widget.Toast
 import com.taostudio.tapaccounting.capture.CaptureApp
 import com.taostudio.tapaccounting.capture.contract.CaptureStatus
+import com.taostudio.tapaccounting.capture.data.CategorySource
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -38,7 +39,11 @@ class NotificationActionReceiver : BroadcastReceiver() {
                             val updated = withContext(Dispatchers.IO) {
                                 repo.updateNoteAndReclassify(ctx, captureId, note)
                             }
-                            val catHint = updated?.categoryName?.let { " → $it" }.orEmpty()
+                            val catHint = updated
+                                ?.takeIf { it.categorySource == CategorySource.RULE }
+                                ?.categoryName
+                                ?.let { " → $it" }
+                                .orEmpty()
                             Toast.makeText(ctx, "已补备注：$note$catHint", Toast.LENGTH_SHORT).show()
                         }
                     }

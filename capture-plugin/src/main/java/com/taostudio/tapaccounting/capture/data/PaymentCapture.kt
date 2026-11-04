@@ -26,8 +26,10 @@ data class PaymentCapture(
     val amountCents: Long? = null,
     val currency: String = "CNY",
     val merchant: String? = null,
-    /** AutoAccounting category.js 推断出的分类名；null 表示未推断。 */
+    /** 分类名；hook 入库永远为 null，仅由备注规则 / AI / 用户手动写入。 */
     val categoryName: String? = null,
+    /** 分类来源：[CategorySource.RULE] / [CategorySource.AI] / [CategorySource.MANUAL]；null = 未归类。 */
+    val categorySource: String? = null,
     val paymentMethodRaw: String? = null,
     val assetId: Long? = null,
     val assetName: String? = null,
@@ -52,3 +54,13 @@ data class PaymentCapture(
     val createdAt: Long,
     val updatedAt: Long,
 )
+
+/** 分类来源。hook 入库不产生分类，所以不会有第四种来源。 */
+object CategorySource {
+    /** 本地备注规则命中。 */
+    const val RULE = "RULE"
+    /** AI 智能归类。 */
+    const val AI = "AI"
+    /** 用户手动选择；自动归类不得覆盖。 */
+    const val MANUAL = "MANUAL"
+}

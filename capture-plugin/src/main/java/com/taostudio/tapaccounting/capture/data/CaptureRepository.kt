@@ -112,29 +112,48 @@ class CaptureRepository(private val dao: PaymentCaptureDao) {
         dao.updateNote(id, note?.takeIf { it.isNotBlank() }, System.currentTimeMillis()) > 0
 
     /**
-     * 更新备注并立即用本地分类规则重新推断分类（如手写“咖啡”立即命中“餐饮 - 咖啡”）。
+     * 更新备注并立即用“备注分类规则”重新推断分类（如手写“咖啡”立即命中“餐饮 - 咖啡”）。
+     *
+     * 只跑 NOTE / ANY 规则，不跑商户规则。用户手动选择的分类（MANUAL）不被覆盖；
+     * 其余来源在未命中时清空分类，等待智能归类。
      */
     suspend fun updateNoteAndReclassify(context: Context, id: String, note: String?): PaymentCapture? {
         val cleanNote = note?.trim()?.takeIf { it.isNotEmpty() }
         val existing = dao.findById(id) ?: return null
-        val matchedCategory = CaptureRuleMatcher.resolveCategoryName(
-            context = context,
-            merchant = existing.merchant,
-            shopItem = null,
-            note = cleanNote,
-            fallbackCategory = existing.categoryName,
-        )
-        val updated = existing.copy(
-            note = cleanNote,
-            categoryName = matchedCategory,
-            updatedAt = System.currentTimeMillis(),
-        )
+        val now = System.currentTimeMillis()
+        val keepManual = existing.categorySource == CategorySource.MANUAL
+        val matchedCategory = if (keepManual) {
+            null
+        } else {
+            CaptureRuleMatcher.resolveNoteCategory(context, cleanNote)
+        }
+        val updated = when {
+            keepManual -> existing.copy(note = cleanNote, updatedAt = now)
+            matchedCategory != null -> existing.copy(
+                note = cleanNote,
+                categoryName = matchedCategory,
+                categorySource = CategorySource.RULE,
+                updatedAt = now,
+            )
+            else -> existing.copy(
+                note = cleanNote,
+                categoryName = null,
+                categorySource = null,
+                updatedAt = now,
+            )
+        }
         dao.update(updated)
         return updated
     }
 
     /**
      * 更新待记草稿（备注/资产/分类），并支持顺手记住资产映射与分类规则。
+     *
+     * 分类写入优先级：
+     * 1. 显式传入 [categoryName]（手动选择默认 MANUAL；AI 归类需传 [CategorySource.AI]）；
+     * 2. 备注变化时只跑备注规则，命中写 RULE；
+     * 3. 未命中且非 MANUAL 时清空分类，等待智能归类；
+     * 4. 备注未变且未显式传分类时保持原分类与来源。
      */
     suspend fun updateDraft(
         context: Context,
@@ -142,6 +161,7 @@ class CaptureRepository(private val dao: PaymentCaptureDao) {
         note: String?,
         assetName: String?,
         categoryName: String?,
+        categorySource: String? = null,
         rememberAssetMapping: Boolean = false,
         rememberCategoryKeyword: String? = null,
     ): PaymentCapture? {
@@ -149,20 +169,42 @@ class CaptureRepository(private val dao: PaymentCaptureDao) {
         val now = System.currentTimeMillis()
         val cleanNote = note?.trim()?.takeIf { it.isNotEmpty() }
         val cleanAsset = assetName?.trim()?.takeIf { it.isNotEmpty() } ?: existing.assetName
-        // 2. 传了新备注且没显式传分类时，优先按新备注重新匹配分类规则。
-        val resolvedCategory = categoryName?.trim()?.takeIf { it.isNotEmpty() }
-            ?: CaptureRuleMatcher.resolveCategoryName(
-                context = context,
-                merchant = existing.merchant,
-                shopItem = null,
-                note = cleanNote,
-                fallbackCategory = existing.categoryName,
-            )
+        val explicitCategory = categoryName?.trim()?.takeIf { it.isNotEmpty() }
+        val noteChanged = cleanNote != existing.note
+        val keepManual = existing.categorySource == CategorySource.MANUAL &&
+            categorySource != null && categorySource != CategorySource.MANUAL
+
+        val resolvedCategory: String?
+        val resolvedCategorySource: String?
+        when {
+            keepManual || (existing.categorySource == CategorySource.MANUAL && explicitCategory == null) -> {
+                resolvedCategory = existing.categoryName
+                resolvedCategorySource = CategorySource.MANUAL
+            }
+            explicitCategory != null -> {
+                resolvedCategory = explicitCategory
+                resolvedCategorySource = when {
+                    categorySource != null -> categorySource
+                    explicitCategory == existing.categoryName -> existing.categorySource
+                    else -> CategorySource.MANUAL
+                }
+            }
+            noteChanged -> {
+                val matched = CaptureRuleMatcher.resolveNoteCategory(context, cleanNote)
+                resolvedCategory = matched
+                resolvedCategorySource = if (matched != null) CategorySource.RULE else null
+            }
+            else -> {
+                resolvedCategory = existing.categoryName
+                resolvedCategorySource = existing.categorySource
+            }
+        }
 
         val updated = existing.copy(
             note = cleanNote,
             assetName = cleanAsset,
             categoryName = resolvedCategory,
+            categorySource = resolvedCategorySource,
             updatedAt = now,
         )
         dao.update(updated)

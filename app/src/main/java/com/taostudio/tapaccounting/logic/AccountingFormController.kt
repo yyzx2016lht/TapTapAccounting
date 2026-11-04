@@ -67,6 +67,179 @@ class AccountingFormController(
         this.requestId = requestId
     }
 
+    /** 当前表单绑定的待记 id；普通记账/被外部预填覆盖后为 null 或其它值。 */
+    fun currentCaptureId(): String? = captureId
+
+    /** 表单字段快照，用于待记/新账两种模式各自暂存草稿。 */
+    data class DraftSnapshot(
+        val amount: String = "",
+        val typePosition: Int = 0,
+        val accountName: String = "",
+        val toAccountName: String = "",
+        val categoryName: String = "",
+        val remark: String = "",
+        val fee: String = "",
+        val time: String = "",
+        val bookName: String = "",
+        val currencyCode: String = "CNY",
+        val isRefundMode: Boolean = false,
+        val refundSourceBill: Bill? = null,
+        val refundSourceLabel: String? = null,
+        val editingBillId: Long? = null,
+        val customTransferRate: Double? = null,
+        val customTargetAmount: Double? = null,
+        val savedTransferRateForEdit: Double? = null,
+        val hasConfirmedExchangeRate: Boolean = false,
+        val customCurrencyRate: Double? = null,
+        val customCurrencyTargetAmount: Double? = null,
+        val hasConfirmedCurrencyRate: Boolean = false,
+    )
+
+    private var onRemarkChanged: ((String) -> Unit)? = null
+    private var suppressRemarkCallback = false
+
+    /** 备注变化回调；程序化回填（待记预填/草稿恢复）不会触发。 */
+    fun setOnRemarkChangedListener(listener: ((String) -> Unit)?) {
+        onRemarkChanged = listener
+    }
+
+    /** 记录当前表单内容。 */
+    fun snapshotDraft(): DraftSnapshot = DraftSnapshot(
+        amount = etMoney.text?.toString().orEmpty(),
+        typePosition = spType.selectedItemPosition.coerceAtLeast(0),
+        accountName = tvAccount.text?.toString().orEmpty(),
+        toAccountName = tvAccount2.text?.toString().orEmpty(),
+        categoryName = sanitizeCategoryNameForSave(tvCategory.text?.toString().orEmpty()),
+        remark = etRemark.text?.toString().orEmpty(),
+        fee = etFee.text?.toString().orEmpty(),
+        time = tvTime.text?.toString().orEmpty(),
+        bookName = tvBook.text?.toString().orEmpty(),
+        currencyCode = spCurrency.selectedItem as? String ?: "CNY",
+        isRefundMode = isRefundMode,
+        refundSourceBill = selectedRefundSourceBill,
+        refundSourceLabel = tvRefundSourceBill?.text?.toString(),
+        editingBillId = editingBillId,
+        customTransferRate = customTransferRate,
+        customTargetAmount = customTargetAmount,
+        savedTransferRateForEdit = savedTransferRateForEdit,
+        hasConfirmedExchangeRate = hasConfirmedExchangeRate,
+        customCurrencyRate = customCurrencyRate,
+        customCurrencyTargetAmount = customCurrencyTargetAmount,
+        hasConfirmedCurrencyRate = hasConfirmedCurrencyRate,
+    )
+
+    /** 恢复表单内容；传 null 表示回到普通空白新账。 */
+    fun restoreDraft(snapshot: DraftSnapshot?) {
+        if (snapshot == null) {
+            restoreBlankDraft()
+            return
+        }
+        suppressRemarkCallback = true
+        try {
+            hideAmountKeypad()
+            clearAiSuggestionState()
+            resetTransientRateState()
+            editingBillId = snapshot.editingBillId
+            val maxType = ((spType.adapter?.count ?: 1) - 1).coerceAtLeast(0)
+            spType.setSelection(snapshot.typePosition.coerceIn(0, maxType))
+            etMoney.setText(snapshot.amount)
+            tvAccount.text = snapshot.accountName
+            tvAccount2.text = snapshot.toAccountName
+            refreshAccountIconForName(snapshot.accountName)
+            refreshAccount2IconForName(snapshot.toAccountName)
+            applyCategoryName(snapshot.categoryName)
+            etRemark.setText(snapshot.remark)
+            etFee.setText(snapshot.fee)
+            tvTime.text = snapshot.time
+            selectedFormBook = BookAccountManager.resolveWritableBook(
+                ctx,
+                snapshot.bookName.ifBlank { BookAccountManager.getDefaultBook(ctx) },
+            )
+            tvBook.text = selectedFormBook
+            setCurrency(snapshot.currencyCode)
+            customTransferRate = snapshot.customTransferRate
+            customTargetAmount = snapshot.customTargetAmount
+            savedTransferRateForEdit = snapshot.savedTransferRateForEdit
+            hasConfirmedExchangeRate = snapshot.hasConfirmedExchangeRate
+            customCurrencyRate = snapshot.customCurrencyRate
+            customCurrencyTargetAmount = snapshot.customCurrencyTargetAmount
+            hasConfirmedCurrencyRate = snapshot.hasConfirmedCurrencyRate
+            if (snapshot.isRefundMode) {
+                enterRefundMode()
+            } else if (isRefundMode) {
+                exitRefundMode()
+            }
+            selectedRefundSourceBill = snapshot.refundSourceBill
+            if (snapshot.refundSourceBill != null) {
+                tvRefundSourceBill?.text =
+                    snapshot.refundSourceLabel ?: ctx.getString(R.string.select_refund_bill)
+                tvRefundSourceBill?.setTextColor(Color.parseColor("#E53935"))
+            } else {
+                tvRefundSourceBill?.text = ctx.getString(R.string.select_refund_bill)
+                tvRefundSourceBill?.setTextColor(Color.parseColor("#888888"))
+            }
+        } finally {
+            suppressRemarkCallback = false
+        }
+    }
+
+    private fun restoreBlankDraft() {
+        suppressRemarkCallback = true
+        try {
+            hideAmountKeypad()
+            clearAiSuggestionState()
+            resetTransientRateState()
+            if (isRefundMode) exitRefundMode()
+            editingBillId = null
+            selectedFormBook = BookAccountManager.resolveWritableBook(
+                ctx,
+                BookAccountManager.getDefaultBook(ctx),
+            )
+            resetToBlankBill()
+            setCurrency("CNY")
+        } finally {
+            suppressRemarkCallback = false
+        }
+    }
+
+    private fun clearAiSuggestionState() {
+        lastAiSuggestOriginalText = null
+        lastAiSuggestType = null
+        lastAiSuggestCategory = null
+        lastAiSuggestAccount1 = null
+        lastAiSuggestAccount2 = null
+    }
+
+    private fun resetTransientRateState() {
+        customTransferRate = null
+        customTargetAmount = null
+        savedTransferRateForEdit = null
+        hasConfirmedExchangeRate = false
+        hasConfirmedCurrencyRate = false
+        customCurrencyRate = null
+        customCurrencyTargetAmount = null
+        pendingInvestmentSchedule = null
+        hasCheckedInvestmentSchedulePrompt = false
+    }
+
+    /** 当前分类文本；占位文案归一为空串。 */
+    fun currentCategoryName(): String =
+        sanitizeCategoryNameForSave(tvCategory.text?.toString().orEmpty())
+
+    /** 待记规则回填分类（null/空串恢复占位）。 */
+    fun applyCategoryName(categoryName: String?) {
+        val normalized = categoryName?.trim().orEmpty()
+            .replace("/::/", " - ")
+            .replace(" > ", " - ")
+        if (normalized.isBlank()) {
+            tvCategory.text = ctx.getString(R.string.select_category)
+            showDefaultCategoryIcon()
+        } else {
+            tvCategory.text = normalized
+            refreshCategoryIconForSelection(normalized)
+        }
+    }
+
     /** 清空待记预填，恢复为空白记账状态。 */
     fun resetToBlankBill() {
         this.captureId = null
@@ -77,7 +250,9 @@ class AccountingFormController(
         resetAccountIconToEmoji()
         tvCategory.text = ctx.getString(R.string.select_category)
         showDefaultCategoryIcon()
+        suppressRemarkCallback = true
         etRemark.setText("")
+        suppressRemarkCallback = false
         etFee.setText("")
         setupDefaults()
     }
@@ -934,6 +1109,15 @@ class AccountingFormController(
 
         // 备注输入框：回车键收起输入法，不换行
         etRemark.dismissKeyboardOnEnter()
+        etRemark.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = Unit
+            override fun afterTextChanged(s: Editable?) {
+                if (!suppressRemarkCallback) {
+                    onRemarkChanged?.invoke(s?.toString().orEmpty())
+                }
+            }
+        })
     }
 
     private fun setupAmountKeypad() {
@@ -988,7 +1172,7 @@ class AccountingFormController(
         isAmountKeypadVisible = true
     }
 
-    private fun hideAmountKeypad() {
+    fun hideAmountKeypad() {
         if (!isAmountKeypadVisible) return
         amountKeypad?.normalize()
         closeAmountKeypad()
@@ -2633,7 +2817,9 @@ class AccountingFormController(
         }
         tvCategory.text = categoryText
         refreshCategoryIconForSelection(categoryText)
+        suppressRemarkCallback = true
         etRemark.setText(json.optString("remarks", json.optString("remark", "")))
+        suppressRemarkCallback = false
         if (json.has("fee")) {
             val fee = json.optDouble("fee", 0.0).coerceAtLeast(0.0)
             etFee.setText(if (fee > 0.0) fee.toString() else "")

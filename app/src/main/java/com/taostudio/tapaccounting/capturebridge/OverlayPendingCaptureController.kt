@@ -13,6 +13,7 @@ import android.text.TextWatcher
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
+import android.view.animation.DecelerateInterpolator
 import android.view.inputmethod.EditorInfo
 import android.widget.EditText
 import android.widget.LinearLayout
@@ -44,8 +45,8 @@ import java.util.UUID
 /**
  * 敲敲记账悬浮窗内的「待记无感联动控制器」：
  * - 未安装插件或无待记时：完全隐身（View.GONE），对普通用户 0 影响；
- * - 有待记时：自动将最新一笔带入记账悬浮窗，并在顶部展示提示横幅；
- * - 支持在同一个悬浮窗内展开「多笔连填备注 + 实时本地规则匹配 + 一键智能归类入账」抽屉。
+ * - 有待记时：自动将最新一笔带入记账悬浮窗，顶部用细上下文条展示待记笔数与当前一笔；
+ * - 支持在同一个悬浮窗内切换「待记 / 新账」两种草稿，并展开多笔速清面板。
  */
 class OverlayPendingCaptureController(
     private val ctx: Context,
@@ -57,29 +58,38 @@ class OverlayPendingCaptureController(
     private val density = ctx.resources.displayMetrics.density
     private fun dp(value: Int): Int = (value * density + 0.5f).toInt()
 
-    private val formContent: LinearLayout? = rootFloatingView.findViewById(R.id.layout_form_content)
     private val formBody: View? = rootFloatingView.findViewById(R.id.layout_form_body)
-    private val amountRow: View? = formContent?.getChildAt(0)
+    private val amountRow: View? = rootFloatingView.findViewById(R.id.layout_amount_row)
+    private val contextContainer: View? = rootFloatingView.findViewById(R.id.layout_capture_context)
+    private val capturePanel: LinearLayout? = rootFloatingView.findViewById(R.id.layout_capture_panel)
+    private val sourceDot: View? = rootFloatingView.findViewById(R.id.view_capture_source_dot)
+    private val tvCaptureCount: TextView? = rootFloatingView.findViewById(R.id.tv_capture_count)
+    private val tvCaptureSummary: TextView? = rootFloatingView.findViewById(R.id.tv_capture_summary)
+    private val btnModePending: TextView? = rootFloatingView.findViewById(R.id.btn_capture_mode_pending)
+    private val btnModeNew: TextView? = rootFloatingView.findViewById(R.id.btn_capture_mode_new)
 
-    private val hostContainer = LinearLayout(ctx).apply {
-        orientation = LinearLayout.VERTICAL
-        visibility = View.GONE
-        layoutParams = LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT,
-            ViewGroup.LayoutParams.WRAP_CONTENT,
-        ).apply {
-            bottomMargin = dp(10)
-        }
-    }
+    private enum class FormMode { PENDING, NEW_BILL }
 
+    private var mode: FormMode = FormMode.NEW_BILL
     private var pendingItems: MutableList<CapturePluginClient.PendingCaptureItem> = mutableListOf()
     private var currentIndex: Int = 0
     private var isBatchDrawerOpen: Boolean = false
     private var isBusy: Boolean = false
     private val noteSyncJobs = mutableMapOf<String, Job>()
 
+    /** 待记模式草稿（切到新账/批量面板时暂存）。 */
+    private var pendingDraft: AccountingFormController.DraftSnapshot? = null
+    private var pendingDraftItemId: String? = null
+    private var hasPendingDraft: Boolean = false
+    /** 新账模式草稿（切回待记时暂存）。 */
+    private var newBillDraft: AccountingFormController.DraftSnapshot? = null
+
     init {
-        formContent?.addView(hostContainer, 0)
+        tvCaptureCount?.setOnClickListener { openBatchPanelFromBar() }
+        btnModePending?.setOnClickListener { switchToPendingMode() }
+        btnModeNew?.setOnClickListener { switchToNewBillMode() }
+        formController.setOnRemarkChangedListener { note -> onSingleRemarkChanged(note) }
+        renderContextBar()
     }
 
     /**
@@ -94,13 +104,18 @@ class OverlayPendingCaptureController(
         scope.launch {
             val items = CapturePluginClient.listPendingCaptures(ctx, limit = 30)
             if (items.isEmpty()) {
-                hostContainer.visibility = View.GONE
+                pendingItems.clear()
+                clearPendingContext()
                 return@launch
             }
             pendingItems = items.toMutableList()
             currentIndex = 0
-            hostContainer.visibility = View.VISIBLE
+            mode = FormMode.PENDING
+            hasPendingDraft = false
+            pendingDraft = null
+            pendingDraftItemId = null
             if (startInBatchMode && pendingItems.size > 1) {
+                showContextBarAnimated()
                 openBatchDrawer()
             } else {
                 applyItemToSingleForm(0)
@@ -109,31 +124,50 @@ class OverlayPendingCaptureController(
     }
 
     fun destroy() {
+        formController.setOnRemarkChangedListener(null)
         noteSyncJobs.values.forEach { it.cancel() }
         scope.cancel()
     }
 
     private fun applyItemToSingleForm(index: Int) {
         if (pendingItems.isEmpty()) {
-            dismissToBlankForm()
+            clearPendingContext()
             return
         }
+        formController.hideAmountKeypad()
         currentIndex = index.coerceIn(0, pendingItems.lastIndex)
         isBatchDrawerOpen = false
+        mode = FormMode.PENDING
+        pendingDraft = null
+        pendingDraftItemId = null
+        hasPendingDraft = true
+        hideBatchPanel()
         setSingleFormVisible(true)
+        showContextBarAnimated()
 
         val item = pendingItems[currentIndex]
         val prefill = CapturePluginClient.toPrefillJson(item)
         formController.updateCaptureContext(item.id, UUID.randomUUID().toString())
         formController.fillDataToUi(prefill, showToast = false, forceMultiMode = false)
-        renderSingleBanner()
+        renderContextBar()
     }
 
-    private fun dismissToBlankForm() {
+    /** 待记全部处理完后收起上下文条，回到普通新账。 */
+    private fun clearPendingContext() {
         isBatchDrawerOpen = false
+        mode = FormMode.NEW_BILL
+        hasPendingDraft = false
+        pendingDraft = null
+        pendingDraftItemId = null
+        currentIndex = 0
+        noteSyncJobs.values.forEach { it.cancel() }
+        noteSyncJobs.clear()
+        contextContainer?.visibility = View.GONE
+        hideBatchPanel()
         setSingleFormVisible(true)
-        hostContainer.visibility = View.GONE
-        formController.resetToBlankBill()
+        formController.updateCaptureContext(null, null)
+        formController.restoreDraft(newBillDraft)
+        renderContextBar()
     }
 
     private fun setSingleFormVisible(visible: Boolean) {
@@ -143,119 +177,245 @@ class OverlayPendingCaptureController(
     }
 
     // ════════════════════════════════════════════════════════
-    //  顶部单笔提示条
+    //  细上下文条 + 待记/新账模式切换
     // ════════════════════════════════════════════════════════
 
-    private fun renderSingleBanner() {
-        hostContainer.removeAllViews()
-        val item = pendingItems.getOrNull(currentIndex) ?: return
-        val otherCount = (pendingItems.size - 1).coerceAtLeast(0)
+    private fun currentItem(): CapturePluginClient.PendingCaptureItem? {
+        if (pendingItems.isEmpty()) return null
+        currentIndex = currentIndex.coerceIn(0, pendingItems.lastIndex)
+        return pendingItems[currentIndex]
+    }
 
-        val card = LinearLayout(ctx).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(12), dp(10), dp(12), dp(10))
-            background = roundedBg(Color.parseColor("#F8FAFF"), dp(13), dp(1), Color.parseColor("#BFDBFE"))
+    private fun renderContextBar() {
+        val container = contextContainer ?: return
+        if (pendingItems.isEmpty()) {
+            container.visibility = View.GONE
+            hideBatchPanel()
+            return
         }
-
-        val topRow = LinearLayout(ctx).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
+        container.visibility = View.VISIBLE
+        val item = currentItem()
+        tvCaptureCount?.text = "待记 ${pendingItems.size} 笔"
+        val dotColor = when (item?.source) {
+            CaptureSource.ALIPAY -> Color.parseColor("#1677FF")
+            CaptureSource.WECHAT -> Color.parseColor("#07C160")
+            else -> ctx.getColor(R.color.brand_primary)
         }
-
-        val isAlipay = item.source == CaptureSource.ALIPAY
-        val badge = TextView(ctx).apply {
-            text = item.sourceLabel()
-            textSize = 11f
-            setTypeface(typeface, Typeface.BOLD)
-            setTextColor(Color.parseColor(if (isAlipay) "#1677FF" else "#07C160"))
-            setPadding(dp(7), dp(2), dp(7), dp(2))
-            background = roundedBg(
-                fillColor = Color.parseColor(if (isAlipay) "#EFF6FF" else "#ECFDF5"),
-                radiusPx = dp(6),
-            )
-        }
-        topRow.addView(badge)
-
-        val merchantPart = item.merchant?.let { " · ${it.take(8)}" }.orEmpty()
-        val titleText = if (otherCount > 0) {
-            " 已带入 ${item.formattedTime()} ${item.formattedAmount()}$merchantPart (还有${otherCount}笔)"
-        } else {
-            " 已带入 ${item.formattedTime()} ${item.formattedAmount()}$merchantPart"
-        }
-
-        val tvInfo = TextView(ctx).apply {
-            text = titleText
-            textSize = 12.5f
-            maxLines = 1
-            ellipsize = TextUtils.TruncateAt.END
-            setTypeface(typeface, Typeface.BOLD)
-            setTextColor(Color.parseColor("#0F172A"))
-            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
-                marginStart = dp(4)
-            }
-        }
-        topRow.addView(tvInfo)
-        card.addView(topRow)
-
-        val actionRow = LinearLayout(ctx).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(0, dp(8), 0, 0)
-        }
-
-        if (pendingItems.size > 1) {
-            actionRow.addView(
-                smallChipButton(
-                    text = "⇄ 批量速清 / 智能归类 (${pendingItems.size})",
-                    textColor = Color.WHITE,
-                    bgColor = Color.parseColor("#2563EB"),
-                ) {
-                    openBatchDrawer()
-                },
-                LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-                    marginEnd = dp(6)
+        sourceDot?.backgroundTintList = ColorStateList.valueOf(dotColor)
+        tvCaptureSummary?.text = if (mode == FormMode.PENDING && item != null) {
+            buildString {
+                append(item.formattedTime())
+                append(" · ")
+                append(item.formattedAmount())
+                item.merchant?.takeIf { it.isNotBlank() }?.let {
+                    append(" · ")
+                    append(it.take(10))
                 }
-            )
+            }
         } else {
-            actionRow.addView(
-                smallChipButton(
-                    text = if (isBusy) "归类中…" else "✨ 智能归类此笔",
-                    textColor = Color.parseColor("#1D4ED8"),
-                    bgColor = Color.parseColor("#DBEAFE"),
-                ) {
-                    runBatchAiClassification(singleOnly = true)
-                },
-                LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-                    marginEnd = dp(6)
-                }
-            )
+            "普通记账中"
         }
+        updateModeSwitchUi()
+    }
 
-        actionRow.addView(
-            smallChipButton(
-                text = "不计这笔",
-                textColor = Color.parseColor("#DC2626"),
-                bgColor = Color.parseColor("#FEF2F2"),
-            ) {
-                ignoreItem(currentIndex)
-            },
-            LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-                marginEnd = dp(6)
-            }
+    private fun updateModeSwitchUi() {
+        styleModeSegment(btnModePending, mode == FormMode.PENDING)
+        styleModeSegment(btnModeNew, mode == FormMode.NEW_BILL)
+    }
+
+    private fun styleModeSegment(tv: TextView?, selected: Boolean) {
+        tv ?: return
+        tv.setTextColor(
+            if (selected) ctx.getColor(R.color.brand_primary) else Color.parseColor("#64748B")
         )
+        tv.setBackgroundResource(if (selected) R.drawable.bg_capture_mode_segment else 0)
+    }
 
-        actionRow.addView(
-            smallChipButton(
-                text = "记新账",
-                textColor = Color.parseColor("#475569"),
-                bgColor = Color.parseColor("#EEF2F6"),
-            ) {
-                dismissToBlankForm()
+    private fun showContextBarAnimated() {
+        val container = contextContainer ?: return
+        val wasVisible = container.visibility == View.VISIBLE
+        renderContextBar()
+        if (wasVisible) {
+            container.alpha = 1f
+            container.translationY = 0f
+            return
+        }
+        container.alpha = 0f
+        container.translationY = dp(4).toFloat()
+        container.animate()
+            .alpha(1f)
+            .translationY(0f)
+            .setDuration(180L)
+            .setInterpolator(DecelerateInterpolator())
+            .start()
+    }
+
+    private fun animateFormSwap() {
+        val views = listOfNotNull(amountRow, formBody)
+        views.forEach { view ->
+            view.animate().cancel()
+            view.alpha = 0.35f
+            view.translationY = dp(5).toFloat()
+            view.animate()
+                .alpha(1f)
+                .translationY(0f)
+                .setDuration(180L)
+                .setInterpolator(DecelerateInterpolator())
+                .start()
+        }
+        tvCaptureSummary?.animate()?.cancel()
+        tvCaptureSummary?.alpha = 0.35f
+        tvCaptureSummary?.animate()
+            ?.alpha(1f)
+            ?.setDuration(160L)
+            ?.start()
+    }
+
+    private fun snapshotPendingDraftIfNeeded() {
+        if (mode != FormMode.PENDING || !hasPendingDraft) return
+        val item = currentItem() ?: return
+        if (pendingDraftItemId != null && pendingDraftItemId != item.id) {
+            pendingDraft = null
+            pendingDraftItemId = null
+            hasPendingDraft = false
+        }
+        if (hasPendingDraft && pendingDraft == null) {
+            pendingDraft = formController.snapshotDraft()
+            pendingDraftItemId = item.id
+        }
+    }
+
+    private fun switchToNewBillMode() {
+        if (isBusy || mode == FormMode.NEW_BILL) return
+        formController.hideAmountKeypad()
+        snapshotPendingDraftIfNeeded()
+        mode = FormMode.NEW_BILL
+        isBatchDrawerOpen = false
+        hideBatchPanel()
+        setSingleFormVisible(true)
+        formController.updateCaptureContext(null, null)
+        formController.restoreDraft(newBillDraft)
+        renderContextBar()
+        animateFormSwap()
+    }
+
+    private fun switchToPendingMode() {
+        if (isBusy || mode == FormMode.PENDING || pendingItems.isEmpty()) return
+        formController.hideAmountKeypad()
+        newBillDraft = formController.snapshotDraft()
+        mode = FormMode.PENDING
+        isBatchDrawerOpen = false
+        hideBatchPanel()
+        setSingleFormVisible(true)
+        restorePendingDraftOrItem()
+        renderContextBar()
+        animateFormSwap()
+    }
+
+    private fun restorePendingDraftOrItem() {
+        val item = currentItem() ?: run {
+            clearPendingContext()
+            return
+        }
+        val draft = pendingDraft
+        if (draft != null && pendingDraftItemId == item.id) {
+            formController.updateCaptureContext(item.id, UUID.randomUUID().toString())
+            formController.restoreDraft(draft)
+            pendingDraft = null
+            pendingDraftItemId = null
+            hasPendingDraft = true
+            renderContextBar()
+        } else {
+            applyItemToSingleForm(currentIndex)
+        }
+    }
+
+    /** 点“待记 N 笔”：任意模式下都打开速清面板，不关闭悬浮窗、不清空待记。 */
+    private fun openBatchPanelFromBar() {
+        if (isBusy || pendingItems.isEmpty()) return
+        if (mode == FormMode.NEW_BILL) {
+            formController.hideAmountKeypad()
+            newBillDraft = formController.snapshotDraft()
+            mode = FormMode.PENDING
+            // 新账草稿先存着；这里直接进批量面板，不改写表单内容。
+            hasPendingDraft = false
+        }
+        if (isBatchDrawerOpen) return
+        openBatchDrawer()
+    }
+
+    /** 从批量面板“细改/分类胶囊”进入单笔；当前笔优先恢复未提交草稿，避免清空。 */
+    private fun editItemFromBatch(index: Int) {
+        val target = pendingItems.getOrNull(index) ?: return
+        if (index == currentIndex && pendingDraftItemId == target.id && pendingDraft != null) {
+            returnToSinglePendingForm()
+        } else {
+            applyItemToSingleForm(index)
+        }
+    }
+
+    private fun returnToSinglePendingForm() {
+        if (pendingItems.isEmpty()) {
+            clearPendingContext()
+            return
+        }
+        formController.hideAmountKeypad()
+        mode = FormMode.PENDING
+        isBatchDrawerOpen = false
+        hideBatchPanel()
+        setSingleFormVisible(true)
+        restorePendingDraftOrItem()
+        renderContextBar()
+        animateFormSwap()
+    }
+
+    private fun hideBatchPanel() {
+        capturePanel?.removeAllViews()
+        capturePanel?.visibility = View.GONE
+    }
+
+    private fun onSingleRemarkChanged(note: String) {
+        if (mode != FormMode.PENDING || isBatchDrawerOpen) return
+        val item = currentItem() ?: return
+        // 悬浮窗被外部 prefill 复用时，表单已不属于当前待记，不能把备注写回旧 capture。
+        if (formController.currentCaptureId() != item.id) return
+        scheduleSingleNoteSync(item, note)
+    }
+
+    private fun scheduleSingleNoteSync(
+        item: CapturePluginClient.PendingCaptureItem,
+        note: String,
+    ) {
+        noteSyncJobs[item.id]?.cancel()
+        noteSyncJobs[item.id] = scope.launch {
+            delay(280L)
+            val cleanNote = note.trim()
+            val res = CapturePluginClient.updateCaptureDraft(ctx, item.id, note = cleanNote)
+            if (!res.ok) return@launch
+            item.note = cleanNote.takeIf { it.isNotEmpty() }
+            val previousCategory = item.categoryName.orEmpty()
+            val formCategory = formController.currentCategoryName()
+            if (res.categoryName != item.categoryName) {
+                item.categoryName = res.categoryName
+                if (formCategory == previousCategory &&
+                    mode == FormMode.PENDING && !isBatchDrawerOpen &&
+                    pendingItems.getOrNull(currentIndex)?.id == item.id
+                ) {
+                    formController.applyCategoryName(res.categoryName)
+                }
             }
-        )
-
-        card.addView(actionRow)
-        hostContainer.addView(card)
+            if (pendingDraft != null && pendingDraftItemId == item.id) {
+                val draftCategory = pendingDraft?.categoryName.orEmpty()
+                pendingDraft = pendingDraft?.copy(
+                    remark = cleanNote,
+                    categoryName = if (draftCategory == previousCategory) {
+                        res.categoryName.orEmpty()
+                    } else {
+                        draftCategory
+                    },
+                )
+            }
+        }
     }
 
     // ════════════════════════════════════════════════════════
@@ -263,15 +423,19 @@ class OverlayPendingCaptureController(
     // ════════════════════════════════════════════════════════
 
     private fun openBatchDrawer() {
+        if (pendingItems.isEmpty()) return
+        formController.hideAmountKeypad()
+        snapshotPendingDraftIfNeeded()
         isBatchDrawerOpen = true
         setSingleFormVisible(false)
+        capturePanel?.visibility = View.VISIBLE
         renderBatchDrawer()
     }
 
     private fun renderBatchDrawer() {
-        hostContainer.removeAllViews()
+        capturePanel?.removeAllViews()
         if (pendingItems.isEmpty()) {
-            dismissToBlankForm()
+            clearPendingContext()
             return
         }
 
@@ -302,7 +466,7 @@ class OverlayPendingCaptureController(
                 textColor = Color.parseColor("#334155"),
                 bgColor = Color.parseColor("#EEF2F6"),
             ) {
-                applyItemToSingleForm(currentIndex)
+                returnToSinglePendingForm()
             },
             LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
                 marginEnd = dp(6)
@@ -314,7 +478,7 @@ class OverlayPendingCaptureController(
                 textColor = Color.parseColor("#475569"),
                 bgColor = Color.parseColor("#EEF2F6"),
             ) {
-                dismissToBlankForm()
+                switchToNewBillMode()
             }
         )
         panel.addView(header)
@@ -422,7 +586,9 @@ class OverlayPendingCaptureController(
         )
         panel.addView(footer)
 
-        hostContainer.addView(panel)
+        capturePanel?.addView(panel)
+        capturePanel?.visibility = View.VISIBLE
+        renderContextBar()
     }
 
     private fun buildBatchItemRow(
@@ -519,7 +685,7 @@ class OverlayPendingCaptureController(
             textColor = Color.parseColor("#059669"),
             bgColor = Color.parseColor("#ECFDF5"),
         ) {
-            applyItemToSingleForm(index)
+            editItemFromBatch(index)
         }
         styleCatBadge(catChip, item.categoryName)
         midLine.addView(
@@ -535,7 +701,7 @@ class OverlayPendingCaptureController(
                 textColor = Color.parseColor("#1D4ED8"),
                 bgColor = Color.parseColor("#EFF6FF"),
             ) {
-                applyItemToSingleForm(index)
+                editItemFromBatch(index)
             },
             LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
                 marginEnd = dp(4)
@@ -570,6 +736,9 @@ class OverlayPendingCaptureController(
                 override fun afterTextChanged(s: Editable?) {
                     val newNote = s?.toString()?.trim().orEmpty()
                     item.note = newNote.takeIf { it.isNotEmpty() }
+                    if (pendingDraft != null && pendingDraftItemId == item.id) {
+                        pendingDraft = pendingDraft?.copy(remark = newNote)
+                    }
                     scheduleNoteSync(item, newNote) { newCat ->
                         styleCatBadge(catChip, newCat)
                     }
@@ -590,10 +759,25 @@ class OverlayPendingCaptureController(
         noteSyncJobs[item.id]?.cancel()
         noteSyncJobs[item.id] = scope.launch {
             delay(280L)
-            val res = CapturePluginClient.updateCaptureDraft(ctx, item.id, note = note)
-            if (res.ok && res.categoryName != item.categoryName) {
+            val cleanNote = note.trim()
+            val res = CapturePluginClient.updateCaptureDraft(ctx, item.id, note = cleanNote)
+            if (!res.ok) return@launch
+            item.note = cleanNote.takeIf { it.isNotEmpty() }
+            val previousCategory = item.categoryName.orEmpty()
+            if (res.categoryName != item.categoryName) {
                 item.categoryName = res.categoryName
                 onCategoryUpdated(res.categoryName)
+            }
+            if (pendingDraft != null && pendingDraftItemId == item.id) {
+                val draftCategory = pendingDraft?.categoryName.orEmpty()
+                pendingDraft = pendingDraft?.copy(
+                    remark = cleanNote,
+                    categoryName = if (draftCategory == previousCategory) {
+                        res.categoryName.orEmpty()
+                    } else {
+                        draftCategory
+                    },
+                )
             }
         }
     }
@@ -602,15 +786,27 @@ class OverlayPendingCaptureController(
         val target = pendingItems.getOrNull(index) ?: return
         scope.launch {
             CapturePluginClient.ignoreCapture(ctx, target.id)
+            val wasCurrent = index == currentIndex
             pendingItems.removeAt(index)
+            if (wasCurrent) {
+                pendingDraft = null
+                pendingDraftItemId = null
+                hasPendingDraft = false
+            }
             if (pendingItems.isEmpty()) {
                 Utils.toast(ctx, "所有待记已处理完毕")
-                dismissToBlankForm()
-            } else if (isBatchDrawerOpen) {
-                renderBatchDrawer()
+                clearPendingContext()
             } else {
-                val nextIdx = index.coerceAtMost(pendingItems.lastIndex)
-                applyItemToSingleForm(nextIdx)
+                currentIndex = when {
+                    index < currentIndex -> currentIndex - 1
+                    currentIndex > pendingItems.lastIndex -> pendingItems.lastIndex
+                    else -> currentIndex
+                }
+                if (isBatchDrawerOpen) {
+                    renderBatchDrawer()
+                } else {
+                    applyItemToSingleForm(currentIndex)
+                }
             }
         }
     }
@@ -634,7 +830,7 @@ class OverlayPendingCaptureController(
         }
 
         isBusy = true
-        if (isBatchDrawerOpen) renderBatchDrawer() else renderSingleBanner()
+        if (isBatchDrawerOpen) renderBatchDrawer() else renderContextBar()
 
         scope.launch {
             try {
@@ -690,10 +886,10 @@ class OverlayPendingCaptureController(
                 Utils.toast(ctx, "归类失败：${e.message ?: e.javaClass.simpleName}")
             } finally {
                 isBusy = false
-                if (isBatchDrawerOpen) {
-                    renderBatchDrawer()
-                } else {
-                    applyItemToSingleForm(currentIndex)
+                when {
+                    isBatchDrawerOpen -> renderBatchDrawer()
+                    mode == FormMode.PENDING -> applyItemToSingleForm(currentIndex)
+                    else -> renderContextBar()
                 }
             }
         }
@@ -760,7 +956,24 @@ class OverlayPendingCaptureController(
 
                     if (recordedIds.isNotEmpty()) {
                         CapturePluginClient.markCapturesRecorded(ctx, recordedIds)
-                        pendingItems.removeAll { it.id in recordedIds.toSet() }
+                        val previousCurrentId = pendingItems.getOrNull(currentIndex)?.id
+                        val removedIds = recordedIds.toSet()
+                        pendingItems.removeAll { it.id in removedIds }
+                        if (pendingItems.isEmpty()) {
+                            pendingDraft = null
+                            pendingDraftItemId = null
+                            hasPendingDraft = false
+                        } else {
+                            val retainedIndex = previousCurrentId
+                                ?.let { id -> pendingItems.indexOfFirst { it.id == id } }
+                                ?: -1
+                            currentIndex = retainedIndex.takeIf { it >= 0 } ?: 0
+                            if (previousCurrentId == null || previousCurrentId in removedIds) {
+                                pendingDraft = null
+                                pendingDraftItemId = null
+                                hasPendingDraft = false
+                            }
+                        }
                     }
                 }
 

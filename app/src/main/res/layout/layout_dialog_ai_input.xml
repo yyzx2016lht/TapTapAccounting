@@ -41,6 +41,19 @@
             </LinearLayout>
 
             <ImageView
+                android:id="@+id/btn_pin"
+                android:layout_width="30dp"
+                android:layout_height="30dp"
+                android:layout_centerVertical="true"
+                android:layout_marginEnd="2dp"
+                android:layout_toStartOf="@id/btn_close"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/ai_panel_collapse"
+                android:padding="7dp"
+                android:src="@drawable/ic_ai_minimize"
+                app:tint="#98A5B6" />
+
+            <ImageView
                 android:id="@+id/btn_close"
                 android:layout_width="30dp"
                 android:layout_height="30dp"

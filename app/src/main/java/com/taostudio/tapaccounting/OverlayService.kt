@@ -484,6 +484,8 @@ class OverlayService : Service() {
             ACTION_SCREEN_CAPTURE -> overlayManager.startScreenCaptureFromTap()
             ACTION_HIDE_OVERLAY -> {
                 overlayManager.removeOverlay(isSaved = false)
+                // F08: 隐藏悬浮层时 AI 面板和小圆一起关掉
+                overlayManager.closeAiPanel()
                 stopSelfIfIdle("overlay-hidden")
             }
             // 开机/看门狗重拉路径（BootReceiver 或直接 startService）
@@ -877,7 +879,10 @@ class OverlayService : Service() {
     }
 
     private fun stopSelfIfIdle(reason: String) {
-        if (isFlipEnabled || isDoubleTapEnabled || overlayManager.isShowing()) return
+        // F08: pin 后的小圆/面板也算活跃，不能把承载它的服务停掉
+        if (isFlipEnabled || isDoubleTapEnabled || overlayManager.isShowing() ||
+            overlayManager.isPinnedPanelActive()
+        ) return
         Logger.i(this, "OverlayService", "Service idle ($reason), stopping")
         cancelRestart()
         try {

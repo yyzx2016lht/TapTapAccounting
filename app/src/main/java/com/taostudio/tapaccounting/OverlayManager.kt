@@ -101,6 +101,36 @@ class OverlayManager(private val ctx: Context) {
 
     private val aiAssistant = AiAssistant(ctx)
     private var formController: AccountingFormController? = null
+
+    /** AI 面板展开时被临时隐藏的普通表单；面板收起/关闭后恢复，避免面板被压在后面。 */
+    private var overlayHiddenForAiPanel = false
+
+    init {
+        // F08: 从「小圆 → 展开」时先让普通表单避让，恢复可见后小圆/面板才看得见
+        aiAssistant.onPanelExpanding = {
+            val view = overlayView
+            if (view != null && !isRemovingOverlay && view.visibility == View.VISIBLE) {
+                view.visibility = View.INVISIBLE
+                overlayHiddenForAiPanel = true
+            }
+        }
+        aiAssistant.onPanelCollapsed = { closeOverlayForm ->
+            if (overlayHiddenForAiPanel) {
+                // 表单只是被展开的面板临时挡住，收小圆后原样放回
+                overlayView?.visibility = View.VISIBLE
+                overlayHiddenForAiPanel = false
+            } else if (closeOverlayForm && overlayView != null) {
+                // 用户主动 pin/点外面/返回：普通表单一起收起
+                removeOverlay(isSaved = false)
+            }
+        }
+        aiAssistant.onPanelClosed = {
+            if (overlayHiddenForAiPanel) {
+                overlayView?.visibility = View.VISIBLE
+                overlayHiddenForAiPanel = false
+            }
+        }
+    }
     private var pendingCaptureController: com.taostudio.tapaccounting.capturebridge.OverlayPendingCaptureController? = null
     private var voiceHandler: VoiceInputHandler? = null
     /** 支付捕获插件“自己记”的幂等键；普通敲击记账为 null。 */
@@ -108,6 +138,14 @@ class OverlayManager(private val ctx: Context) {
     private var pendingRequestId: String? = null
 
     fun isShowing(): Boolean = overlayView != null
+
+    /** F08: AI 面板处于 pin/小圆状态时，服务不能按 idle 退出。 */
+    fun isPinnedPanelActive(): Boolean = aiAssistant.isPinnedPanelActive()
+
+    /** F08: 彻底关闭 AI 面板并移除小圆。 */
+    fun closeAiPanel() {
+        aiAssistant.closePanel()
+    }
 
     fun handleExternalAiResult(result: JSONObject, showSaveOnly: Boolean = false) {
         handleAiResult(result)
@@ -1220,6 +1258,8 @@ class OverlayManager(private val ctx: Context) {
     }
 
     fun removeOverlay(isSaved: Boolean = true) {
+        // 表单即将移除，不能再被 AI 面板恢复可见
+        overlayHiddenForAiPanel = false
         // 表单已关闭：本次“自己记”的幂等键随之失效，下一条不能复用。
         pendingCaptureId = null
         pendingRequestId = null

@@ -873,6 +873,8 @@
 
     <!-- AI 助手 -->
     <string name="ai_assistant_title">智能记账助手</string>
+    <string name="ai_panel_collapse">收起为悬浮小圆</string>
+    <string name="ai_panel_bubble_desc">打开智能记账助手</string>
     <string name="smart_recognition">智能识别</string>
     <string name="visual_retry_hint">失败时用视觉模型重试</string>
     <string name="expand_all">展开全部</string>

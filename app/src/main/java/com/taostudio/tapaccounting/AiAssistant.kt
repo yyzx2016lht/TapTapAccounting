@@ -3,16 +3,21 @@ package com.taostudio.tapaccounting
 import android.app.Activity
 import android.content.Context
 import android.content.Intent
+import android.graphics.PixelFormat
 import android.net.Uri
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.provider.Settings
 import android.view.Gravity
 import android.view.LayoutInflater
+import android.view.MotionEvent
 import android.view.View
+import android.view.ViewConfiguration
 import android.view.WindowManager
 import android.view.WindowManager.BadTokenException
+import android.view.inputmethod.InputMethodManager
 import android.widget.EditText
 import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
@@ -44,13 +49,50 @@ class AiAssistant(private val ctx: Context) {
     private var analyzeJob: Job? = null
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-    /** P1-29: 宿主销毁时取消协程，避免 scope 永不 cancel。 */
+    /** P1-29: 宿主销毁时取消协程，避免 scope 永不 cancel；同时移除常驻小圆。 */
     fun shutdown() {
         analyzeJob?.cancel()
+        pendingCollapsedResult = null
+        pendingCollapsedOnResult = null
+        removeMiniBubble()
+        isPinned = false
+        currentDialog?.setOnDismissListener(null)
+        runCatching { currentDialog?.dismiss() }
+        currentDialog = null
         scope.cancel()
     }
     private var lastReceiptImageUri: Uri? = null
     private var currentHideStreamText: Boolean = false
+
+    // ── F08: AI 面板收起为侧边常驻小圆 ──────────────────────
+    /** 用户点过「缩小」后，点外面/返回/失焦都只收成小圆，不彻底关闭。 */
+    private var isPinned: Boolean = false
+    /** 常驻小圆；非 null 时面板一定处于 dialog.hide() 的收起状态。 */
+    private var miniBubble: View? = null
+    private var miniBubbleWindowManager: WindowManager? = null
+    private var miniBubbleBadge: View? = null
+
+    /** 从收起态展开前：宿主可暂时隐藏压在面板上面的普通表单。 */
+    var onPanelExpanding: (() -> Unit)? = null
+    /** 面板收进小圆后：closeOverlayForm=true 表示本次是用户主动收起（pin/点外面/返回）。 */
+    var onPanelCollapsed: ((closeOverlayForm: Boolean) -> Unit)? = null
+    /** 面板彻底关闭后：宿主恢复之前被临时隐藏的普通表单。 */
+    var onPanelClosed: (() -> Unit)? = null
+
+    /** Dialog.isCancelable() 不在公开 SDK 里，这里同步记录一份。 */
+    private var panelCancelable = true
+
+    /** 收起期间返回的单笔结果：先挂起亮角标，点小圆回来再交给表单。 */
+    private var pendingCollapsedResult: JSONObject? = null
+    private var pendingCollapsedOnResult: ((JSONObject) -> Unit)? = null
+
+    private var outsideTouchDown = false
+    private var bubbleTouchDownRawX = 0f
+    private var bubbleTouchDownRawY = 0f
+    private var bubbleTouchStartX = 0
+    private var bubbleTouchStartY = 0
+    private var bubbleTouchDownAtMs = 0L
+    private var bubbleTouchMoved = false
 
     // 外部可注入语音按钮绑定逻辑
     var voiceInputBtnSetup: ((View) -> Unit)? = null
@@ -73,6 +115,12 @@ class AiAssistant(private val ctx: Context) {
         /** 图片记账顶层字段：画面本身是否为「一次消费的凭证」（一张小票/一个支付成功页/一个订单详情）。 */
         const val KEY_SINGLE_PAYMENT = "single_payment"
 
+        /** F08: 收起后常驻小圆的边长（dp）。 */
+        private const val MINI_BUBBLE_SIZE_DP = 54
+        /** 没保存过位置时小圆距离屏幕顶部的比例。 */
+        private const val MINI_BUBBLE_DEFAULT_Y_RATIO = 0.42f
+        private const val MINI_BUBBLE_ANIM_MS = 140L
+
     }
 
     fun showInputPanel(
@@ -85,13 +133,30 @@ class AiAssistant(private val ctx: Context) {
         val finalMode = mode
         currentHideStreamText = hideStreamText
 
-        // 已有对话框则直接复用
-        if (currentDialog?.isShowing == true) {
-            updatePanelState(finalMode, defaultText)
-            if (finalMode == MODE_LOADING && !defaultText.isNullOrEmpty() && defaultText != VOICE_PLACEHOLDER_TEXT) {
-                startAnalysis(defaultText, onResult)
+        // 已有面板则复用：收起态先展开，绝不创建第二个面板
+        val existing = currentDialog
+        if (existing != null) {
+            if (miniBubble != null) {
+                val hadPendingResult = pendingCollapsedResult != null
+                expandFromBubble()
+                if (hadPendingResult) return
+                updatePanelState(finalMode, defaultText)
+                if (finalMode == MODE_LOADING && !defaultText.isNullOrEmpty() && defaultText != VOICE_PLACEHOLDER_TEXT) {
+                    startAnalysis(defaultText, onResult)
+                }
+                return
             }
-            return
+            if (existing.isShowing) {
+                updatePanelState(finalMode, defaultText)
+                if (finalMode == MODE_LOADING && !defaultText.isNullOrEmpty() && defaultText != VOICE_PLACEHOLDER_TEXT) {
+                    startAnalysis(defaultText, onResult)
+                }
+                return
+            }
+            // show 失败等原因留下的失效引用：清掉再重建
+            existing.setOnDismissListener(null)
+            runCatching { existing.dismiss() }
+            currentDialog = null
         }
 
         stopTapIfNeeded()
@@ -136,6 +201,74 @@ class AiAssistant(private val ctx: Context) {
         }
     }
 
+    /** 小圆或已 pin 的面板仍然存在，OverlayService 不能按 idle 退出。 */
+    fun isPinnedPanelActive(): Boolean = isPinned || miniBubble != null
+
+    /**
+     * 面板收起为侧边小圆，用 hide() 保留 dialog 和输入框里的文字。
+     *
+     * @param closeOverlayForm 用户主动 pin/点外面/返回时为 true，顺带收起普通记账表单；
+     *                         识别结果自动收起时传 false，避免把刚填好的表单关掉。
+     */
+    fun collapseToBubble(closeOverlayForm: Boolean = true) {
+        val dialog = currentDialog ?: return
+        if (!canUseFloatingBubble()) return
+        isPinned = true
+        hideIme(dialog)
+        if (dialog.isShowing) {
+            runCatching { dialog.hide() }
+        }
+        if (!showMiniBubble()) {
+            runCatching { dialog.show() }
+            return
+        }
+        onPanelCollapsed?.invoke(closeOverlayForm)
+    }
+
+    /** 从小圆恢复面板；原 view 还在，文字和识别结果都不会丢。 */
+    fun expandFromBubble() {
+        val dialog = currentDialog
+        removeMiniBubble()
+        if (dialog == null) {
+            isPinned = false
+            return
+        }
+        try {
+            // hide() 只把 decor 置为 GONE，show() 会重新置为 VISIBLE
+            dialog.show()
+        } catch (e: Exception) {
+            Logger.e(ctx, "AiAssistant", "expandFromBubble failed: ${e.message}")
+            dialog.setOnDismissListener(null)
+            runCatching { dialog.dismiss() }
+            currentDialog = null
+            isPinned = false
+            return
+        }
+        // 面板恢复可见后再隐藏表单，保证面板不会压在 INVISIBLE 的表单下面
+        onPanelExpanding?.invoke()
+        val pendingResult = pendingCollapsedResult
+        if (pendingResult != null) {
+            val callback = pendingCollapsedOnResult
+            pendingCollapsedResult = null
+            pendingCollapsedOnResult = null
+            callback?.invoke(pendingResult)
+            // 结果交给表单后重新收回小圆，保持连续记账
+            finishAfterResult(notifyBadge = false)
+            return
+        }
+        val inputLayout = dialog.findViewById<View>(R.id.layout_input)
+        if (inputLayout?.visibility == View.VISIBLE) {
+            dialog.findViewById<EditText>(R.id.et_ai_input)?.requestFocus()
+        }
+    }
+
+    /** 收起期间拿到的结果先存起来，避免在面板背后弹出记账表单。 */
+    private fun holdResultForCollapsedPanel(result: JSONObject, onResult: (JSONObject) -> Unit) {
+        pendingCollapsedResult = result
+        pendingCollapsedOnResult = onResult
+        showBubbleBadge()
+    }
+
     private fun updatePanelState(mode: Int, text: String? = null) {
         val dialog = currentDialog ?: return
         val view = dialog.findViewById<View>(android.R.id.content) ?: return
@@ -144,6 +277,7 @@ class AiAssistant(private val ctx: Context) {
         val layoutLoading = view.findViewById<View>(R.id.layout_loading)
         val layoutResult = view.findViewById<View>(R.id.layout_result)
         val btnClose = view.findViewById<View>(R.id.btn_close)
+        val btnPin = view.findViewById<View>(R.id.btn_pin)
 
         when (mode) {
             MODE_INPUT -> {
@@ -201,6 +335,10 @@ class AiAssistant(private val ctx: Context) {
                 btnClose.visibility = View.VISIBLE
             }
         }
+        panelCancelable = mode == MODE_INPUT || mode == MODE_LOADING
+        // 语音录制中不提供收起入口，避免录音状态被挂到小圆上
+        btnPin?.visibility =
+            if (canUseFloatingBubble() && mode != MODE_RECORDING && mode != MODE_CANCEL) View.VISIBLE else View.GONE
     }
 
     private fun updateLoadingText(text: String) {
@@ -296,9 +434,14 @@ class AiAssistant(private val ctx: Context) {
                 bills.getJSONObject(i).put("original_text_from_user", sourceText)
             }
             if (bills.length() == 1) {
-                // 先回调再 dismiss，避免 dismiss 时把「未进入记账」当成放弃而删截屏
-                onResult(bills.getJSONObject(0))
-                dismiss()
+                val bill = bills.getJSONObject(0)
+                if (miniBubble != null) {
+                    holdResultForCollapsedPanel(bill, onResult)
+                    return
+                }
+                // 先回调再收尾，避免收尾时把「未进入记账」当成放弃而删截屏
+                onResult(bill)
+                finishAfterResult()
                 return
             }
             updateLoadingText(ctx.getString(R.string.recognition_complete_count, bills.length()))
@@ -319,18 +462,24 @@ class AiAssistant(private val ctx: Context) {
                 // 整批直存；落库后由表单侧按图片来源判断要不要问一次「是否合并」
                 result.put(EXTRA_BATCH_SAVE_ALL, true)
                 onResult(result)
-                dismiss()
+                finishAfterResult(notifyBadge = false)
             }
             btnRecordOneByOne?.setOnClickListener {
                 // 逐条走记账表单确认
                 result.put(EXTRA_FORCE_BILL_QUEUE, true)
                 onResult(result)
-                dismiss()
+                finishAfterResult(notifyBadge = false)
             }
+            // 多笔结果需要用户选入账方式，收起时只亮角标，点小圆再回来操作
+            if (miniBubble != null) showBubbleBadge()
         } else {
             result.put("original_text_from_user", sourceText)
+            if (miniBubble != null) {
+                holdResultForCollapsedPanel(result, onResult)
+                return
+            }
             onResult(result)
-            dismiss()
+            finishAfterResult()
         }
     }
 
@@ -399,6 +548,8 @@ class AiAssistant(private val ctx: Context) {
     ) {
         Logger.d(ctx, "StreamPreview", "startAnalysis called, text=${text.take(50)}, hideStream=$currentHideStreamText")
         analyzeJob?.cancel()
+        pendingCollapsedResult = null
+        pendingCollapsedOnResult = null
         val hideStream = currentHideStreamText
         analyzeJob = scope.launch {
             try {
@@ -443,8 +594,12 @@ class AiAssistant(private val ctx: Context) {
                         presentAccountingResult(result, text, onResult)
                     } else {
                         result.put("original_text_from_user", text)
-                        dismiss()
-                        onResult(result)
+                        if (miniBubble != null) {
+                            holdResultForCollapsedPanel(result, onResult)
+                        } else {
+                            finishAfterResult()
+                            onResult(result)
+                        }
                     }
                 }
             } catch (e: kotlinx.coroutines.CancellationException) {
@@ -556,6 +711,7 @@ class AiAssistant(private val ctx: Context) {
         layoutLoading.visibility = View.GONE
         layoutResult.visibility = View.VISIBLE
         dialog.setCancelable(true)
+        panelCancelable = true
         btnClose.visibility = View.VISIBLE
 
         btnConfirm.setOnClickListener {
@@ -600,11 +756,221 @@ class AiAssistant(private val ctx: Context) {
         }
     }
 
-    fun dismiss() {
+    /** 兼容旧调用：dismiss 现在等价于彻底关闭（含小圆）。 */
+    fun dismiss() = closePanel()
+
+    /** 彻底关闭面板并移除小圆；X、ACTION_HIDE_OVERLAY、服务销毁都走这里。 */
+    fun closePanel() {
+        val wasActive = isPinned || miniBubble != null || currentDialog != null
+        pendingCollapsedResult = null
+        pendingCollapsedOnResult = null
+        isPinned = false
+        removeMiniBubble()
         analyzeJob?.cancel()
-        currentDialog?.dismiss()
-        currentDialog = null
+        analyzeJob = null
+        val dialog = currentDialog
+        if (dialog == null) {
+            onPanelClosed?.invoke()
+            if (wasActive) restartTapIfNeeded()
+            return
+        }
+        dialog.dismiss()
+        if (currentDialog === dialog) {
+            // dismiss 没触发监听（窗口已失效）时兜底清理
+            dialog.setOnDismissListener(null)
+            currentDialog = null
+            restartTapIfNeeded()
+        }
+        onPanelClosed?.invoke()
     }
+
+    /** 识别结果已交付：pin 过的收成小圆方便继续记，未 pin 的维持原来的关闭行为。 */
+    private fun finishAfterResult(notifyBadge: Boolean = true) {
+        if (!isPinned) {
+            dismiss()
+            return
+        }
+        collapseToBubble(closeOverlayForm = false)
+        resetPanelForNextEntry()
+        if (notifyBadge) showBubbleBadge()
+    }
+
+    /** 单笔结果已交出去，输入框清空，下一次点小圆就是新的记账。 */
+    private fun resetPanelForNextEntry() {
+        updatePanelState(MODE_INPUT)
+        currentDialog?.findViewById<EditText>(R.id.et_ai_input)?.setText("")
+        tvRecordedTextPreview?.visibility = View.GONE
+        btnExpandPreview?.visibility = View.GONE
+        layoutMultiRecordActions?.visibility = View.GONE
+    }
+
+    // ── 常驻小圆 ────────────────────────────────────────────
+    private fun canUseFloatingBubble(): Boolean {
+        if (ctx is Activity) return false
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return true
+        return Settings.canDrawOverlays(ctx)
+    }
+
+    private fun showMiniBubble(): Boolean {
+        if (miniBubble != null) return true
+        if (!canUseFloatingBubble()) return false
+        val wm = ctx.getSystemService(Context.WINDOW_SERVICE) as? WindowManager ?: return false
+        val size = dp(MINI_BUBBLE_SIZE_DP)
+        val bubble = LayoutInflater.from(ContextThemeWrapper(ctx, R.style.Theme_TapAccounting))
+            .inflate(R.layout.layout_ai_mini_bubble, null)
+        miniBubbleBadge = bubble.findViewById(R.id.view_ai_mini_bubble_badge)
+
+        val params = WindowManager.LayoutParams().apply {
+            width = size
+            height = size
+            type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+            } else {
+                @Suppress("DEPRECATION")
+                WindowManager.LayoutParams.TYPE_PHONE
+            }
+            flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
+            format = PixelFormat.TRANSLUCENT
+            // 固定 LEFT：x 就是屏幕左边缘像素值，避免 RTL 下 START 解析到右边
+            gravity = Gravity.TOP or Gravity.LEFT
+            x = initialBubbleX(size)
+            y = initialBubbleY(size)
+            windowAnimations = 0
+        }
+        bubble.setOnTouchListener { _, event -> handleBubbleTouch(bubble, params, wm, event) }
+        try {
+            wm.addView(bubble, params)
+        } catch (e: Exception) {
+            Logger.e(ctx, "AiAssistant", "showMiniBubble addView failed: ${e.message}")
+            miniBubbleBadge = null
+            return false
+        }
+        miniBubble = bubble
+        miniBubbleWindowManager = wm
+        bubble.alpha = 0f
+        bubble.scaleX = 0.82f
+        bubble.scaleY = 0.82f
+        bubble.animate()
+            .alpha(1f)
+            .scaleX(1f)
+            .scaleY(1f)
+            .setDuration(MINI_BUBBLE_ANIM_MS)
+            .start()
+        return true
+    }
+
+    private fun removeMiniBubble() {
+        val bubble = miniBubble
+        val wm = miniBubbleWindowManager
+        miniBubble = null
+        miniBubbleWindowManager = null
+        miniBubbleBadge = null
+        if (bubble != null) {
+            bubble.animate().cancel()
+            runCatching { wm?.removeView(bubble) }
+        }
+    }
+
+    private fun showBubbleBadge() {
+        miniBubbleBadge?.visibility = View.VISIBLE
+    }
+
+    private fun initialBubbleX(size: Int): Int {
+        val right = (ctx.resources.displayMetrics.widthPixels - size).coerceAtLeast(0)
+        return if (Prefs.getAiPanelBubbleSide(ctx) == Prefs.AI_BUBBLE_SIDE_LEFT) 0 else right
+    }
+
+    private fun initialBubbleY(size: Int): Int {
+        val maxY = maxBubbleY(size)
+        val saved = Prefs.getAiPanelBubbleY(ctx)
+        if (saved in 0..maxY) return saved
+        return (ctx.resources.displayMetrics.heightPixels * MINI_BUBBLE_DEFAULT_Y_RATIO)
+            .toInt()
+            .coerceIn(0, maxY)
+    }
+
+    private fun maxBubbleX(width: Int): Int =
+        (ctx.resources.displayMetrics.widthPixels - width).coerceAtLeast(0)
+
+    private fun maxBubbleY(height: Int): Int =
+        (ctx.resources.displayMetrics.heightPixels - height).coerceAtLeast(0)
+
+    private fun handleBubbleTouch(
+        bubble: View,
+        params: WindowManager.LayoutParams,
+        wm: WindowManager,
+        event: MotionEvent
+    ): Boolean {
+        when (event.actionMasked) {
+            MotionEvent.ACTION_DOWN -> {
+                bubbleTouchDownRawX = event.rawX
+                bubbleTouchDownRawY = event.rawY
+                bubbleTouchStartX = params.x
+                bubbleTouchStartY = params.y
+                bubbleTouchDownAtMs = SystemClock.uptimeMillis()
+                bubbleTouchMoved = false
+                return true
+            }
+
+            MotionEvent.ACTION_MOVE -> {
+                val dx = event.rawX - bubbleTouchDownRawX
+                val dy = event.rawY - bubbleTouchDownRawY
+                if (!bubbleTouchMoved) {
+                    val slop = ViewConfiguration.get(ctx).scaledTouchSlop
+                    bubbleTouchMoved = kotlin.math.abs(dx) > slop || kotlin.math.abs(dy) > slop
+                }
+                if (bubbleTouchMoved) {
+                    params.x = (bubbleTouchStartX + dx.toInt()).coerceIn(0, maxBubbleX(params.width))
+                    params.y = (bubbleTouchStartY + dy.toInt()).coerceIn(0, maxBubbleY(params.height))
+                    runCatching { wm.updateViewLayout(bubble, params) }
+                }
+                return true
+            }
+
+            MotionEvent.ACTION_UP -> {
+                if (bubbleTouchMoved) {
+                    snapBubbleToEdge(bubble, params, wm)
+                } else if (SystemClock.uptimeMillis() - bubbleTouchDownAtMs <
+                    ViewConfiguration.getLongPressTimeout()
+                ) {
+                    // 长按不作为关闭入口，只有轻点才展开
+                    expandFromBubble()
+                }
+                return true
+            }
+
+            MotionEvent.ACTION_CANCEL -> return true
+        }
+        return false
+    }
+
+    private fun snapBubbleToEdge(
+        bubble: View,
+        params: WindowManager.LayoutParams,
+        wm: WindowManager
+    ) {
+        val screenWidth = ctx.resources.displayMetrics.widthPixels
+        val side = if (params.x + params.width / 2 < screenWidth / 2) {
+            Prefs.AI_BUBBLE_SIDE_LEFT
+        } else {
+            Prefs.AI_BUBBLE_SIDE_RIGHT
+        }
+        params.x = if (side == Prefs.AI_BUBBLE_SIDE_LEFT) 0 else maxBubbleX(params.width)
+        params.y = params.y.coerceIn(0, maxBubbleY(params.height))
+        runCatching { wm.updateViewLayout(bubble, params) }
+        Prefs.setAiPanelBubbleSide(ctx, side)
+        Prefs.setAiPanelBubbleY(ctx, params.y)
+    }
+
+    private fun hideIme(dialog: AlertDialog) {
+        val token = dialog.window?.decorView?.windowToken ?: return
+        val imm = ctx.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager ?: return
+        runCatching { imm.hideSoftInputFromWindow(token, 0) }
+    }
+
+    private fun dp(value: Int): Int =
+        (value * ctx.resources.displayMetrics.density).toInt()
 
     fun getCurrentInputText(): String {
         val dialog = currentDialog ?: return ""
@@ -751,6 +1117,8 @@ class AiAssistant(private val ctx: Context) {
         currentDialog?.setOnDismissListener(null)
         currentDialog?.dismiss()
         currentDialog = null
+        isPinned = false
+        removeMiniBubble()
         if (naturalLanguage) {
             analyzeImageNaturalLanguage(imageUris, supplementText, onResult, onAbandoned)
         } else {
@@ -800,6 +1168,7 @@ class AiAssistant(private val ctx: Context) {
         tvThinkingLog?.text = ctx.getString(R.string.generating_from_image)
         tvThinkingLog?.setTextColor(android.graphics.Color.parseColor("#7B61FF"))
         dialog.setCancelable(true)
+        panelCancelable = true
 
         view.findViewById<View>(R.id.btn_close)?.setOnClickListener {
             analyzeJob?.cancel()
@@ -972,6 +1341,7 @@ class AiAssistant(private val ctx: Context) {
         layoutInput.visibility = View.VISIBLE
         btnClose.visibility = View.VISIBLE
         dialog.setCancelable(true)
+        panelCancelable = true
 
         val mergedSummary = ReceiptImageInputHelper.mergeSupplementWithSummary(summary, supplementText)
         etInput.setText(mergedSummary)
@@ -1002,6 +1372,8 @@ class AiAssistant(private val ctx: Context) {
         }
 
         btnRetryVision?.visibility = View.GONE
+        // 收起状态下图片转写完成，也需要在小圆上提示可以继续确认识别
+        if (miniBubble != null) showBubbleBadge()
     }
 
     private fun retryReceiptWithVision(imageUri: Uri, onResult: (JSONObject) -> Unit) {
@@ -1016,6 +1388,7 @@ class AiAssistant(private val ctx: Context) {
         tvThinkingLog?.text = ctx.getString(R.string.retrying_with_vision)
         tvThinkingLog?.setTextColor(android.graphics.Color.parseColor("#7B61FF"))
         dialog.setCancelable(false)
+        panelCancelable = false
 
         analyzeJob?.cancel()
         analyzeJob = scope.launch {
@@ -1040,18 +1413,24 @@ class AiAssistant(private val ctx: Context) {
                     view.findViewById<View>(R.id.layout_input)?.visibility = View.VISIBLE
                     view.findViewById<View>(R.id.btn_close)?.visibility = View.VISIBLE
                     dialog.setCancelable(true)
+                    panelCancelable = true
                     Utils.toast(ctx, ctx.getString(R.string.toast_image_recognition_failed))
                 }
             }
         }
     }
 
-    /** 统一 dismiss：业务回调 + 恢复双击悬浮 + 清空引用（后设的会覆盖 createDialog 默认）。 */
+    /** 统一 dismiss：业务回调 + 移除小圆 + 恢复双击悬浮 + 清空引用（后设的会覆盖 createDialog 默认）。 */
     private fun installDialogDismissHandler(dialog: AlertDialog, onDismiss: (() -> Unit)? = null) {
         dialog.setOnDismissListener {
             onDismiss?.invoke()
+            pendingCollapsedResult = null
+            pendingCollapsedOnResult = null
+            removeMiniBubble()
+            isPinned = false
             restartTapIfNeeded()
             currentDialog = null
+            onPanelClosed?.invoke()
         }
     }
 
@@ -1059,12 +1438,28 @@ class AiAssistant(private val ctx: Context) {
         val themeContext = ContextThemeWrapper(ctx, R.style.Theme_TapAccounting)
         val view = LayoutInflater.from(themeContext).inflate(R.layout.layout_dialog_ai_input, null)
 
+        // 任何新建面板都从「未 pin、无小圆」开始，避免旧小圆和新面板同屏
+        pendingCollapsedResult = null
+        pendingCollapsedOnResult = null
+        removeMiniBubble()
+        isPinned = false
+        panelCancelable = cancelable
+
         val dialog = AlertDialog.Builder(themeContext)
             .setView(view)
             .setCancelable(cancelable)
             .create()
+        // 点外面完全由 handleDialogTouch 接管：pin 时收小圆，未 pin 时才关闭
+        dialog.setCanceledOnTouchOutside(false)
 
         installDialogDismissHandler(dialog)
+
+        view.findViewById<View>(R.id.btn_pin)?.apply {
+            visibility = if (canUseFloatingBubble()) View.VISIBLE else View.GONE
+            setOnClickListener { collapseToBubble() }
+        }
+        // 返回键：pin 过就收小圆，否则交回系统按 cancelable 处理
+        dialog.setOnKeyListener { _, keyCode, event -> handleDialogKey(keyCode, event) }
 
         dialog.window?.apply {
             val useOverlayWindow =
@@ -1101,8 +1496,74 @@ class AiAssistant(private val ctx: Context) {
             val widthPx = kotlin.math.min((dm.widthPixels * 0.9f).toInt(), maxCardWidth)
             win.setLayout(widthPx, WindowManager.LayoutParams.WRAP_CONTENT)
         }
+        // 点外面：只在这里统一判定，键盘弹出/收起引起的窗口变化不参与
+        dialog.window?.decorView?.setOnTouchListener { decor, event -> handleDialogTouch(decor, event) }
 
         return dialog to view
+    }
+
+    private fun handleDialogKey(keyCode: Int, event: android.view.KeyEvent): Boolean {
+        if (keyCode != android.view.KeyEvent.KEYCODE_BACK) return false
+        // 未 pin 时把返回键交回系统，保持原来的关闭行为
+        if (!isPinned) return false
+        if (event.action == android.view.KeyEvent.ACTION_UP && miniBubble == null) {
+            collapseToBubble()
+        }
+        // DOWN/UP 都吃掉，避免按键分发状态残留
+        return true
+    }
+
+    /**
+     * 面板外点击判定。
+     *
+     * 不监听窗口焦点：输入法弹出/收起同样会改变窗口大小和焦点，
+     * 只有真正的窗外触摸（ACTION_OUTSIDE 或落在 decor 外的 DOWN）才收起/关闭。
+     */
+    private fun handleDialogTouch(view: View, event: MotionEvent): Boolean {
+        when (event.actionMasked) {
+            MotionEvent.ACTION_OUTSIDE -> {
+                onPanelOutsideTouch()
+                return true
+            }
+
+            MotionEvent.ACTION_DOWN -> {
+                outsideTouchDown = !isPointInside(view, event.x, event.y)
+                return outsideTouchDown
+            }
+
+            MotionEvent.ACTION_MOVE -> return outsideTouchDown
+
+            MotionEvent.ACTION_UP -> {
+                val wasOutside = outsideTouchDown
+                outsideTouchDown = false
+                if (wasOutside) {
+                    onPanelOutsideTouch()
+                    return true
+                }
+                return false
+            }
+
+            MotionEvent.ACTION_CANCEL -> {
+                outsideTouchDown = false
+                return false
+            }
+        }
+        return false
+    }
+
+    private fun isPointInside(view: View, x: Float, y: Float): Boolean {
+        if (view.width <= 0 || view.height <= 0) return true
+        return x >= 0f && y >= 0f && x <= view.width && y <= view.height
+    }
+
+    private fun onPanelOutsideTouch() {
+        if (miniBubble != null) return
+        val dialog = currentDialog ?: return
+        if (isPinned) {
+            collapseToBubble()
+        } else if (panelCancelable && dialog.isShowing) {
+            dismiss()
+        }
     }
 
     private fun navigationBarHeight(): Int {

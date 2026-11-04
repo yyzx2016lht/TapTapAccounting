@@ -12,6 +12,7 @@ import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 import com.taostudio.tapaccounting.capture.CaptureApp
+import com.taostudio.tapaccounting.capture.contract.CaptureSources
 import com.taostudio.tapaccounting.capture.data.CaptureEvent
 import com.taostudio.tapaccounting.capture.history.AutoAccountingHistoryImporter
 import kotlinx.coroutines.CoroutineScope
@@ -195,11 +196,7 @@ class CaptureHistoryActivity : Activity() {
         }
     }
 
-    private fun sourceLabel(source: String): String = when (source.uppercase(Locale.US)) {
-        "WECHAT" -> "微信"
-        "ALIPAY" -> "支付宝"
-        else -> source
-    }
+    private fun sourceLabel(source: String): String = CaptureSources.displayName(source)
 
     private fun typeLabel(event: CaptureEvent): String = when {
         event.localType == null -> "待分类"

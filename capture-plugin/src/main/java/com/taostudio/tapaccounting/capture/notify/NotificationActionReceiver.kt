@@ -16,7 +16,7 @@ import kotlinx.coroutines.withContext
 /**
  * 处理通知栏快捷操作：
  * 1. RemoteInput 直接输入备注（免打开 App）；
- * 2. 一键忽略最新待记。
+ * 2. 一键标记最新待记为不计。
  */
 class NotificationActionReceiver : BroadcastReceiver() {
 
@@ -47,7 +47,7 @@ class NotificationActionReceiver : BroadcastReceiver() {
                         withContext(Dispatchers.IO) {
                             repo.updateStatus(captureId, CaptureStatus.IGNORED)
                         }
-                        Toast.makeText(ctx, "已忽略该笔待记", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(ctx, "已标记该笔为不计", Toast.LENGTH_SHORT).show()
                     }
                 }
                 CaptureNotifier.refreshAll(ctx)

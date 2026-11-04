@@ -321,7 +321,7 @@ internal object CaptureImportService {
         )
     }
 
-    // ---------------- AI 分类 ----------------
+    // ---------------- 智能归类 ----------------
 
     /**
      * 用 App 已配置的 AI 对多笔待记一次性分类。
@@ -366,7 +366,7 @@ internal object CaptureImportService {
         val aiResult = runCatching {
             AIService.analyzeAccounting(ctx = ctx, userInput = promptLines.joinToString("\n"))
         }.getOrElse { e ->
-            return errorJson("ai_error", e.message ?: "AI 分类请求失败")
+            return errorJson("ai_error", e.message ?: "归类请求失败")
         } ?: return errorJson("ai_empty", "AI 未返回分类结果")
 
         val aiBills = aiResult.optJSONArray("bills") ?: JSONArray().put(aiResult)

@@ -14,7 +14,7 @@ import androidx.core.content.ContextCompat
 import com.taostudio.tapaccounting.capture.CaptureApp
 import com.taostudio.tapaccounting.capture.R
 import com.taostudio.tapaccounting.capture.contract.CaptureContract
-import com.taostudio.tapaccounting.capture.contract.CaptureSource
+import com.taostudio.tapaccounting.capture.contract.CaptureSources
 import com.taostudio.tapaccounting.capture.data.CapturePrefs
 import com.taostudio.tapaccounting.capture.data.PaymentCapture
 import com.taostudio.tapaccounting.capture.ui.PendingListActivity
@@ -28,7 +28,7 @@ import java.util.Locale
  * 常驻待记通知：
  * - 展示待记笔数、合计金额与最新几笔明细（InboxStyle）；
  * - 支持在通知栏直接点「✎ 补最新备注」通过 RemoteInput 打字保存，无需打开 App；
- * - 支持一键「忽略最新」。
+ * - 支持一键「不计最新」。
  */
 object CaptureNotifier {
     const val CHANNEL_ID: String = "capture_pending"
@@ -146,12 +146,12 @@ object CaptureNotifier {
             if (items.size > 5) {
                 inbox.setSummaryText("还有 ${items.size - 5} 笔待记，点开查看全部")
             } else {
-                inbox.setSummaryText("下拉可快捷补备注 · 敲击手机可一键 AI 分类")
+                inbox.setSummaryText("下拉可快捷补备注 · 敲击手机可统一整理")
             }
             builder.setStyle(inbox)
         }
 
-        // 为最新一笔提供通知栏直接打字补备注（RemoteInput）与一键忽略
+        // 为最新一笔提供通知栏直接打字补备注（RemoteInput）与一键不计
         if (latest != null) {
             val mutableFlags = PendingIntent.FLAG_UPDATE_CURRENT or
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) PendingIntent.FLAG_MUTABLE else 0
@@ -167,7 +167,7 @@ object CaptureNotifier {
                 mutableFlags,
             )
             val remoteInput = RemoteInput.Builder(NotificationActionReceiver.KEY_REMOTE_NOTE)
-                .setLabel("买什么了？如：青菜（自动匹配分类）")
+                .setLabel("补一句备注，方便以后查找")
                 .build()
             val replyAction = Notification.Action.Builder(
                 R.drawable.ic_capture,
@@ -190,7 +190,7 @@ object CaptureNotifier {
             )
             val ignoreAction = Notification.Action.Builder(
                 R.drawable.ic_capture,
-                "忽略最新",
+                "不计最新",
                 ignorePendingIntent,
             ).build()
             builder.addAction(ignoreAction)
@@ -200,11 +200,7 @@ object CaptureNotifier {
     }
 
     private fun formatItemLine(item: PaymentCapture, timeFmt: SimpleDateFormat): String {
-        val src = when (item.source) {
-            CaptureSource.WECHAT -> "微信"
-            CaptureSource.ALIPAY -> "支付宝"
-            else -> item.source
-        }
+        val src = CaptureSources.displayName(item.source)
         val isRefund = item.subType == com.taostudio.tapaccounting.capture.contract.LocalBillType.SUBTYPE_REFUND ||
             item.needsRefundLink
         val isIncome = item.billType == com.taostudio.tapaccounting.capture.contract.LocalBillType.TYPE_INCOME

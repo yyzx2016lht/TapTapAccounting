@@ -104,7 +104,7 @@ object CaptureRuleMatcher {
         val item = shopItem?.trim().orEmpty()
         val n = note?.trim().orEmpty()
 
-        // 如果用户手写了备注，先跑一次备注命中（避免商户是笼统的“微信支付”覆盖掉手写备注“青菜”）
+        // 如果用户手写了备注，先跑一次备注命中（避免商户是笼统的“微信支付”覆盖掉手写备注“咖啡”）
         if (n.isNotEmpty()) {
             for (rule in rules) {
                 if (rule.matchField == CategoryRule.MATCH_MERCHANT) continue

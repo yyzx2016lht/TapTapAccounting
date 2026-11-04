@@ -27,6 +27,7 @@ import com.taostudio.tapaccounting.capture.bridge.CaptureReconciler
 import com.taostudio.tapaccounting.capture.contract.AccountingContext
 import com.taostudio.tapaccounting.capture.contract.CapturePayload
 import com.taostudio.tapaccounting.capture.contract.CaptureSource
+import com.taostudio.tapaccounting.capture.contract.CaptureSources
 import com.taostudio.tapaccounting.capture.contract.CaptureStatus
 import com.taostudio.tapaccounting.capture.contract.ImportBill
 import com.taostudio.tapaccounting.capture.contract.ImportItemStatus
@@ -59,7 +60,7 @@ import java.util.UUID
 
 /**
  * 敲敲待记插件工作台：
- * - Tab 0：待记收件箱（备注实时保存并秒级重分类、点选真实资产/分类并顺手记忆规则、AI 一键分类、一键批量入账）
+ * - Tab 0：待记收件箱（备注实时保存并秒级重分类、点选真实资产/分类并顺手记忆规则、自动统一归类、一键批量入账）
  * - Tab 1：资产映射（读取敲敲记账真实资产，预置自动记账映射规则）
  * - Tab 2：分类规则（读取敲敲记账真实分类树，预置自动记账关键字/正则规则）
  * - Tab 3：设置与调试（付款提醒方式切换、纯净支出过滤、模拟与自检工具）
@@ -131,7 +132,7 @@ class PendingListActivity : Activity() {
             setTextColor(CaptureUi.TEXT_PRIMARY)
         })
         titleBlock.addView(TextView(this).apply {
-            text = "微信 · 支付宝收件箱"
+            text = "${CaptureSources.all.joinToString(" · ") { it.displayName }}收件箱"
             textSize = 11.5f
             setTextColor(CaptureUi.TEXT_MUTED)
             setPadding(0, dp(1), 0, 0)
@@ -410,7 +411,7 @@ class PendingListActivity : Activity() {
         }
         val aiBtn = CaptureUi.button(
             activity = this,
-            text = if (isAiBusy) "AI 分析中…" else "AI 补全分类 (${items.size})",
+            text = if (isAiBusy) "归类中…" else "自动归类 (${items.size})",
             textColor = CaptureUi.BRAND_DARK,
             bgColor = CaptureUi.BRAND_SOFT,
             strokeColor = CaptureUi.BRAND_BORDER,
@@ -429,7 +430,7 @@ class PendingListActivity : Activity() {
             bgColor = if (canImportAll) CaptureUi.BRAND else CaptureUi.BG_SEGMENT,
             onClick = {
                 if (readyItems.isEmpty()) {
-                    toast("请先点左侧“AI 补全分类”或为账单选择分类")
+                    toast("请先点左侧“自动归类”或为账单选择分类")
                 } else {
                     batchImportReadyItems(readyItems)
                 }
@@ -469,7 +470,7 @@ class PendingListActivity : Activity() {
             setTextColor(CaptureUi.TEXT_PRIMARY)
         })
         emptyCard.addView(TextView(this).apply {
-            text = "微信或支付宝付款时会自动留底到这里；敲击手机背面即可在记账悬浮窗里顺手分类入账。"
+            text = "${CaptureSources.all.joinToString("、") { it.displayName }}付款时会自动留底到这里；敲击手机背面即可在记账悬浮窗里顺手分类入账。"
             textSize = 13f
             gravity = Gravity.CENTER
             setTextColor(CaptureUi.TEXT_SECONDARY)
@@ -479,7 +480,7 @@ class PendingListActivity : Activity() {
         emptyCard.addView(
             CaptureUi.button(
                 activity = this,
-                text = "+ 模拟一笔菜市场买菜 (¥3.00)",
+                text = "+ 模拟一笔示例支出 (¥3.00)",
                 textColor = CaptureUi.BRAND_DARK,
                 bgColor = CaptureUi.BRAND_SOFT,
                 strokeColor = CaptureUi.BRAND_BORDER,
@@ -677,12 +678,7 @@ class PendingListActivity : Activity() {
         // 第三行：无感自动保存备注框（打字 300ms 自动落库并匹配本地分类规则，无需手动点保存）
         val noteInput = EditText(this).apply {
             setText(item.note.orEmpty())
-            val merchantHint = item.merchant?.takeIf { it.isNotBlank() }
-            hint = if (merchantHint != null) {
-                "写备注（如：青菜，自动归类；不填默认“$merchantHint”）"
-            } else {
-                "写备注（如：青菜、五花肉，自动匹配分类）"
-            }
+            hint = "写备注，命中关键词会自动归类"
             textSize = 13f
             setTextColor(CaptureUi.TEXT_PRIMARY)
             setHintTextColor(CaptureUi.TEXT_MUTED)
@@ -721,7 +717,7 @@ class PendingListActivity : Activity() {
         })
         card.addView(noteInput)
 
-        // 第四行：操作栏（直接入账 / 悬浮窗改 / 忽略）
+        // 第四行：操作栏（直接入账 / 悬浮窗改 / 不计）
         val actionRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -771,7 +767,7 @@ class PendingListActivity : Activity() {
         actionRow.addView(
             CaptureUi.button(
                 activity = this,
-                text = "忽略",
+                text = "不计",
                 textColor = CaptureUi.TEXT_MUTED,
                 bgColor = CaptureUi.BG_SUBTLE,
                 radiusDp = 10,
@@ -875,7 +871,7 @@ class PendingListActivity : Activity() {
     }
 
     // ════════════════════════════════════════════════════════
-    //  批量 AI 分类 & 批量一键入账
+    //  批量自动归类 & 批量一键入账
     // ════════════════════════════════════════════════════════
 
     private fun runBatchAiClassify(items: List<PaymentCapture>) {
@@ -889,10 +885,10 @@ class PendingListActivity : Activity() {
                     val repo = CaptureApp.from(this@PendingListActivity).repository
                     items.mapNotNull { repo.findById(it.id) }
                 }
-                toast("正在调用敲敲记账 AI 分析 ${freshItems.size} 笔账单…")
+                toast("正在调用敲敲记账归类 ${freshItems.size} 笔账单…")
                 val outcome = bridge.classifyCaptures(freshItems)
                 if (!outcome.ok) {
-                    toast("AI 分类未完成：${outcome.error ?: "请检查敲敲记账 AI 设置"}")
+                    toast("自动归类未完成：${outcome.error ?: "请检查敲敲记账 AI 设置"}")
                     return@launch
                 }
                 var updatedCount = 0
@@ -914,7 +910,7 @@ class PendingListActivity : Activity() {
                         }
                     }
                 }
-                toast("AI 已补全 $updatedCount 笔分类，确认后可点“一键入账”")
+                toast("已自动归类 $updatedCount 笔，确认后可点“一键入账”")
             } finally {
                 isAiBusy = false
                 load()
@@ -1007,7 +1003,7 @@ class PendingListActivity : Activity() {
         if (type in setOf(LocalBillType.TYPE_EXPENSE, LocalBillType.TYPE_INCOME) &&
             item.categoryName.isNullOrBlank()
         ) {
-            toast("请先为该笔账单选择分类，或点顶部“AI 补全分类”")
+            toast("请先为该笔账单选择分类，或点顶部“自动归类”")
             showCategoryPickerDialog(item, latestSnapshot?.accountingContext)
             return
         }
@@ -1121,7 +1117,7 @@ class PendingListActivity : Activity() {
                     val mappedAsset = CaptureRuleMatcher.resolveAssetName(scopeCtx, "零钱")
                     val matchedCategory = CaptureRuleMatcher.resolveCategoryName(
                         context = scopeCtx,
-                        merchant = "A摊买菜",
+                        merchant = "示例支出",
                         shopItem = null,
                         note = null,
                         fallbackCategory = null,
@@ -1131,7 +1127,7 @@ class PendingListActivity : Activity() {
                         source = CaptureSource.WECHAT,
                         amountCents = 300L,
                         currency = "CNY",
-                        merchant = "A摊买菜",
+                        merchant = "示例支出",
                         paymentMethodRaw = "零钱",
                         assetName = mappedAsset,
                         categoryName = matchedCategory,
@@ -1155,7 +1151,7 @@ class PendingListActivity : Activity() {
                 currentTab = 0
                 updateTabSelection()
                 load()
-                toast("已模拟：微信 ¥3.00 A摊买菜（自动映射账户：${outcome.first.assetName ?: "微信"}）")
+                toast("已模拟：${CaptureSources.displayName(CaptureSource.WECHAT)} ¥3.00 示例支出（自动映射账户：${outcome.first.assetName ?: CaptureSources.displayName(CaptureSource.WECHAT)}）")
             } catch (t: Throwable) {
                 toast("模拟失败：${t.message ?: t.javaClass.simpleName}")
             }
@@ -1244,11 +1240,7 @@ class PendingListActivity : Activity() {
         requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), REQUEST_NOTIFICATIONS)
     }
 
-    private fun sourceLabel(source: String): String = when (source) {
-        CaptureSource.WECHAT -> "微信支付"
-        CaptureSource.ALIPAY -> "支付宝"
-        else -> source
-    }
+    private fun sourceLabel(source: String): String = CaptureSources.displayName(source)
 
     private fun formatAmount(cents: Long?): String {
         if (cents == null) return "¥0.00"
@@ -1268,7 +1260,7 @@ class PendingListActivity : Activity() {
             """{"mMap":{"description":"使用招商银行储蓄卡(4852)支付￥9.00","source":"微信支付","title":"已支付¥9.00","display_name":"同程旅行","cachedPayTools":"","cachedPayMoney":"","cachedPayShop":"","t":1770696436886}}"""
 
         val SAMPLES: List<Pair<String, String>> = listOf(
-            "样本 1：微信支付 mMap ¥9.00 同程旅行" to SAMPLE_WECHAT_PAY,
+            "样本 1：${CaptureSources.displayName(CaptureSource.WECHAT)}支付 mMap ¥9.00 同程旅行" to SAMPLE_WECHAT_PAY,
         )
     }
 }

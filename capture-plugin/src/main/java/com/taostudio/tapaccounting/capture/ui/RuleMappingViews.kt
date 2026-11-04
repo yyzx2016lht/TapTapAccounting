@@ -22,6 +22,8 @@ import android.widget.TextView
 import android.widget.Toast
 import com.taostudio.tapaccounting.capture.CaptureApp
 import com.taostudio.tapaccounting.capture.contract.AccountingContext
+import com.taostudio.tapaccounting.capture.contract.CaptureSource
+import com.taostudio.tapaccounting.capture.contract.CaptureSources
 import com.taostudio.tapaccounting.capture.data.AssetMappingRule
 import com.taostudio.tapaccounting.capture.data.CapturePrefs
 import com.taostudio.tapaccounting.capture.data.CategoryRule
@@ -121,7 +123,7 @@ internal class RuleMappingViews(
                 ) {
                     AlertDialog.Builder(activity)
                         .setTitle("恢复通用通道预置")
-                        .setMessage("将补齐微信、支付宝、花呗等通用渠道基础映射（不含任何具体个人银行卡）。不会删除你已自定义的规则。")
+                        .setMessage("将补齐${CaptureSources.all.joinToString("、") { it.displayName }}、花呗等通用渠道基础映射（不含任何具体个人银行卡）。不会删除你已自定义的规则。")
                         .setPositiveButton("恢复") { _, _ ->
                             scope.launch {
                                 withContext(Dispatchers.IO) {
@@ -407,7 +409,7 @@ internal class RuleMappingViews(
                 setTextColor(CaptureUi.TEXT_PRIMARY)
             })
             addView(TextView(activity).apply {
-                text = "付款或手写备注（如“青菜”“瑞幸”）时 0 毫秒优先匹配本地规则；点击下方任意关键词即可编辑或删除。"
+                text = "付款或手写备注（如“咖啡”“打车”“房租”）时 0 毫秒优先匹配本地规则；点击下方任意关键词即可编辑或删除。"
                 textSize = 12.5f
                 setTextColor(CaptureUi.TEXT_SECONDARY)
                 setLineSpacing(0f, 1.2f)
@@ -437,7 +439,7 @@ internal class RuleMappingViews(
         }
         container.addView(infoCard)
 
-        val searchBox = buildSearchBox("搜索关键词或分类（如：买菜、美宜佳、交通）")
+        val searchBox = buildSearchBox("搜索关键词或分类（如：咖啡、美宜佳、交通）")
         container.addView(searchBox)
 
         val listHost = LinearLayout(activity).apply {
@@ -556,11 +558,11 @@ internal class RuleMappingViews(
             setPadding(dp(20), dp(14), dp(20), dp(8))
         }
         val etKeyword = buildDialogInput(
-            hint = "匹配关键词（如：青菜、美宜佳、瑞幸）",
+            hint = "匹配关键词（如：咖啡、打车、房租）",
             initial = existing?.keyword.orEmpty(),
         )
         val etCategory = buildDialogInput(
-            hint = "目标分类（如：吃的 - 买菜）",
+            hint = "目标分类（如：餐饮 - 咖啡）",
             initial = existing?.targetCategoryName.orEmpty(),
         ).apply {
             layoutParams = LinearLayout.LayoutParams(
@@ -674,7 +676,7 @@ internal class RuleMappingViews(
                 setTextColor(CaptureUi.TEXT_PRIMARY)
             })
             addView(TextView(activity).apply {
-                text = "选择微信/支付宝付款成功那一刻插件如何提示你（无论选哪种，敲击手机背面都能在记账悬浮窗里看到待记）："
+                text = "选择${CaptureSources.all.joinToString("/") { it.displayName }}付款成功那一刻插件如何提示你（无论选哪种，敲击手机背面都能在记账悬浮窗里看到待记）："
                 textSize = 12.5f
                 setTextColor(CaptureUi.TEXT_SECONDARY)
                 setLineSpacing(0f, 1.2f)
@@ -796,7 +798,7 @@ internal class RuleMappingViews(
                 setTextColor(CaptureUi.TEXT_PRIMARY)
             })
             textCol.addView(TextView(activity).apply {
-                text = "默认关闭（同时捕获支出、微信转账收款、转账退款与红包）；开启后忽略普通收款"
+                text = "默认关闭（同时捕获支出、${CaptureSources.displayName(CaptureSource.WECHAT)}转账收款、转账退款与红包）；开启后忽略普通收款"
                 textSize = 12f
                 setTextColor(CaptureUi.TEXT_SECONDARY)
                 setPadding(0, dp(2), 0, 0)
@@ -827,7 +829,7 @@ internal class RuleMappingViews(
             row1.addView(
                 CaptureUi.button(
                     activity = activity,
-                    text = "模拟菜市场消费 (¥3)",
+                    text = "模拟示例支出 (¥3)",
                     textColor = CaptureUi.SUCCESS,
                     bgColor = CaptureUi.SUCCESS_SOFT,
                     strokeColor = CaptureUi.SUCCESS_BORDER,

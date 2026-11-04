@@ -112,7 +112,7 @@ class CaptureRepository(private val dao: PaymentCaptureDao) {
         dao.updateNote(id, note?.takeIf { it.isNotBlank() }, System.currentTimeMillis()) > 0
 
     /**
-     * 更新备注并立即用本地分类规则重新推断分类（如手写“青菜”立即命中“吃的 - 买菜”）。
+     * 更新备注并立即用本地分类规则重新推断分类（如手写“咖啡”立即命中“餐饮 - 咖啡”）。
      */
     suspend fun updateNoteAndReclassify(context: Context, id: String, note: String?): PaymentCapture? {
         val cleanNote = note?.trim()?.takeIf { it.isNotEmpty() }

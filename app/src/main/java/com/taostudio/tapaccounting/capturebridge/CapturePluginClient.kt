@@ -5,6 +5,7 @@ import android.net.Uri
 import android.os.Bundle
 import com.taostudio.tapaccounting.capture.contract.CaptureContract
 import com.taostudio.tapaccounting.capture.contract.CaptureSource
+import com.taostudio.tapaccounting.capture.contract.CaptureSources
 import com.taostudio.tapaccounting.data.local.AppDatabase
 import com.taostudio.tapaccounting.logic.AssetNameResolver
 import com.taostudio.tapaccounting.logic.CategoryNameResolver
@@ -45,11 +46,7 @@ object CapturePluginClient {
         val needsRefundLink: Boolean,
         val status: String,
     ) {
-        fun sourceLabel(): String = when (source.uppercase(Locale.US)) {
-            CaptureSource.WECHAT -> "微信"
-            CaptureSource.ALIPAY -> "支付宝"
-            else -> source
-        }
+        fun sourceLabel(): String = CaptureSources.displayName(source)
 
         fun formattedAmount(): String =
             String.format(Locale.CHINA, "¥%.2f", amountCents / 100.0)

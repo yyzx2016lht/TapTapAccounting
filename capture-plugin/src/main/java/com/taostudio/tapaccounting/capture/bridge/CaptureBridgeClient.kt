@@ -181,7 +181,7 @@ class CaptureBridgeClient(context: Context) {
             val res = callForObject(CaptureContract.METHOD_CLASSIFY_CAPTURES, arr.toString(), extras)
                 ?: return@withContext ClassifyResult(ok = false, error = "无法连接敲敲记账")
             if (!res.optBoolean("ok", false)) {
-                val msg = res.optString("message", "").ifBlank { res.optString("error", "AI 分类未完成") }
+                val msg = res.optString("message", "").ifBlank { res.optString("error", "自动归类未完成") }
                 return@withContext ClassifyResult(ok = false, error = msg)
             }
             val draftsArr = res.optJSONArray("drafts") ?: return@withContext ClassifyResult(ok = true)

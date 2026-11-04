@@ -18,12 +18,12 @@ import androidx.room.Update
 )
 data class CategoryRule(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
-    /** 匹配关键词或正则表达式，如 "美宜佳"、"青菜"、"淘宝闪购"。 */
+    /** 匹配关键词或正则表达式，如 "美宜佳"、"咖啡"、"淘宝闪购"。 */
     val keyword: String,
     /** 匹配范围：ANY（商户/商品/备注任一）、MERCHANT（仅商户）、NOTE（仅备注）。 */
     val matchField: String = MATCH_ANY,
     val isRegex: Boolean = false,
-    /** 目标分类名称（与敲敲记账一致，如 "吃的 - 买菜"、"喝的 - 饮料"）。 */
+    /** 目标分类名称（与敲敲记账一致，如 "餐饮 - 咖啡"、"饮品 - 奶茶"）。 */
     val targetCategoryName: String,
     val targetBookName: String? = null,
     val sort: Int = 0,

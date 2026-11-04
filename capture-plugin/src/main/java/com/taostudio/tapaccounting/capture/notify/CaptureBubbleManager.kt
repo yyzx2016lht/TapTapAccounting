@@ -23,6 +23,7 @@ import android.widget.TextView
 import android.widget.Toast
 import com.taostudio.tapaccounting.capture.CaptureApp
 import com.taostudio.tapaccounting.capture.contract.CaptureSource
+import com.taostudio.tapaccounting.capture.contract.CaptureSources
 import com.taostudio.tapaccounting.capture.data.PaymentCapture
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -91,11 +92,7 @@ object CaptureBubbleManager {
             CaptureSource.ALIPAY -> "#1677FF"
             else -> "#3B82F6"
         }
-        val badgeText = when (capture.source) {
-            CaptureSource.WECHAT -> "微信$typeSuffix"
-            CaptureSource.ALIPAY -> "支付宝$typeSuffix"
-            else -> "支付$typeSuffix"
-        }
+        val badgeText = CaptureSources.displayName(capture.source) + typeSuffix
 
         val badge = TextView(app).apply {
             text = badgeText
@@ -141,7 +138,7 @@ object CaptureBubbleManager {
         }
 
         val etNote = EditText(app).apply {
-            hint = "买什么了？如：青菜（回车保存）"
+            hint = "补一句备注，方便以后查找"
             setHintTextColor(Color.parseColor("#94A3B8"))
             setTextColor(Color.WHITE)
             textSize = 14f

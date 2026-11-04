@@ -42,7 +42,7 @@ import java.util.UUID
  * 敲敲记账悬浮窗内的「待记无感联动控制器」：
  * - 未安装插件或无待记时：完全隐身（View.GONE），对普通用户 0 影响；
  * - 有待记时：自动将最新一笔带入记账悬浮窗，并在顶部展示提示横幅；
- * - 支持在同一个悬浮窗内展开「多笔连填备注 + 实时本地规则匹配 + 一键 AI 分类入账」抽屉。
+ * - 支持在同一个悬浮窗内展开「多笔连填备注 + 实时本地规则匹配 + 一键智能归类入账」抽屉。
  */
 class OverlayPendingCaptureController(
     private val ctx: Context,
@@ -203,7 +203,7 @@ class OverlayPendingCaptureController(
         if (pendingItems.size > 1) {
             actionRow.addView(
                 smallChipButton(
-                    text = "⇄ 批量速清 / AI分类 (${pendingItems.size})",
+                    text = "⇄ 批量速清 / 智能归类 (${pendingItems.size})",
                     textColor = Color.WHITE,
                     bgColor = Color.parseColor("#2563EB"),
                 ) {
@@ -216,7 +216,7 @@ class OverlayPendingCaptureController(
         } else {
             actionRow.addView(
                 smallChipButton(
-                    text = if (isBusy) "AI思考中…" else "✨ AI 分类此笔",
+                    text = if (isBusy) "归类中…" else "✨ 智能归类此笔",
                     textColor = Color.parseColor("#1D4ED8"),
                     bgColor = Color.parseColor("#DBEAFE"),
                 ) {
@@ -230,7 +230,7 @@ class OverlayPendingCaptureController(
 
         actionRow.addView(
             smallChipButton(
-                text = "忽略这笔",
+                text = "不计这笔",
                 textColor = Color.parseColor("#DC2626"),
                 bgColor = Color.parseColor("#FEF2F2"),
             ) {
@@ -256,7 +256,7 @@ class OverlayPendingCaptureController(
     }
 
     // ════════════════════════════════════════════════════════
-    //  多笔待记速清 & 一键 AI 分类入账面板
+    //  多笔待记速清 & 一键智能归类入账面板
     // ════════════════════════════════════════════════════════
 
     private fun openBatchDrawer() {
@@ -317,7 +317,7 @@ class OverlayPendingCaptureController(
         panel.addView(header)
 
         val tvSubHint = TextView(ctx).apply {
-            text = "写备注会实时匹配本地分类规则；未命中项可点下方「AI 补全分类」后一键入账。"
+            text = "写备注会实时匹配本地分类规则；未命中项可点下方「自动归类」后一键入账。"
             textSize = 11.5f
             setTextColor(Color.parseColor("#64748B"))
             setPadding(0, 0, 0, dp(8))
@@ -372,7 +372,7 @@ class OverlayPendingCaptureController(
         }
 
         val btnAiClassify = TextView(ctx).apply {
-            text = if (isBusy) "AI 思考中…" else "✨ AI 补全分类"
+            text = if (isBusy) "归类中…" else "✨ 自动归类"
             textSize = 13.5f
             setTypeface(typeface, Typeface.BOLD)
             gravity = Gravity.CENTER
@@ -480,7 +480,7 @@ class OverlayPendingCaptureController(
         })
         card.addView(topLine)
 
-        // 第二行：商户 + 实时可刷新分类胶囊 + 单记/忽略
+        // 第二行：商户 + 实时可刷新分类胶囊 + 单记/不计
         val midLine = LinearLayout(ctx).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -498,7 +498,7 @@ class OverlayPendingCaptureController(
 
         fun styleCatBadge(tv: TextView, cat: String?) {
             val hasCat = !cat.isNullOrBlank()
-            tv.text = if (hasCat) "🏷️ $cat" else "待自动分类"
+            tv.text = if (hasCat) "🏷️ $cat" else "待归类"
             tv.setTextColor(Color.parseColor(if (hasCat) "#059669" else "#D97706"))
             tv.background = rippleBg(
                 fillColor = Color.parseColor(if (hasCat) "#ECFDF5" else "#FFFBEB"),
@@ -538,7 +538,7 @@ class OverlayPendingCaptureController(
 
         midLine.addView(
             smallChipButton(
-                text = "忽略",
+                text = "不计",
                 textColor = Color.parseColor("#DC2626"),
                 bgColor = Color.parseColor("#FEF2F2"),
             ) {
@@ -550,11 +550,7 @@ class OverlayPendingCaptureController(
         // 第三行：内联备注输入框（输入停止 280ms 后同步插件并实时回刷分类标签）
         val etNote = EditText(ctx).apply {
             setText(item.note.orEmpty())
-            hint = if (!item.merchant.isNullOrBlank()) {
-                "写备注（如：青菜，自动归类；不填默认“${item.merchant.take(8)}”）"
-            } else {
-                "买什么了？如：青菜、五花肉（自动归类）"
-            }
+            hint = "写备注，命中关键词会自动归类"
             textSize = 13f
             setTextColor(Color.parseColor("#0F172A"))
             setHintTextColor(Color.parseColor("#94A3B8"))
@@ -614,7 +610,7 @@ class OverlayPendingCaptureController(
     }
 
     /**
-     * 调用统一 [CaptureImportService.classify] 进行 AI 分类。
+     * 调用统一 [CaptureImportService.classify] 进行智能归类。
      */
     private fun runBatchAiClassification(singleOnly: Boolean) {
         if (isBusy) return
@@ -641,7 +637,7 @@ class OverlayPendingCaptureController(
                     CaptureImportService.classify(ctx, inputArr)
                 }
                 if (!res.optBoolean("ok", false)) {
-                    Utils.toast(ctx, res.optString("message", "AI 分类未完成"))
+                    Utils.toast(ctx, res.optString("message", "自动归类未完成"))
                     return@launch
                 }
                 val drafts = res.optJSONArray("drafts") ?: JSONArray()
@@ -667,9 +663,9 @@ class OverlayPendingCaptureController(
                         categoryName = target.categoryName,
                     )
                 }
-                Utils.toast(ctx, "✨ AI 已匹配 $updatedCount 笔分类")
+                Utils.toast(ctx, "✨ 已自动归类 $updatedCount 笔")
             } catch (e: Exception) {
-                Utils.toast(ctx, "AI 分类失败：${e.message ?: e.javaClass.simpleName}")
+                Utils.toast(ctx, "归类失败：${e.message ?: e.javaClass.simpleName}")
             } finally {
                 isBusy = false
                 if (isBatchDrawerOpen) {
@@ -765,7 +761,7 @@ class OverlayPendingCaptureController(
                     renderBatchDrawer()
                 } else {
                     val reason = when {
-                        firstError == "missing_category" -> "请先点「AI 补全分类」或写备注匹配分类"
+                        firstError == "missing_category" -> "请先点「自动归类」或写备注匹配分类"
                         firstError?.startsWith("asset_not_found:") == true ->
                             "账户「${firstError.removePrefix("asset_not_found:")}」在敲敲记账中不存在"
                         !firstError.isNullOrBlank() -> firstError

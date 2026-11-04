@@ -2,6 +2,7 @@ package com.taostudio.tapaccounting.capture.ui
 
 import android.app.Activity
 import android.app.AlertDialog
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color
 import android.graphics.Typeface
@@ -137,6 +138,25 @@ class PendingListActivity : Activity() {
             setPadding(0, dp(1), 0, 0)
         })
         titleRow.addView(titleBlock)
+
+        val historyEntry = TextView(this).apply {
+            text = "历史"
+            textSize = 12f
+            setTypeface(typeface, Typeface.BOLD)
+            setTextColor(CaptureUi.TEXT_SECONDARY)
+            setPadding(dp(8), dp(5), dp(8), dp(5))
+            background = CaptureUi.rippleBg(CaptureUi.BG_SUBTLE, dp(999), dp(1), CaptureUi.BORDER)
+            setOnClickListener {
+                startActivity(Intent(this@PendingListActivity, CaptureHistoryActivity::class.java))
+            }
+        }
+        titleRow.addView(
+            historyEntry,
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+            ).apply { marginEnd = dp(6) },
+        )
 
         val statusPill = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL

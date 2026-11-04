@@ -84,8 +84,8 @@ class PendingListActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        CaptureUi.applyLightStatusBar(this)
         setContentView(buildRoot())
+        CaptureUi.applyLightStatusBar(this)
         requestNotificationPermissionIfNeeded()
         CaptureKeepAliveService.start(this)
     }

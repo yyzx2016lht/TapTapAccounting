@@ -56,18 +56,22 @@ internal object CaptureUi {
     val ALIPAY_SOFT = Color.parseColor("#EFF6FF")
 
     fun applyLightStatusBar(activity: Activity) {
-        val window = activity.window ?: return
-        window.statusBarColor = Color.WHITE
-        window.navigationBarColor = BG_PAGE
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            window.insetsController?.setSystemBarsAppearance(
-                WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS,
-                WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS,
-            )
-        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            @Suppress("DEPRECATION")
-            window.decorView.systemUiVisibility =
-                window.decorView.systemUiVisibility or View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR
+        runCatching {
+            val window = activity.window ?: return
+            window.statusBarColor = Color.WHITE
+            window.navigationBarColor = BG_PAGE
+            // 必须先拿 decorView 触发 installDecor()，否则 PhoneWindow.getInsetsController() 内部 mDecor 为 null 会 NPE
+            val decor = window.decorView ?: return
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                decor.windowInsetsController?.setSystemBarsAppearance(
+                    WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS,
+                    WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS,
+                )
+            } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                @Suppress("DEPRECATION")
+                decor.systemUiVisibility =
+                    decor.systemUiVisibility or View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR
+            }
         }
     }
 

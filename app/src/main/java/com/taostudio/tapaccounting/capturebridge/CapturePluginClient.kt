@@ -146,6 +146,7 @@ object CapturePluginClient {
         note: String?,
         assetName: String? = null,
         categoryName: String? = null,
+        categorySource: String? = null,
         rememberAsset: Boolean = false,
         rememberCategoryKeyword: String? = null,
     ): DraftUpdateResult = withContext(Dispatchers.IO) {
@@ -155,6 +156,7 @@ object CapturePluginClient {
             note?.let { putString("note", it) }
             assetName?.let { putString("assetName", it) }
             categoryName?.let { putString("categoryName", it) }
+            categorySource?.let { putString("categorySource", it) }
             putBoolean("rememberAsset", rememberAsset)
             rememberCategoryKeyword?.let { putString("rememberCategoryKeyword", it) }
         }

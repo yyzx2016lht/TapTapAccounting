@@ -18,6 +18,8 @@ import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import androidx.appcompat.app.AlertDialog
+import androidx.appcompat.view.ContextThemeWrapper
 import com.taostudio.tapaccounting.Prefs
 import com.taostudio.tapaccounting.R
 import com.taostudio.tapaccounting.Utils
@@ -25,6 +27,7 @@ import com.taostudio.tapaccounting.capture.contract.CaptureSource
 import com.taostudio.tapaccounting.capture.contract.ImportItemStatus
 import com.taostudio.tapaccounting.capture.contract.LocalBillType
 import com.taostudio.tapaccounting.logic.AccountingFormController
+import com.taostudio.tapaccounting.ui.dialog.OverlayDialogs
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -317,7 +320,7 @@ class OverlayPendingCaptureController(
         panel.addView(header)
 
         val tvSubHint = TextView(ctx).apply {
-            text = "写备注会实时匹配本地分类规则；未命中项可点下方「自动归类」后一键入账。"
+            text = "写备注会实时匹配本地分类规则；未命中项可点下方「智能归类」。没备注的账单保持待归类。"
             textSize = 11.5f
             setTextColor(Color.parseColor("#64748B"))
             setPadding(0, 0, 0, dp(8))
@@ -372,7 +375,7 @@ class OverlayPendingCaptureController(
         }
 
         val btnAiClassify = TextView(ctx).apply {
-            text = if (isBusy) "归类中…" else "✨ 自动归类"
+            text = if (isBusy) "归类中…" else "✨ 智能归类"
             textSize = 13.5f
             setTypeface(typeface, Typeface.BOLD)
             gravity = Gravity.CENTER
@@ -390,8 +393,11 @@ class OverlayPendingCaptureController(
             }
         }
 
+        val categorizedCount = pendingItems.count {
+            !it.categoryName.isNullOrBlank() && it.amountCents > 0L
+        }
         val btnCommitAll = TextView(ctx).apply {
-            text = if (isBusy) "处理中…" else "✓ 一键入账 (${pendingItems.size}笔)"
+            text = if (isBusy) "处理中…" else "✓ 一键入账 (${categorizedCount}笔)"
             textSize = 13.5f
             setTypeface(typeface, Typeface.BOLD)
             gravity = Gravity.CENTER
@@ -610,16 +616,17 @@ class OverlayPendingCaptureController(
     }
 
     /**
-     * 调用统一 [CaptureImportService.classify] 进行智能归类。
+     * 轻量智能归类：只把备注与账单类型交给 [CaptureImportService.classifyNotes]，
+     * 不再复用整笔记账分析；没备注的条目保持待归类。
      */
     private fun runBatchAiClassification(singleOnly: Boolean) {
         if (isBusy) return
-        val targets = if (singleOnly) {
+        val scopeTargets = if (singleOnly) {
             listOfNotNull(pendingItems.getOrNull(currentIndex))
         } else {
             pendingItems.toList()
         }
-        if (targets.isEmpty()) return
+        if (scopeTargets.isEmpty()) return
 
         if (Prefs.getAiKey(ctx).isBlank()) {
             Utils.toast(ctx, "请先在敲敲记账设置中配置 AI API Key")
@@ -632,12 +639,22 @@ class OverlayPendingCaptureController(
         scope.launch {
             try {
                 noteSyncJobs.values.forEach { it.join() }
+                // 等防抖落库后重新看一遍：本地规则刚命中的、没备注的、转账都不调 AI。
+                val targets = scopeTargets.filter {
+                    !it.note.isNullOrBlank() &&
+                        it.categoryName.isNullOrBlank() &&
+                        it.billType != LocalBillType.TYPE_TRANSFER
+                }
+                if (targets.isEmpty()) {
+                    Utils.toast(ctx, "没有可智能归类的备注；没备注的账单保持待归类")
+                    return@launch
+                }
                 val inputArr = buildCaptureInputArray(targets)
                 val res = withContext(Dispatchers.IO) {
-                    CaptureImportService.classify(ctx, inputArr)
+                    CaptureImportService.classifyNotes(ctx, inputArr)
                 }
                 if (!res.optBoolean("ok", false)) {
-                    Utils.toast(ctx, res.optString("message", "自动归类未完成"))
+                    Utils.toast(ctx, res.optString("message", "智能归类未完成"))
                     return@launch
                 }
                 val drafts = res.optJSONArray("drafts") ?: JSONArray()
@@ -645,25 +662,30 @@ class OverlayPendingCaptureController(
                 for (i in 0 until drafts.length()) {
                     val d = drafts.optJSONObject(i) ?: continue
                     val cid = d.optString("captureId", "")
-                    val target = pendingItems.firstOrNull { it.id == cid } ?: continue
+                    val target = targets.firstOrNull { it.id == cid } ?: continue
+                    val current = pendingItems.firstOrNull { it.id == cid } ?: continue
+                    if (current.note?.trim() != target.note?.trim()) continue
                     val cat = d.optString("categoryName", "").trim().takeIf { it.isNotEmpty() }
-                    val rem = d.optString("remarks", "").trim().takeIf { it.isNotEmpty() }
-                    if (cat != null) {
-                        target.categoryName = cat
-                        updatedCount++
-                    }
-                    if (target.note.isNullOrBlank() && rem != null) {
-                        target.note = rem
-                    }
+                        ?: continue
+                    current.categoryName = cat
                     CapturePluginClient.updateCaptureDraft(
                         context = ctx,
-                        captureId = target.id,
-                        note = target.note,
-                        assetName = target.assetName,
-                        categoryName = target.categoryName,
+                        captureId = current.id,
+                        note = current.note,
+                        assetName = current.assetName,
+                        categoryName = cat,
+                        categorySource = "AI",
                     )
+                    updatedCount++
                 }
-                Utils.toast(ctx, "✨ 已自动归类 $updatedCount 笔")
+                Utils.toast(
+                    ctx,
+                    if (updatedCount == 0) {
+                        "AI 暂无法判断，账单保持待归类"
+                    } else {
+                        "✨ 已智能归类 $updatedCount 笔"
+                    }
+                )
             } catch (e: Exception) {
                 Utils.toast(ctx, "归类失败：${e.message ?: e.javaClass.simpleName}")
             } finally {
@@ -678,7 +700,8 @@ class OverlayPendingCaptureController(
     }
 
     /**
-     * 一键将当前待记入账（共用 [CaptureImportService.importBills]，严格走同一套校验与幂等事务）。
+     * 一键入账：只入账已有分类的待记；缺分类的不静默丢弃，
+     * 入账完成后弹窗列出并逐笔补分类，取消/未选则保留 PENDING。
      */
     private fun commitAllPendingBills() {
         if (isBusy || pendingItems.isEmpty()) return
@@ -688,27 +711,12 @@ class OverlayPendingCaptureController(
         scope.launch {
             try {
                 noteSyncJobs.values.forEach { it.join() }
-                val unclassified = pendingItems.filter { it.categoryName.isNullOrBlank() }
-                if (unclassified.isNotEmpty() && Prefs.getAiKey(ctx).isNotBlank()) {
-                    val inputArr = buildCaptureInputArray(unclassified)
-                    val aiRes = withContext(Dispatchers.IO) {
-                        CaptureImportService.classify(ctx, inputArr)
-                    }
-                    if (aiRes.optBoolean("ok", false)) {
-                        val drafts = aiRes.optJSONArray("drafts") ?: JSONArray()
-                        for (i in 0 until drafts.length()) {
-                            val d = drafts.optJSONObject(i) ?: continue
-                            val cid = d.optString("captureId", "")
-                            val item = pendingItems.firstOrNull { it.id == cid } ?: continue
-                            val cat = d.optString("categoryName", "").trim().takeIf { it.isNotEmpty() }
-                            if (cat != null) item.categoryName = cat
-                        }
-                    }
+                val categorized = pendingItems.filter {
+                    !it.categoryName.isNullOrBlank() && it.amountCents > 0L
                 }
 
                 val billsArray = JSONArray()
-                for (item in pendingItems) {
-                    if (item.amountCents <= 0L) continue
+                categorized.forEach { item ->
                     val finalRemark = item.note?.takeIf { it.isNotBlank() }
                         ?: item.merchant?.takeIf { it.isNotBlank() }
                         ?: ""
@@ -725,50 +733,59 @@ class OverlayPendingCaptureController(
                             putOpt("toAssetName", item.toAssetName)
                             putOpt("categoryName", item.categoryName)
                             put("remarks", finalRemark)
+                            putOpt("note", item.note)
                             putOpt("bookName", item.bookName)
                         }
                     )
                 }
 
-                val requestId = UUID.randomUUID().toString()
-                val importRes = withContext(Dispatchers.IO) {
-                    CaptureImportService.importBills(ctx, billsArray, requestId)
-                }
-                val resultsArr = importRes.optJSONArray("results") ?: JSONArray()
                 val recordedIds = mutableListOf<String>()
                 var firstError: String? = null
-                for (i in 0 until resultsArr.length()) {
-                    val r = resultsArr.optJSONObject(i) ?: continue
-                    val cid = r.optString("captureId", "")
-                    val st = r.optString("status", "")
-                    if (st == ImportItemStatus.CREATED || st == ImportItemStatus.DUPLICATE) {
-                        recordedIds.add(cid)
-                    } else if (firstError == null) {
-                        firstError = r.optString("error", "").takeIf { it.isNotBlank() }
+                if (billsArray.length() > 0) {
+                    val requestId = UUID.randomUUID().toString()
+                    val importRes = withContext(Dispatchers.IO) {
+                        CaptureImportService.importBills(ctx, billsArray, requestId)
+                    }
+                    val resultsArr = importRes.optJSONArray("results") ?: JSONArray()
+                    for (i in 0 until resultsArr.length()) {
+                        val r = resultsArr.optJSONObject(i) ?: continue
+                        val cid = r.optString("captureId", "")
+                        val st = r.optString("status", "")
+                        if (st == ImportItemStatus.CREATED || st == ImportItemStatus.DUPLICATE) {
+                            recordedIds.add(cid)
+                        } else if (firstError == null) {
+                            firstError = r.optString("error", "").takeIf { it.isNotBlank() }
+                        }
+                    }
+
+                    if (recordedIds.isNotEmpty()) {
+                        CapturePluginClient.markCapturesRecorded(ctx, recordedIds)
+                        pendingItems.removeAll { it.id in recordedIds.toSet() }
                     }
                 }
 
                 if (recordedIds.isNotEmpty()) {
-                    CapturePluginClient.markCapturesRecorded(ctx, recordedIds)
-                    pendingItems.removeAll { it.id in recordedIds.toSet() }
-                }
-
-                if (pendingItems.isEmpty() && recordedIds.isNotEmpty()) {
-                    Utils.toast(ctx, "✓ 已一键入账 ${recordedIds.size} 笔账单")
-                    onCloseOverlay(true)
-                } else if (recordedIds.isNotEmpty()) {
-                    Utils.toast(ctx, "已入账 ${recordedIds.size} 笔，剩余 ${pendingItems.size} 笔待补分类或检查账户")
-                    renderBatchDrawer()
+                    Utils.toast(ctx, "✓ 已入账 ${recordedIds.size} 笔")
+                } else if (categorized.isEmpty()) {
+                    Utils.toast(ctx, "没有已分类的账单可入账")
                 } else {
                     val reason = when {
-                        firstError == "missing_category" -> "请先点「自动归类」或写备注匹配分类"
+                        firstError == "missing_category" -> "请先点「智能归类」或写备注匹配分类"
                         firstError?.startsWith("asset_not_found:") == true ->
                             "账户「${firstError.removePrefix("asset_not_found:")}」在敲敲记账中不存在"
                         !firstError.isNullOrBlank() -> firstError
                         else -> "请先补齐分类"
                     }
                     Utils.toast(ctx, "暂未入账：$reason")
-                    renderBatchDrawer()
+                }
+
+                val missing = pendingItems.filter {
+                    it.categoryName.isNullOrBlank() && it.billType != LocalBillType.TYPE_TRANSFER
+                }
+                when {
+                    missing.isNotEmpty() -> promptMissingCategories(missing)
+                    pendingItems.isEmpty() && recordedIds.isNotEmpty() -> onCloseOverlay(true)
+                    else -> renderBatchDrawer()
                 }
             } catch (e: Exception) {
                 Utils.toast(ctx, "批量入账失败：${e.message ?: e.javaClass.simpleName}")
@@ -779,19 +796,92 @@ class OverlayPendingCaptureController(
         }
     }
 
+    /** 一键入账后缺分类的列表弹窗；点“逐笔补分类”进入顺序补分类。 */
+    private fun promptMissingCategories(items: List<CapturePluginClient.PendingCaptureItem>) {
+        if (items.isEmpty()) {
+            renderBatchDrawer()
+            return
+        }
+        val preview = buildString {
+            items.take(6).forEach { item ->
+                append("· ").append(item.formattedAmount()).append("  ")
+                append(item.merchant?.takeIf { it.isNotBlank() } ?: "未知商户")
+                item.note?.takeIf { it.isNotBlank() }?.let {
+                    append("（").append(it.take(12)).append("）")
+                }
+                append('\n')
+            }
+            if (items.size > 6) append("… 还有 ${items.size - 6} 笔")
+        }
+        AlertDialog.Builder(ContextThemeWrapper(ctx, R.style.Theme_TapAccounting))
+            .setTitle("${items.size} 笔缺少分类，已跳过入账")
+            .setMessage("以下待记仍保留在列表里，需逐笔补分类：\n\n$preview")
+            .setPositiveButton("逐笔补分类") { _, _ ->
+                promptMissingCategoryAt(items, 0, 0)
+            }
+            .setNegativeButton("稍后") { _, _ -> renderBatchDrawer() }
+            .setOnCancelListener { renderBatchDrawer() }
+            .show()
+    }
+
+    private fun promptMissingCategoryAt(
+        items: List<CapturePluginClient.PendingCaptureItem>,
+        index: Int,
+        addedCount: Int,
+    ) {
+        if (index >= items.size) {
+            if (addedCount > 0) {
+                Utils.toast(ctx, "已补 $addedCount 笔分类，可再次点“一键入账”")
+            } else {
+                Utils.toast(ctx, "未补分类，缺分类账单仍保留待记")
+            }
+            renderBatchDrawer()
+            return
+        }
+        val item = items[index]
+        if (pendingItems.none { it.id == item.id }) {
+            promptMissingCategoryAt(items, index + 1, addedCount)
+            return
+        }
+
+        OverlayDialogs.showGridCategoryPicker(
+            ctx = ctx,
+            currentSelectionText = item.categoryName.orEmpty(),
+            type = item.billType ?: LocalBillType.TYPE_EXPENSE,
+            allowClear = false,
+            onCancel = {
+                promptMissingCategoryAt(items, index + 1, addedCount)
+            },
+        ) { selected ->
+            if (selected.isBlank()) {
+                promptMissingCategoryAt(items, index + 1, addedCount)
+            } else {
+                scope.launch {
+                    val res = CapturePluginClient.updateCaptureDraft(
+                        context = ctx,
+                        captureId = item.id,
+                        note = item.note,
+                        assetName = item.assetName,
+                        categoryName = selected,
+                    )
+                    if (res.ok) {
+                        item.categoryName = res.categoryName ?: selected
+                        promptMissingCategoryAt(items, index + 1, addedCount + 1)
+                    } else {
+                        Utils.toast(ctx, "补分类失败，该笔保留待归类")
+                        promptMissingCategoryAt(items, index + 1, addedCount)
+                    }
+                }
+            }
+        }
+    }
+
     private fun buildCaptureInputArray(items: List<CapturePluginClient.PendingCaptureItem>): JSONArray =
         JSONArray().apply {
             items.forEach { item ->
                 put(
                     JSONObject().apply {
                         put("captureId", item.id)
-                        put("amountCents", item.amountCents)
-                        put("paidAt", item.paidAt)
-                        put("source", item.source)
-                        putOpt("merchant", item.merchant)
-                        putOpt("paymentMethodRaw", item.paymentMethodRaw)
-                        putOpt("assetName", item.assetName)
-                        putOpt("categoryName", item.categoryName)
                         putOpt("note", item.note)
                         putOpt("billType", item.billType)
                     }

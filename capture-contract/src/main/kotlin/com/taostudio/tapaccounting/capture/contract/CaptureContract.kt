@@ -91,12 +91,16 @@ object CaptureContract {
     const val METHOD_IGNORE_CAPTURE: String = "ignoreCapture"
     const val METHOD_MARK_CAPTURES_RECORDED: String = "markCapturesRecorded"
     const val METHOD_CLASSIFY_CAPTURES: String = "classifyCaptures"
+    /** 轻量智能归类：只把备注与分类候选发给 AI，不传金额/时间/资产/商户。 */
+    const val METHOD_CLASSIFY_NOTES: String = "classifyNotes"
 
     const val EXTRA_REQUEST_ID: String = "requestId"
     const val EXTRA_CAPTURE_ID: String = "captureId"
     const val EXTRA_CAPTURE_IDS: String = "captureIds"
     const val EXTRA_PREFILL: String = "prefill"
     const val EXTRA_BILL_ID: String = "billId"
+    /** `classifyNotes` 的请求数组（每项 captureId/note/billType）。 */
+    const val EXTRA_NOTES: String = "notes"
 
     // ---- App -> 插件：广播 ----
     const val ACTION_PENDING_COUNT_CHANGED: String = "$PLUGIN_PACKAGE.action.PENDING_COUNT_CHANGED"

@@ -23,6 +23,7 @@ import android.widget.TextView
 import android.widget.Toast
 import com.taostudio.tapaccounting.capture.CaptureApp
 import com.taostudio.tapaccounting.capture.bridge.CaptureBridgeClient
+import com.taostudio.tapaccounting.capture.bridge.CaptureNoteClassifier
 import com.taostudio.tapaccounting.capture.bridge.CaptureReconciler
 import com.taostudio.tapaccounting.capture.contract.AccountingContext
 import com.taostudio.tapaccounting.capture.contract.CapturePayload
@@ -339,6 +340,7 @@ class PendingListActivity : Activity() {
             .mapNotNull { it.amountCents }
             .sum()
         val readyItems = items.filter { !it.categoryName.isNullOrBlank() && (it.amountCents ?: 0L) > 0L }
+        val missingCategoryItems = items.filter { it.needsCategory() }
         val unmappedCount = items.count { it.categoryName.isNullOrBlank() }
 
         val card = CaptureUi.card(
@@ -412,7 +414,7 @@ class PendingListActivity : Activity() {
         }
         val aiBtn = CaptureUi.button(
             activity = this,
-            text = if (isAiBusy) "归类中…" else "自动归类 (${items.size})",
+            text = if (isAiBusy) "归类中…" else "智能归类 (${items.size})",
             textColor = CaptureUi.BRAND_DARK,
             bgColor = CaptureUi.BRAND_SOFT,
             strokeColor = CaptureUi.BRAND_BORDER,
@@ -423,17 +425,17 @@ class PendingListActivity : Activity() {
             LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginEnd = dp(8) },
         )
 
-        val canImportAll = readyItems.isNotEmpty()
+        val canImportAll = readyItems.isNotEmpty() || missingCategoryItems.isNotEmpty()
         val importAllBtn = CaptureUi.button(
             activity = this,
             text = "一键入账 (${readyItems.size})",
             textColor = if (canImportAll) Color.WHITE else CaptureUi.TEXT_MUTED,
             bgColor = if (canImportAll) CaptureUi.BRAND else CaptureUi.BG_SEGMENT,
             onClick = {
-                if (readyItems.isEmpty()) {
-                    toast("请先点左侧“自动归类”或为账单选择分类")
+                if (!canImportAll) {
+                    toast("请先点左侧“智能归类”或为账单选择分类")
                 } else {
-                    batchImportReadyItems(readyItems)
+                    batchImportWithMissing(readyItems, missingCategoryItems)
                 }
             },
         )
@@ -676,7 +678,8 @@ class PendingListActivity : Activity() {
         chipRow.addView(categoryChip)
         card.addView(chipRow)
 
-        // 第三行：无感自动保存备注框（打字 300ms 自动落库并匹配本地分类规则，无需手动点保存）
+        // 第三行：无感自动保存备注框（打字 280ms 只落库并匹配本地规则；AI 只在失焦/完成时调一次）
+        var aiRequestedFor: String? = null
         val noteInput = EditText(this).apply {
             setText(item.note.orEmpty())
             hint = "写备注，命中关键词会自动归类"
@@ -687,20 +690,13 @@ class PendingListActivity : Activity() {
             imeOptions = EditorInfo.IME_ACTION_DONE
             setPadding(dp(11), dp(8), dp(11), dp(8))
             background = CaptureUi.roundedBg(CaptureUi.BG_SUBTLE, dp(9), dp(1), CaptureUi.BORDER)
-            setOnFocusChangeListener { _, hasFocus ->
-                background = CaptureUi.roundedBg(
-                    if (hasFocus) Color.WHITE else CaptureUi.BG_SUBTLE,
-                    dp(9),
-                    dp(1),
-                    if (hasFocus) CaptureUi.BORDER_FOCUS else CaptureUi.BORDER,
-                )
-            }
         }
         noteInput.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = Unit
             override fun afterTextChanged(s: Editable?) {
                 val newNote = s?.toString()?.trim().orEmpty()
+                aiRequestedFor = null
                 noteSaveJobs[item.id]?.cancel()
                 noteSaveJobs[item.id] = scope.launch {
                     delay(280L)
@@ -716,6 +712,49 @@ class PendingListActivity : Activity() {
                 }
             }
         })
+
+        fun triggerAiClassify() {
+            val note = noteInput.text?.toString()?.trim().orEmpty()
+            if (note.isEmpty() || !currentCategory.isNullOrBlank()) return
+            if (aiRequestedFor == note) return
+            aiRequestedFor = note
+            scope.launch {
+                // 先等 280ms 防抖落库，确保 AI 看到的是这条备注，且本地规则已先跑过。
+                noteSaveJobs[item.id]?.join()
+                val updated = withContext(Dispatchers.IO) {
+                    val repository = CaptureApp.from(this@PendingListActivity).repository
+                    CaptureNoteClassifier.classifyAndApply(
+                        context = this@PendingListActivity,
+                        client = bridge,
+                        repository = repository,
+                        captureId = item.id,
+                    )
+                }
+                if (updated != null && updated.categoryName != currentCategory) {
+                    currentCategory = updated.categoryName
+                    styleCategoryChip(categoryChip, currentCategory)
+                }
+            }
+        }
+
+        noteInput.setOnFocusChangeListener { _, hasFocus ->
+            noteInput.background = CaptureUi.roundedBg(
+                if (hasFocus) Color.WHITE else CaptureUi.BG_SUBTLE,
+                dp(9),
+                dp(1),
+                if (hasFocus) CaptureUi.BORDER_FOCUS else CaptureUi.BORDER,
+            )
+            if (!hasFocus) triggerAiClassify()
+        }
+        noteInput.setOnEditorActionListener { _, actionId, _ ->
+            if (actionId == EditorInfo.IME_ACTION_DONE) {
+                triggerAiClassify()
+                noteInput.clearFocus()
+                true
+            } else {
+                false
+            }
+        }
         card.addView(noteInput)
 
         // 第四行：操作栏（直接入账 / 悬浮窗改 / 不计）
@@ -826,12 +865,18 @@ class PendingListActivity : Activity() {
             .show()
     }
 
-    private fun showCategoryPickerDialog(item: PaymentCapture, ctx: AccountingContext?) {
+    private fun showCategoryPickerDialog(
+        item: PaymentCapture,
+        ctx: AccountingContext?,
+        title: String = "选择账单分类",
+        onResult: ((String?) -> Unit)? = null,
+    ) {
         val isRefund = item.subType == LocalBillType.SUBTYPE_REFUND || item.needsRefundLink
         val targetType = if (isRefund) null else item.billType?.takeIf { it in 0..1 }
         val categories = ruleViews.buildCategoryDisplayList(ctx, targetType)
         if (categories.isEmpty()) {
             toast("尚未从敲敲记账读取到分类列表，请确认敲敲记账已安装")
+            onResult?.invoke(null)
             return
         }
         val candidateKeyword = item.note?.trim()?.takeIf { it.isNotEmpty() }
@@ -851,29 +896,57 @@ class PendingListActivity : Activity() {
         }
         layout.addView(rememberBox)
 
+        var finished = false
+        fun finish(result: String?) {
+            if (finished) return
+            finished = true
+            onResult?.invoke(result)
+        }
+
         AlertDialog.Builder(this)
-            .setTitle("选择账单分类")
+            .setTitle(title)
             .setView(layout)
             .setItems(categories.toTypedArray()) { _, which ->
                 val chosenCat = categories[which]
-                mutate { repo ->
-                    repo.updateDraft(
-                        context = this@PendingListActivity,
-                        id = item.id,
-                        note = item.note,
-                        assetName = item.assetName,
-                        categoryName = chosenCat,
-                        categorySource = CategorySource.MANUAL,
-                        rememberCategoryKeyword = if (rememberBox.isChecked) candidateKeyword else null,
-                    )
+                if (onResult == null) {
+                    mutate { repo ->
+                        repo.updateDraft(
+                            context = this@PendingListActivity,
+                            id = item.id,
+                            note = item.note,
+                            assetName = item.assetName,
+                            categoryName = chosenCat,
+                            categorySource = CategorySource.MANUAL,
+                            rememberCategoryKeyword = if (rememberBox.isChecked) candidateKeyword else null,
+                        )
+                    }
+                } else {
+                    scope.launch {
+                        val updated = runCatching {
+                            withContext(Dispatchers.IO) {
+                                CaptureApp.from(this@PendingListActivity).repository.updateDraft(
+                                    context = this@PendingListActivity,
+                                    id = item.id,
+                                    note = item.note,
+                                    assetName = item.assetName,
+                                    categoryName = chosenCat,
+                                    categorySource = CategorySource.MANUAL,
+                                    rememberCategoryKeyword = if (rememberBox.isChecked) candidateKeyword else null,
+                                )
+                            }
+                        }.getOrNull()
+                        if (updated == null) toast("保存分类失败")
+                        finish(if (updated != null) chosenCat else null)
+                    }
                 }
             }
-            .setNegativeButton("取消", null)
+            .setNegativeButton("取消") { _, _ -> finish(null) }
+            .setOnCancelListener { _ -> finish(null) }
             .show()
     }
 
     // ════════════════════════════════════════════════════════
-    //  批量自动归类 & 批量一键入账
+    //  批量智能归类 & 批量一键入账
     // ════════════════════════════════════════════════════════
 
     private fun runBatchAiClassify(items: List<PaymentCapture>) {
@@ -881,39 +954,65 @@ class PendingListActivity : Activity() {
         latestSnapshot?.let { renderCurrentTab(it) }
         scope.launch {
             try {
-                // 先等待所有正在防抖输入的备注落库，确保发给 AI 的是最新的备注
+                // 先等待所有正在防抖输入的备注落库，确保发给 AI 的是最新的备注。
                 noteSaveJobs.values.forEach { it.join() }
                 val freshItems = withContext(Dispatchers.IO) {
                     val repo = CaptureApp.from(this@PendingListActivity).repository
                     items.mapNotNull { repo.findById(it.id) }
                 }
-                toast("正在调用敲敲记账归类 ${freshItems.size} 笔账单…")
-                val outcome = bridge.classifyCaptures(freshItems)
+                // 没备注不调 AI；已有本地规则/手动分类的也不重复调。
+                val targets = freshItems.filter {
+                    !it.note.isNullOrBlank() &&
+                        it.categoryName.isNullOrBlank() &&
+                        it.billType != LocalBillType.TYPE_TRANSFER
+                }
+                if (targets.isEmpty()) {
+                    toast("没有可智能归类的备注；没备注的账单保持待归类")
+                    return@launch
+                }
+                toast("正在智能归类 ${targets.size} 笔…")
+                val outcome = bridge.classifyNotes(
+                    targets.map { item ->
+                        CaptureBridgeClient.NoteClassifyInput(
+                            captureId = item.id,
+                            note = item.note,
+                            billType = item.billType,
+                        )
+                    }
+                )
                 if (!outcome.ok) {
-                    toast("自动归类未完成：${outcome.error ?: "请检查敲敲记账 AI 设置"}")
+                    toast("智能归类未完成：${outcome.error ?: "请检查敲敲记账 AI 设置"}")
                     return@launch
                 }
                 var updatedCount = 0
-                if (outcome.drafts.isNotEmpty()) {
-                    withContext(Dispatchers.IO) {
-                        val repo = CaptureApp.from(this@PendingListActivity).repository
-                        for (d in outcome.drafts) {
-                            val cid = d.captureId
-                            val cat = d.categoryName?.takeIf { it.isNotBlank() } ?: continue
-                            val existing = freshItems.firstOrNull { it.id == cid } ?: continue
-                            repo.updateDraft(
-                                context = this@PendingListActivity,
-                                id = cid,
-                                note = existing.note ?: d.remarks,
-                                assetName = existing.assetName ?: d.assetName,
-                                categoryName = cat,
-                                categorySource = CategorySource.AI,
-                            )
-                            updatedCount++
-                        }
+                withContext(Dispatchers.IO) {
+                    val repo = CaptureApp.from(this@PendingListActivity).repository
+                    for (item in targets) {
+                        val category = outcome.categories[item.id]?.takeIf { it.isNotBlank() }
+                            ?: continue
+                        // AI 返回时用户可能又改了备注或已手动分类：以数据库最新状态为准。
+                        val latest = repo.findById(item.id) ?: continue
+                        if (latest.note?.trim() != item.note?.trim()) continue
+                        if (!latest.categoryName.isNullOrBlank()) continue
+                        repo.updateDraft(
+                            context = this@PendingListActivity,
+                            id = latest.id,
+                            note = latest.note,
+                            assetName = latest.assetName,
+                            categoryName = category,
+                            categorySource = CategorySource.AI,
+                        )
+                        updatedCount++
                     }
                 }
-                toast("已自动归类 $updatedCount 笔，确认后可点“一键入账”")
+                val unresolved = targets.size - updatedCount
+                toast(
+                    if (unresolved == 0) {
+                        "已智能归类 $updatedCount 笔，确认后可点“一键入账”"
+                    } else {
+                        "已智能归类 $updatedCount 笔，$unresolved 笔暂无法判断（保持待归类）"
+                    }
+                )
             } finally {
                 isAiBusy = false
                 load()
@@ -921,57 +1020,134 @@ class PendingListActivity : Activity() {
         }
     }
 
-    private fun batchImportReadyItems(readyItems: List<PaymentCapture>) {
+    /**
+     * 一键入账：只入账已有分类的条目；缺分类的不静默丢弃，
+     * 入账完成后弹窗列出并逐笔让用户补分类，取消/未选则保留 PENDING。
+     */
+    private fun batchImportWithMissing(
+        readyItems: List<PaymentCapture>,
+        missingItems: List<PaymentCapture>,
+    ) {
         scope.launch {
             noteSaveJobs.values.forEach { it.join() }
-            val bills = readyItems.map { item ->
-                ImportBill(
-                    captureId = item.id,
-                    type = item.billType ?: LocalBillType.TYPE_EXPENSE,
-                    subType = item.subType ?: LocalBillType.SUBTYPE_NORMAL,
-                    needsRefundLink = item.needsRefundLink,
-                    amountCents = item.amountCents ?: 0L,
-                    currency = item.currency,
-                    paidAt = item.paidAt,
-                    assetName = item.assetName ?: item.paymentMethodRaw,
-                    toAssetName = item.toAssetName,
-                    categoryName = item.categoryName,
-                    remarks = item.note?.takeIf { it.isNotBlank() } ?: item.merchant.orEmpty(),
-                    bookName = item.bookName,
-                )
+            val repo = CaptureApp.from(this@PendingListActivity).repository
+            val requestedIds = (readyItems + missingItems).map { it.id }.distinct()
+            val freshItems = withContext(Dispatchers.IO) {
+                requestedIds.mapNotNull { repo.findById(it) }
             }
-            val result = bridge.importBills(bills, UUID.randomUUID().toString())
-            if (result == null) {
-                toast("敲敲记账桥接不可用，未入账")
-                return@launch
+            val freshReady = freshItems.filter {
+                !it.categoryName.isNullOrBlank() && (it.amountCents ?: 0L) > 0L
             }
-            val resultsArr = result.optJSONArray("results")
-            var successCount = 0
-            var firstError: String? = null
-            if (resultsArr != null) {
-                withContext(Dispatchers.IO) {
-                    val repo = CaptureApp.from(this@PendingListActivity).repository
-                    for (i in 0 until resultsArr.length()) {
-                        val r = resultsArr.optJSONObject(i) ?: continue
-                        val cid = r.optString("captureId")
-                        val st = r.optString("status")
-                        if (st == ImportItemStatus.CREATED || st == ImportItemStatus.DUPLICATE) {
-                            repo.updateStatus(cid, CaptureStatus.RECORDED)
-                            successCount++
-                        } else if (firstError == null) {
-                            firstError = r.optString("error").takeIf { it.isNotBlank() }
+            val freshMissing = freshItems.filter { it.needsCategory() }
+
+            if (freshReady.isNotEmpty()) {
+                val bills = freshReady.map { item ->
+                    ImportBill(
+                        captureId = item.id,
+                        type = item.billType ?: LocalBillType.TYPE_EXPENSE,
+                        subType = item.subType ?: LocalBillType.SUBTYPE_NORMAL,
+                        needsRefundLink = item.needsRefundLink,
+                        amountCents = item.amountCents ?: 0L,
+                        currency = item.currency,
+                        paidAt = item.paidAt,
+                        assetName = item.assetName ?: item.paymentMethodRaw,
+                        toAssetName = item.toAssetName,
+                        categoryName = item.categoryName,
+                        remarks = item.note?.takeIf { it.isNotBlank() } ?: item.merchant.orEmpty(),
+                        note = item.note,
+                        bookName = item.bookName,
+                    )
+                }
+                val result = bridge.importBills(bills, UUID.randomUUID().toString())
+                if (result == null) {
+                    toast("敲敲记账桥接不可用，未入账")
+                } else {
+                    val resultsArr = result.optJSONArray("results")
+                    var successCount = 0
+                    var firstError: String? = null
+                    if (resultsArr != null) {
+                        withContext(Dispatchers.IO) {
+                            for (i in 0 until resultsArr.length()) {
+                                val r = resultsArr.optJSONObject(i) ?: continue
+                                val cid = r.optString("captureId")
+                                val st = r.optString("status")
+                                if (st == ImportItemStatus.CREATED || st == ImportItemStatus.DUPLICATE) {
+                                    repo.updateStatus(cid, CaptureStatus.RECORDED)
+                                    successCount++
+                                } else if (firstError == null) {
+                                    firstError = r.optString("error").takeIf { it.isNotBlank() }
+                                }
+                            }
                         }
                     }
+                    val failCount = bills.size - successCount
+                    if (failCount == 0) {
+                        toast("✓ 已成功入账 $successCount 笔")
+                    } else {
+                        toast("入账 $successCount 笔，失败 $failCount 笔（${humanizeImportError(firstError)}）")
+                    }
                 }
+            } else if (freshMissing.isEmpty()) {
+                toast("没有可入账的账单")
             }
-            val failCount = bills.size - successCount
-            if (failCount == 0) {
-                toast("✓ 已成功入账 $successCount 笔")
+
+            load()
+            if (freshMissing.isNotEmpty()) {
+                promptMissingCategories(freshMissing)
+            }
+        }
+    }
+
+    private fun promptMissingCategories(items: List<PaymentCapture>) {
+        if (items.isEmpty()) return
+        val preview = buildString {
+            items.take(8).forEach { item ->
+                append("· ").append(formatAmount(item.amountCents))
+                item.merchant?.takeIf { it.isNotBlank() }?.let { append(" ").append(it.take(14)) }
+                item.note?.takeIf { it.isNotBlank() }?.let {
+                    append("（").append(it.take(14)).append("）")
+                }
+                append('\n')
+            }
+            if (items.size > 8) append("… 还有 ${items.size - 8} 笔")
+        }
+        AlertDialog.Builder(this)
+            .setTitle("${items.size} 笔缺少分类，已跳过入账")
+            .setMessage("以下待记仍保留在列表里，需逐笔补分类：\n\n$preview")
+            .setPositiveButton("逐笔补分类") { _, _ ->
+                promptMissingCategoryAt(items, 0, 0)
+            }
+            .setNegativeButton("稍后", null)
+            .show()
+    }
+
+    private fun promptMissingCategoryAt(
+        items: List<PaymentCapture>,
+        index: Int,
+        addedCount: Int,
+    ) {
+        if (index >= items.size) {
+            if (addedCount > 0) {
+                toast("已补 $addedCount 笔分类，可再次点“一键入账”")
             } else {
-                toast("入账 $successCount 笔，失败 $failCount 笔（${humanizeImportError(firstError)}）")
+                toast("未补分类，缺分类账单仍保留在待记")
             }
             load()
+            return
         }
+        val item = items[index]
+        showCategoryPickerDialog(
+            item = item,
+            ctx = latestSnapshot?.accountingContext,
+            title = "补分类 ${index + 1}/${items.size}",
+            onResult = { selected ->
+                promptMissingCategoryAt(
+                    items = items,
+                    index = index + 1,
+                    addedCount = addedCount + if (selected != null) 1 else 0,
+                )
+            },
+        )
     }
 
     // ════════════════════════════════════════════════════════
@@ -1006,7 +1182,7 @@ class PendingListActivity : Activity() {
         if (type in setOf(LocalBillType.TYPE_EXPENSE, LocalBillType.TYPE_INCOME) &&
             item.categoryName.isNullOrBlank()
         ) {
-            toast("请先为该笔账单选择分类，或点顶部“自动归类”")
+            toast("请先为该笔账单选择分类，或点顶部“智能归类”")
             showCategoryPickerDialog(item, latestSnapshot?.accountingContext)
             return
         }
@@ -1033,6 +1209,7 @@ class PendingListActivity : Activity() {
                 toAssetName = item.toAssetName,
                 categoryName = item.categoryName,
                 remarks = item.note?.takeIf { it.isNotBlank() } ?: item.merchant.orEmpty(),
+                note = item.note,
                 bookName = item.bookName,
             )
             performDirectImport(item, bill)
@@ -1242,6 +1419,10 @@ class PendingListActivity : Activity() {
         if (cents == null) return "¥0.00"
         return "¥" + String.format(Locale.CHINA, "%.2f", cents / 100.0)
     }
+
+    /** 转入/还款不需要消费分类；其余空分类的待记在一键入账时要弹窗补分类。 */
+    private fun PaymentCapture.needsCategory(): Boolean =
+        categoryName.isNullOrBlank() && billType != LocalBillType.TYPE_TRANSFER
 
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density + 0.5f).toInt()
 

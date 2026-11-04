@@ -30,6 +30,8 @@ data class ImportBill(
     val categoryId: Long? = null,
     val categoryName: String? = null,
     val remarks: String = "",
+    /** 用户备注原文；只用于缺分类时的轻量智能归类，不写入账单备注（账单备注用 [remarks]）。 */
+    val note: String? = null,
     val bookName: String? = null,
     val feeCents: Long = 0,
     /** 退款关联的原支出账单；不能只靠名称猜。 */

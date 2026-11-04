@@ -38,6 +38,20 @@ class CaptureBridgeClient(context: Context) {
         val remarks: String?,
     )
 
+    /** 轻量智能归类的输入：只带用户备注和账单类型，不带金额/时间/资产/商户。 */
+    data class NoteClassifyInput(
+        val captureId: String,
+        val note: String?,
+        val billType: Int? = null,
+    )
+
+    data class ClassifyNotesResult(
+        val ok: Boolean,
+        /** captureId -> 分类路径；没有结果的条目不在 map 里。 */
+        val categories: Map<String, String> = emptyMap(),
+        val error: String? = null,
+    )
+
     /** App 桥接是否可用。 */
     suspend fun ping(): Boolean = pingDetail().ok
 
@@ -204,6 +218,61 @@ class CaptureBridgeClient(context: Context) {
         }
 
     /**
+     * 轻量智能归类：只把备注与账单类型发给 App，不带金额/时间/资产/商户。
+     *
+     * 没有备注的条目不请求 AI；调用失败、超时或 App 未配置 AI 时返回 ok=false，
+     * 调用方应保持这些待记原样（PENDING / 待归类）。
+     */
+    suspend fun classifyNotes(inputs: List<NoteClassifyInput>): ClassifyNotesResult =
+        withContext(Dispatchers.IO) {
+            val valid = inputs
+                .asSequence()
+                .filter { it.captureId.isNotBlank() && !it.note.isNullOrBlank() }
+                .toList()
+            if (valid.isEmpty()) return@withContext ClassifyNotesResult(ok = true)
+
+            val arr = JSONArray()
+            valid.forEach { input ->
+                arr.put(
+                    JSONObject().apply {
+                        put("captureId", input.captureId)
+                        put("note", input.note!!.trim())
+                        input.billType?.let { put("billType", it) }
+                    }
+                )
+            }
+            val extras = Bundle().apply {
+                putString(CaptureContract.EXTRA_NOTES, arr.toString())
+            }
+            val res = try {
+                callForObject(CaptureContract.METHOD_CLASSIFY_NOTES, arr.toString(), extras)
+            } catch (t: kotlinx.coroutines.CancellationException) {
+                throw t
+            } catch (t: Throwable) {
+                Log.w(TAG, "classifyNotes failed", t)
+                null
+            } ?: return@withContext ClassifyNotesResult(ok = false, error = "无法连接敲敲记账")
+
+            if (!res.optBoolean("ok", false)) {
+                val msg = res.optString("message", "").ifBlank {
+                    res.optString("error", "智能归类未完成")
+                }
+                return@withContext ClassifyNotesResult(ok = false, error = msg)
+            }
+            val categories = LinkedHashMap<String, String>()
+            val drafts = res.optJSONArray("drafts") ?: JSONArray()
+            for (i in 0 until drafts.length()) {
+                val obj = drafts.optJSONObject(i) ?: continue
+                val captureId = obj.optString("captureId", "").trim()
+                if (captureId.isEmpty()) continue
+                if (!obj.has("categoryName") || obj.isNull("categoryName")) continue
+                val categoryName = obj.optString("categoryName", "").trim()
+                if (categoryName.isNotEmpty()) categories[captureId] = categoryName
+            }
+            ClassifyNotesResult(ok = true, categories = categories)
+        }
+
+    /**
      * 查询 [captureIds] 在 App 侧 `external_imports` 里的状态。
      */
     suspend fun getImportStatus(captureIds: List<String>): Map<String, String> =
@@ -283,6 +352,7 @@ class CaptureBridgeClient(context: Context) {
                     putOpt("categoryId", bill.categoryId)
                     putOpt("categoryName", bill.categoryName)
                     put("remarks", bill.remarks)
+                    putOpt("note", bill.note)
                     putOpt("bookName", bill.bookName)
                     put("feeCents", bill.feeCents)
                     putOpt("relatedBillId", bill.relatedBillId)

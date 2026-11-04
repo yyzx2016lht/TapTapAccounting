@@ -3,6 +3,7 @@ package com.taostudio.tapaccounting
 import android.content.Context
 import android.util.Base64
 import com.google.gson.JsonObject
+import com.taostudio.tapaccounting.data.local.entity.Category
 import org.json.JSONObject
 import retrofit2.HttpException
 import java.io.File
@@ -70,6 +71,48 @@ internal fun JSONObject.optNullableString(name: String): String? {
 internal fun JSONObject.optNullableDouble(name: String): Double? {
     if (!has(name) || isNull(name)) return null
     return runCatching { getDouble(name) }.getOrNull()
+}
+
+/**
+ * 校验 AI 返回的分类名，只接受当前候选分类里的“本名 / 父 - 子路径”。
+ *
+ * 这是轻量智能归类的最后一道闸：模型可以返回任何字符串，但只有能精确落到
+ * 本地分类（且类型一致）时才写入待记；否则一律按“判断不了”处理。
+ */
+internal fun resolveClassifiedCategory(
+    raw: String,
+    categories: List<Category>,
+    billType: Int
+): Category? {
+    if (billType != 0 && billType != 1) return null
+    val text = raw.trim().trim('"', '“', '”').trim()
+    if (text.isEmpty()) return null
+    val candidates = categories.filter { it.type == billType }
+    if (candidates.isEmpty()) return null
+
+    fun displayPath(category: Category): String {
+        val parent = category.parentId?.let { pid -> categories.firstOrNull { it.id == pid } }
+        return if (parent != null) "${parent.name} - ${category.name}" else category.name
+    }
+
+    candidates.firstOrNull { displayPath(it).equals(text, ignoreCase = true) }?.let { return it }
+    candidates.firstOrNull { it.name.equals(text, ignoreCase = true) }?.let { return it }
+
+    val parts = text.split(Regex("\\s*(?:-|/|>|›)\\s*"))
+        .map { it.trim() }
+        .filter { it.isNotEmpty() }
+    if (parts.size >= 2) {
+        val parentName = parts[parts.size - 2]
+        val leafName = parts.last()
+        candidates.firstOrNull { candidate ->
+            candidate.name.equals(leafName, ignoreCase = true) &&
+                categories.firstOrNull { it.id == candidate.parentId }
+                    ?.name
+                    ?.equals(parentName, ignoreCase = true) == true
+        }?.let { return it }
+        candidates.firstOrNull { it.name.equals(leafName, ignoreCase = true) }?.let { return it }
+    }
+    return null
 }
 
 internal fun cleanJsonString(input: String): String {

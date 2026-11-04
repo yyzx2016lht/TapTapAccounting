@@ -22,6 +22,8 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import com.taostudio.tapaccounting.capture.CaptureApp
+import com.taostudio.tapaccounting.capture.bridge.CaptureBridgeClient
+import com.taostudio.tapaccounting.capture.bridge.CaptureNoteClassifier
 import com.taostudio.tapaccounting.capture.contract.CaptureSource
 import com.taostudio.tapaccounting.capture.contract.CaptureSources
 import com.taostudio.tapaccounting.capture.data.CategorySource
@@ -159,21 +161,41 @@ object CaptureBubbleManager {
         fun submitNote() {
             val noteText = etNote.text?.toString()?.trim().orEmpty()
             scope.launch {
+                val appContext = app.applicationContext
+                val repository = CaptureApp.from(appContext).repository
                 val updated = withContext(Dispatchers.IO) {
-                    CaptureApp.from(app).repository.updateNoteAndReclassify(app, capture.id, noteText)
+                    repository.updateNoteAndReclassify(appContext, capture.id, noteText)
                 }
-                CaptureNotifier.refreshAll(app)
-                val catHint = updated
-                    ?.takeIf { it.categorySource == CategorySource.RULE }
-                    ?.categoryName
-                    ?.let { " · 自动归类：$it" }
+                // 本地备注规则没命中、且有备注时，才在“只存备注”提交点做一次轻量 AI 归类。
+                val classified = if (updated != null && noteText.isNotEmpty() && updated.categoryName.isNullOrBlank()) {
+                    withContext(Dispatchers.IO) {
+                        CaptureNoteClassifier.classifyAndApply(
+                            context = appContext,
+                            client = CaptureBridgeClient(appContext),
+                            repository = repository,
+                            captureId = capture.id,
+                        )
+                    }
+                } else {
+                    updated
+                }
+                CaptureNotifier.refreshAll(appContext)
+                val catHint = classified
+                    ?.takeIf { !it.categoryName.isNullOrBlank() }
+                    ?.let { item ->
+                        when (item.categorySource) {
+                            CategorySource.AI -> " · 智能归类：${item.categoryName}"
+                            CategorySource.MANUAL -> " · 分类：${item.categoryName}"
+                            else -> " · 自动归类：${item.categoryName}"
+                        }
+                    }
                     .orEmpty()
                 Toast.makeText(
-                    app,
+                    appContext,
                     if (noteText.isNotEmpty()) "已留底备注：$noteText$catHint" else "已保存",
                     Toast.LENGTH_SHORT,
                 ).show()
-                dismissImmediate(app)
+                dismissImmediate(appContext)
             }
         }
 

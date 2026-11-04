@@ -3,11 +3,13 @@ package com.taostudio.tapaccounting
 import android.content.Context
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import com.google.gson.Gson
 import com.taostudio.tapaccounting.data.local.AppDatabase
 import com.taostudio.tapaccounting.data.local.entity.Asset
 import com.taostudio.tapaccounting.data.local.entity.AiRule as DbAiRule
 import com.taostudio.tapaccounting.data.local.entity.Bill
+import com.taostudio.tapaccounting.data.local.entity.Category
 import com.google.gson.JsonObject
 import android.util.Base64
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
@@ -41,6 +43,7 @@ object AIService {
     private const val ACCOUNTING_ASSISTANT_LOG_TAG = "AccountingAssistant"
     private const val GENERAL_CHAT_LOG_TAG = "GeneralChat"
     private const val SIMPLE_CHAT_LOG_TAG = "SimpleChat"
+    private const val CATEGORY_CLASSIFY_LOG_TAG = "CategoryClassify"
     private const val AI_IO_LOG_TAG = "AI_IO"
     private const val AI_CACHE_LOG_TAG = "AICache"
 
@@ -59,6 +62,9 @@ object AIService {
     private const val SPEECH_CONNECT_TIMEOUT_SECONDS = 60L
     private const val SPEECH_READ_TIMEOUT_SECONDS = 180L
     private const val SPEECH_WRITE_TIMEOUT_SECONDS = 180L
+    /** 轻量归类只等一小会儿；超时就按“判断不了”处理，绝不拖住待记提交。 */
+    private const val CATEGORY_CLASSIFY_TIMEOUT_MS = 15_000L
+    private const val CATEGORY_CLASSIFY_BATCH_TIMEOUT_MS = 25_000L
     private const val DEFAULT_CUSTOM_REPLY_STYLE_GUIDE =
         "回复风格：按用户自定义要求回复。"
     private fun enableThinkingForAccounting(ctx: Context): Boolean = Prefs.isAiThinkingMultiBillEnabled(ctx)
@@ -960,6 +966,190 @@ object AIService {
             if (e is kotlinx.coroutines.CancellationException) throw e
             Logger.d(ctx, "AIService", "classifyIntent failed: ${e.message}, fallback to BOOKKEEPING")
             "BOOKKEEPING"
+        }
+    }
+
+    /**
+     * 轻量智能归类：只把“分类候选 + 用户备注”发给 AI，返回一个本地分类。
+     *
+     * 不传金额、时间、资产、商户；不调用整笔记账的 [analyzeAccounting]。
+     * 备注为空、AI 未配置、超时、解析失败或返回值不在候选内，一律返回 null。
+     */
+    suspend fun classifyCategory(
+        ctx: Context,
+        note: String,
+        billType: Int,
+        categories: List<Category>
+    ): Category? {
+        val cleanNote = note.trim()
+        if (cleanNote.isEmpty()) return null
+        if (billType != Bill.TYPE_EXPENSE && billType != Bill.TYPE_INCOME) return null
+        val candidates = categories.filter { it.type == billType }
+        if (candidates.isEmpty()) return null
+
+        val apiKey = Prefs.getAiKey(ctx)
+        if (apiKey.isBlank()) return null
+        val model = AiModelSlots.resolveTextModel(ctx)
+        if (model.isBlank()) return null
+
+        val userPrompt = buildCategoryClassifyUserPrompt(cleanNote, candidates, categories)
+        val content = try {
+            withTimeoutOrNull(CATEGORY_CLASSIFY_TIMEOUT_MS) {
+                val requestJson = buildTextChatRequest(
+                    model = model,
+                    temperature = 0.1,
+                    systemPrompt = AIPrompts.CATEGORY_CLASSIFY_PROMPT_DEFAULT,
+                    userText = userPrompt,
+                    jsonObjectResponse = true,
+                    enableThinking = false
+                )
+                val response = getApi(ctx).chatRaw(
+                    "Bearer $apiKey",
+                    adaptChatRequestForProvider(Prefs.getAiProvider(ctx), requestJson)
+                )
+                response.choices.firstOrNull()?.message?.content?.trim().orEmpty()
+            }
+        } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+            Logger.dPriv(
+                ctx,
+                "AIService",
+                "classifyCategory failed: errType=${e.javaClass.simpleName}",
+                "Category classify failure detail=${detailedHttpError(e)}"
+            )
+            return null
+        }
+        if (content == null) {
+            Logger.d(ctx, CATEGORY_CLASSIFY_LOG_TAG, "classifyCategory timeout after ${CATEGORY_CLASSIFY_TIMEOUT_MS}ms")
+            return null
+        }
+
+        val jsonText = extractFirstJsonObjectText(cleanJsonString(content))
+        val rawCategory = runCatching {
+            jsonText?.let { JSONObject(it).optNullableString("category") }
+        }.getOrNull()
+            ?: content.trim().takeIf { it.isNotEmpty() && it.length <= 40 && !it.contains('\n') }
+        val resolved = rawCategory?.let { resolveClassifiedCategory(it, categories, billType) }
+        Logger.d(
+            ctx,
+            CATEGORY_CLASSIFY_LOG_TAG,
+            "classifyCategory: candidates=${candidates.size}, result=${resolved?.name ?: "none"}"
+        )
+        return resolved
+    }
+
+    /**
+     * 批量轻量归类：同一种账单类型（支出/收入）只发一次请求。
+     * 模型按序号返回结果，每条单独校验；某条缺失/非法只影响该条。
+     */
+    suspend fun classifyCategories(
+        ctx: Context,
+        notes: List<String>,
+        billType: Int,
+        categories: List<Category>
+    ): List<Category?> {
+        val cleanNotes = notes.map { it.trim() }
+        if (cleanNotes.isEmpty()) return emptyList()
+        if (cleanNotes.size == 1) {
+            return listOf(classifyCategory(ctx, cleanNotes[0], billType, categories))
+        }
+        if (billType != Bill.TYPE_EXPENSE && billType != Bill.TYPE_INCOME) {
+            return List(cleanNotes.size) { null }
+        }
+        val candidates = categories.filter { it.type == billType }
+        if (candidates.isEmpty()) return List(cleanNotes.size) { null }
+
+        val apiKey = Prefs.getAiKey(ctx)
+        if (apiKey.isBlank()) return List(cleanNotes.size) { null }
+        val model = AiModelSlots.resolveTextModel(ctx)
+        if (model.isBlank()) return List(cleanNotes.size) { null }
+
+        val userPrompt = buildCategoryClassifyBatchUserPrompt(cleanNotes, candidates, categories)
+        val content = try {
+            withTimeoutOrNull(CATEGORY_CLASSIFY_BATCH_TIMEOUT_MS) {
+                val requestJson = buildTextChatRequest(
+                    model = model,
+                    temperature = 0.1,
+                    systemPrompt = AIPrompts.CATEGORY_CLASSIFY_BATCH_PROMPT_DEFAULT,
+                    userText = userPrompt,
+                    jsonObjectResponse = true,
+                    enableThinking = false
+                )
+                val response = getApi(ctx).chatRaw(
+                    "Bearer $apiKey",
+                    adaptChatRequestForProvider(Prefs.getAiProvider(ctx), requestJson)
+                )
+                response.choices.firstOrNull()?.message?.content?.trim().orEmpty()
+            }
+        } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+            Logger.dPriv(
+                ctx,
+                "AIService",
+                "classifyCategories failed: errType=${e.javaClass.simpleName}",
+                "Category classify batch failure detail=${detailedHttpError(e)}"
+            )
+            return List(cleanNotes.size) { null }
+        }
+
+        val result = MutableList<Category?>(cleanNotes.size) { null }
+        if (content == null) {
+            Logger.d(ctx, CATEGORY_CLASSIFY_LOG_TAG, "classifyCategories timeout after ${CATEGORY_CLASSIFY_BATCH_TIMEOUT_MS}ms")
+            return result
+        }
+
+        val jsonText = extractFirstJsonObjectText(cleanJsonString(content))
+        val root = runCatching { jsonText?.let { JSONObject(it) } }.getOrNull()
+        val arr = root?.optJSONArray("results") ?: return result
+        for (i in 0 until arr.length()) {
+            val obj = arr.optJSONObject(i) ?: continue
+            val index = obj.optInt("index", i + 1) - 1
+            if (index !in result.indices) continue
+            val raw = obj.optNullableString("category") ?: continue
+            result[index] = resolveClassifiedCategory(raw, categories, billType)
+        }
+        Logger.d(
+            ctx,
+            CATEGORY_CLASSIFY_LOG_TAG,
+            "classifyCategories: notes=${cleanNotes.size}, resolved=${result.count { it != null }}"
+        )
+        return result
+    }
+
+    private fun buildCategoryClassifyUserPrompt(
+        note: String,
+        candidates: List<Category>,
+        allCategories: List<Category>
+    ): String = buildString {
+        appendCategoryCandidates(candidates, allCategories)
+        append("用户备注：").append(note)
+    }
+
+    private fun buildCategoryClassifyBatchUserPrompt(
+        notes: List<String>,
+        candidates: List<Category>,
+        allCategories: List<Category>
+    ): String = buildString {
+        appendCategoryCandidates(candidates, allCategories)
+        appendLine("用户备注：")
+        notes.forEachIndexed { index, note ->
+            append(index + 1).append(". ")
+                .append(note.replace('\n', ' ').replace('\r', ' '))
+                .append('\n')
+        }
+    }
+
+    private fun StringBuilder.appendCategoryCandidates(
+        candidates: List<Category>,
+        allCategories: List<Category>
+    ) {
+        val byId = allCategories.associateBy { it.id }
+        appendLine("分类候选：")
+        candidates.forEach { category ->
+            val parent = category.parentId?.let { byId[it] }
+            append("- ")
+            if (parent != null) append(parent.name).append(" - ")
+            appendLine(category.name)
         }
     }
 

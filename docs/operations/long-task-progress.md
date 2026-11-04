@@ -7,8 +7,8 @@
 | ID | 功能 | 状态 | 子代理 session | 最近 commit | APK 目录 | 备注 |
 |---|---|---|---|---|---|---|
 | F01 | 文案与来源注册表 | DONE | ses_e589b0cf5ffeWniCQ36L46jkV0 | 91f4eba | dist/long-task/F01-copy-source | 编译通过；capture-contract 测试 4 项通过；grep 无旧文案 |
-| F02 | 分类语义重构 | DONE | ses_e5894643efferHVaaqFBhgRa9Z | 待记录 | dist/long-task/F02-classification-semantics | 编译通过；插件单测 6 项通过；DB v7 迁移加 categorySource，历史分类保留 |
-| F03 | 轻量智能归类与无备注跳过 | TODO | - | - | - | |
+| F02 | 分类语义重构 | DONE | ses_e5894643efferHVaaqFBhgRa9Z | 16acb2f | dist/long-task/F02-classification-semantics | 编译通过；插件单测 6 项通过；DB v7 迁移加 categorySource，历史分类保留 |
+| F03 | 轻量智能归类与无备注跳过 | DONE | ses_e588dc85fffeA6q1rkhUdCrwyk | 待记录 | dist/long-task/F03-smart-classification | 子代理网络中断未回报，编排者复核 diff+编译通过；app 单测 6 项通过；缺分类弹窗补分类 |
 | F04 | 气泡三态 + 直接记账 + 不计/恢复 | TODO | - | - | - | |
 | F05 | AI 规则学习 | TODO | - | - | - | |
 | F06 | 文字拆分记账 + 支付组合并 | TODO | - | - | - | |

@@ -22,6 +22,7 @@ import com.taostudio.tapaccounting.logic.AssetNameResolver
 import com.taostudio.tapaccounting.logic.CategoryNameResolver
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -63,10 +64,11 @@ class CaptureBridgeProvider : ContentProvider() {
             CaptureContract.METHOD_IMPORT_BILLS -> importBills(ctx, arg, extras)
             CaptureContract.METHOD_GET_IMPORT_STATUS -> getImportStatus(ctx, arg, extras)
             CaptureContract.METHOD_CLASSIFY_CAPTURES,
-            CaptureContract.METHOD_START_CLASSIFY -> classifyCaptures(ctx, arg, extras)
+            CaptureContract.METHOD_CLASSIFY_NOTES,
+            CaptureContract.METHOD_START_CLASSIFY -> classifyNotes(ctx, arg, extras)
             CaptureContract.METHOD_GET_CLASSIFY_RESULT -> errorJson(
                 "not_implemented",
-                "$method 请直接使用 classifyCaptures"
+                "$method 请直接使用 classifyNotes"
             )
             else -> errorJson("unknown_method", "未知方法：$method")
         }
@@ -322,16 +324,28 @@ class CaptureBridgeProvider : ContentProvider() {
     }
 
     /**
-     * 调用敲敲记账已配置好的 AI 对多笔待记一次性推断分类与整理备注。
-     * 时间、金额、资产由插件 Hook 锁定，AI 仅补充分类与备注。
+     * 轻量智能归类：只读取备注与 billType，把分类候选和备注交给 App 的 AI。
+     * 兼容旧 `classifyCaptures`：多余字段会被忽略，响应仍是 `{ok, drafts}`。
      */
-    private suspend fun classifyCaptures(ctx: Context, arg: String?, extras: Bundle?): JSONObject {
-        val raw = extras?.getString("captures") ?: arg
-            ?: return errorJson("missing_captures", "缺少 captures JSON")
-        val array = runCatching { JSONArray(raw) }.getOrElse {
-            return errorJson("invalid_captures", "captures 不是合法 JSONArray")
+    private suspend fun classifyNotes(ctx: Context, arg: String?, extras: Bundle?): JSONObject {
+        val raw = extras?.getString(CaptureContract.EXTRA_NOTES)
+            ?: extras?.getString("notes")
+            ?: extras?.getString("captures")
+            ?: arg
+            ?: return errorJson("missing_notes", "缺少 notes JSON")
+        val array = try {
+            if (raw.trimStart().startsWith("[")) {
+                JSONArray(raw)
+            } else {
+                JSONArray().put(JSONObject(raw))
+            }
+        } catch (t: Throwable) {
+            return errorJson("invalid_notes", "notes 不是合法 JSON：${t.message}")
         }
-        return CaptureImportService.classify(ctx, array)
+        // AI 内部已有 15/25 秒超时；这里再兜一层，避免 binder 调用被异常网络拖死。
+        return withTimeoutOrNull(30_000L) {
+            CaptureImportService.classifyNotes(ctx, array)
+        } ?: errorJson("ai_timeout", "智能归类超时，请重试")
     }
 
     // ---------------- 工具 ----------------

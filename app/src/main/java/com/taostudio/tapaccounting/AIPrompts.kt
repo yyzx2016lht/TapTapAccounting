@@ -232,6 +232,22 @@ ${buildRemarksChineseRule().trim()}
     // Compatibility alias for callers and older prompt tests.
     const val CHAT_INPUT_ROUTER_PROMPT = INTENT_ROUTER_PROMPT_DEFAULT
 
+    /** 轻量智能归类：只根据用户备注从候选分类里选一个，不参与整笔记账。 */
+    const val CATEGORY_CLASSIFY_PROMPT_DEFAULT = """
+你是记账分类助手。只根据用户备注，从给出的分类候选中选择最合适的一个分类。
+只输出一个 JSON 对象：{"category":"分类路径"}。
+无法判断或没有合适分类时，输出 {"category":""}。
+只能使用候选列表中的分类，不要编造；不要输出解释、Markdown、代码块或任何其它字段。
+"""
+
+    /** 批量版轻量智能归类：一次请求处理多条备注。 */
+    const val CATEGORY_CLASSIFY_BATCH_PROMPT_DEFAULT = """
+你是记账分类助手。只根据用户备注，为每条记录从给出的分类候选中选择最合适的一个分类。
+只输出一个 JSON 对象：{"results":[{"index":1,"category":"分类路径"}]}。
+无法判断、没有合适分类或该条没有备注时，category 输出空字符串。
+只能使用候选列表中的分类，不要编造；不要输出解释、Markdown、代码块或任何其它字段。
+"""
+
 
 
     const val RECEIPT_VISION_RETRY_PROMPT_DEFAULT = """

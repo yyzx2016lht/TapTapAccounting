@@ -356,12 +356,14 @@ object OverlayDialogs {
         currentSelectionText: String,
         type: Int,
         allowClear: Boolean = true,
+        onCancel: (() -> Unit)? = null,
         onConfirm: (String) -> Unit
     ) {
         val themeContext = ContextThemeWrapper(ctx, R.style.Theme_TapAccounting)
         val view = LayoutInflater.from(themeContext).inflate(R.layout.dialog_category_picker, null)
 
         val dialog = AlertDialog.Builder(themeContext).setView(view).create()
+        dialog.setOnCancelListener { onCancel?.invoke() }
         val container = view.findViewById<LinearLayout>(R.id.container_categories)
         val scrollCategories = view.findViewById<ScrollView>(R.id.scroll_categories)
         val rvSortCategories = view.findViewById<RecyclerView>(R.id.rv_sort_categories)

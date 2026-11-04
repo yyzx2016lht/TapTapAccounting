@@ -83,6 +83,8 @@ object CaptureContract {
     const val METHOD_GET_CLASSIFY_RESULT: String = "getClassifyResult"
     const val METHOD_IMPORT_BILLS: String = "importBills"
     const val METHOD_GET_IMPORT_STATUS: String = "getImportStatus"
+    /** AI 规则学习：只把备注、已确认分类、账单类型发给 App，取回 1-8 字可复用关键词。 */
+    const val METHOD_SUGGEST_RULE: String = "suggestRuleKeyword"
 
     /** App -> 插件：查询待记数量与待记列表（signature 权限或同签名调用）。 */
     const val METHOD_GET_PENDING_COUNT: String = "getPendingCount"
@@ -101,6 +103,8 @@ object CaptureContract {
     const val EXTRA_BILL_ID: String = "billId"
     /** `classifyNotes` 的请求数组（每项 captureId/note/billType）。 */
     const val EXTRA_NOTES: String = "notes"
+    /** `suggestRuleKeyword` 的 JSON：{note, categoryName, billType}。 */
+    const val EXTRA_RULE_PAYLOAD: String = "rulePayload"
 
     // ---- App -> 插件：广播 ----
     const val ACTION_PENDING_COUNT_CHANGED: String = "$PLUGIN_PACKAGE.action.PENDING_COUNT_CHANGED"

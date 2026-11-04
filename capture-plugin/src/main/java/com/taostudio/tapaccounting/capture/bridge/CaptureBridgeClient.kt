@@ -52,6 +52,12 @@ class CaptureBridgeClient(context: Context) {
         val error: String? = null,
     )
 
+    data class SuggestRuleResult(
+        val ok: Boolean,
+        val keyword: String = "",
+        val error: String? = null,
+    )
+
     /** App 桥接是否可用。 */
     suspend fun ping(): Boolean = pingDetail().ok
 
@@ -271,6 +277,49 @@ class CaptureBridgeClient(context: Context) {
             }
             ClassifyNotesResult(ok = true, categories = categories)
         }
+
+    /**
+     * AI 规则学习：只发备注、已确认分类和账单类型，取回 1-8 字可复用关键词。
+     *
+     * 失败、超时或 App 未配置 AI 都返回 ok=false，由调用方保留任务稍后重试。
+     */
+    suspend fun suggestRuleKeyword(
+        note: String,
+        categoryName: String,
+        billType: Int,
+    ): SuggestRuleResult = withContext(Dispatchers.IO) {
+        val cleanNote = note.trim()
+        val cleanCategory = categoryName.trim()
+        if (cleanNote.isEmpty() || cleanCategory.isEmpty()) {
+            return@withContext SuggestRuleResult(ok = true)
+        }
+        val payload = JSONObject()
+            .put("note", cleanNote)
+            .put("categoryName", cleanCategory)
+            .put("billType", billType)
+        val extras = Bundle().apply {
+            putString(CaptureContract.EXTRA_RULE_PAYLOAD, payload.toString())
+        }
+        val res = try {
+            callForObject(CaptureContract.METHOD_SUGGEST_RULE, payload.toString(), extras)
+        } catch (t: kotlinx.coroutines.CancellationException) {
+            throw t
+        } catch (t: Throwable) {
+            Log.w(TAG, "suggestRuleKeyword failed", t)
+            null
+        } ?: return@withContext SuggestRuleResult(ok = false, error = "无法连接敲敲记账")
+
+        if (!res.optBoolean("ok", false)) {
+            val msg = res.optString("message", "").ifBlank {
+                res.optString("error", "规则学习未完成")
+            }
+            return@withContext SuggestRuleResult(ok = false, error = msg)
+        }
+        SuggestRuleResult(
+            ok = true,
+            keyword = res.optString("keyword", "").trim(),
+        )
+    }
 
     /**
      * 查询 [captureIds] 在 App 侧 `external_imports` 里的状态。

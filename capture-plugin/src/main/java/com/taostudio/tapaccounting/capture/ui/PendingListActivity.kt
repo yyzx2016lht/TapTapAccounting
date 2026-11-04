@@ -25,6 +25,7 @@ import com.taostudio.tapaccounting.capture.CaptureApp
 import com.taostudio.tapaccounting.capture.bridge.CaptureBridgeClient
 import com.taostudio.tapaccounting.capture.bridge.CaptureNoteClassifier
 import com.taostudio.tapaccounting.capture.bridge.CaptureReconciler
+import com.taostudio.tapaccounting.capture.bridge.RuleLearningManager
 import com.taostudio.tapaccounting.capture.contract.AccountingContext
 import com.taostudio.tapaccounting.capture.contract.CapturePayload
 import com.taostudio.tapaccounting.capture.contract.CaptureSource
@@ -1176,6 +1177,10 @@ class PendingListActivity : Activity() {
                                 val st = r.optString("status")
                                 if (st == ImportItemStatus.CREATED || st == ImportItemStatus.DUPLICATE) {
                                     repo.updateStatus(cid, CaptureStatus.RECORDED)
+                                    // 首次成功才学习；duplicate 不重复学习。
+                                    if (st == ImportItemStatus.CREATED) {
+                                        RuleLearningManager.schedule(this@PendingListActivity, cid)
+                                    }
                                     successCount++
                                 } else if (firstError == null) {
                                     firstError = r.optString("error").takeIf { it.isNotBlank() }
@@ -1328,7 +1333,16 @@ class PendingListActivity : Activity() {
         }
         val first = result.optJSONArray("results")?.optJSONObject(0)
         when (first?.optString("status")) {
-            ImportItemStatus.CREATED, ImportItemStatus.DUPLICATE -> {
+            ImportItemStatus.CREATED -> {
+                withContext(Dispatchers.IO) {
+                    CaptureApp.from(this@PendingListActivity).repository
+                        .updateStatus(item.id, CaptureStatus.RECORDED)
+                    RuleLearningManager.schedule(this@PendingListActivity, item.id)
+                }
+                toast("✓ 已入账")
+                load()
+            }
+            ImportItemStatus.DUPLICATE -> {
                 withContext(Dispatchers.IO) {
                     CaptureApp.from(this@PendingListActivity).repository
                         .updateStatus(item.id, CaptureStatus.RECORDED)

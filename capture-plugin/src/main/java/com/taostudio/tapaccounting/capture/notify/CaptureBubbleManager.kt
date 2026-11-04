@@ -24,6 +24,7 @@ import android.widget.Toast
 import com.taostudio.tapaccounting.capture.CaptureApp
 import com.taostudio.tapaccounting.capture.bridge.CaptureBridgeClient
 import com.taostudio.tapaccounting.capture.bridge.CaptureNoteClassifier
+import com.taostudio.tapaccounting.capture.bridge.RuleLearningManager
 import com.taostudio.tapaccounting.capture.contract.CaptureSource
 import com.taostudio.tapaccounting.capture.contract.CaptureSources
 import com.taostudio.tapaccounting.capture.contract.CaptureStatus
@@ -460,7 +461,20 @@ object CaptureBubbleManager {
 
             val first = result.optJSONArray("results")?.optJSONObject(0)
             when (first?.optString("status").orEmpty()) {
-                ImportItemStatus.CREATED, ImportItemStatus.DUPLICATE -> {
+                ImportItemStatus.CREATED -> {
+                    withContext(Dispatchers.IO) {
+                        repository.updateStatus(latest.id, CaptureStatus.RECORDED)
+                        RuleLearningManager.schedule(app, latest.id)
+                    }
+                    CaptureNotifier.refreshAll(app)
+                    if (isActive()) {
+                        val cat = latest.categoryName?.takeIf { it.isNotBlank() }
+                        setStatus("✓ 已记" + (cat?.let { " · 归类：$it" } ?: ""), "#6EE7B7")
+                        applyState(BubbleState.RECORDED)
+                    }
+                }
+
+                ImportItemStatus.DUPLICATE -> {
                     withContext(Dispatchers.IO) {
                         repository.updateStatus(latest.id, CaptureStatus.RECORDED)
                     }

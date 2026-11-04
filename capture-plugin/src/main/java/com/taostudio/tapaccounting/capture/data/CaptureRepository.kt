@@ -248,6 +248,8 @@ class CaptureRepository(private val dao: PaymentCaptureDao) {
                     targetCategoryName = resolvedCategory,
                     sort = existingCatRule?.sort ?: 0,
                     enabled = true,
+                    source = CategoryRule.SOURCE_USER,
+                    learnedAt = null,
                 )
             )
         }

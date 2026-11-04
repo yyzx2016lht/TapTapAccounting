@@ -13,8 +13,9 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         CaptureEvent::class,
         AssetMappingRule::class,
         CategoryRule::class,
+        RuleLearningTask::class,
     ],
-    version = 7,
+    version = 8,
     exportSchema = false,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -22,6 +23,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun captureEventDao(): CaptureEventDao
     abstract fun assetMappingDao(): AssetMappingDao
     abstract fun categoryRuleDao(): CategoryRuleDao
+    abstract fun ruleLearningTaskDao(): RuleLearningTaskDao
 
     companion object {
         /**
@@ -130,6 +132,35 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * v7 -> v8：分类规则来源 / 学习时间 + AI 规则学习任务表。
+         *
+         * 历史规则没有来源信息，统一标成 USER（用户自己的规则），不删除、不重写目标分类。
+         */
+        val MIGRATION_7_8: Migration = object : Migration(7, 8) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "ALTER TABLE category_rules ADD COLUMN source TEXT NOT NULL DEFAULT 'USER'"
+                )
+                db.execSQL("ALTER TABLE category_rules ADD COLUMN learnedAt INTEGER")
+                db.execSQL(
+                    """CREATE TABLE IF NOT EXISTS `rule_learning_tasks` (
+                        `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        `captureId` TEXT NOT NULL,
+                        `note` TEXT NOT NULL,
+                        `categoryName` TEXT NOT NULL,
+                        `billType` INTEGER NOT NULL,
+                        `attempts` INTEGER NOT NULL,
+                        `createdAt` INTEGER NOT NULL
+                    )""".trimIndent()
+                )
+                db.execSQL(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS `index_rule_learning_tasks_captureId` " +
+                        "ON `rule_learning_tasks` (`captureId`)"
+                )
+            }
+        }
+
         @Volatile
         private var instance: AppDatabase? = null
 
@@ -147,6 +178,7 @@ abstract class AppDatabase : RoomDatabase() {
                         MIGRATION_4_5,
                         MIGRATION_5_6,
                         MIGRATION_6_7,
+                        MIGRATION_7_8,
                     )
                     .build()
                     .also { instance = it }

@@ -65,6 +65,8 @@ object AIService {
     /** 轻量归类只等一小会儿；超时就按“判断不了”处理，绝不拖住待记提交。 */
     private const val CATEGORY_CLASSIFY_TIMEOUT_MS = 15_000L
     private const val CATEGORY_CLASSIFY_BATCH_TIMEOUT_MS = 25_000L
+    /** 规则关键词只是后台副作用，超时就留给插件下次启动补跑。 */
+    private const val RULE_KEYWORD_TIMEOUT_MS = 10_000L
     private const val DEFAULT_CUSTOM_REPLY_STYLE_GUIDE =
         "回复风格：按用户自定义要求回复。"
     private fun enableThinkingForAccounting(ctx: Context): Boolean = Prefs.isAiThinkingMultiBillEnabled(ctx)
@@ -1114,6 +1116,87 @@ object AIService {
             "classifyCategories: notes=${cleanNotes.size}, resolved=${result.count { it != null }}"
         )
         return result
+    }
+
+    /**
+     * AI 规则学习：从备注 + 已确认分类中提取一个 1-8 字的可复用备注关键词。
+     *
+     * 只返回关键词；空备注、空分类、非收支、AI 未配置、超时或泛词一律返回空串。
+     * 备注本身就是短关键词（如“苹果”）时不发请求，直接返回，保证入账后的 toast 及时出现。
+     */
+    suspend fun suggestRuleKeyword(
+        ctx: Context,
+        note: String,
+        categoryName: String,
+        billType: Int,
+    ): String {
+        val cleanNote = note.trim()
+        val cleanCategory = categoryName.trim()
+        if (cleanNote.isEmpty() || cleanCategory.isEmpty()) return ""
+        if (billType != Bill.TYPE_EXPENSE && billType != Bill.TYPE_INCOME) return ""
+        val leafCategory = cleanCategory.split(Regex("""\s*(?:-|/|>|›|→)\s*"""))
+            .lastOrNull { it.isNotBlank() }
+            ?.trim()
+            .orEmpty()
+        if (leafCategory == "其他") return ""
+
+        RuleKeywordPolicy.directKeywordFromNote(cleanNote)?.let { return it }
+
+        val apiKey = Prefs.getAiKey(ctx)
+        if (apiKey.isBlank()) return ""
+        val model = AiModelSlots.resolveTextModel(ctx)
+        if (model.isBlank()) return ""
+
+        val typeLabel = if (billType == Bill.TYPE_EXPENSE) "支出" else "收入"
+        val userPrompt = buildString {
+            append("用户备注：").append(cleanNote.replace('\n', ' ').replace('\r', ' ')).append('\n')
+            append("已确认分类：").append(cleanCategory).append('\n')
+            append("账单类型：").append(typeLabel)
+        }
+
+        val content = try {
+            withTimeoutOrNull(RULE_KEYWORD_TIMEOUT_MS) {
+                val requestJson = buildTextChatRequest(
+                    model = model,
+                    temperature = 0.1,
+                    systemPrompt = AIPrompts.RULE_KEYWORD_PROMPT_DEFAULT,
+                    userText = userPrompt,
+                    jsonObjectResponse = true,
+                    enableThinking = false
+                )
+                val response = getApi(ctx).chatRaw(
+                    "Bearer $apiKey",
+                    adaptChatRequestForProvider(Prefs.getAiProvider(ctx), requestJson)
+                )
+                response.choices.firstOrNull()?.message?.content?.trim().orEmpty()
+            }
+        } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+            Logger.dPriv(
+                ctx,
+                "AIService",
+                "suggestRuleKeyword failed: errType=${e.javaClass.simpleName}",
+                "Rule keyword failure detail=${detailedHttpError(e)}"
+            )
+            return ""
+        }
+        if (content.isNullOrBlank()) {
+            Logger.d(ctx, "AIService", "suggestRuleKeyword timeout after ${RULE_KEYWORD_TIMEOUT_MS}ms")
+            return ""
+        }
+
+        val jsonText = extractFirstJsonObjectText(cleanJsonString(content))
+        val rawKeyword = runCatching {
+            jsonText?.let { JSONObject(it).optNullableString("keyword") }
+        }.getOrNull()
+            ?: content.trim().takeIf { it.length in 1..8 && !it.contains('\n') }
+        val keyword = RuleKeywordPolicy.sanitize(rawKeyword)
+        Logger.d(
+            ctx,
+            "AIService",
+            "suggestRuleKeyword: noteLen=${cleanNote.length}, category=$cleanCategory, result=${keyword.ifEmpty { "none" }}"
+        )
+        return keyword
     }
 
     private fun buildCategoryClassifyUserPrompt(

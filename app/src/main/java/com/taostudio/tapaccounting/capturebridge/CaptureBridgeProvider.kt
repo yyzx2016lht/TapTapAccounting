@@ -8,6 +8,7 @@ import android.database.Cursor
 import android.net.Uri
 import android.os.Bundle
 import android.provider.Settings
+import com.taostudio.tapaccounting.AIService
 import com.taostudio.tapaccounting.BookAccountManager
 import com.taostudio.tapaccounting.OverlayService
 import com.taostudio.tapaccounting.Prefs
@@ -63,6 +64,7 @@ class CaptureBridgeProvider : ContentProvider() {
             CaptureContract.METHOD_OPEN_QUICK_RECORD -> openQuickRecord(ctx, extras)
             CaptureContract.METHOD_IMPORT_BILLS -> importBills(ctx, arg, extras)
             CaptureContract.METHOD_GET_IMPORT_STATUS -> getImportStatus(ctx, arg, extras)
+            CaptureContract.METHOD_SUGGEST_RULE -> suggestRuleKeyword(ctx, arg, extras)
             CaptureContract.METHOD_CLASSIFY_CAPTURES,
             CaptureContract.METHOD_CLASSIFY_NOTES,
             CaptureContract.METHOD_START_CLASSIFY -> classifyNotes(ctx, arg, extras)
@@ -346,6 +348,41 @@ class CaptureBridgeProvider : ContentProvider() {
         return withTimeoutOrNull(30_000L) {
             CaptureImportService.classifyNotes(ctx, array)
         } ?: errorJson("ai_timeout", "智能归类超时，请重试")
+    }
+
+    /**
+     * AI 规则学习：只接收备注、已确认分类与账单类型，返回 `{ok, keyword}`。
+     *
+     * 失败/超时返回空关键词而不是异常；学习是后台副作用，绝不能影响入账。
+     */
+    private suspend fun suggestRuleKeyword(
+        ctx: Context,
+        arg: String?,
+        extras: Bundle?,
+    ): JSONObject {
+        val raw = extras?.getString(CaptureContract.EXTRA_RULE_PAYLOAD) ?: arg
+            ?: return errorJson("missing_rule_payload", "缺少规则学习 JSON")
+        val payload = try {
+            JSONObject(raw)
+        } catch (t: Throwable) {
+            return errorJson("invalid_rule_payload", "规则学习 JSON 不合法：${t.message}")
+        }
+        val note = payload.optString("note", "").trim()
+        val categoryName = payload.optString("categoryName", "").trim()
+        val billType = payload.optInt("billType", -1)
+        if (note.isEmpty() || categoryName.isEmpty()) {
+            return JSONObject().put("ok", true).put("keyword", "")
+        }
+        // AI 内部 10 秒超时；这里再兜一层，避免 binder 被异常网络拖死。
+        val keyword = withTimeoutOrNull(15_000L) {
+            AIService.suggestRuleKeyword(
+                ctx = ctx,
+                note = note,
+                categoryName = categoryName,
+                billType = billType,
+            )
+        }.orEmpty()
+        return JSONObject().put("ok", true).put("keyword", keyword)
     }
 
     // ---------------- 工具 ----------------

@@ -45,6 +45,7 @@ object CaptureRuleMatcher {
                         targetCategoryName = category,
                         sort = index,
                         enabled = true,
+                        source = CategoryRule.SOURCE_SEED,
                     )
                 )
             }

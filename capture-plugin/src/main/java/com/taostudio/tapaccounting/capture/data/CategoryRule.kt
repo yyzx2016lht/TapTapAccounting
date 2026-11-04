@@ -1,5 +1,6 @@
 package com.taostudio.tapaccounting.capture.data
 
+import androidx.room.ColumnInfo
 import androidx.room.Dao
 import androidx.room.Entity
 import androidx.room.Index
@@ -29,11 +30,29 @@ data class CategoryRule(
     val sort: Int = 0,
     val enabled: Boolean = true,
     val createdAt: Long = System.currentTimeMillis(),
+    /** 规则来源：[SOURCE_SEED] / [SOURCE_USER] / [SOURCE_AI] / [SOURCE_IMPORT]。 */
+    @ColumnInfo(defaultValue = "USER")
+    val source: String = SOURCE_USER,
+    /** AI 学习写入时间；手动/内置/导入规则为 null。 */
+    val learnedAt: Long? = null,
 ) {
     companion object {
         const val MATCH_ANY = "ANY"
         const val MATCH_MERCHANT = "MERCHANT"
         const val MATCH_NOTE = "NOTE"
+
+        const val SOURCE_SEED = "SEED"
+        const val SOURCE_USER = "USER"
+        const val SOURCE_AI = "AI"
+        const val SOURCE_IMPORT = "IMPORT"
+
+        /** 规则页展示文案：内置 / 我的 / AI 学习 / 导入。 */
+        fun sourceLabel(source: String?): String = when (source) {
+            SOURCE_SEED -> "内置"
+            SOURCE_AI -> "AI 学习"
+            SOURCE_IMPORT -> "导入"
+            else -> "我的"
+        }
     }
 }
 
@@ -47,6 +66,10 @@ interface CategoryRuleDao {
 
     @Query("SELECT * FROM category_rules WHERE keyword = :keyword AND matchField = :matchField LIMIT 1")
     suspend fun findByKeywordAndField(keyword: String, matchField: String): CategoryRule?
+
+    /** 同名规则（可能同时存在 NOTE / ANY / MERCHANT），供 AI 学习判断是否可写。 */
+    @Query("SELECT * FROM category_rules WHERE keyword = :keyword COLLATE NOCASE")
+    suspend fun findByKeyword(keyword: String): List<CategoryRule>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(rule: CategoryRule): Long

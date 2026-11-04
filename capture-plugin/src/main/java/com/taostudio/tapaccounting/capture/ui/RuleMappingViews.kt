@@ -35,6 +35,9 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 /**
  * 插件工作台 Tab 1（资产映射）、Tab 2（分类规则）、Tab 3（设置与调试）视图构建器。
@@ -409,7 +412,7 @@ internal class RuleMappingViews(
                 setTextColor(CaptureUi.TEXT_PRIMARY)
             })
             addView(TextView(activity).apply {
-                text = "只按用户备注匹配分类；商户规则保留但不再自动命中。付款时可在备注里写“咖啡”“打车”“房租”等关键词。"
+                text = "只按用户备注匹配分类；商户规则保留但不再自动命中。付款时可在备注里写“咖啡”“打车”“房租”等关键词。AI 确认入账后也会自动学习备注关键词，标记为「AI 学习」。"
                 textSize = 12.5f
                 setTextColor(CaptureUi.TEXT_SECONDARY)
                 setLineSpacing(0f, 1.2f)
@@ -514,13 +517,19 @@ internal class RuleMappingViews(
                         setPadding(0, dp(3), 0, dp(3))
                     }
                     rowRules.forEach { rule ->
+                        val sourceTag = CategoryRule.sourceLabel(rule.source)
                         val scopeTag = if (rule.matchField == CategoryRule.MATCH_MERCHANT) "不自动匹配: " else ""
+                        val isAi = rule.source == CategoryRule.SOURCE_AI
                         val pill = CaptureUi.chip(
                             activity = activity,
-                            text = "$scopeTag${rule.keyword}",
-                            textColor = if (rule.enabled) CaptureUi.TEXT_SECONDARY else CaptureUi.TEXT_MUTED,
-                            bgColor = CaptureUi.BG_SUBTLE,
-                            strokeColor = CaptureUi.BORDER,
+                            text = "$sourceTag · $scopeTag${rule.keyword}",
+                            textColor = when {
+                                isAi -> CaptureUi.BRAND_DARK
+                                rule.enabled -> CaptureUi.TEXT_SECONDARY
+                                else -> CaptureUi.TEXT_MUTED
+                            },
+                            bgColor = if (isAi) CaptureUi.BRAND_SOFT else CaptureUi.BG_SUBTLE,
+                            strokeColor = if (isAi) CaptureUi.BRAND_BORDER else CaptureUi.BORDER,
                         ) {
                             showEditCategoryRuleDialog(rule, categoryPaths)
                         }
@@ -573,6 +582,23 @@ internal class RuleMappingViews(
         layout.addView(etKeyword)
         layout.addView(etCategory)
 
+        if (existing != null && existing.id != 0L) {
+            val learnedAt = existing.learnedAt
+            val sourceText = buildString {
+                append("来源：").append(CategoryRule.sourceLabel(existing.source))
+                if (learnedAt != null && learnedAt > 0L) {
+                    append(" · 学习于 ")
+                    append(SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date(learnedAt)))
+                }
+            }
+            layout.addView(TextView(activity).apply {
+                text = sourceText
+                textSize = 11.5f
+                setTextColor(CaptureUi.TEXT_MUTED)
+                setPadding(0, dp(6), 0, 0)
+            })
+        }
+
         if (categoryPaths.isNotEmpty()) {
             val pickBtn = CaptureUi.button(
                 activity = activity,
@@ -618,6 +644,9 @@ internal class RuleMappingViews(
                                 targetCategoryName = cat,
                                 sort = existing?.sort ?: 0,
                                 enabled = existing?.enabled ?: true,
+                                // 用户在规则页手动保存后，这条规则归“我的”，AI 以后不得覆盖。
+                                source = CategoryRule.SOURCE_USER,
+                                learnedAt = null,
                             )
                         )
                     }
@@ -626,7 +655,7 @@ internal class RuleMappingViews(
             }
             .setNegativeButton("取消", null)
 
-        if (!isNew && existing != null) {
+        if (existing != null && existing.id != 0L) {
             builder.setNeutralButton("删除此词") { _, _ ->
                 scope.launch {
                     withContext(Dispatchers.IO) {

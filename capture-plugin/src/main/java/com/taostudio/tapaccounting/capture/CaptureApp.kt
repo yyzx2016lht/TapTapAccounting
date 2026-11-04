@@ -2,6 +2,7 @@ package com.taostudio.tapaccounting.capture
 
 import android.app.Application
 import android.content.Context
+import com.taostudio.tapaccounting.capture.bridge.RuleLearningManager
 import com.taostudio.tapaccounting.capture.data.AppDatabase
 import com.taostudio.tapaccounting.capture.data.CaptureEventRepository
 import com.taostudio.tapaccounting.capture.data.CaptureRepository
@@ -24,6 +25,8 @@ class CaptureApp : Application() {
         CaptureNotifier.ensureChannel(this)
         // 启动插件进程内直连 TCP 服务（127.0.0.1:52047），供微信/支付宝毫秒级零延迟投递。
         PluginDirectServer.ensureStarted(this)
+        // 补跑上次入账后没来得及完成的 AI 规则学习（失败重试最多 2 次）。
+        RuleLearningManager.processPendingInBackground(this)
     }
 
     companion object {

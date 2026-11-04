@@ -236,6 +236,7 @@ object AutoAccountingRuleImporter {
             targetBookName = targetBook,
             sort = sort,
             enabled = enabled,
+            source = CategoryRule.SOURCE_IMPORT,
         )
     }
 

@@ -10,6 +10,7 @@ import android.os.Bundle
 import android.provider.Settings
 import com.taostudio.tapaccounting.AIService
 import com.taostudio.tapaccounting.BookAccountManager
+import com.taostudio.tapaccounting.ImagePickerActivity
 import com.taostudio.tapaccounting.OverlayService
 import com.taostudio.tapaccounting.Prefs
 import com.taostudio.tapaccounting.capture.contract.AccountingContext
@@ -62,6 +63,7 @@ class CaptureBridgeProvider : ContentProvider() {
             CaptureContract.METHOD_GET_ACCOUNTING_CONTEXT -> getAccountingContext(ctx)
             CaptureContract.METHOD_GET_RECENT_BILLS -> getRecentBills(ctx, extras)
             CaptureContract.METHOD_OPEN_QUICK_RECORD -> openQuickRecord(ctx, extras)
+            CaptureContract.METHOD_OPEN_IMAGE_ACCOUNTING -> openImageAccounting(ctx, extras)
             CaptureContract.METHOD_IMPORT_BILLS -> importBills(ctx, arg, extras)
             CaptureContract.METHOD_IMPORT_BILL_GROUP -> importBillGroup(ctx, arg, extras)
             CaptureContract.METHOD_PREVIEW_SPLIT -> previewSplit(ctx, arg, extras)
@@ -249,6 +251,78 @@ class CaptureBridgeProvider : ContentProvider() {
         }
     }
 
+    /**
+     * 待记图片记账：带 capture 上下文打开图片选择器。
+     *
+     * 选图、AI 识别和确认面板在 [com.taostudio.tapaccounting.CaptureImageAccountingActivity]
+     * 里完成，复用 App 现有图片记账链路；这里只做幂等预检和启动。
+     */
+    private suspend fun openImageAccounting(ctx: Context, extras: Bundle?): JSONObject {
+        val captureId = extras?.getString(CaptureContract.EXTRA_CAPTURE_ID)
+            ?.trim()
+            ?.takeIf { it.isNotEmpty() }
+            ?: return errorJson("missing_captureId", "缺少 captureId")
+        val payloadRaw = extras.getString(CaptureContract.EXTRA_CAPTURE_PAYLOAD)
+            ?: return errorJson("missing_capture_payload", "缺少待记上下文")
+        val payload = try {
+            JSONObject(payloadRaw)
+        } catch (t: Throwable) {
+            return errorJson("invalid_capture_payload", "待记上下文不是合法 JSON：${t.message}")
+        }
+        if (payload.optLong("amountCents", 0L) <= 0L) {
+            return errorJson("invalid_capture_amount", "待记金额缺失，请先补金额再图片记账")
+        }
+        if (Prefs.getAiKey(ctx).isBlank()) {
+            return errorJson("ai_not_configured", "请先在敲敲记账中配置 AI API Key")
+        }
+
+        // 第二道幂等：已导入过就直接回执，不再打开图片选择器。
+        val db = AppDatabase.getDatabase(ctx)
+        val existing = db.externalImportDao().getByCaptureId(captureId)
+        if (existing != null) {
+            if (db.billDao().getBillById(existing.billId) != null) {
+                return JSONObject()
+                    .put("ok", true)
+                    .put("accepted", false)
+                    .put("duplicate", true)
+                    .put("captureId", captureId)
+                    .put("billId", existing.billId)
+            }
+            // 账单已被删除：旧回执失效，允许重新入账。
+            db.externalImportDao().deleteByCaptureId(captureId)
+        }
+
+        val normalizedPayload = normalizeCaptureAsset(ctx, payload).apply {
+            // 资产功能关闭时不带 account，避免绑定一个用户根本看不到的资产。
+            if (!Prefs.isAssetFeatureEnabled(ctx)) {
+                remove("assetId")
+                remove("assetName")
+            }
+        }
+        val requestId = extras.getString(CaptureContract.EXTRA_REQUEST_ID)
+        val intent = Intent(ctx, ImagePickerActivity::class.java).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            putExtra(CaptureContract.EXTRA_CAPTURE_ID, captureId)
+            putExtra(CaptureContract.EXTRA_CAPTURE_PAYLOAD, normalizedPayload.toString())
+            if (!requestId.isNullOrBlank()) {
+                putExtra(CaptureContract.EXTRA_REQUEST_ID, requestId)
+            }
+        }
+        return try {
+            ctx.startActivity(intent)
+            JSONObject()
+                .put("ok", true)
+                .put("accepted", true)
+                .put("captureId", captureId)
+                .put("requestId", requestId ?: JSONObject.NULL)
+        } catch (e: Exception) {
+            errorJson(
+                "activity_start_blocked",
+                e.message ?: e.javaClass.simpleName
+            )
+        }
+    }
+
     private suspend fun importBills(ctx: Context, arg: String?, extras: Bundle?): JSONObject {
         val raw = extras?.getString("bills")
             ?: extras?.getString("billsJson")
@@ -296,6 +370,20 @@ class CaptureBridgeProvider : ContentProvider() {
         return withTimeoutOrNull(20_000L) {
             CaptureImportService.importBillGroup(ctx, payload, requestId)
         } ?: errorJson("import_timeout", "拆分入账超时，请重试")
+    }
+
+    /**
+     * 图片记账的资产名也可能是渠道原始户名；能匹配到本地资产时折成本地名字。
+     * 匹配不到就保留原值，让 importBillGroup 明确报 asset_not_found，不静默丢资产。
+     */
+    private suspend fun normalizeCaptureAsset(ctx: Context, source: JSONObject): JSONObject {
+        val out = JSONObject(source.toString())
+        if (out.optLong("assetId", 0L) > 0L) return out
+        val raw = out.optString("assetName", "").trim()
+        if (raw.isEmpty()) return out
+        val assets = AppDatabase.getDatabase(ctx).assetDao().getAllAssetsList()
+        AssetNameResolver.resolve(assets, raw)?.let { out.put("assetName", it.name) }
+        return out
     }
 
     /**

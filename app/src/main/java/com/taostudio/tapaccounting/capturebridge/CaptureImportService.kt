@@ -499,6 +499,10 @@ internal object CaptureImportService {
             ?: CategoryNameResolver.resolve(categories, "其它", billType)?.name
     }
 
+    /** 图片记账补差额用：与文字拆分相同的“其他”兜底分类。 */
+    suspend fun resolveFallbackCategoryName(ctx: Context, billType: Int): String? =
+        resolveFallbackCategory(AppDatabase.getDatabase(ctx), billType)
+
     private data class GroupItem(
         val name: String,
         val amountCents: Long,

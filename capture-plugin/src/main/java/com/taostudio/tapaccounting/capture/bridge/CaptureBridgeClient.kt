@@ -90,6 +90,17 @@ class CaptureBridgeClient(context: Context) {
         val message: String? = null,
     )
 
+    data class OpenImageAccountingResult(
+        val ok: Boolean,
+        val accepted: Boolean = false,
+        /** App 已有该 captureId 的回执：这笔之前已经入账。 */
+        val duplicate: Boolean = false,
+        val captureId: String = "",
+        val billId: Long? = null,
+        val error: String? = null,
+        val message: String? = null,
+    )
+
     /** App 桥接是否可用。 */
     suspend fun ping(): Boolean = pingDetail().ok
 
@@ -622,6 +633,72 @@ class CaptureBridgeClient(context: Context) {
         val json = callForObject(CaptureContract.METHOD_OPEN_QUICK_RECORD, null, extras)
             ?: return@withContext false
         json.optBoolean("ok", false)
+    }
+
+    /**
+     * 待记图片记账：把 capture 上下文交给 App，由 App 打开图片选择器、识别并合并入账。
+     *
+     * 资产/时间/账本/类型全部随 capture 一起下发，AI 只负责明细分类和金额。
+     */
+    suspend fun openImageAccounting(
+        capture: PaymentCapture,
+        requestId: String?,
+    ): OpenImageAccountingResult = withContext(Dispatchers.IO) {
+        if (capture.id.isBlank()) {
+            return@withContext OpenImageAccountingResult(
+                ok = false,
+                error = "missing_captureId",
+                message = "缺少 captureId",
+            )
+        }
+        val payload = JSONObject()
+            .put("captureId", capture.id)
+            .put("amountCents", capture.amountCents ?: 0L)
+            .put("currency", capture.currency)
+            .put("paidAt", capture.paidAt)
+            .put("type", capture.billType ?: 0)
+            .put("subType", capture.subType ?: 0)
+            .put("needsRefundLink", capture.needsRefundLink)
+        capture.assetId?.let { payload.put("assetId", it) }
+        (capture.assetName ?: capture.paymentMethodRaw)
+            ?.trim()
+            ?.takeIf { it.isNotEmpty() }
+            ?.let { payload.put("assetName", it) }
+        capture.bookName?.trim()?.takeIf { it.isNotEmpty() }?.let { payload.put("bookName", it) }
+        capture.merchant?.trim()?.takeIf { it.isNotEmpty() }?.let { payload.put("merchant", it) }
+        capture.note?.trim()?.takeIf { it.isNotEmpty() }?.let { payload.put("note", it) }
+
+        val extras = Bundle().apply {
+            putString(CaptureContract.EXTRA_CAPTURE_ID, capture.id)
+            putString(CaptureContract.EXTRA_CAPTURE_PAYLOAD, payload.toString())
+            if (!requestId.isNullOrBlank()) {
+                putString(CaptureContract.EXTRA_REQUEST_ID, requestId)
+            }
+        }
+        val json = try {
+            callForObject(CaptureContract.METHOD_OPEN_IMAGE_ACCOUNTING, null, extras)
+        } catch (t: kotlinx.coroutines.CancellationException) {
+            throw t
+        } catch (t: Throwable) {
+            Log.w(TAG, "openImageAccounting failed", t)
+            null
+        } ?: return@withContext OpenImageAccountingResult(
+            ok = false,
+            error = "bridge_unavailable",
+            message = "无法连接敲敲记账",
+        )
+
+        OpenImageAccountingResult(
+            ok = json.optBoolean("ok", false),
+            accepted = json.optBoolean("accepted", false),
+            duplicate = json.optBoolean("duplicate", false),
+            captureId = json.optString("captureId", capture.id),
+            billId = if (json.has("billId") && !json.isNull("billId")) json.optLong("billId") else null,
+            error = json.optString("error", "").trim()
+                .takeUnless { it.isEmpty() || it == "null" },
+            message = json.optString("message", "").trim()
+                .takeUnless { it.isEmpty() || it == "null" },
+        )
     }
 
     /**

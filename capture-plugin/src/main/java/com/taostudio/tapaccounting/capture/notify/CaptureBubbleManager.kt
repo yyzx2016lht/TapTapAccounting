@@ -236,19 +236,24 @@ object CaptureBubbleManager {
 
         val summaryActions = actionRow()
         val btnSmart = actionButton("智能记账", "#FFFFFF", "#3B82F6")
+        val btnImage = actionButton("图片记账", "#BFDBFE", "#1E3A8A")
         val btnAdjust = actionButton("细改", "#93C5FD", "#1E3A8A")
         val btnIgnore = actionButton("不计", "#CBD5E1", "#334155")
         summaryActions.addView(
             btnSmart,
-            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1.2f).apply { marginEnd = dp(8) },
+            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1.25f).apply { marginEnd = dp(6) },
+        )
+        summaryActions.addView(
+            btnImage,
+            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginEnd = dp(6) },
         )
         summaryActions.addView(
             btnAdjust,
-            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginEnd = dp(8) },
+            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 0.8f).apply { marginEnd = dp(6) },
         )
         summaryActions.addView(
             btnIgnore,
-            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 0.8f),
+            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 0.7f),
         )
         root.addView(summaryActions)
 
@@ -720,6 +725,41 @@ object CaptureBubbleManager {
         btnSmart.setOnClickListener {
             if (s.busy) return@setOnClickListener
             openInput()
+        }
+        btnImage.setOnClickListener {
+            if (s.busy) return@setOnClickListener
+            runBusy {
+                val latest = persistNote(etNote.text?.toString()) ?: s.capture
+                s.capture = latest
+                CaptureNotifier.refreshAll(app)
+                val result = CaptureBridgeClient(app).openImageAccounting(
+                    latest,
+                    UUID.randomUUID().toString(),
+                )
+                when {
+                    result.duplicate -> {
+                        withContext(Dispatchers.IO) {
+                            CaptureApp.from(app).repository
+                                .updateStatus(latest.id, CaptureStatus.RECORDED)
+                        }
+                        CaptureNotifier.refreshAll(app)
+                        toast("这笔已入账，未重复建单")
+                        dismissImmediate(app)
+                    }
+
+                    result.ok && result.accepted -> {
+                        toast("已打开图片记账：选小票/截图后点“确认入账并合并”")
+                        dismissImmediate(app)
+                    }
+
+                    else -> {
+                        toast(
+                            "图片记账未打开：" +
+                                (result.message ?: result.error ?: "敲敲记账桥接不可用")
+                        )
+                    }
+                }
+            }
         }
         btnAdjust.setOnClickListener {
             if (s.busy) return@setOnClickListener

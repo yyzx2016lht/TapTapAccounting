@@ -882,6 +882,7 @@
     <!-- 多条账单识别完成后的入账方式 -->
     <string name="record_all_at_once">一键全部入账</string>
     <string name="record_one_by_one">逐条确认入账</string>
+    <string name="confirm_and_merge">确认入账并合并</string>
     <!-- 一键全部入账后询问是否并成一笔扣款 -->
     <string name="merge_payment_count">共 %1$d 笔</string>
     <string name="merge_payment_message">这些账单看起来来自同一次付款。合并后它们各自仍是独立账单、分类统计不变，只是在资产详情里折叠成一行显示合计，方便和银行流水对账。</string>

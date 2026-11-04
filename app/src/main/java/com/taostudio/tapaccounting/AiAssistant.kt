@@ -44,10 +44,16 @@ class AiAssistant(private val ctx: Context) {
     private var btnExpandPreview: TextView? = null
     /** 多条账单识别完成后「一键全部入账 / 逐条确认入账」的按钮容器 */
     private var layoutMultiRecordActions: View? = null
-    private var btnRecordAllAtOnce: View? = null
-    private var btnRecordOneByOne: View? = null
+    private var btnRecordAllAtOnce: TextView? = null
+    private var btnRecordOneByOne: TextView? = null
     private var analyzeJob: Job? = null
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    /** 待记图片记账：结果面板只提供“确认入账并合并”，不逐条编辑。 */
+    private var captureMode = false
+    /** capture 模式用于在结果页显示“付款/识别合计/差额”。 */
+    private var captureExpectedTotalCents: Long? = null
+    /** capture 的币种；入账强制使用它，预览也按它显示。 */
+    private var captureExpectedCurrency: String = "CNY"
 
     /** P1-29: 宿主销毁时取消协程，避免 scope 永不 cancel；同时移除常驻小圆。 */
     fun shutdown() {
@@ -428,6 +434,10 @@ class AiAssistant(private val ctx: Context) {
         sourceText: String,
         onResult: (JSONObject) -> Unit
     ) {
+        if (captureMode) {
+            presentCaptureAccountingResult(result, onResult)
+            return
+        }
         if (result.has("bills")) {
             val bills = result.getJSONArray("bills")
             for (i in 0 until bills.length()) {
@@ -458,12 +468,14 @@ class AiAssistant(private val ctx: Context) {
                 }
             }
             layoutMultiRecordActions?.visibility = View.VISIBLE
+            btnRecordAllAtOnce?.text = ctx.getString(R.string.record_all_at_once)
             btnRecordAllAtOnce?.setOnClickListener {
                 // 整批直存；落库后由表单侧按图片来源判断要不要问一次「是否合并」
                 result.put(EXTRA_BATCH_SAVE_ALL, true)
                 onResult(result)
                 finishAfterResult(notifyBadge = false)
             }
+            btnRecordOneByOne?.visibility = View.VISIBLE
             btnRecordOneByOne?.setOnClickListener {
                 // 逐条走记账表单确认
                 result.put(EXTRA_FORCE_BILL_QUEUE, true)
@@ -480,6 +492,86 @@ class AiAssistant(private val ctx: Context) {
             }
             onResult(result)
             finishAfterResult()
+        }
+    }
+
+    /**
+     * 待记图片记账的结果页：只展示识别明细和一个「确认入账并合并」按钮。
+     *
+     * 不提供整批直存/逐条确认；取消（X/点外面/返回）只关闭面板，待记仍为 PENDING。
+     */
+    private fun presentCaptureAccountingResult(
+        result: JSONObject,
+        onResult: (JSONObject) -> Unit
+    ) {
+        val bills = result.optJSONArray("bills") ?: JSONArray().put(result)
+        if (bills.length() == 0) {
+            Utils.toast(ctx, "没有从图片识别到可入账的明细")
+            dismiss()
+            return
+        }
+        // 预览也按 capture 的币种显示，避免 AI 输出的币种与最终入账不一致。
+        for (i in 0 until bills.length()) {
+            bills.optJSONObject(i)?.put("currency", captureExpectedCurrency)
+        }
+        progressAiLoading?.visibility = View.GONE
+        updateLoadingText(ctx.getString(R.string.recognized_bills_count, bills.length()))
+        updateLoadingPreview(
+            buildList {
+                captureTotalPreviewLine(bills)?.let { add(it) }
+                add(formatOverlayFinalBillPreview(bills))
+            }.joinToString("\n")
+        )
+        btnExpandPreview?.apply {
+            visibility = if (bills.length() > 8) View.VISIBLE else View.GONE
+            text = ctx.getString(R.string.expand_all)
+            var expanded = false
+            setOnClickListener {
+                expanded = !expanded
+                updateLoadingPreview(
+                    buildList {
+                        captureTotalPreviewLine(bills)?.let { add(it) }
+                        add(formatOverlayFinalBillPreview(bills, expanded))
+                    }.joinToString("\n")
+                )
+                text = if (expanded) {
+                    ctx.getString(R.string.collapse)
+                } else {
+                    ctx.getString(R.string.expand_all)
+                }
+            }
+        }
+        layoutMultiRecordActions?.visibility = View.VISIBLE
+        btnRecordOneByOne?.visibility = View.GONE
+        btnRecordAllAtOnce?.apply {
+            text = ctx.getString(R.string.confirm_and_merge)
+            setOnClickListener {
+                onResult(result)
+                finishAfterResult(notifyBadge = false)
+            }
+        }
+        if (miniBubble != null) showBubbleBadge()
+    }
+
+    /** capture 模式的结果页顶部：付款 / 识别合计 / 差额（补“其他”或超出拒绝）。 */
+    private fun captureTotalPreviewLine(bills: JSONArray): String? {
+        val totalCents = captureExpectedTotalCents?.takeIf { it > 0L } ?: return null
+        var recognizedCents = 0L
+        for (i in 0 until bills.length()) {
+            val bill = bills.optJSONObject(i) ?: continue
+            val amount = bill.optDouble("amount", Double.NaN)
+            if (!amount.isNaN() && amount > 0.0) {
+                recognizedCents += Math.round(amount * 100.0)
+            }
+        }
+        val currency = captureExpectedCurrency
+        val totalText = formatMoneyWithSymbol(totalCents / 100.0, currency)
+        val recognizedText = formatMoneyWithSymbol(recognizedCents / 100.0, currency)
+        val diff = totalCents - recognizedCents
+        return when {
+            diff == 0L -> "付款 $totalText · 识别合计 $recognizedText"
+            diff > 0L -> "付款 $totalText · 识别合计 $recognizedText · 差额 ${formatMoneyWithSymbol(diff / 100.0, currency)} 将补入「其他」"
+            else -> "付款 $totalText · 识别合计 $recognizedText · 已超出，无法入账"
         }
     }
 
@@ -1018,7 +1110,10 @@ class AiAssistant(private val ctx: Context) {
         imageUris: List<Uri>,
         onResult: (JSONObject) -> Unit,
         onAbandoned: (() -> Unit)? = null,
-        sourceKind: String = "receipt_image"
+        sourceKind: String = "receipt_image",
+        captureMode: Boolean = false,
+        expectedTotalCents: Long? = null,
+        expectedCurrency: String = "CNY"
     ) {
         if (!ensureOverlayPermission()) {
             onAbandoned?.invoke()
@@ -1029,9 +1124,13 @@ class AiAssistant(private val ctx: Context) {
             return
         }
         lastReceiptImageUri = imageUris.first()
+        this.captureMode = captureMode
+        this.captureExpectedTotalCents = if (captureMode) expectedTotalCents else null
+        this.captureExpectedCurrency = expectedCurrency.ifBlank { "CNY" }
 
-        val needSupplement = Prefs.isReceiptImageDraftConfirmEnabled(ctx)
-        val naturalLanguage = Prefs.isImageAccountingNaturalLanguage(ctx)
+        // capture 模式固定直出 JSON：不走“先核对小票文字”或自然语言草稿，结果页只保留确认按钮。
+        val needSupplement = Prefs.isReceiptImageDraftConfirmEnabled(ctx) && !captureMode
+        val naturalLanguage = Prefs.isImageAccountingNaturalLanguage(ctx) && !captureMode
 
         if (needSupplement) {
             showSupplementInput(imageUris, naturalLanguage, onResult, onAbandoned, sourceKind)

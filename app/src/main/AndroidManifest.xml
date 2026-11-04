@@ -236,6 +236,13 @@
             android:taskAffinity=""
             android:excludeFromRecents="true"
             android:exported="false" />
+        <activity
+            android:name=".CaptureImageAccountingActivity"
+            android:label="待记图片记账"
+            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:theme="@style/Theme.TapAccounting.Transparent" />
         <!-- 桌面小组件：四种固定样式共享同一套渲染逻辑，见 com.taostudio.tapaccounting.widget 包 -->
         <receiver
             android:name=".widget.CompactExpenseWidgetProvider"

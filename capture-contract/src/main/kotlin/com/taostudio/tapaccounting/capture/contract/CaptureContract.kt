@@ -89,6 +89,8 @@ object CaptureContract {
     const val METHOD_PREVIEW_SPLIT: String = "previewSplit"
     /** 拆分入账：N 条账单共用 paymentGroupId，一条 captureId 回执。 */
     const val METHOD_IMPORT_BILL_GROUP: String = "importBillGroup"
+    /** 图片记账：带 capture 上下文打开系统图片选择器，识别后按支付组合并入账。 */
+    const val METHOD_OPEN_IMAGE_ACCOUNTING: String = "openImageAccounting"
 
     /** App -> 插件：查询待记数量与待记列表（signature 权限或同签名调用）。 */
     const val METHOD_GET_PENDING_COUNT: String = "getPendingCount"
@@ -113,6 +115,8 @@ object CaptureContract {
     const val EXTRA_SPLIT_PAYLOAD: String = "splitPayload"
     /** `importBillGroup` 的 JSON：capture 字段 + items。 */
     const val EXTRA_BILL_GROUP_PAYLOAD: String = "billGroupPayload"
+    /** `openImageAccounting` 的 JSON：amountCents/assetId/assetName/paidAt/bookName/type/subType/currency 等。 */
+    const val EXTRA_CAPTURE_PAYLOAD: String = "capturePayload"
 
     // ---- App -> 插件：广播 ----
     const val ACTION_PENDING_COUNT_CHANGED: String = "$PLUGIN_PACKAGE.action.PENDING_COUNT_CHANGED"

@@ -968,6 +968,31 @@ class PendingListActivity : Activity() {
         }
         card.addView(splitBox)
 
+        // 图片记账入口：小票/截图交给 App 识别，确认后按同一支付组入账。
+        val imageRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(0, dp(6), 0, 0)
+        }
+        imageRow.addView(
+            CaptureUi.chip(
+                activity = this,
+                text = "图片记账（小票/截图）",
+                textColor = CaptureUi.BRAND_DARK,
+                bgColor = CaptureUi.BRAND_SOFT,
+                strokeColor = CaptureUi.BRAND_BORDER,
+            ) {
+                val draftNote = noteInput.text?.toString()?.trim().orEmpty()
+                openImageAccounting(
+                    item.copy(
+                        note = draftNote.ifBlank { item.note },
+                        categoryName = currentCategory ?: item.categoryName,
+                    )
+                )
+            }
+        )
+        card.addView(imageRow)
+
         // 第四行：操作栏（直接入账 / 拆分入账 / 悬浮窗改 / 不计）
         val actionRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -1641,6 +1666,62 @@ class PendingListActivity : Activity() {
             err == "needs_refund_link" -> "退款账单需在悬浮窗关联原消费账单"
             err.isNotEmpty() -> err
             else -> "请检查分类与账户映射"
+        }
+    }
+
+    /**
+     * 图片记账入口：只把 capture 上下文交给 App，AI 识别与确认面板都在 App 内完成。
+     *
+     * 取消或识别失败不会改本地状态；App 写入成功后通过 BILL_CREATED 广播或 onResume
+     * 对账把待记标成 RECORDED。
+     */
+    private fun openImageAccounting(item: PaymentCapture) {
+        val type = item.billType ?: LocalBillType.TYPE_EXPENSE
+        if ((item.amountCents ?: 0L) <= 0L) {
+            toast("金额缺失，请先补金额再图片记账")
+            return
+        }
+        if (type !in setOf(LocalBillType.TYPE_EXPENSE, LocalBillType.TYPE_INCOME) ||
+            item.subType == LocalBillType.SUBTYPE_REFUND ||
+            item.needsRefundLink
+        ) {
+            toast("图片记账只支持普通支出/收入")
+            return
+        }
+        scope.launch {
+            withContext(Dispatchers.IO) {
+                runCatching {
+                    CaptureApp.from(this@PendingListActivity).repository.updateDraft(
+                        context = this@PendingListActivity,
+                        id = item.id,
+                        note = item.note,
+                        assetName = item.assetName,
+                        categoryName = item.categoryName,
+                    )
+                }
+            }
+            val result = bridge.openImageAccounting(item, UUID.randomUUID().toString())
+            when {
+                result.duplicate -> {
+                    withContext(Dispatchers.IO) {
+                        CaptureApp.from(this@PendingListActivity).repository
+                            .updateStatus(item.id, CaptureStatus.RECORDED)
+                    }
+                    toast("这笔已入账，未重复建单")
+                    load()
+                }
+
+                result.ok && result.accepted -> {
+                    toast("已打开图片记账：选小票/截图后点“确认入账并合并”")
+                }
+
+                else -> {
+                    toast(
+                        "图片记账未打开：" +
+                            (result.message ?: result.error ?: "敲敲记账桥接不可用")
+                    )
+                }
+            }
         }
     }
 

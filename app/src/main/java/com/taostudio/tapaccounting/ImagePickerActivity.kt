@@ -5,6 +5,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.widget.Toast
+import com.taostudio.tapaccounting.capture.contract.CaptureContract
 import java.io.File
 
 /**
@@ -71,6 +72,10 @@ class ImagePickerActivity : Activity() {
                     if (stableUris.isEmpty()) {
                         Toast.makeText(this, getString(R.string.image_read_failed), Toast.LENGTH_SHORT).show()
                         onPickCancelled?.invoke()
+                    } else if (launchCaptureAccounting(stableUris)) {
+                        // 待记图片记账：选图完成后交给 capture 专用 Activity，不走 OverlayManager 回调
+                        finish()
+                        return
                     } else {
                         // 优先调多图回调，兼容单图回调
                         val multiCb = onImagesPicked
@@ -82,10 +87,45 @@ class ImagePickerActivity : Activity() {
                     }
                 }
             } else {
+                if (!intent.getStringExtra(CaptureContract.EXTRA_CAPTURE_ID).isNullOrBlank()) {
+                    Toast.makeText(this, "已取消图片记账，待记仍保留", Toast.LENGTH_SHORT).show()
+                }
                 onPickCancelled?.invoke()
             }
         }
         finish()
+    }
+
+    /**
+     * 待记图片记账模式：把已复制到缓存的图片 Uri 和 capture 上下文交给
+     * [CaptureImageAccountingActivity]。返回 false 表示不是该模式。
+     */
+    private fun launchCaptureAccounting(uris: List<Uri>): Boolean {
+        val captureId = intent?.getStringExtra(CaptureContract.EXTRA_CAPTURE_ID)
+            ?.trim()
+            ?.takeIf { it.isNotEmpty() }
+            ?: return false
+        val next = Intent(this, CaptureImageAccountingActivity::class.java).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            putStringArrayListExtra(
+                CaptureImageAccountingActivity.EXTRA_IMAGE_URIS,
+                ArrayList(uris.map { it.toString() })
+            )
+            putExtra(CaptureContract.EXTRA_CAPTURE_ID, captureId)
+            intent.getStringExtra(CaptureContract.EXTRA_CAPTURE_PAYLOAD)?.let {
+                putExtra(CaptureContract.EXTRA_CAPTURE_PAYLOAD, it)
+            }
+            intent.getStringExtra(CaptureContract.EXTRA_REQUEST_ID)?.let {
+                putExtra(CaptureContract.EXTRA_REQUEST_ID, it)
+            }
+        }
+        return try {
+            startActivity(next)
+            true
+        } catch (t: Throwable) {
+            Logger.e(this, "StreamPreview", "launchCaptureAccounting failed: ${t.message}")
+            false
+        }
     }
 
     override fun onDestroy() {

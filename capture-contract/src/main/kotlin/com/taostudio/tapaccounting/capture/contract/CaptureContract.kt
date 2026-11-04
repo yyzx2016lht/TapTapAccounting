@@ -75,8 +75,13 @@ object CaptureContract {
     const val METHOD_IMPORT_BILLS: String = "importBills"
     const val METHOD_GET_IMPORT_STATUS: String = "getImportStatus"
 
-    /** App -> 插件：查询待记数量（signature 权限）。 */
+    /** App -> 插件：查询待记数量与待记列表（signature 权限或同签名调用）。 */
     const val METHOD_GET_PENDING_COUNT: String = "getPendingCount"
+    const val METHOD_LIST_PENDING_CAPTURES: String = "listPendingCaptures"
+    const val METHOD_UPDATE_CAPTURE_DRAFT: String = "updateCaptureDraft"
+    const val METHOD_IGNORE_CAPTURE: String = "ignoreCapture"
+    const val METHOD_MARK_CAPTURES_RECORDED: String = "markCapturesRecorded"
+    const val METHOD_CLASSIFY_CAPTURES: String = "classifyCaptures"
 
     const val EXTRA_REQUEST_ID: String = "requestId"
     const val EXTRA_CAPTURE_ID: String = "captureId"

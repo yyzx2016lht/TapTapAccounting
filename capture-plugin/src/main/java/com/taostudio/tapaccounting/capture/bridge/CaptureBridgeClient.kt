@@ -4,8 +4,13 @@ import android.content.Context
 import android.net.Uri
 import android.os.Bundle
 import android.util.Log
+import com.taostudio.tapaccounting.capture.contract.AccountingContext
+import com.taostudio.tapaccounting.capture.contract.AssetInfo
+import com.taostudio.tapaccounting.capture.contract.BookInfo
 import com.taostudio.tapaccounting.capture.contract.CaptureContract
+import com.taostudio.tapaccounting.capture.contract.CategoryInfo
 import com.taostudio.tapaccounting.capture.contract.ImportBill
+import com.taostudio.tapaccounting.capture.data.PaymentCapture
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
@@ -14,32 +19,192 @@ import java.util.Locale
 
 /**
  * 插件 → 敲敲记账 [CaptureContract.BRIDGE_AUTHORITY] 的唯一调用入口。
- *
- * App 侧 `CaptureBridgeProvider.call()` 返回 `Bundle[ACK_RESULT]`：
- * - 普通方法返回 JSONObject（`{ok:true, ...}` / `{ok:false, error:...}`）；
- * - `getImportStatus` 返回 JSONArray。
- *
- * 所有方法内部切到 [Dispatchers.IO]，调用方即使从主线程 `launch` 也不会阻塞 UI；
- * 任何异常（App 未安装、无签名权限、binder 死亡、JSON 损坏）都吞掉并返回失败值，
- * 插件不会因为桥接不可用而崩溃。
  */
 class CaptureBridgeClient(context: Context) {
 
     private val appContext: Context = context.applicationContext
     private val bridgeUri: Uri = Uri.parse("content://${CaptureContract.BRIDGE_AUTHORITY}")
 
+    data class PingStatus(
+        val ok: Boolean,
+        val aiEnabled: Boolean = false,
+        val appVersion: String = "",
+    )
+
+    data class ClassifiedDraft(
+        val captureId: String,
+        val categoryName: String?,
+        val assetName: String?,
+        val remarks: String?,
+    )
+
     /** App 桥接是否可用。 */
-    suspend fun ping(): Boolean = withContext(Dispatchers.IO) {
-        val json = callForObject(CaptureContract.METHOD_PING, null, null) ?: return@withContext false
-        json.optBoolean("ok", false)
+    suspend fun ping(): Boolean = pingDetail().ok
+
+    suspend fun pingDetail(): PingStatus = withContext(Dispatchers.IO) {
+        val json = callForObject(CaptureContract.METHOD_PING, null, null)
+            ?: return@withContext PingStatus(ok = false)
+        PingStatus(
+            ok = json.optBoolean("ok", false),
+            aiEnabled = json.optBoolean("aiEnabled", false),
+            appVersion = json.optString("appVersion", ""),
+        )
     }
 
     /**
+     * 读取敲敲记账的账本、资产、分类上下文。
+     */
+    suspend fun getAccountingContext(): AccountingContext? = withContext(Dispatchers.IO) {
+        val json = callForObject(CaptureContract.METHOD_GET_ACCOUNTING_CONTEXT, null, null)
+            ?: return@withContext null
+        if (!json.optBoolean("ok", false)) return@withContext null
+
+        val books = buildList {
+            val arr = json.optJSONArray("books") ?: JSONArray()
+            for (i in 0 until arr.length()) {
+                val obj = arr.optJSONObject(i) ?: continue
+                val name = obj.optString("name", "").trim()
+                if (name.isNotEmpty()) {
+                    add(BookInfo(id = obj.optLong("id", (i + 1).toLong()), name = name))
+                }
+            }
+        }
+        val assets = buildList {
+            val arr = json.optJSONArray("assets") ?: JSONArray()
+            for (i in 0 until arr.length()) {
+                val obj = arr.optJSONObject(i) ?: continue
+                val name = obj.optString("name", "").trim()
+                if (name.isNotEmpty()) {
+                    add(
+                        AssetInfo(
+                            id = obj.optLong("id", 0L),
+                            name = name,
+                            type = obj.optString("type", ""),
+                            assetCategory = obj.optString("assetCategory", ""),
+                            currency = obj.optString("currency", "CNY"),
+                        )
+                    )
+                }
+            }
+        }
+        val categories = buildList {
+            val arr = json.optJSONArray("categories") ?: JSONArray()
+            for (i in 0 until arr.length()) {
+                val obj = arr.optJSONObject(i) ?: continue
+                val name = obj.optString("name", "").trim()
+                if (name.isNotEmpty()) {
+                    val parentId = if (obj.has("parentId") && !obj.isNull("parentId")) {
+                        obj.optLong("parentId")
+                    } else {
+                        null
+                    }
+                    add(
+                        CategoryInfo(
+                            id = obj.optLong("id", 0L),
+                            name = name,
+                            type = obj.optInt("type", 0),
+                            parentId = parentId,
+                        )
+                    )
+                }
+            }
+        }
+        val defaultBook = if (json.has("defaultBookName") && !json.isNull("defaultBookName")) {
+            json.optString("defaultBookName", "").takeIf { it.isNotBlank() }
+        } else {
+            null
+        }
+        AccountingContext(
+            contractVersion = json.optInt("contractVersion", CaptureContract.VERSION),
+            defaultBookName = defaultBook,
+            assetFeatureEnabled = json.optBoolean("assetFeatureEnabled", true),
+            books = books,
+            assets = assets,
+            categories = categories,
+        )
+    }
+
+    /**
+     * 查询某时间点附近的已有支出账单，用于检测用户是否已经手动记过（标“可能已记”）。
+     */
+    suspend fun hasRecentMatchingBill(paidAt: Long, amountCents: Long, windowMinutes: Int = 10): Boolean =
+        withContext(Dispatchers.IO) {
+            if (amountCents <= 0L) return@withContext false
+            val extras = Bundle().apply {
+                putLong(CaptureContract.EXTRA_PAID_AT, paidAt)
+                putInt("windowMinutes", windowMinutes)
+                putInt("limit", 30)
+            }
+            val array = callForArray(CaptureContract.METHOD_GET_RECENT_BILLS, null, extras)
+                ?: return@withContext false
+            for (i in 0 until array.length()) {
+                val item = array.optJSONObject(i) ?: continue
+                if (item.optLong("amountCents", -1L) == amountCents) {
+                    return@withContext true
+                }
+            }
+            false
+        }
+
+    data class ClassifyResult(
+        val ok: Boolean,
+        val drafts: List<ClassifiedDraft> = emptyList(),
+        val error: String? = null,
+    )
+
+    /**
+     * 调用敲敲记账内置的 AI 服务对多笔待记一次性分类（时间、金额、资产保持锁定）。
+     */
+    suspend fun classifyCaptures(captures: List<PaymentCapture>): ClassifyResult =
+        withContext(Dispatchers.IO) {
+            if (captures.isEmpty()) return@withContext ClassifyResult(ok = true)
+            val arr = JSONArray()
+            captures.forEach { item ->
+                arr.put(
+                    JSONObject().apply {
+                        put("captureId", item.id)
+                        put("amountCents", item.amountCents ?: 0L)
+                        put("paidAt", item.paidAt)
+                        put("source", item.source)
+                        putOpt("merchant", item.merchant)
+                        putOpt("paymentMethodRaw", item.paymentMethodRaw)
+                        putOpt("assetName", item.assetName)
+                        putOpt("categoryName", item.categoryName)
+                        putOpt("note", item.note)
+                        putOpt("billType", item.billType)
+                    }
+                )
+            }
+            val extras = Bundle().apply {
+                putString("captures", arr.toString())
+            }
+            val res = callForObject(CaptureContract.METHOD_CLASSIFY_CAPTURES, arr.toString(), extras)
+                ?: return@withContext ClassifyResult(ok = false, error = "无法连接敲敲记账")
+            if (!res.optBoolean("ok", false)) {
+                val msg = res.optString("message", "").ifBlank { res.optString("error", "AI 分类未完成") }
+                return@withContext ClassifyResult(ok = false, error = msg)
+            }
+            val draftsArr = res.optJSONArray("drafts") ?: return@withContext ClassifyResult(ok = true)
+            val drafts = buildList {
+                for (i in 0 until draftsArr.length()) {
+                    val obj = draftsArr.optJSONObject(i) ?: continue
+                    val id = obj.optString("captureId", "").trim()
+                    if (id.isEmpty()) continue
+                    add(
+                        ClassifiedDraft(
+                            captureId = id,
+                            categoryName = obj.optString("categoryName", "").trim().takeIf { it.isNotEmpty() },
+                            assetName = obj.optString("assetName", "").trim().takeIf { it.isNotEmpty() },
+                            remarks = obj.optString("remarks", "").trim().takeIf { it.isNotEmpty() },
+                        )
+                    )
+                }
+            }
+            ClassifyResult(ok = true, drafts = drafts)
+        }
+
+    /**
      * 查询 [captureIds] 在 App 侧 `external_imports` 里的状态。
-     *
-     * 返回 captureId → RECORDED/UNKNOWN。App 只回答“已写入”或“查不到”，
-     * IMPORTING 之类是插件本地状态，不在这里出现。
-     * 桥接不可用/返回为空时返回空 Map（调用方据此保持本地状态不变）。
      */
     suspend fun getImportStatus(captureIds: List<String>): Map<String, String> =
         withContext(Dispatchers.IO) {
@@ -68,16 +233,12 @@ class CaptureBridgeClient(context: Context) {
                     .uppercase(Locale.US)
                     .ifEmpty { STATUS_UNKNOWN }
             }
-            // App 没返回的 id 视为未确认，避免调用方把“缺省”误判成已记。
             ids.forEach { id -> result.putIfAbsent(id, STATUS_UNKNOWN) }
             result
         }
 
     /**
      * 让 App 打开悬浮窗“自己记”表单。
-     *
-     * @return App 是否接受了请求（`ok:true`）。已存在回执时 App 会返回
-     * `ok:true, duplicate:true`，同样视为成功；下一次对账会把本地状态推进为 RECORDED。
      */
     suspend fun openQuickRecord(
         prefill: JSONObject,
@@ -98,9 +259,6 @@ class CaptureBridgeClient(context: Context) {
 
     /**
      * 把插件里已经确认好类型的待记直接交给 App 写入账本。
-     *
-     * 返回 App 的原始结果 JSON（`ok`、`results`）；桥接不可用返回 null。
-     * 退款必须带 relatedBillId，否则 App 会返回 needs_refund_link。
      */
     suspend fun importBills(
         bills: List<ImportBill>,
@@ -156,12 +314,10 @@ class CaptureBridgeClient(context: Context) {
             .getOrNull()
     }
 
-    /** 返回 [CaptureContract.ACK_RESULT] 的原始 JSON 文本；任何失败都返回 null。 */
     private fun callRaw(method: String, arg: String?, extras: Bundle?): String? = try {
         val bundle = appContext.contentResolver.call(bridgeUri, method, arg, extras)
         bundle?.getString(CaptureContract.ACK_RESULT)?.trim()?.takeIf { it.isNotEmpty() }
     } catch (t: Throwable) {
-        // App 未安装 / 无 CAPTURE_BRIDGE 权限 / Provider 未导出 / binder 异常。
         Log.w(TAG, "bridge call failed: $method", t)
         null
     }

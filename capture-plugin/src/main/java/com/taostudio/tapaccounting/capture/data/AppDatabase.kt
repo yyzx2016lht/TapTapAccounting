@@ -8,20 +8,24 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
-    entities = [PaymentCapture::class, CaptureEvent::class],
-    version = 5,
+    entities = [
+        PaymentCapture::class,
+        CaptureEvent::class,
+        AssetMappingRule::class,
+        CategoryRule::class,
+    ],
+    version = 6,
     exportSchema = false,
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun paymentCaptureDao(): PaymentCaptureDao
     abstract fun captureEventDao(): CaptureEventDao
+    abstract fun assetMappingDao(): AssetMappingDao
+    abstract fun categoryRuleDao(): CategoryRuleDao
 
     companion object {
         /**
          * v1 -> v2：账单类型本地化字段。
-         *
-         * 现有行保持 `billType/subType = NULL`、`needsRefundLink = 0`，不重算、不丢数据。
-         * 旧行在 UI 上显示为“待分类”；当前没有自动回填，后续可一次性重跑规则或手动选类型。
          */
         val MIGRATION_1_2: Migration = object : Migration(1, 2) {
             override fun migrate(db: SupportSQLiteDatabase) {
@@ -81,6 +85,44 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /** v5 -> v6：资产映射表 + 分类规则表。 */
+        val MIGRATION_5_6: Migration = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """CREATE TABLE IF NOT EXISTS `asset_mapping_rules` (
+                        `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        `pattern` TEXT NOT NULL,
+                        `targetAssetName` TEXT NOT NULL,
+                        `isRegex` INTEGER NOT NULL,
+                        `sort` INTEGER NOT NULL,
+                        `enabled` INTEGER NOT NULL,
+                        `createdAt` INTEGER NOT NULL
+                    )""".trimIndent()
+                )
+                db.execSQL(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS `index_asset_mapping_rules_pattern` " +
+                        "ON `asset_mapping_rules` (`pattern`)"
+                )
+                db.execSQL(
+                    """CREATE TABLE IF NOT EXISTS `category_rules` (
+                        `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        `keyword` TEXT NOT NULL,
+                        `matchField` TEXT NOT NULL,
+                        `isRegex` INTEGER NOT NULL,
+                        `targetCategoryName` TEXT NOT NULL,
+                        `targetBookName` TEXT,
+                        `sort` INTEGER NOT NULL,
+                        `enabled` INTEGER NOT NULL,
+                        `createdAt` INTEGER NOT NULL
+                    )""".trimIndent()
+                )
+                db.execSQL(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS `index_category_rules_keyword_matchField` " +
+                        "ON `category_rules` (`keyword`, `matchField`)"
+                )
+            }
+        }
+
         @Volatile
         private var instance: AppDatabase? = null
 
@@ -91,7 +133,13 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "capture.db",
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+                    .addMigrations(
+                        MIGRATION_1_2,
+                        MIGRATION_2_3,
+                        MIGRATION_3_4,
+                        MIGRATION_4_5,
+                        MIGRATION_5_6,
+                    )
                     .build()
                     .also { instance = it }
             }

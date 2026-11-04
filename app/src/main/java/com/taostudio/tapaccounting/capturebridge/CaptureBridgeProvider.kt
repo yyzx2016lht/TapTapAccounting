@@ -16,16 +16,10 @@ import com.taostudio.tapaccounting.capture.contract.AssetInfo
 import com.taostudio.tapaccounting.capture.contract.BookInfo
 import com.taostudio.tapaccounting.capture.contract.CaptureContract
 import com.taostudio.tapaccounting.capture.contract.CategoryInfo
-import com.taostudio.tapaccounting.capture.contract.ImportBill
-import com.taostudio.tapaccounting.capture.contract.ImportItemStatus
 import com.taostudio.tapaccounting.data.local.AppDatabase
-import com.taostudio.tapaccounting.data.local.entity.Asset
 import com.taostudio.tapaccounting.data.local.entity.Bill
-import com.taostudio.tapaccounting.data.local.entity.ExternalImport
 import com.taostudio.tapaccounting.logic.AssetNameResolver
-import com.taostudio.tapaccounting.logic.BillMutationService
 import com.taostudio.tapaccounting.logic.CategoryNameResolver
-import com.taostudio.tapaccounting.logic.DuplicateCaptureException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import org.json.JSONArray
@@ -68,11 +62,11 @@ class CaptureBridgeProvider : ContentProvider() {
             CaptureContract.METHOD_OPEN_QUICK_RECORD -> openQuickRecord(ctx, extras)
             CaptureContract.METHOD_IMPORT_BILLS -> importBills(ctx, arg, extras)
             CaptureContract.METHOD_GET_IMPORT_STATUS -> getImportStatus(ctx, arg, extras)
-            // P2 未实现：明确报错，不静默返回空数据。
-            CaptureContract.METHOD_START_CLASSIFY,
+            CaptureContract.METHOD_CLASSIFY_CAPTURES,
+            CaptureContract.METHOD_START_CLASSIFY -> classifyCaptures(ctx, arg, extras)
             CaptureContract.METHOD_GET_CLASSIFY_RESULT -> errorJson(
                 "not_implemented",
-                "$method 属于 P2，当前未开放"
+                "$method 请直接使用 classifyCaptures"
             )
             else -> errorJson("unknown_method", "未知方法：$method")
         }
@@ -84,13 +78,13 @@ class CaptureBridgeProvider : ContentProvider() {
         val appVersion = runCatching {
             ctx.packageManager.getPackageInfo(ctx.packageName, 0).versionName.orEmpty()
         }.getOrDefault("")
+        val hasAiKey = runCatching { Prefs.getAiKey(ctx).isNotBlank() }.getOrDefault(false)
         return JSONObject()
             .put("ok", true)
             .put("contractVersion", CaptureContract.CONTRACT_VERSION)
             .put("appVersion", appVersion)
             .put("importEnabled", true)
-            // AI 代理是 P2，插件据此走本地草稿/自己记。
-            .put("aiEnabled", false)
+            .put("aiEnabled", hasAiKey)
     }
 
     private suspend fun getAccountingContext(ctx: Context): JSONObject {
@@ -265,215 +259,7 @@ class CaptureBridgeProvider : ContentProvider() {
         } catch (t: Throwable) {
             return errorJson("invalid_bills", "bills 不是合法 JSON：${t.message}")
         }
-
-        val db = AppDatabase.getDatabase(ctx)
-        val bookRows = db.bookDao().getAll()
-        val books = BookAccountManager.getBookAccounts(ctx, bookRows.map { it.name })
-        val defaultBook = BookAccountManager.getDefaultBook(ctx, books)
-        val results = JSONArray()
-        var allOk = true
-
-        for (index in 0 until array.length()) {
-            val item = array.optJSONObject(index)
-            val captureId = item?.optString("captureId", "").orEmpty().trim()
-            try {
-                requireNotNull(item) { "bills[$index] 不是对象" }
-                val import = parseImportBill(item)
-                val created = importOne(ctx, db, import, requestId, defaultBook)
-                results.put(
-                    JSONObject()
-                        .put("captureId", created.first)
-                        .put("billId", created.second)
-                        .put("status", created.third)
-                )
-                if (created.third == ImportItemStatus.ERROR) allOk = false
-            } catch (t: DuplicateCaptureException) {
-                results.put(
-                    JSONObject()
-                        .put("captureId", t.captureId)
-                        .put("billId", t.existingBillId)
-                        .put("status", ImportItemStatus.DUPLICATE)
-                )
-            } catch (t: Throwable) {
-                allOk = false
-                results.put(
-                    JSONObject()
-                        .put("captureId", captureId)
-                        .put("billId", JSONObject.NULL)
-                        .put("status", ImportItemStatus.ERROR)
-                        .put("error", t.message ?: t.javaClass.simpleName)
-                )
-            }
-        }
-
-        return JSONObject()
-            .put("ok", allOk)
-            .put("requestId", requestId ?: JSONObject.NULL)
-            .put("results", results)
-    }
-
-    /** 返回 captureId / billId / status。 */
-    private suspend fun importOne(
-        ctx: Context,
-        db: AppDatabase,
-        import: ImportBill,
-        requestId: String?,
-        defaultBook: String
-    ): Triple<String, Long, String> {
-        val existing = db.externalImportDao().getByCaptureId(import.captureId)
-        if (existing != null && db.billDao().getBillById(existing.billId) != null) {
-            return Triple(import.captureId, existing.billId, ImportItemStatus.DUPLICATE)
-        }
-        if (existing != null) {
-            // 账单已被删除：回执失效，允许重新导入。
-            db.externalImportDao().deleteByCaptureId(import.captureId)
-        }
-
-        val type = when (import.type) {
-            Bill.TYPE_REPAYMENT -> Bill.TYPE_TRANSFER
-            else -> import.type
-        }
-        val subType = when {
-            import.type == Bill.TYPE_REPAYMENT -> Bill.SUBTYPE_REPAYMENT
-            import.subType == Bill.SUBTYPE_REFUND -> Bill.SUBTYPE_REFUND
-            else -> import.subType
-        }
-        require(type in setOf(Bill.TYPE_EXPENSE, Bill.TYPE_INCOME, Bill.TYPE_TRANSFER)) {
-            "unsupported bill type: ${import.type}"
-        }
-
-        if (subType == Bill.SUBTYPE_REFUND || import.needsRefundLink) {
-            return importRefund(db, import, requestId)
-        }
-
-        val asset = resolveAsset(db, import.assetId, import.assetName)
-        val toAsset = resolveAsset(db, import.toAssetId, import.toAssetName)
-        if (type == Bill.TYPE_TRANSFER) {
-            require(Prefs.isAssetFeatureEnabled(ctx)) { "asset_feature_disabled" }
-            requireNotNull(asset) { "missing_asset" }
-            requireNotNull(toAsset) { "missing_to_asset" }
-            require(asset.id != toAsset.id) { "same_asset" }
-        }
-
-        val resolvedCategory = if (type in setOf(Bill.TYPE_EXPENSE, Bill.TYPE_INCOME)) {
-            CategoryNameResolver.resolve(
-                db.categoryDao().getAllCategoriesList(),
-                import.categoryName,
-                type,
-            )
-        } else {
-            null
-        }
-        val categoryName = when {
-            type == Bill.TYPE_TRANSFER && subType == Bill.SUBTYPE_REPAYMENT ->
-                "还款到${toAsset?.name.orEmpty()}"
-            type == Bill.TYPE_TRANSFER -> "转账到${toAsset?.name.orEmpty()}"
-            else -> resolvedCategory?.name.orEmpty()
-        }
-
-        val bill = Bill(
-            type = type,
-            subType = subType,
-            amount = import.amountCents / 100.0,
-            originalAmount = import.amountCents / 100.0,
-            currency = import.currency.ifBlank { "CNY" },
-            categoryId = import.categoryId ?: resolvedCategory?.id,
-            categoryName = categoryName,
-            accountId = asset?.id,
-            accountName = asset?.name.orEmpty(),
-            toAccountId = toAsset?.id,
-            toAccountName = toAsset?.name.orEmpty(),
-            time = normalizeMillis(import.paidAt),
-            remark = import.remarks,
-            fee = import.feeCents / 100.0,
-            bookName = import.bookName?.takeIf { it.isNotBlank() } ?: defaultBook,
-            relatedBillId = import.relatedBillId,
-        )
-
-        val saved = BillMutationService.insertBillAndApplyImpact(
-            db = db,
-            bill = bill,
-            applyAssetImpact = true,
-            captureId = import.captureId,
-            requestId = requestId,
-        )
-        return Triple(import.captureId, saved.id, ImportItemStatus.CREATED)
-    }
-
-    private suspend fun importRefund(
-        db: AppDatabase,
-        import: ImportBill,
-        requestId: String?
-    ): Triple<String, Long, String> {
-        val original = import.relatedBillId?.let { relatedId ->
-            db.billDao().getBillById(relatedId)
-                ?: throw IllegalArgumentException("refund_source_not_found")
-        } ?: run {
-            // 没有显式关联时，按分类/金额/时间找唯一候选；找不到就留在“待关联”。
-            val probe = Bill(
-                type = Bill.TYPE_EXPENSE,
-                subType = Bill.SUBTYPE_REFUND,
-                amount = import.amountCents / 100.0,
-                originalAmount = import.amountCents / 100.0,
-                categoryName = import.categoryName.orEmpty(),
-                time = normalizeMillis(import.paidAt),
-            )
-            BillMutationService.resolveRefundSourceBill(db, probe)
-                ?: throw IllegalArgumentException("needs_refund_link")
-        }
-        require(original.type == Bill.TYPE_EXPENSE && original.subType != Bill.SUBTYPE_REFUND) {
-            "refund_source_not_expense"
-        }
-
-        val amount = import.amountCents / 100.0
-        val refund = Bill(
-            type = Bill.TYPE_INCOME,
-            subType = Bill.SUBTYPE_REFUND,
-            amount = amount,
-            originalAmount = amount,
-            currency = original.currency,
-            exchangeRate = original.exchangeRate,
-            categoryId = original.categoryId,
-            categoryName = "退款：${original.categoryName}",
-            accountId = original.accountId,
-            accountName = original.accountName,
-            time = normalizeMillis(import.paidAt),
-            remark = import.remarks,
-            bookName = original.bookName,
-            relatedBillId = original.id,
-        )
-        val saved = BillMutationService.saveRefundBill(db, original, refund)
-
-        val inserted = db.externalImportDao().insertIgnore(
-            ExternalImport(
-                captureId = import.captureId,
-                billId = saved.id,
-                requestId = requestId,
-                createdAt = System.currentTimeMillis(),
-            )
-        )
-        if (inserted == -1L) {
-            val existing = db.externalImportDao().getByCaptureId(import.captureId)
-            if (existing != null) {
-                return Triple(import.captureId, existing.billId, ImportItemStatus.DUPLICATE)
-            }
-        }
-        return Triple(import.captureId, saved.id, ImportItemStatus.CREATED)
-    }
-
-    private suspend fun resolveAsset(
-        db: AppDatabase,
-        id: Long?,
-        name: String?
-    ): Asset? {
-        if (id != null && id > 0L) {
-            return db.assetDao().getAssetById(id)
-                ?: throw IllegalArgumentException("asset_not_found:$id")
-        }
-        val trimmed = name?.trim().orEmpty()
-        if (trimmed.isEmpty()) return null
-        return AssetNameResolver.resolve(db.assetDao().getAllAssetsList(), trimmed)
-            ?: throw IllegalArgumentException("asset_not_found:$trimmed")
+        return CaptureImportService.importBills(ctx, array, requestId)
     }
 
     /**
@@ -502,52 +288,6 @@ class CaptureBridgeProvider : ContentProvider() {
             }
         }
         return out
-    }
-
-    private fun parseImportBill(obj: JSONObject): ImportBill {
-        val captureId = obj.optString("captureId", "").trim()
-        require(captureId.isNotEmpty()) { "missing_captureId" }
-        val amountCents = obj.optLong("amountCents", -1L)
-        require(amountCents > 0L) { "invalid_amountCents" }
-        val type = obj.optInt("type", Bill.TYPE_EXPENSE)
-        val subType = if (obj.has("subType")) {
-            obj.optInt("subType", Bill.SUBTYPE_NORMAL)
-        } else if (type == Bill.TYPE_REPAYMENT) {
-            Bill.SUBTYPE_REPAYMENT
-        } else {
-            Bill.SUBTYPE_NORMAL
-        }
-        return ImportBill(
-            captureId = captureId,
-            type = type,
-            subType = subType,
-            needsRefundLink = obj.optBoolean(
-                "needsRefundLink",
-                subType == Bill.SUBTYPE_REFUND
-            ),
-            amountCents = amountCents,
-            currency = obj.optString("currency", "CNY"),
-            paidAt = normalizeMillis(obj.optLong("paidAt", System.currentTimeMillis())),
-            assetId = obj.longOrNull("assetId"),
-            assetName = obj.optString("assetName", "").takeIf { it.isNotBlank() },
-            toAssetId = obj.longOrNull("toAssetId"),
-            toAssetName = obj.optString("toAssetName", "").takeIf { it.isNotBlank() },
-            categoryId = obj.longOrNull("categoryId"),
-            categoryName = obj.optString("categoryName", "").takeIf { it.isNotBlank() },
-            remarks = obj.optString("remarks", ""),
-            bookName = obj.optString("bookName", "").takeIf { it.isNotBlank() },
-            feeCents = obj.optLong("feeCents", 0L),
-            relatedBillId = obj.longOrNull("relatedBillId"),
-        )
-    }
-
-    private fun JSONObject.longOrNull(key: String): Long? {
-        if (!has(key) || isNull(key)) return null
-        return when (val value = opt(key)) {
-            is Number -> value.toLong()
-            is String -> value.trim().toLongOrNull()
-            else -> null
-        }
     }
 
     private suspend fun getImportStatus(ctx: Context, arg: String?, extras: Bundle?): JSONArray {
@@ -579,6 +319,19 @@ class CaptureBridgeProvider : ContentProvider() {
                 )
             }
         }
+    }
+
+    /**
+     * 调用敲敲记账已配置好的 AI 对多笔待记一次性推断分类与整理备注。
+     * 时间、金额、资产由插件 Hook 锁定，AI 仅补充分类与备注。
+     */
+    private suspend fun classifyCaptures(ctx: Context, arg: String?, extras: Bundle?): JSONObject {
+        val raw = extras?.getString("captures") ?: arg
+            ?: return errorJson("missing_captures", "缺少 captures JSON")
+        val array = runCatching { JSONArray(raw) }.getOrElse {
+            return errorJson("invalid_captures", "captures 不是合法 JSONArray")
+        }
+        return CaptureImportService.classify(ctx, array)
     }
 
     // ---------------- 工具 ----------------

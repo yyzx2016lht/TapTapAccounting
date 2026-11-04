@@ -67,6 +67,21 @@ class AccountingFormController(
         this.requestId = requestId
     }
 
+    /** 清空待记预填，恢复为空白记账状态。 */
+    fun resetToBlankBill() {
+        this.captureId = null
+        this.requestId = null
+        etMoney.setText("")
+        spType.setSelection(0)
+        tvAccount.text = ctx.getString(R.string.select_asset_dialog)
+        resetAccountIconToEmoji()
+        tvCategory.text = ctx.getString(R.string.select_category)
+        showDefaultCategoryIcon()
+        etRemark.setText("")
+        etFee.setText("")
+        setupDefaults()
+    }
+
     /** P1-29: 界面销毁时取消协程。 */
     fun destroy() {
         aiAssistantInstance?.shutdown()

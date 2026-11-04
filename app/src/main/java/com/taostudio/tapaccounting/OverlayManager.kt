@@ -101,6 +101,7 @@ class OverlayManager(private val ctx: Context) {
 
     private val aiAssistant = AiAssistant(ctx)
     private var formController: AccountingFormController? = null
+    private var pendingCaptureController: com.taostudio.tapaccounting.capturebridge.OverlayPendingCaptureController? = null
     private var voiceHandler: VoiceInputHandler? = null
     /** 支付捕获插件“自己记”的幂等键；普通敲击记账为 null。 */
     private var pendingCaptureId: String? = null
@@ -357,6 +358,16 @@ class OverlayManager(private val ctx: Context) {
         if (prefill != null) {
             val forceMulti = prefill.has("bills")
             formController?.fillDataToUi(prefill, showToast = false, forceMultiMode = forceMulti)
+        }
+
+        pendingCaptureController?.destroy()
+        pendingCaptureController = com.taostudio.tapaccounting.capturebridge.OverlayPendingCaptureController(
+            ctx = ctx,
+            rootFloatingView = view,
+            formController = formController!!,
+            onCloseOverlay = { isSaved -> removeOverlay(isSaved) }
+        ).also {
+            it.loadIfNeeded(hasExplicitPrefill = prefill != null || !captureId.isNullOrBlank())
         }
 
         voiceHandler = VoiceInputHandler(
@@ -1199,6 +1210,8 @@ class OverlayManager(private val ctx: Context) {
 
     /** OverlayService 销毁时调用：释放管理器级常驻资源（removeOverlay 只处理单次表单的资源） */
     fun destroy() {
+        pendingCaptureController?.destroy()
+        pendingCaptureController = null
         formController?.destroy()
         formController = null
         pendingCaptureId = null
@@ -1210,6 +1223,8 @@ class OverlayManager(private val ctx: Context) {
         // 表单已关闭：本次“自己记”的幂等键随之失效，下一条不能复用。
         pendingCaptureId = null
         pendingRequestId = null
+        pendingCaptureController?.destroy()
+        pendingCaptureController = null
         // 若仍挂着「未进入记账」的截屏，关掉悬浮层时一并删掉
         discardPendingScreenCapture()
         hideScreenCaptureLoadingOverlay()

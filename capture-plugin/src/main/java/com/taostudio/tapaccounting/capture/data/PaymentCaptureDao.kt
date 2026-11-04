@@ -19,6 +19,9 @@ interface PaymentCaptureDao {
     @Query("SELECT * FROM payment_captures ORDER BY paidAt DESC, createdAt DESC LIMIT :limit")
     suspend fun listRecent(limit: Int): List<PaymentCapture>
 
+    @Query("SELECT * FROM payment_captures WHERE status IN (:statuses) ORDER BY paidAt DESC, createdAt DESC LIMIT :limit")
+    suspend fun listByStatuses(statuses: List<String>, limit: Int): List<PaymentCapture>
+
     @Query("SELECT * FROM payment_captures WHERE id = :id LIMIT 1")
     suspend fun findById(id: String): PaymentCapture?
 
@@ -33,4 +36,25 @@ interface PaymentCaptureDao {
 
     @Query("UPDATE payment_captures SET note = :note, updatedAt = :updatedAt WHERE id = :id")
     suspend fun updateNote(id: String, note: String?, updatedAt: Long): Int
+
+    @Query("UPDATE payment_captures SET assetName = :assetName, updatedAt = :updatedAt WHERE id = :id")
+    suspend fun updateAssetName(id: String, assetName: String?, updatedAt: Long): Int
+
+    @Query("UPDATE payment_captures SET categoryName = :categoryName, updatedAt = :updatedAt WHERE id = :id")
+    suspend fun updateCategoryName(id: String, categoryName: String?, updatedAt: Long): Int
+
+    @Query(
+        "UPDATE payment_captures SET note = :note, assetName = :assetName, " +
+            "categoryName = :categoryName, updatedAt = :updatedAt WHERE id = :id"
+    )
+    suspend fun updateDraftFields(
+        id: String,
+        note: String?,
+        assetName: String?,
+        categoryName: String?,
+        updatedAt: Long,
+    ): Int
+
+    @Query("DELETE FROM payment_captures WHERE id = :id")
+    suspend fun deleteById(id: String): Int
 }

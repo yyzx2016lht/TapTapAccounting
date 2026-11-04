@@ -32,6 +32,9 @@ object CategoryNameResolver {
         "其他" to listOf("其他"),
     )
 
+    /** 插件/规则里用的“父 - 子”路径分隔符（兼容 `父-子`、`父/子`、`父>子`）。 */
+    private val pathSeparator = Regex("\\s*(?:-|/|>|›)\\s*")
+
     fun resolve(categories: List<Category>, rawName: String?, type: Int): Category? {
         val raw = rawName?.trim().orEmpty()
         if (raw.isEmpty()) return null
@@ -39,9 +42,30 @@ object CategoryNameResolver {
         if (candidates.isEmpty()) return null
 
         candidates.firstOrNull { it.name.equals(raw, ignoreCase = true) }?.let { return it }
+
+        // “吃的 - 买菜”：先按父子精确匹配；子分类同名时靠父分类区分。
+        val parts = raw.split(pathSeparator).map { it.trim() }.filter { it.isNotEmpty() }
+        if (parts.size >= 2) {
+            val parentName = parts[parts.size - 2]
+            val leafName = parts.last()
+            val byId = candidates.associateBy { it.id }
+            candidates.firstOrNull { cat ->
+                cat.name.equals(leafName, ignoreCase = true) &&
+                    cat.parentId?.let { byId[it] }?.name.equals(parentName, ignoreCase = true)
+            }?.let { return it }
+            candidates.firstOrNull { it.name.equals(leafName, ignoreCase = true) }?.let { return it }
+            return resolve(categories, leafName, type)
+        }
+
         aliases[raw]?.forEach { target ->
             candidates.firstOrNull { it.name.equals(target, ignoreCase = true) }?.let { return it }
         }
         return null
+    }
+
+    /** 返回插件侧通用的显示路径：有父分类时为“父 - 子”，否则为本名。 */
+    fun displayPath(categories: List<Category>, category: Category): String {
+        val parent = category.parentId?.let { pid -> categories.firstOrNull { it.id == pid } }
+        return if (parent != null) "${parent.name} - ${category.name}" else category.name
     }
 }

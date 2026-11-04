@@ -45,9 +45,10 @@
         android:name="com.taostudio.tapaccounting.permission.CAPTURE_BRIDGE"
         android:protectionLevel="signature" />
 
-    <!-- Android 11+ 包可见性：显式声明插件包名，便于广播/Provider 互调。 -->
+    <!-- Android 11+ 包可见性：显式声明插件包名与 Provider，便于广播/Provider 互调。 -->
     <queries>
         <package android:name="com.taostudio.tapaccounting.capture" />
+        <provider android:authorities="com.taostudio.tapaccounting.capture.ingest" />
     </queries>
 
 

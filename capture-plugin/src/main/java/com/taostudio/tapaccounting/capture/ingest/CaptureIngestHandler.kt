@@ -4,10 +4,16 @@ import android.content.Context
 import android.util.Log
 import com.taostudio.tapaccounting.capture.BuildConfig
 import com.taostudio.tapaccounting.capture.CaptureApp
+import com.taostudio.tapaccounting.capture.bridge.CaptureBridgeClient
 import com.taostudio.tapaccounting.capture.contract.CaptureContract
 import com.taostudio.tapaccounting.capture.contract.CapturePayload
+import com.taostudio.tapaccounting.capture.contract.CaptureStatus
+import com.taostudio.tapaccounting.capture.contract.LocalBillType
+import com.taostudio.tapaccounting.capture.data.CapturePrefs
+import com.taostudio.tapaccounting.capture.notify.CaptureBubbleManager
 import com.taostudio.tapaccounting.capture.notify.CaptureNotifier
 import com.taostudio.tapaccounting.capture.parse.AutoAccountingRuleEngine
+import com.taostudio.tapaccounting.capture.parse.CaptureRuleMatcher
 import com.taostudio.tapaccounting.capture.service.CaptureKeepAliveService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
@@ -18,14 +24,6 @@ import kotlin.math.roundToLong
 
 /**
  * hook -> 插件的实际入库逻辑。
- *
- * 两个入口共用：
- * - [CaptureIngestReceiver]：显式广播。微信/支付宝没有在 manifest 里声明本插件，
- *   受 Android 11+ 包可见性限制，ContentResolver 解析不到本插件的 Provider；
- *   显式广播不受包可见性过滤，是当前 hook 的主路径。
- * - [CaptureIngestProvider]：保留给同包/声明了 provider authority 的调用方和 adb 调试。
- *
- * 所有异常都在这里收敛成 ack JSON，调用方（Provider/Receiver）不需要再兜底。
  */
 internal object CaptureIngestHandler {
 
@@ -44,10 +42,46 @@ internal object CaptureIngestHandler {
                 ?: return ackError("app not attached")
             AutoAccountingRuleEngine.init(app)
             val analysis = enrichWithRules(payload)
-            val enriched = analysis.payload
-            val (outcome, count) = runBlocking(Dispatchers.IO) {
-                // 先留原始事件（AutoAccounting AppDataModel 等价物），
-                // 未命中的丰巢/普通通知只进历史，不建待记。
+            val baseEnriched = analysis.payload
+
+            val (outcome, pendingItems) = runBlocking(Dispatchers.IO) {
+                val enriched = baseEnriched?.let { item ->
+                    val mappedAsset = item.assetName
+                        ?: CaptureRuleMatcher.resolveAssetName(app, item.paymentMethodRaw)
+                    val mappedToAsset = item.toAssetName?.let { rawTo ->
+                        CaptureRuleMatcher.resolveAssetName(app, rawTo) ?: rawTo
+                    }
+                    val mappedCategory = CaptureRuleMatcher.resolveCategoryName(
+                        context = app,
+                        merchant = item.merchant,
+                        shopItem = analysis.shopItem,
+                        note = item.note,
+                        fallbackCategory = item.categoryName,
+                    )
+                    val amountCentsVal = item.amountCents
+                    val duplicateSuspected = if (amountCentsVal != null && amountCentsVal > 0L) {
+                        runCatching {
+                            CaptureBridgeClient(app).hasRecentMatchingBill(
+                                paidAt = item.paidAt,
+                                amountCents = amountCentsVal,
+                            )
+                        }.getOrDefault(false)
+                    } else {
+                        false
+                    }
+                    item.copy(
+                        assetName = mappedAsset,
+                        toAssetName = mappedToAsset,
+                        categoryName = mappedCategory,
+                        status = if (duplicateSuspected) {
+                            CaptureStatus.POSSIBLE_DUPLICATE
+                        } else {
+                            CaptureStatus.PENDING
+                        },
+                    )
+                }
+
+                // 先留原始事件（AutoAccounting AppDataModel 等价物）
                 val rawJson = payload.rawJson
                 if (!rawJson.isNullOrBlank()) {
                     app.eventRepository.insert(
@@ -67,12 +101,24 @@ internal object CaptureIngestHandler {
                     )
                 }
                 val result = enriched?.let { app.repository.insert(it) }
-                result to app.repository.countPending()
+                val onlyExpense = CapturePrefs.isOnlyExpense(app)
+                result to app.repository.listPending(50, onlyExpense = onlyExpense)
             }
 
-            CaptureNotifier.refresh(app, count)
-            // 收到任何一笔后再尝试拉起保活服务；后台启动失败会被 start() 吞掉。
+            val count = pendingItems.size
+            CaptureNotifier.refreshWithItems(app, pendingItems)
             CaptureKeepAliveService.start(app)
+
+            if (outcome != null && outcome.inserted) {
+                val cap = outcome.capture
+                val isExpenseLike = cap.billType == null || cap.billType == LocalBillType.TYPE_EXPENSE
+                if ((!CapturePrefs.isOnlyExpense(app) || isExpenseLike) &&
+                    CapturePrefs.getPromptMode(app) == CapturePrefs.MODE_BUBBLE
+                ) {
+                    CaptureBubbleManager.showBubble(app, cap, count.coerceAtLeast(1))
+                }
+            }
+
             if (outcome == null) {
                 ackIgnored(payload.captureId, count)
             } else {
@@ -109,20 +155,13 @@ internal object CaptureIngestHandler {
             .put("error", message)
             .toString()
 
-    /**
-     * 用 AutoAccounting 原始规则解析 rawJson。
-     * 即使探针已经抓到了金额，也以规则输出为准（规则包含商户/支付方式/时间等更完整的语义）。
-     * 规则失败/未命中 → 保留探针值，绝不因此拒绝写入。
-     *
-     * 阶段一（组合 B）：支出/收入/转账/还款/退款都写入待记，并带上本地类型；
-     * 规则命中但本地类型无法判断（如 Expend+退款）时不写类型字段，标记待分类。
-     */
     private data class Enriched(
         val payload: CapturePayload?,
         val matched: Boolean,
         val ruleName: String?,
         val autoType: String?,
         val channel: String?,
+        val shopItem: String? = null,
     )
 
     private fun enrichWithRules(payload: CapturePayload): Enriched {
@@ -150,7 +189,6 @@ internal object CaptureIngestHandler {
                     Log.i(TAG, "rule no match, raw event recorded but no pending bill")
                     Enriched(null, matched = false, ruleName = null, autoType = null, channel = null)
                 } else {
-                    // 合成/探针显式给了类型，仍允许入库，便于调试。
                     Log.i(TAG, "rule no match, keep explicit type=${payload.billType}")
                     Enriched(payload, matched = false, ruleName = null, autoType = null, channel = null)
                 }
@@ -172,7 +210,6 @@ internal object CaptureIngestHandler {
                     needsRefundLink =
                         if (parsed.localType != null) parsed.needsRefundLink else payload.needsRefundLink,
                     ruleVersion = AutoAccountingRuleEngine.RULE_VERSION,
-                    // 规则只有金额有效时才会命中，所以这里一定是补全了金额。
                     needsAmount = false,
                 )
                 Log.i(
@@ -187,22 +224,18 @@ internal object CaptureIngestHandler {
                     ruleName = parsed.ruleName,
                     autoType = parsed.type,
                     channel = parsed.channel,
+                    shopItem = parsed.shopItem,
                 )
             }
         }
     }
 
-    /**
-     * 宽容解析：constract 用 camelCase，文档示例用 snake_case，两者都接受。
-     * 缺失字段保持 null，不编造；金额缺失时 needsAmount=true。
-     */
     private fun parsePayload(json: String): CapturePayload {
         val obj = JSONObject(json)
         val now = System.currentTimeMillis()
 
         val captureId = obj.stringOrNull("captureId", "capture_id", "id")
             ?: UUID.randomUUID().toString()
-        // 保留原始大小写：WECHAT/ALIPAY 是枚举，cmb.pb 等是真实包名。
         val source = obj.stringOrNull("source") ?: ""
         require(source.isNotEmpty()) { "missing source" }
 
@@ -229,6 +262,7 @@ internal object CaptureIngestHandler {
             merchant = obj.stringOrNull("merchant", "shopName", "shop_name"),
             categoryName = obj.stringOrNull("categoryName", "category_name"),
             paymentMethodRaw = obj.stringOrNull("paymentMethodRaw", "payment_method_raw"),
+            assetName = obj.stringOrNull("assetName", "asset_name"),
             toAssetName = obj.stringOrNull("toAssetName", "to_asset_name"),
             paidAt = paidAt,
             capturedAt = capturedAt,

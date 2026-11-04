@@ -40,7 +40,7 @@ class BillCreatedReceiver : BroadcastReceiver() {
                     captureIds = setOf(captureId),
                 )
                 if (changed > 0) {
-                    CaptureNotifier.refresh(context, repository.countPending())
+                    CaptureNotifier.refreshAll(context)
                 }
             } catch (t: Throwable) {
                 Log.w(TAG, "BILL_CREATED reconcile failed", t)

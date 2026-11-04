@@ -1,7 +1,11 @@
 package com.taostudio.tapaccounting.capture.data
 
+import android.content.Context
+import com.taostudio.tapaccounting.capture.CaptureApp
 import com.taostudio.tapaccounting.capture.contract.CapturePayload
 import com.taostudio.tapaccounting.capture.contract.CaptureStatus
+import com.taostudio.tapaccounting.capture.contract.LocalBillType
+import com.taostudio.tapaccounting.capture.parse.CaptureRuleMatcher
 
 /** 一次插入的结果；inserted=false 表示命中幂等去重（id 或 source+sourceTxnId）。 */
 data class InsertOutcome(
@@ -25,6 +29,7 @@ class CaptureRepository(private val dao: PaymentCaptureDao) {
                         merchant = payload.merchant?.takeIf { it.isNotBlank() } ?: existing.merchant,
                         categoryName = payload.categoryName ?: existing.categoryName,
                         paymentMethodRaw = payload.paymentMethodRaw ?: existing.paymentMethodRaw,
+                        assetName = payload.assetName ?: existing.assetName,
                         toAssetName = payload.toAssetName ?: existing.toAssetName,
                         billType = payload.billType,
                         subType = payload.subType ?: existing.subType,
@@ -49,15 +54,133 @@ class CaptureRepository(private val dao: PaymentCaptureDao) {
         return InsertOutcome(entity, inserted = true)
     }
 
+    suspend fun findById(id: String): PaymentCapture? = dao.findById(id)
+
     suspend fun list(limit: Int = 200): List<PaymentCapture> = dao.listRecent(limit)
 
-    suspend fun countPending(): Int = dao.countByStatus(CaptureStatus.PENDING_COUNT_STATUSES.toList())
+    suspend fun listPending(limit: Int = 100, onlyExpense: Boolean = false): List<PaymentCapture> {
+        val rows = dao.listByStatuses(CaptureStatus.PENDING_COUNT_STATUSES.toList(), limit)
+        return if (onlyExpense) {
+            rows.filter {
+                (it.billType == null || it.billType == LocalBillType.TYPE_EXPENSE) && !it.needsRefundLink
+            }
+        } else {
+            rows
+        }
+    }
+
+    suspend fun countPending(onlyExpense: Boolean = false): Int {
+        if (!onlyExpense) {
+            return dao.countByStatus(CaptureStatus.PENDING_COUNT_STATUSES.toList())
+        }
+        return listPending(200, onlyExpense = true).size
+    }
 
     suspend fun updateStatus(id: String, status: String): Boolean =
         dao.updateStatus(id, status, System.currentTimeMillis()) > 0
 
     suspend fun updateNote(id: String, note: String?): Boolean =
         dao.updateNote(id, note?.takeIf { it.isNotBlank() }, System.currentTimeMillis()) > 0
+
+    /**
+     * 更新备注并立即用本地分类规则重新推断分类（如手写“青菜”立即命中“吃的 - 买菜”）。
+     */
+    suspend fun updateNoteAndReclassify(context: Context, id: String, note: String?): PaymentCapture? {
+        val cleanNote = note?.trim()?.takeIf { it.isNotEmpty() }
+        val existing = dao.findById(id) ?: return null
+        val matchedCategory = CaptureRuleMatcher.resolveCategoryName(
+            context = context,
+            merchant = existing.merchant,
+            shopItem = null,
+            note = cleanNote,
+            fallbackCategory = existing.categoryName,
+        )
+        val updated = existing.copy(
+            note = cleanNote,
+            categoryName = matchedCategory,
+            updatedAt = System.currentTimeMillis(),
+        )
+        dao.update(updated)
+        return updated
+    }
+
+    /**
+     * 更新待记草稿（备注/资产/分类），并支持顺手记住资产映射与分类规则。
+     */
+    suspend fun updateDraft(
+        context: Context,
+        id: String,
+        note: String?,
+        assetName: String?,
+        categoryName: String?,
+        rememberAssetMapping: Boolean = false,
+        rememberCategoryKeyword: String? = null,
+    ): PaymentCapture? {
+        val existing = dao.findById(id) ?: return null
+        val now = System.currentTimeMillis()
+        val cleanNote = note?.trim()?.takeIf { it.isNotEmpty() }
+        val cleanAsset = assetName?.trim()?.takeIf { it.isNotEmpty() } ?: existing.assetName
+        // 2. 传了新备注且没显式传分类时，优先按新备注重新匹配分类规则。
+        val resolvedCategory = categoryName?.trim()?.takeIf { it.isNotEmpty() }
+            ?: CaptureRuleMatcher.resolveCategoryName(
+                context = context,
+                merchant = existing.merchant,
+                shopItem = null,
+                note = cleanNote,
+                fallbackCategory = existing.categoryName,
+            )
+
+        val updated = existing.copy(
+            note = cleanNote,
+            assetName = cleanAsset,
+            categoryName = resolvedCategory,
+            updatedAt = now,
+        )
+        dao.update(updated)
+
+        val db = CaptureApp.from(context).database
+        val rawChannel = existing.paymentMethodRaw?.trim().orEmpty()
+        if (rememberAssetMapping && rawChannel.isNotEmpty() && !cleanAsset.isNullOrBlank()) {
+            val existingRule = db.assetMappingDao().findByPattern(rawChannel)
+            db.assetMappingDao().upsert(
+                AssetMappingRule(
+                    id = existingRule?.id ?: 0L,
+                    pattern = rawChannel,
+                    targetAssetName = cleanAsset,
+                    isRegex = false,
+                    sort = existingRule?.sort ?: 0,
+                    enabled = true,
+                )
+            )
+            // 顺手把其它同支付方式的待记条目也填上该资产
+            listPending(200, onlyExpense = false)
+                .filter { it.id != id && it.paymentMethodRaw?.trim() == rawChannel }
+                .forEach { other ->
+                    dao.updateAssetName(other.id, cleanAsset, now)
+                }
+        }
+
+        val ruleKeyword = rememberCategoryKeyword?.trim().orEmpty()
+        if (ruleKeyword.isNotEmpty() && !resolvedCategory.isNullOrBlank()) {
+            val existingCatRule = db.categoryRuleDao()
+                .findByKeywordAndField(ruleKeyword, CategoryRule.MATCH_ANY)
+            db.categoryRuleDao().upsert(
+                CategoryRule(
+                    id = existingCatRule?.id ?: 0L,
+                    keyword = ruleKeyword,
+                    matchField = CategoryRule.MATCH_ANY,
+                    isRegex = false,
+                    targetCategoryName = resolvedCategory,
+                    sort = existingCatRule?.sort ?: 0,
+                    enabled = true,
+                )
+            )
+        }
+
+        return updated
+    }
+
+    suspend fun deleteById(id: String): Boolean = dao.deleteById(id) > 0
 
     private fun CapturePayload.toEntity(now: Long): PaymentCapture = PaymentCapture(
         id = captureId,
@@ -68,6 +191,7 @@ class CaptureRepository(private val dao: PaymentCaptureDao) {
         merchant = merchant?.takeIf { it.isNotBlank() },
         categoryName = categoryName?.takeIf { it.isNotBlank() },
         paymentMethodRaw = paymentMethodRaw?.takeIf { it.isNotBlank() },
+        assetName = assetName?.takeIf { it.isNotBlank() },
         toAssetName = toAssetName?.takeIf { it.isNotBlank() },
         billType = billType,
         subType = subType,
@@ -77,7 +201,7 @@ class CaptureRepository(private val dao: PaymentCaptureDao) {
         bookName = bookName?.takeIf { it.isNotBlank() },
         note = note?.takeIf { it.isNotBlank() },
         // hook 投递的一律先落 PENDING；状态只能由插件自己推进。
-        status = CaptureStatus.PENDING,
+        status = status.ifBlank { CaptureStatus.PENDING },
         needsAmount = needsAmount || amountCents == null,
         rawJson = rawJson,
         ruleVersion = ruleVersion,

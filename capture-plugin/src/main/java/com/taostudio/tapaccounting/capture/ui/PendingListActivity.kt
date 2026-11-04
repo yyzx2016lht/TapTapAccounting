@@ -78,6 +78,7 @@ class PendingListActivity : Activity() {
     private var currentTab = 0
     private var latestSnapshot: Snapshot? = null
     private var isAiBusy = false
+    private var ignoredExpanded = false
     private val noteSaveJobs = mutableMapOf<String, Job>()
 
     private lateinit var bridgeDot: View
@@ -247,6 +248,7 @@ class PendingListActivity : Activity() {
                     val accountingCtx = if (ping.ok) bridge.getAccountingContext() else null
                     Snapshot(
                         pendingItems = pendingItems,
+                        ignoredItems = repository.listIgnored(50),
                         assetRules = db.assetMappingDao().listAll(),
                         categoryRules = db.categoryRuleDao().listAll(),
                         accountingContext = accountingCtx,
@@ -320,14 +322,115 @@ class PendingListActivity : Activity() {
         val items = snapshot.pendingItems
         if (items.isEmpty()) {
             container.addView(buildEmptyStateCard())
-            return scroll
+        } else {
+            container.addView(buildSummaryHeroCard(items))
+            items.forEach { item ->
+                container.addView(buildCaptureCard(item, snapshot.accountingContext))
+            }
         }
-
-        container.addView(buildSummaryHeroCard(items))
-        items.forEach { item ->
-            container.addView(buildCaptureCard(item, snapshot.accountingContext))
+        if (snapshot.ignoredItems.isNotEmpty()) {
+            container.addView(buildIgnoredSection(snapshot.ignoredItems))
         }
         return scroll
+    }
+
+    /** 待记列表底部的“已不计”折叠区，只做恢复，不改变列表主体结构。 */
+    private fun buildIgnoredSection(items: List<PaymentCapture>): View {
+        val card = CaptureUi.card(
+            activity = this,
+            paddingH = 14,
+            paddingV = 12,
+            radiusDp = 14,
+        ).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+            ).apply { bottomMargin = dp(10) }
+        }
+
+        val header = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setOnClickListener {
+                ignoredExpanded = !ignoredExpanded
+                latestSnapshot?.let { renderCurrentTab(it) }
+            }
+        }
+        header.addView(TextView(this).apply {
+            text = "已不计 (${items.size})"
+            textSize = 13.5f
+            setTypeface(typeface, Typeface.BOLD)
+            setTextColor(CaptureUi.TEXT_SECONDARY)
+            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+        })
+        header.addView(TextView(this).apply {
+            text = if (ignoredExpanded) "收起 ▴" else "展开 ▾"
+            textSize = 12f
+            setTextColor(CaptureUi.BRAND_DARK)
+            setPadding(dp(8), dp(4), 0, dp(4))
+        })
+        card.addView(header)
+        if (!ignoredExpanded) return card
+
+        items.forEach { item ->
+            val row = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(0, dp(9), 0, 0)
+            }
+            val amountPrefix = when {
+                item.billType == LocalBillType.TYPE_INCOME ||
+                    item.subType == LocalBillType.SUBTYPE_REFUND ||
+                    item.needsRefundLink -> "+"
+                item.billType == LocalBillType.TYPE_TRANSFER -> ""
+                else -> "-"
+            }
+            row.addView(TextView(this).apply {
+                text = buildString {
+                    append(amountPrefix).append(formatAmount(item.amountCents))
+                    item.merchant?.takeIf { it.isNotBlank() }?.let { append(" · ").append(it.take(12)) }
+                    append(" · ").append(rowTimeFormat.format(Date(item.paidAt)))
+                }
+                textSize = 12.5f
+                maxLines = 1
+                ellipsize = TextUtils.TruncateAt.END
+                setTextColor(CaptureUi.TEXT_MUTED)
+                layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
+                    marginEnd = dp(8)
+                }
+            })
+            row.addView(
+                CaptureUi.button(
+                    activity = this,
+                    text = "恢复",
+                    textColor = CaptureUi.BRAND_DARK,
+                    bgColor = CaptureUi.BRAND_SOFT,
+                    strokeColor = CaptureUi.BRAND_BORDER,
+                    radiusDp = 9,
+                    paddingH = 12,
+                    paddingV = 6,
+                    textSizeSp = 12f,
+                ) { restoreIgnored(item) },
+                LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT),
+            )
+            card.addView(row)
+        }
+        return card
+    }
+
+    private fun restoreIgnored(item: PaymentCapture) {
+        scope.launch {
+            try {
+                withContext(Dispatchers.IO) {
+                    CaptureApp.from(this@PendingListActivity).repository
+                        .updateStatus(item.id, CaptureStatus.PENDING)
+                }
+                toast("已恢复到待记")
+                load()
+            } catch (t: Throwable) {
+                toast("恢复失败：${t.message ?: t.javaClass.simpleName}")
+            }
+        }
     }
 
     private fun buildSummaryHeroCard(items: List<PaymentCapture>): View {
@@ -1396,6 +1499,7 @@ class PendingListActivity : Activity() {
 
     private data class Snapshot(
         val pendingItems: List<PaymentCapture>,
+        val ignoredItems: List<PaymentCapture> = emptyList(),
         val assetRules: List<AssetMappingRule>,
         val categoryRules: List<CategoryRule>,
         val accountingContext: AccountingContext?,

@@ -98,6 +98,10 @@ class CaptureRepository(private val dao: PaymentCaptureDao) {
         return row
     }
 
+    /** “已不计”列表，支持在待记页底部恢复为待记。 */
+    suspend fun listIgnored(limit: Int = 50): List<PaymentCapture> =
+        dao.listByStatuses(listOf(CaptureStatus.IGNORED), limit).map { normalizeHistoricalRow(it) }
+
     suspend fun countPending(onlyExpense: Boolean = false): Int {
         if (!onlyExpense) {
             return dao.countByStatus(CaptureStatus.PENDING_COUNT_STATUSES.toList())

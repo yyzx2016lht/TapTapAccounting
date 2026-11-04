@@ -26,6 +26,10 @@ import com.taostudio.tapaccounting.capture.bridge.CaptureBridgeClient
 import com.taostudio.tapaccounting.capture.bridge.CaptureNoteClassifier
 import com.taostudio.tapaccounting.capture.contract.CaptureSource
 import com.taostudio.tapaccounting.capture.contract.CaptureSources
+import com.taostudio.tapaccounting.capture.contract.CaptureStatus
+import com.taostudio.tapaccounting.capture.contract.ImportBill
+import com.taostudio.tapaccounting.capture.contract.ImportItemStatus
+import com.taostudio.tapaccounting.capture.contract.LocalBillType
 import com.taostudio.tapaccounting.capture.data.CategorySource
 import com.taostudio.tapaccounting.capture.data.PaymentCapture
 import kotlinx.coroutines.CoroutineScope
@@ -33,10 +37,22 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.json.JSONObject
+import java.text.SimpleDateFormat
+import java.util.Date
 import java.util.Locale
+import java.util.UUID
 
 /**
- * 付款瞬间的底部微胶囊气泡（默认 4 秒自动收起，支持点击原地展开补一句备注）。
+ * 付款瞬间的底部微胶囊气泡。
+ *
+ * 三态：
+ * - 摘要态：[智能记账] [细改] [不计] + ✕
+ * - 输入态：[只存备注] [记这笔]
+ * - 结果态：归类：水果 [记这笔] [改] / ✓ 已记
+ *
+ * 直接写账只走普通收支：转账/还款/退款、金额缺失、资产未映射、可能已记、
+ * 桥接不可用或归类失败都会转交敲敲记账悬浮窗细改。
  */
 object CaptureBubbleManager {
 
@@ -46,6 +62,28 @@ object CaptureBubbleManager {
     private var currentView: View? = null
     private var currentParams: WindowManager.LayoutParams? = null
     private var dismissRunnable: Runnable? = null
+    private var session: BubbleSession? = null
+
+    private enum class BubbleState { SUMMARY, INPUT, CLASSIFYING, RESULT, RECORDED }
+
+    private class BubbleSession(
+        val app: Context,
+        val root: LinearLayout,
+        val summaryText: TextView,
+        val statusText: TextView,
+        val noteRow: LinearLayout,
+        val noteInput: EditText,
+        val summaryActions: LinearLayout,
+        val inputActions: LinearLayout,
+        val resultActions: LinearLayout,
+        val inputRecordButton: TextView,
+        val resultRecordButton: TextView,
+        val resultAdjustButton: TextView,
+        var capture: PaymentCapture,
+        var pendingCount: Int,
+        var busy: Boolean = false,
+        var state: BubbleState = BubbleState.SUMMARY,
+    )
 
     fun canDrawOverlays(context: Context): Boolean =
         Build.VERSION.SDK_INT < Build.VERSION_CODES.M || Settings.canDrawOverlays(context)
@@ -81,13 +119,12 @@ object CaptureBubbleManager {
             gravity = Gravity.CENTER_VERTICAL
         }
 
-        val isRefund = capture.subType == com.taostudio.tapaccounting.capture.contract.LocalBillType.SUBTYPE_REFUND ||
-            capture.needsRefundLink
-        val isIncome = capture.billType == com.taostudio.tapaccounting.capture.contract.LocalBillType.TYPE_INCOME
+        val isRefund = capture.subType == LocalBillType.SUBTYPE_REFUND || capture.needsRefundLink
+        val isIncome = capture.billType == LocalBillType.TYPE_INCOME
         val typeSuffix = when {
             isRefund -> "·退款"
             isIncome -> "·收入"
-            capture.billType == com.taostudio.tapaccounting.capture.contract.LocalBillType.TYPE_TRANSFER -> "·转账"
+            capture.billType == LocalBillType.TYPE_TRANSFER -> "·转账"
             else -> ""
         }
         val badgeColor = when (capture.source) {
@@ -95,10 +132,8 @@ object CaptureBubbleManager {
             CaptureSource.ALIPAY -> "#1677FF"
             else -> "#3B82F6"
         }
-        val badgeText = CaptureSources.displayName(capture.source) + typeSuffix
-
         val badge = TextView(app).apply {
-            text = badgeText
+            text = CaptureSources.displayName(capture.source) + typeSuffix
             textSize = 11f
             setTypeface(typeface, Typeface.BOLD)
             setTextColor(Color.WHITE)
@@ -110,38 +145,41 @@ object CaptureBubbleManager {
         }
         topRow.addView(badge)
 
-        val amountPrefix = if (isIncome || isRefund) "+¥" else "¥"
-        val amountStr = capture.amountCents?.let {
-            String.format(Locale.CHINA, "%s%.2f", amountPrefix, it / 100.0)
-        } ?: "金额待补"
-        val assetStr = capture.assetName ?: capture.paymentMethodRaw
-        val merchantStr = capture.merchant
-
-        val summaryText = buildString {
-            append("  ").append(amountStr)
-            if (!merchantStr.isNullOrBlank()) append(" · ").append(merchantStr.take(10))
-            if (!assetStr.isNullOrBlank()) append(" (").append(assetStr.take(8)).append(")")
-            append("  · 待记 ").append(pendingCount).append(" 笔")
-        }
-
         val tvSummary = TextView(app).apply {
-            text = summaryText
             textSize = 13.5f
             setTypeface(typeface, Typeface.BOLD)
             setTextColor(Color.WHITE)
+            maxLines = 2
+            setPadding(dp(8), 0, dp(4), 0)
             layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
         }
         topRow.addView(tvSummary)
 
-        val editRow = LinearLayout(app).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
+        val btnClose = TextView(app).apply {
+            text = " ✕ "
+            textSize = 13f
+            setTextColor(Color.parseColor("#94A3B8"))
+            setPadding(dp(6), dp(4), dp(2), dp(4))
+        }
+        topRow.addView(btnClose)
+        root.addView(topRow)
+
+        val tvStatus = TextView(app).apply {
+            textSize = 13f
+            setTextColor(Color.parseColor("#A7F3D0"))
+            setPadding(dp(2), dp(8), dp(2), 0)
+            maxLines = 4
+            visibility = View.GONE
+        }
+        root.addView(tvStatus)
+
+        val noteRow = LinearLayout(app).apply {
+            orientation = LinearLayout.VERTICAL
             visibility = View.GONE
             setPadding(0, dp(10), 0, 0)
         }
-
         val etNote = EditText(app).apply {
-            hint = "补一句备注，方便以后查找"
+            hint = "补一句备注，自动归类"
             setHintTextColor(Color.parseColor("#94A3B8"))
             setTextColor(Color.WHITE)
             textSize = 14f
@@ -153,109 +191,433 @@ object CaptureBubbleManager {
                 setColor(Color.parseColor("#334155"))
                 cornerRadius = dp(12).toFloat()
             }
-            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
-                marginEnd = dp(8)
+        }
+        etNote.setText(capture.note.orEmpty())
+        noteRow.addView(etNote)
+        root.addView(noteRow)
+
+        fun actionRow(): LinearLayout = LinearLayout(app).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            visibility = View.GONE
+            setPadding(0, dp(10), 0, 0)
+        }
+
+        fun actionButton(
+            text: String,
+            textColor: String,
+            bgColor: String,
+        ): TextView = TextView(app).apply {
+            this.text = text
+            textSize = 13f
+            setTypeface(typeface, Typeface.BOLD)
+            gravity = Gravity.CENTER
+            setTextColor(Color.parseColor(textColor))
+            setPadding(dp(10), dp(8), dp(10), dp(8))
+            background = GradientDrawable().apply {
+                setColor(Color.parseColor(bgColor))
+                cornerRadius = dp(12).toFloat()
             }
         }
 
-        fun submitNote() {
-            val noteText = etNote.text?.toString()?.trim().orEmpty()
-            scope.launch {
-                val appContext = app.applicationContext
-                val repository = CaptureApp.from(appContext).repository
-                val updated = withContext(Dispatchers.IO) {
-                    repository.updateNoteAndReclassify(appContext, capture.id, noteText)
+        val summaryActions = actionRow()
+        val btnSmart = actionButton("智能记账", "#FFFFFF", "#3B82F6")
+        val btnAdjust = actionButton("细改", "#93C5FD", "#1E3A8A")
+        val btnIgnore = actionButton("不计", "#CBD5E1", "#334155")
+        summaryActions.addView(
+            btnSmart,
+            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1.2f).apply { marginEnd = dp(8) },
+        )
+        summaryActions.addView(
+            btnAdjust,
+            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginEnd = dp(8) },
+        )
+        summaryActions.addView(
+            btnIgnore,
+            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 0.8f),
+        )
+        root.addView(summaryActions)
+
+        val inputActions = actionRow()
+        val btnSaveOnly = actionButton("只存备注", "#93C5FD", "#1E3A8A")
+        val btnRecordInput = actionButton("记这笔", "#FFFFFF", "#3B82F6")
+        inputActions.addView(
+            btnSaveOnly,
+            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginEnd = dp(8) },
+        )
+        inputActions.addView(
+            btnRecordInput,
+            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1.2f),
+        )
+        root.addView(inputActions)
+
+        val resultActions = actionRow()
+        val btnRecordResult = actionButton("记这笔", "#FFFFFF", "#3B82F6")
+        val btnAdjustResult = actionButton("改", "#93C5FD", "#1E3A8A")
+        resultActions.addView(
+            btnRecordResult,
+            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1.2f).apply { marginEnd = dp(8) },
+        )
+        resultActions.addView(
+            btnAdjustResult,
+            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f),
+        )
+        root.addView(resultActions)
+
+        val s = BubbleSession(
+            app = app,
+            root = root,
+            summaryText = tvSummary,
+            statusText = tvStatus,
+            noteRow = noteRow,
+            noteInput = etNote,
+            summaryActions = summaryActions,
+            inputActions = inputActions,
+            resultActions = resultActions,
+            inputRecordButton = btnRecordInput,
+            resultRecordButton = btnRecordResult,
+            resultAdjustButton = btnAdjustResult,
+            capture = capture,
+            pendingCount = pendingCount,
+        )
+
+        fun isActive(): Boolean = session === s
+
+        fun setStatus(text: String, color: String = "#A7F3D0") {
+            tvStatus.text = text
+            tvStatus.setTextColor(Color.parseColor(color))
+            tvStatus.visibility = View.VISIBLE
+        }
+
+        fun toast(message: String) {
+            Toast.makeText(app, message, Toast.LENGTH_SHORT).show()
+        }
+
+        fun updateSummary() {
+            val item = s.capture
+            val refund = item.subType == LocalBillType.SUBTYPE_REFUND || item.needsRefundLink
+            val income = item.billType == LocalBillType.TYPE_INCOME
+            val amountPrefix = if (income || refund) "+¥" else "¥"
+            val amountStr = item.amountCents?.let {
+                String.format(Locale.CHINA, "%s%.2f", amountPrefix, it / 100.0)
+            } ?: "金额待补"
+            val assetStr = item.assetName ?: item.paymentMethodRaw
+            tvSummary.text = buildString {
+                append(amountStr)
+                item.merchant?.takeIf { it.isNotBlank() }?.let { append(" · ").append(it.take(10)) }
+                assetStr?.takeIf { it.isNotBlank() }?.let { append(" (").append(it.take(8)).append(")") }
+                append(" · 待记 ").append(s.pendingCount).append(" 笔")
+            }
+        }
+
+        fun applyState(state: BubbleState) {
+            val previous = s.state
+            s.state = state
+            s.noteRow.visibility = if (state == BubbleState.INPUT) View.VISIBLE else View.GONE
+            s.inputActions.visibility = if (state == BubbleState.INPUT) View.VISIBLE else View.GONE
+            s.summaryActions.visibility = if (state == BubbleState.SUMMARY) View.VISIBLE else View.GONE
+            s.resultActions.visibility = if (state == BubbleState.RESULT) View.VISIBLE else View.GONE
+            s.statusText.visibility = if (state == BubbleState.SUMMARY) View.GONE else View.VISIBLE
+            s.inputRecordButton.isEnabled = !s.busy
+            s.resultRecordButton.isEnabled = !s.busy
+            s.resultAdjustButton.isEnabled = !s.busy
+
+            if (state != BubbleState.INPUT && previous == BubbleState.INPUT) {
+                hideInput(app, etNote)
+            }
+            when (state) {
+                BubbleState.SUMMARY -> {
+                    scheduleAutoDismiss(app, 4_000L)
                 }
-                // 本地备注规则没命中、且有备注时，才在“只存备注”提交点做一次轻量 AI 归类。
-                val classified = if (updated != null && noteText.isNotEmpty() && updated.categoryName.isNullOrBlank()) {
-                    withContext(Dispatchers.IO) {
-                        CaptureNoteClassifier.classifyAndApply(
-                            context = appContext,
-                            client = CaptureBridgeClient(appContext),
-                            repository = repository,
-                            captureId = capture.id,
-                        )
-                    }
+
+                BubbleState.INPUT -> {
+                    cancelAutoDismiss()
+                    setStatus("写一句备注，自动归类", "#94A3B8")
+                    if (previous != BubbleState.INPUT) enableWindowFocus(app, etNote)
+                }
+
+                BubbleState.CLASSIFYING -> {
+                    cancelAutoDismiss()
+                    setStatus("正在智能归类…", "#94A3B8")
+                }
+
+                BubbleState.RESULT -> {
+                    cancelAutoDismiss()
+                }
+
+                BubbleState.RECORDED -> {
+                    cancelAutoDismiss()
+                    scheduleAutoDismiss(app, 2_500L)
+                }
+            }
+        }
+
+        suspend fun persistNote(noteText: String?): PaymentCapture? {
+            val repository = CaptureApp.from(app).repository
+            return withContext(Dispatchers.IO) {
+                val existing = repository.findById(s.capture.id) ?: return@withContext null
+                val normalized = noteText?.trim().orEmpty()
+                if (normalized == existing.note?.trim().orEmpty()) {
+                    existing
                 } else {
-                    updated
+                    repository.updateNoteAndReclassify(app, existing.id, normalized)
                 }
-                CaptureNotifier.refreshAll(appContext)
-                val catHint = classified
-                    ?.takeIf { !it.categoryName.isNullOrBlank() }
-                    ?.let { item ->
-                        when (item.categorySource) {
-                            CategorySource.AI -> " · 智能归类：${item.categoryName}"
-                            CategorySource.MANUAL -> " · 分类：${item.categoryName}"
-                            else -> " · 自动归类：${item.categoryName}"
-                        }
-                    }
-                    .orEmpty()
-                Toast.makeText(
-                    appContext,
-                    if (noteText.isNotEmpty()) "已留底备注：$noteText$catHint" else "已保存",
-                    Toast.LENGTH_SHORT,
-                ).show()
-                dismissImmediate(appContext)
             }
         }
 
+        fun showSummary() {
+            updateSummary()
+            applyState(BubbleState.SUMMARY)
+        }
+
+        suspend fun fineTune(noteText: String?, reason: String?) {
+            if (!isActive()) return
+            val repository = CaptureApp.from(app).repository
+            val latest = persistNote(noteText) ?: s.capture
+            s.capture = latest
+            CaptureNotifier.refreshAll(app)
+            val accepted = runCatching {
+                CaptureBridgeClient(app).openQuickRecord(
+                    buildPrefill(latest),
+                    latest.id,
+                    UUID.randomUUID().toString(),
+                )
+            }.getOrDefault(false)
+            if (accepted) {
+                toast("已交给悬浮窗${reason?.let { "（$it）" } ?: ""}")
+                dismissImmediate(app)
+            } else {
+                toast("${reason ?: "无法直接入账"}；敲敲记账悬浮窗不可用，已保留待记")
+                if (isActive()) showSummary()
+            }
+        }
+
+        suspend fun classifyThenResult() {
+            val noteText = etNote.text?.toString()?.trim().orEmpty()
+            val repository = CaptureApp.from(app).repository
+            val bridge = CaptureBridgeClient(app)
+
+            val ping = bridge.pingDetail()
+            if (!ping.ok) {
+                fineTune(noteText, BubbleRecordPolicy.Block.BRIDGE_UNAVAILABLE.message)
+                return
+            }
+
+            val base = persistNote(noteText) ?: s.capture
+            s.capture = base
+            val earlyBlock = BubbleRecordPolicy.preClassificationBlock(base, bridgeAvailable = true)
+            if (earlyBlock != null) {
+                fineTune(noteText, earlyBlock.message)
+                return
+            }
+
+            var category = base.categoryName?.takeIf { it.isNotBlank() }
+            if (category == null && !base.note.isNullOrBlank()) {
+                val classified = withContext(Dispatchers.IO) {
+                    CaptureNoteClassifier.classifyAndApply(
+                        context = app,
+                        client = bridge,
+                        repository = repository,
+                        captureId = base.id,
+                    )
+                }
+                category = classified?.categoryName?.takeIf { it.isNotBlank() }
+                s.capture = classified ?: base
+            }
+            if (category.isNullOrBlank()) {
+                fineTune(noteText, BubbleRecordPolicy.Block.MISSING_CATEGORY.message)
+                return
+            }
+
+            s.capture = withContext(Dispatchers.IO) { repository.findById(base.id) } ?: s.capture
+            if (isActive()) {
+                setStatus("归类：$category")
+                applyState(BubbleState.RESULT)
+            }
+        }
+
+        suspend fun importFromResult() {
+            val repository = CaptureApp.from(app).repository
+            val latest = withContext(Dispatchers.IO) { repository.findById(s.capture.id) } ?: s.capture
+            s.capture = latest
+
+            val bridge = CaptureBridgeClient(app)
+            val bridgeOk = bridge.pingDetail().ok
+            val block = BubbleRecordPolicy.importBlock(latest, bridgeAvailable = bridgeOk)
+            if (block != null) {
+                fineTune(latest.note, block.message)
+                return
+            }
+
+            val result = bridge.importBills(listOf(latest.toImportBill()), UUID.randomUUID().toString())
+            if (result == null) {
+                if (isActive()) {
+                    setStatus("入账失败：敲敲记账桥接不可用\n已保留在待记，可重试或点「改」", "#FCA5A5")
+                    applyState(BubbleState.RESULT)
+                }
+                return
+            }
+
+            val first = result.optJSONArray("results")?.optJSONObject(0)
+            when (first?.optString("status").orEmpty()) {
+                ImportItemStatus.CREATED, ImportItemStatus.DUPLICATE -> {
+                    withContext(Dispatchers.IO) {
+                        repository.updateStatus(latest.id, CaptureStatus.RECORDED)
+                    }
+                    CaptureNotifier.refreshAll(app)
+                    if (isActive()) {
+                        val cat = latest.categoryName?.takeIf { it.isNotBlank() }
+                        setStatus("✓ 已记" + (cat?.let { " · 归类：$it" } ?: ""), "#6EE7B7")
+                        applyState(BubbleState.RECORDED)
+                    }
+                }
+
+                else -> {
+                    val error = first?.optString("error").orEmpty()
+                        .ifBlank { result.optString("error", "未知错误") }
+                    if (isActive()) {
+                        val cat = latest.categoryName?.takeIf { it.isNotBlank() }
+                        setStatus(
+                            "归类：${cat ?: "—"}\n入账未完成：${humanizeImportError(error)}",
+                            "#FCA5A5",
+                        )
+                        applyState(BubbleState.RESULT)
+                    }
+                }
+            }
+        }
+
+        suspend fun saveNoteOnly() {
+            val noteText = etNote.text?.toString()?.trim().orEmpty()
+            val repository = CaptureApp.from(app).repository
+            val updated = withContext(Dispatchers.IO) {
+                val existing = repository.findById(s.capture.id)
+                if (existing != null && noteText == existing.note?.trim().orEmpty()) {
+                    existing
+                } else {
+                    repository.updateNoteAndReclassify(app, s.capture.id, noteText)
+                }
+            }
+            // 本地备注规则没命中、且有备注时，才做一次轻量 AI 归类；只存备注，不入账。
+            val classified = if (updated != null && noteText.isNotEmpty() && updated.categoryName.isNullOrBlank()) {
+                withContext(Dispatchers.IO) {
+                    CaptureNoteClassifier.classifyAndApply(
+                        context = app,
+                        client = CaptureBridgeClient(app),
+                        repository = repository,
+                        captureId = s.capture.id,
+                    )
+                }
+            } else {
+                updated
+            }
+            CaptureNotifier.refreshAll(app)
+            val catHint = classified
+                ?.takeIf { !it.categoryName.isNullOrBlank() }
+                ?.let { item ->
+                    when (item.categorySource) {
+                        CategorySource.AI -> " · 智能归类：${item.categoryName}"
+                        CategorySource.MANUAL -> " · 分类：${item.categoryName}"
+                        else -> " · 自动归类：${item.categoryName}"
+                    }
+                }
+                .orEmpty()
+            toast(if (noteText.isNotEmpty()) "已留底备注：$noteText$catHint" else "已保存")
+            dismissImmediate(app)
+        }
+
+        suspend fun ignoreCapture() {
+            val repository = CaptureApp.from(app).repository
+            val latest = withContext(Dispatchers.IO) { repository.findById(s.capture.id) }
+            if (latest == null) {
+                toast("这笔待记已不存在")
+                dismissImmediate(app)
+                return
+            }
+            if (latest.status == CaptureStatus.RECORDED) {
+                toast("这笔已经入账，未标记不计")
+                dismissImmediate(app)
+                return
+            }
+            withContext(Dispatchers.IO) {
+                repository.updateStatus(latest.id, CaptureStatus.IGNORED)
+            }
+            CaptureNotifier.refreshAll(app)
+            toast("已标记不计，可在待记列表底部恢复")
+            dismissImmediate(app)
+        }
+
+        fun runBusy(state: BubbleState? = null, block: suspend () -> Unit) {
+            if (s.busy) return
+            s.busy = true
+            cancelAutoDismiss()
+            if (state != null) applyState(state)
+            s.inputRecordButton.alpha = 0.6f
+            s.resultRecordButton.alpha = 0.6f
+            s.resultAdjustButton.alpha = 0.6f
+            scope.launch {
+                try {
+                    block()
+                } catch (t: Throwable) {
+                    if (isActive()) {
+                        toast("操作失败：${t.message ?: t.javaClass.simpleName}")
+                        showSummary()
+                    }
+                } finally {
+                    s.busy = false
+                    s.inputRecordButton.alpha = 1f
+                    s.resultRecordButton.alpha = 1f
+                    s.resultAdjustButton.alpha = 1f
+                    if (isActive()) applyState(s.state)
+                }
+            }
+        }
+
+        fun openInput() {
+            updateSummary()
+            applyState(BubbleState.INPUT)
+        }
+
+        btnClose.setOnClickListener { dismissImmediate(app) }
+        btnSmart.setOnClickListener {
+            if (s.busy) return@setOnClickListener
+            openInput()
+        }
+        btnAdjust.setOnClickListener {
+            if (s.busy) return@setOnClickListener
+            runBusy { fineTune(etNote.text?.toString()?.trim(), null) }
+        }
+        btnIgnore.setOnClickListener {
+            if (s.busy) return@setOnClickListener
+            runBusy { ignoreCapture() }
+        }
+        btnSaveOnly.setOnClickListener {
+            if (s.busy) return@setOnClickListener
+            runBusy { saveNoteOnly() }
+        }
+        btnRecordInput.setOnClickListener {
+            runBusy(state = BubbleState.CLASSIFYING) { classifyThenResult() }
+        }
+        btnRecordResult.setOnClickListener {
+            runBusy { importFromResult() }
+        }
+        btnAdjustResult.setOnClickListener {
+            if (s.busy) return@setOnClickListener
+            runBusy { fineTune(etNote.text?.toString()?.trim(), null) }
+        }
         etNote.setOnEditorActionListener { _, actionId, event ->
             if (actionId == EditorInfo.IME_ACTION_DONE ||
                 (event != null && event.keyCode == KeyEvent.KEYCODE_ENTER && event.action == KeyEvent.ACTION_DOWN)
             ) {
-                submitNote()
+                if (!s.busy) runBusy(state = BubbleState.CLASSIFYING) { classifyThenResult() }
                 true
             } else {
                 false
             }
         }
 
-        val btnSaveNote = TextView(app).apply {
-            text = "保存"
-            textSize = 13f
-            setTypeface(typeface, Typeface.BOLD)
-            setTextColor(Color.WHITE)
-            setPadding(dp(12), dp(8), dp(12), dp(8))
-            background = GradientDrawable().apply {
-                setColor(Color.parseColor("#3B82F6"))
-                cornerRadius = dp(12).toFloat()
-            }
-            setOnClickListener { submitNote() }
-        }
-
-        editRow.addView(etNote)
-        editRow.addView(btnSaveNote)
-
-        val btnAddNote = TextView(app).apply {
-            text = "✎ 补一句"
-            textSize = 12f
-            setTypeface(typeface, Typeface.BOLD)
-            setTextColor(Color.parseColor("#93C5FD"))
-            setPadding(dp(10), dp(5), dp(10), dp(5))
-            background = GradientDrawable().apply {
-                setColor(Color.parseColor("#1E3A8A"))
-                cornerRadius = dp(14).toFloat()
-            }
-            setOnClickListener {
-                cancelAutoDismiss()
-                visibility = View.GONE
-                editRow.visibility = View.VISIBLE
-                enableWindowFocus(app, etNote)
-            }
-        }
-        topRow.addView(btnAddNote)
-
-        val btnClose = TextView(app).apply {
-            text = " ✕ "
-            textSize = 13f
-            setTextColor(Color.parseColor("#94A3B8"))
-            setPadding(dp(6), dp(4), dp(2), dp(4))
-            setOnClickListener { dismissImmediate(app) }
-        }
-        topRow.addView(btnClose)
-
-        root.addView(topRow)
-        root.addView(editRow)
+        updateSummary()
+        applyState(BubbleState.SUMMARY)
 
         val params = WindowManager.LayoutParams().apply {
             width = (app.resources.displayMetrics.widthPixels * 0.92f).toInt()
@@ -279,15 +641,66 @@ object CaptureBubbleManager {
             wm.addView(root, params)
             currentView = root
             currentParams = params
+            session = s
             root.animate()
                 .alpha(1f)
                 .translationY(0f)
                 .setDuration(220L)
                 .start()
-            scheduleAutoDismiss(app, 4_000L)
         } catch (_: Throwable) {
             currentView = null
             currentParams = null
+            session = null
+        }
+    }
+
+    private fun buildPrefill(item: PaymentCapture): JSONObject {
+        val timeFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
+        return JSONObject().apply {
+            put("type", item.billType ?: LocalBillType.TYPE_EXPENSE)
+            put("subType", item.subType ?: LocalBillType.SUBTYPE_NORMAL)
+            put("amount", (item.amountCents ?: 0L) / 100.0)
+            put("currency", item.currency)
+            (item.assetName ?: item.paymentMethodRaw)?.let { put("asset_name", it) }
+            item.toAssetName?.let { put("to_asset_name", it) }
+            item.categoryName?.let { put("category_name", it) }
+            put("time", timeFormat.format(Date(item.paidAt)))
+            put("remarks", item.note?.takeIf { it.isNotBlank() } ?: item.merchant.orEmpty())
+            item.bookName?.let { put("book_name", it) }
+        }
+    }
+
+    private fun PaymentCapture.toImportBill(): ImportBill = ImportBill(
+        captureId = id,
+        type = billType ?: LocalBillType.TYPE_EXPENSE,
+        subType = subType ?: LocalBillType.SUBTYPE_NORMAL,
+        needsRefundLink = needsRefundLink,
+        amountCents = amountCents ?: 0L,
+        currency = currency,
+        paidAt = paidAt,
+        assetName = assetName ?: paymentMethodRaw,
+        toAssetName = toAssetName,
+        categoryName = categoryName,
+        remarks = note?.takeIf { it.isNotBlank() } ?: merchant.orEmpty(),
+        note = note,
+        bookName = bookName,
+    )
+
+    private fun humanizeImportError(rawError: String?): String {
+        val err = rawError?.trim().orEmpty()
+        return when {
+            err == "missing_category" -> "请先选择分类"
+            err.startsWith("category_not_found:") ->
+                "敲敲记账中不存在分类「${err.removePrefix("category_not_found:")}」，请点「改」重选"
+            err.startsWith("asset_not_found:") ->
+                "敲敲记账中不存在账户「${err.removePrefix("asset_not_found:")}」，请点「改」绑定资产"
+            err == "needs_refund_link" -> "退款账单需在悬浮窗关联原消费账单"
+            err == "missing_asset" -> "缺少账户，请在悬浮窗选择"
+            err == "missing_to_asset" -> "缺少转入账户，请在悬浮窗选择"
+            err == "same_asset" -> "转出与转入账户不能相同"
+            err == "asset_feature_disabled" -> "敲敲记账未开启资产功能"
+            err.isNotEmpty() -> err
+            else -> "请检查分类与账户映射"
         }
     }
 
@@ -306,6 +719,18 @@ object CaptureBubbleManager {
         }, 80L)
     }
 
+    private fun hideInput(app: Context, targetEdit: EditText) {
+        val imm = app.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
+        imm?.hideSoftInputFromWindow(targetEdit.windowToken, 0)
+        targetEdit.clearFocus()
+        val wm = app.getSystemService(Context.WINDOW_SERVICE) as? WindowManager ?: return
+        val view = currentView ?: return
+        val params = currentParams ?: return
+        params.flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+            WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
+        runCatching { wm.updateViewLayout(view, params) }
+    }
+
     private fun scheduleAutoDismiss(app: Context, delayMs: Long) {
         cancelAutoDismiss()
         val runnable = Runnable { dismissImmediate(app) }
@@ -320,9 +745,13 @@ object CaptureBubbleManager {
 
     fun dismissImmediate(context: Context) {
         cancelAutoDismiss()
-        val view = currentView ?: return
+        val view = currentView ?: run {
+            session = null
+            return
+        }
         currentView = null
         currentParams = null
+        session = null
         val wm = context.applicationContext.getSystemService(Context.WINDOW_SERVICE) as? WindowManager
         runCatching { wm?.removeViewImmediate(view) }
     }

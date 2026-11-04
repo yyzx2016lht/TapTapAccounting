@@ -139,7 +139,11 @@ internal object CaptureIngestHandler {
                             }.getOrDefault(false)
                             if (dup) {
                                 runCatching {
-                                    app.repository.updateStatus(cap.id, CaptureStatus.POSSIBLE_DUPLICATE)
+                                    // 用户可能在核对期间已经点“不计”或“记这笔”，只改仍然待记的条目。
+                                    val current = app.repository.findById(cap.id)
+                                    if (current != null && current.status == CaptureStatus.PENDING) {
+                                        app.repository.updateStatus(cap.id, CaptureStatus.POSSIBLE_DUPLICATE)
+                                    }
                                 }
                             }
                         }

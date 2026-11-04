@@ -89,13 +89,6 @@ internal object SystemNotificationHooker {
     fun install(lpparam: XC_LoadPackage.LoadPackageParam) {
         hookEnqueueNotification(lpparam)
         hookNotificationPosted(lpparam)
-        // system_server 是最持久的宿主之一；能抢到 52046 就由它跑 relay。
-        val context = systemContext()
-        if (context != null) {
-            RelayServer.ensureStarted(context)
-        } else {
-            log("relay context unavailable in system_server")
-        }
     }
 
     /** Android 8+ 的通知入队入口。 */

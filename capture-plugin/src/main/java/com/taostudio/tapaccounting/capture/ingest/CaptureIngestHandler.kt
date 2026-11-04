@@ -15,17 +15,25 @@ import com.taostudio.tapaccounting.capture.notify.CaptureNotifier
 import com.taostudio.tapaccounting.capture.parse.AutoAccountingRuleEngine
 import com.taostudio.tapaccounting.capture.parse.CaptureRuleMatcher
 import com.taostudio.tapaccounting.capture.service.CaptureKeepAliveService
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.json.JSONObject
 import java.util.Locale
 import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.roundToLong
 
 /**
  * hook -> 插件的实际入库逻辑。
  */
 internal object CaptureIngestHandler {
+
+    private val ingestLock = Any()
+    private val recentIngestedIds = ConcurrentHashMap<String, Long>()
+    private val bgScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     fun ingest(context: Context, token: String?, payloadJson: String?): String {
         val expectedToken = BuildConfig.CAPTURE_INGEST_TOKEN
@@ -40,92 +48,118 @@ internal object CaptureIngestHandler {
             val payload = parsePayload(payloadJson)
             val app = context.applicationContext as? CaptureApp
                 ?: return ackError("app not attached")
-            AutoAccountingRuleEngine.init(app)
-            val analysis = enrichWithRules(payload)
-            val baseEnriched = analysis.payload
 
-            val (outcome, pendingItems) = runBlocking(Dispatchers.IO) {
-                val enriched = baseEnriched?.let { item ->
-                    val mappedAsset = item.assetName
-                        ?: CaptureRuleMatcher.resolveAssetName(app, item.paymentMethodRaw)
-                    val mappedToAsset = item.toAssetName?.let { rawTo ->
-                        CaptureRuleMatcher.resolveAssetName(app, rawTo) ?: rawTo
-                    }
-                    val mappedCategory = CaptureRuleMatcher.resolveCategoryName(
-                        context = app,
-                        merchant = item.merchant,
-                        shopItem = analysis.shopItem,
-                        note = item.note,
-                        fallbackCategory = item.categoryName,
-                    )
-                    val amountCentsVal = item.amountCents
-                    val duplicateSuspected = if (amountCentsVal != null && amountCentsVal > 0L) {
-                        runCatching {
-                            CaptureBridgeClient(app).hasRecentMatchingBill(
-                                paidAt = item.paidAt,
-                                amountCents = amountCentsVal,
-                            )
-                        }.getOrDefault(false)
-                    } else {
-                        false
-                    }
-                    item.copy(
-                        assetName = mappedAsset,
-                        toAssetName = mappedToAsset,
-                        categoryName = mappedCategory,
-                        status = if (duplicateSuspected) {
-                            CaptureStatus.POSSIBLE_DUPLICATE
-                        } else {
-                            CaptureStatus.PENDING
-                        },
-                    )
-                }
-
-                // 先留原始事件（AutoAccounting AppDataModel 等价物）
-                val rawJson = payload.rawJson
-                if (!rawJson.isNullOrBlank()) {
-                    app.eventRepository.insert(
-                        source = payload.source,
-                        rawType = payload.rawType,
-                        rawJson = rawJson,
-                        receivedAt = payload.capturedAt,
-                        matched = analysis.matched,
-                        ruleName = analysis.ruleName,
-                        autoType = analysis.autoType,
-                        localType = enriched?.billType ?: payload.billType,
-                        localSubType = enriched?.subType ?: payload.subType,
-                        amountCents = enriched?.amountCents ?: payload.amountCents,
-                        merchant = enriched?.merchant ?: payload.merchant,
-                        categoryName = enriched?.categoryName ?: payload.categoryName,
-                        channel = analysis.channel,
-                    )
-                }
-                val result = enriched?.let { app.repository.insert(it) }
-                val onlyExpense = CapturePrefs.isOnlyExpense(app)
-                result to app.repository.listPending(50, onlyExpense = onlyExpense)
-            }
-
-            val count = pendingItems.size
-            CaptureNotifier.refreshWithItems(app, pendingItems)
-            CaptureKeepAliveService.start(app)
-
-            if (outcome != null && outcome.inserted) {
-                val cap = outcome.capture
-                val isExpenseOrRefund = cap.billType == null ||
-                    cap.billType == LocalBillType.TYPE_EXPENSE ||
-                    cap.subType == LocalBillType.SUBTYPE_REFUND ||
-                    cap.needsRefundLink
-                if ((!CapturePrefs.isOnlyExpense(app) || isExpenseOrRefund) &&
-                    CapturePrefs.getPromptMode(app) == CapturePrefs.MODE_BUBBLE
-                ) {
-                    CaptureBubbleManager.showBubble(app, cap, count.coerceAtLeast(1))
+            val now = System.currentTimeMillis()
+            recentIngestedIds[payload.captureId]?.let { prev ->
+                if (now - prev < 60_000L) {
+                    return ackOk(payload.captureId, inserted = false, count = 0)
                 }
             }
 
-            if (outcome == null) {
-                ackIgnored(payload.captureId, count)
-            } else {
-                ackOk(outcome.capture.id, outcome.inserted, count)
+            synchronized(ingestLock) {
+                recentIngestedIds[payload.captureId]?.let { prev ->
+                    if (now - prev < 60_000L) {
+                        return ackOk(payload.captureId, inserted = false, count = 0)
+                    }
+                }
+                if (recentIngestedIds.size > 512) {
+                    recentIngestedIds.entries.removeAll { now - it.value > 60_000L }
+                }
+                recentIngestedIds[payload.captureId] = now
+
+                AutoAccountingRuleEngine.init(app)
+                val analysis = enrichWithRules(payload)
+                val baseEnriched = analysis.payload
+
+                val (outcome, pendingItems) = runBlocking(Dispatchers.IO) {
+                    val enriched = baseEnriched?.let { item ->
+                        val mappedAsset = item.assetName
+                            ?: CaptureRuleMatcher.resolveAssetName(app, item.paymentMethodRaw)
+                        val mappedToAsset = item.toAssetName?.let { rawTo ->
+                            CaptureRuleMatcher.resolveAssetName(app, rawTo) ?: rawTo
+                        }
+                        val mappedCategory = CaptureRuleMatcher.resolveCategoryName(
+                            context = app,
+                            merchant = item.merchant,
+                            shopItem = analysis.shopItem,
+                            note = item.note,
+                            fallbackCategory = item.categoryName,
+                        )
+                        // 不在入库与弹窗关键路径上同步跨进程调用主应用 ContentProvider（主应用冷启动或被冻结会阻塞 1~3 秒），
+                        // 先以 PENDING 毫秒级落库并立即弹出悬浮窗，再去后台异步核对是否疑似重复。
+                        item.copy(
+                            assetName = mappedAsset,
+                            toAssetName = mappedToAsset,
+                            categoryName = mappedCategory,
+                            status = CaptureStatus.PENDING,
+                        )
+                    }
+
+                    // 先留原始事件（AutoAccounting AppDataModel 等价物）
+                    val rawJson = payload.rawJson
+                    if (!rawJson.isNullOrBlank()) {
+                        app.eventRepository.insert(
+                            source = payload.source,
+                            rawType = payload.rawType,
+                            rawJson = rawJson,
+                            receivedAt = payload.capturedAt,
+                            matched = analysis.matched,
+                            ruleName = analysis.ruleName,
+                            autoType = analysis.autoType,
+                            localType = enriched?.billType ?: payload.billType,
+                            localSubType = enriched?.subType ?: payload.subType,
+                            amountCents = enriched?.amountCents ?: payload.amountCents,
+                            merchant = enriched?.merchant ?: payload.merchant,
+                            categoryName = enriched?.categoryName ?: payload.categoryName,
+                            channel = analysis.channel,
+                        )
+                    }
+                    val result = enriched?.let { app.repository.insert(it) }
+                    val onlyExpense = CapturePrefs.isOnlyExpense(app)
+                    result to app.repository.listPending(50, onlyExpense = onlyExpense)
+                }
+
+                val count = pendingItems.size
+
+                // 第一优先级：立即在主线程弹出悬浮胶囊（不等待通知栏构建或跨进程 IPC）
+                if (outcome != null && outcome.inserted) {
+                    val cap = outcome.capture
+                    val isExpenseOrRefund = cap.billType == null ||
+                        cap.billType == LocalBillType.TYPE_EXPENSE ||
+                        cap.subType == LocalBillType.SUBTYPE_REFUND ||
+                        cap.needsRefundLink
+                    if ((!CapturePrefs.isOnlyExpense(app) || isExpenseOrRefund) &&
+                        CapturePrefs.getPromptMode(app) == CapturePrefs.MODE_BUBBLE
+                    ) {
+                        CaptureBubbleManager.showBubble(app, cap, count.coerceAtLeast(1))
+                    }
+                    // 后台异步检测主应用是否已有同金额近似时间账单
+                    val amountCentsVal = cap.amountCents
+                    if (amountCentsVal != null && amountCentsVal > 0L) {
+                        bgScope.launch {
+                            val dup = runCatching {
+                                CaptureBridgeClient(app).hasRecentMatchingBill(
+                                    paidAt = cap.paidAt,
+                                    amountCents = amountCentsVal,
+                                )
+                            }.getOrDefault(false)
+                            if (dup) {
+                                runCatching {
+                                    app.repository.updateStatus(cap.id, CaptureStatus.POSSIBLE_DUPLICATE)
+                                }
+                            }
+                        }
+                    }
+                }
+
+                CaptureNotifier.refreshWithItems(app, pendingItems)
+                CaptureKeepAliveService.start(app)
+
+                if (outcome == null) {
+                    ackIgnored(payload.captureId, count)
+                } else {
+                    ackOk(outcome.capture.id, outcome.inserted, count)
+                }
             }
         } catch (t: Throwable) {
             Log.w(TAG, "ingest failed", t)

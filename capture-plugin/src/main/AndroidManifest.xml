@@ -51,6 +51,21 @@
             android:theme="@android:style/Theme.Material.Light.NoActionBar" />
 
         <!--
+          1px 透明无动画唤醒 Activity（对齐 AutoAccounting 的 FloatingWindowTriggerActivity）。
+          由 com.android.phone (UID 1001) 的 RelayServer 在后台拉起，3ms 内解除 ColorOS Hans 冻结并立即弹出悬浮胶囊。
+        -->
+        <activity
+            android:name=".service.CaptureWakeActivity"
+            android:excludeFromRecents="true"
+            android:exported="true"
+            android:launchMode="singleInstance"
+            android:noHistory="true"
+            android:showWhenLocked="true"
+            android:taskAffinity=".trigger"
+            android:theme="@style/TransparentTriggerTheme"
+            tools:ignore="ExportedActivity" />
+
+        <!--
           前台保活服务；specialUse 与 AutoAccounting 的 CoreService 一致。
           启动失败（Android 12+ 后台限制）只影响及时性，不影响广播落库。
         -->

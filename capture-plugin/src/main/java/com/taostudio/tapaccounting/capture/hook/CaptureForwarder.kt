@@ -91,29 +91,38 @@ internal object CaptureForwarder {
             )
 
             // 1. 首选直连插件进程内 TCP 端口（127.0.0.1:52047）：
-            //    绕过 ColorOS 后台 FGS 启动拦截与广播排队，1~5ms 内直接完成入库与弹窗。
-            if (trySocketDeliver(CaptureContract.PLUGIN_DIRECT_PORT, payload, captureId, connectTimeoutMs = 250)) {
+            //    插件未冻结时 1~3ms 内立即返回 ACK 并完成入库与弹窗；
+            //    若插件在后台被 ColorOS Hans 冻结，100ms 快速超时后立即交由 com.android.phone (52046) 强制解冻。
+            if (trySocketDeliver(
+                    port = CaptureContract.PLUGIN_DIRECT_PORT,
+                    payload = payload,
+                    captureId = captureId,
+                    connectTimeoutMs = 80,
+                    soTimeoutMs = 100,
+                )
+            ) {
                 log("forward direct delivered source=$source captureId=$captureId")
                 return@launch
             }
 
-            // 2. 插件进程可能尚未启动或被冻结：尝试用当前前台宿主（微信/支付宝）直接唤醒插件。
+            // 2. 插件被 Hans 冻结或未启动：立即投递给常驻 com.android.phone (UID 1001) 的 RelayServer (52046)，
+            //    由 UID 1001 拉起 1px 透明 CaptureWakeActivity，3ms 内解除 Hans 冻结并弹窗（与自动记账完全一致）。
+            val relayDelivered = trySocketDeliver(
+                port = CaptureContract.RELAY_PORT,
+                payload = payload,
+                captureId = captureId,
+                connectTimeoutMs = 250,
+                soTimeoutMs = 800,
+            )
+            if (relayDelivered) {
+                log("forward relay queued source=$source captureId=$captureId")
+            }
+
+            // 3. 若当前宿主（如微信/支付宝）本身在前台，也并行发送前台唤醒作为双保险（插件侧按 captureId 幂等去重）。
             val context = contextOverride ?: appContext()
             if (context != null) {
-                if (tryProviderDeliver(context, payload)) {
-                    log("forward provider delivered source=$source captureId=$captureId")
-                    return@launch
-                }
                 wakePluginViaContext(context, payload, captureId)
-            }
-
-            // 3. 同时投递常驻 relay 落盘兜底（插件一旦唤醒会立即消费并回 ack）。
-            if (trySocketDeliver(CaptureContract.RELAY_PORT, payload, captureId, connectTimeoutMs = 600)) {
-                log("forward relay queued source=$source captureId=$captureId")
-                return@launch
-            }
-
-            if (context == null) {
+            } else if (!relayDelivered) {
                 log("forward failed source=$source: direct/relay down and no application context")
                 seen.remove(dedupKey)
             }
@@ -129,6 +138,7 @@ internal object CaptureForwarder {
         payload: String,
         captureId: String,
         connectTimeoutMs: Int,
+        soTimeoutMs: Int,
     ): Boolean {
         return try {
             Socket().use { socket ->
@@ -136,7 +146,7 @@ internal object CaptureForwarder {
                     InetSocketAddress("127.0.0.1", port),
                     connectTimeoutMs,
                 )
-                socket.soTimeout = 1_500
+                socket.soTimeout = soTimeoutMs
                 val out = DataOutputStream(socket.getOutputStream())
                 val envelope = JSONObject()
                     .put("token", BuildConfig.CAPTURE_INGEST_TOKEN)

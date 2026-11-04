@@ -114,7 +114,21 @@ object AutoAccountingRuleEngine {
 
     /** 在 CaptureApp.onCreate / Provider 里调用；只接受 application context。 */
     fun init(context: Context) {
-        appContext = context.applicationContext
+        val app = context.applicationContext ?: context
+        val firstInit = appContext == null
+        appContext = app
+        if (firstInit) {
+            Thread({
+                try {
+                    quickJs
+                    ruleSetOrNull()
+                } catch (_: Throwable) {
+                }
+            }, "TapCaptureRuleWarmup").apply {
+                isDaemon = true
+                start()
+            }
+        }
     }
 
     /**

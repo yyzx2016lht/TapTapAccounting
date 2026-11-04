@@ -218,8 +218,9 @@ internal object RelayServer {
                 inFlight[captureId] = System.currentTimeMillis()
                 respond(output, true, null)
                 log("queued id=$captureId size=${bytes.size}")
-                // 立即异步投递，不等待 1000ms 的 workerLoop 轮询！
-                executor.execute { startPluginService(file, captureId) }
+                // CaptureForwarder 只有在直连 52047 失败（插件被 Hans 冻结或未启动）时才会投递到 52046，
+                // 因此这里不等待轮询、也不再重复探测 52047，立即由 UID 1001 拉起透明唤醒 Activity 强制解冻！
+                executor.execute { startPluginService(file, captureId, immediateWake = true) }
             } catch (t: Throwable) {
                 log("client failed: ${t.javaClass.simpleName}: ${t.message}")
             }
@@ -238,7 +239,7 @@ internal object RelayServer {
                             val last = inFlight[id] ?: 0L
                             if (now - last < RETRY_MS) return@forEach
                             inFlight[id] = now
-                            startPluginService(file, id)
+                            startPluginService(file, id, immediateWake = false)
                         }
                 }
             } catch (t: Throwable) {
@@ -253,7 +254,7 @@ internal object RelayServer {
         }
     }
 
-    private fun startPluginService(file: File, relayId: String) {
+    private fun startPluginService(file: File, relayId: String, immediateWake: Boolean = false) {
         val ctx = context ?: return
         val payload = try {
             JSONObject(file.readText(Charsets.UTF_8)).optString("payload", "")
@@ -268,21 +269,57 @@ internal object RelayServer {
             return
         }
 
-        // 1. 首选通过插件进程内直连 TCP（127.0.0.1:52047）投递，绕过 ColorOS 对后台 startForegroundService 的拦截
-        if (tryDirectPlugin(payload, relayId)) {
+        // 周期重试时先尝试 52047 直连（若插件已被解冻，2ms 内直接完成）
+        if (!immediateWake && tryDirectPlugin(payload, relayId)) {
             deleteQueued(relayId)
             log("delivered via direct tcp id=$relayId")
             return
         }
 
-        // 2. 次选通过 ContentProvider.call 唤醒并投递（ColorOS Hans 允许 Provider 立即解冻进程）
+        // 1. 核心通道（与 AutoAccounting FloatingWindowTriggerActivity 完全一致）：
+        //    由 com.android.phone (UID 1001，具备后台启动 Activity 特权) 拉起 1px 透明无动画 CaptureWakeActivity，
+        //    ColorOS 会在 3ms 内将插件从 Hans 冻结黑名单移除（Hans update: false），并在 onCreate 内完成入库与弹窗。
+        try {
+            val wakeIntent = Intent(CaptureContract.ACTION_WAKE_INGEST).apply {
+                component = ComponentName(
+                    CaptureContract.PLUGIN_PACKAGE,
+                    CaptureContract.WAKE_ACTIVITY_CLASS,
+                )
+                putExtra(CaptureContract.EXTRA_TOKEN, BuildConfig.CAPTURE_INGEST_TOKEN)
+                putExtra(CaptureContract.EXTRA_PAYLOAD, payload)
+                putExtra(CaptureContract.EXTRA_RELAY_ID, relayId)
+                addFlags(
+                    Intent.FLAG_ACTIVITY_NEW_TASK or
+                        Intent.FLAG_ACTIVITY_NO_HISTORY or
+                        Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS or
+                        Intent.FLAG_ACTIVITY_NO_ANIMATION,
+                )
+            }
+            ctx.startActivity(wakeIntent)
+            log("started wake activity id=$relayId host=${ctx.packageName}")
+        } catch (t: Throwable) {
+            log("wake activity failed id=$relayId: ${t.javaClass.simpleName}: ${t.message}")
+        }
+
+        // startActivity 发出后约 4ms ColorOS 就会执行 Hans update:[uid=false] 解冻插件进程；
+        // 等待 15ms 后立即通过 52047 直连投递，这样即使屏幕熄灭或窗口过渡尚未走完 onCreate，也能在 20ms 内完成入库弹窗。
+        try {
+            Thread.sleep(15)
+        } catch (_: InterruptedException) {
+        }
+        if (tryDirectPlugin(payload, relayId)) {
+            deleteQueued(relayId)
+            log("delivered via direct tcp after wake id=$relayId")
+            return
+        }
+
+        // 2. 次选通过 ContentProvider.call / 显式高优广播兜底
         if (tryProviderCall(ctx, payload)) {
             deleteQueued(relayId)
             log("delivered via provider id=$relayId")
             return
         }
 
-        // 3. 发送显式高优广播 + 尝试启动前台服务
         try {
             val broadcastIntent = Intent(CaptureContract.ACTION_INGEST).apply {
                 component = ComponentName(
@@ -297,29 +334,6 @@ internal object RelayServer {
         } catch (t: Throwable) {
             log("broadcast plugin failed id=$relayId: ${t.javaClass.simpleName}")
         }
-
-        val intent = Intent(CaptureContract.ACTION_SERVICE_INGEST).apply {
-            component = ComponentName(
-                CaptureContract.PLUGIN_PACKAGE,
-                CaptureContract.INGEST_SERVICE_CLASS,
-            )
-            putExtra(CaptureContract.EXTRA_TOKEN, BuildConfig.CAPTURE_INGEST_TOKEN)
-            putExtra(CaptureContract.EXTRA_PAYLOAD, payload)
-            putExtra(CaptureContract.EXTRA_RELAY_ID, relayId)
-        }
-
-        try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                ctx.startForegroundService(intent)
-            } else {
-                ctx.startService(intent)
-            }
-            log("started plugin service id=$relayId host=${ctx.packageName}")
-        } catch (t: Throwable) {
-            // Android 12+ 后台 FGS 限制；等下一次 worker tick 再试。
-            log("start plugin failed id=$relayId: ${t.javaClass.simpleName}: ${t.message}")
-            inFlight.remove(relayId)
-        }
     }
 
     private fun tryDirectPlugin(payload: String, relayId: String): Boolean {
@@ -327,9 +341,9 @@ internal object RelayServer {
             Socket().use { socket ->
                 socket.connect(
                     InetSocketAddress("127.0.0.1", CaptureContract.PLUGIN_DIRECT_PORT),
-                    300,
+                    80,
                 )
-                socket.soTimeout = 1_500
+                socket.soTimeout = 100
                 val out = DataOutputStream(socket.getOutputStream())
                 val envelope = JSONObject()
                     .put("token", BuildConfig.CAPTURE_INGEST_TOKEN)

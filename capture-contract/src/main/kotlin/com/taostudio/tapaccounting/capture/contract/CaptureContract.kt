@@ -41,8 +41,14 @@ object CaptureContract {
     /** relay 拉起插件前台服务时使用的 action。 */
     const val ACTION_SERVICE_INGEST: String = "$PLUGIN_PACKAGE.action.SERVICE_INGEST"
 
+    /** relay（com.android.phone UID 1001）拉起透明唤醒 Activity 时使用的 action。 */
+    const val ACTION_WAKE_INGEST: String = "$PLUGIN_PACKAGE.action.WAKE_INGEST"
+
     /** 插件前台服务类名（跨进程启动时用 ComponentName）。 */
     const val INGEST_SERVICE_CLASS: String = "$PLUGIN_PACKAGE.service.CaptureKeepAliveService"
+
+    /** 插件 1px 透明唤醒 Activity 类名（等价于 AutoAccounting 的 FloatingWindowTriggerActivity）。 */
+    const val WAKE_ACTIVITY_CLASS: String = "$PLUGIN_PACKAGE.service.CaptureWakeActivity"
 
     /** relay 队列 id；插件入库完成后用它回 ack。 */
     const val EXTRA_RELAY_ID: String = "relayId"

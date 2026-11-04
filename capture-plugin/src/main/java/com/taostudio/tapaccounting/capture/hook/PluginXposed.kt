@@ -26,8 +26,9 @@ class PluginXposed : IXposedHookLoadPackage {
                         "targetSdk=${lpparam.appInfo?.targetSdkVersion ?: "?"}",
                 )
                 try {
-                    // 先装 relay：越早抢到 52046，支付事件越早进入可靠队列。
-                    RelayServer.install(lpparam)
+                    // 注意：不要在微信/支付宝里启动 RelayServer(52046)，
+                    // 否则重启 com.android.phone 时 52046 会被微信抢占，而微信在后台没有 UID 1001 的
+                    // startActivity 解冻特权。52046 固定由常驻系统进程 com.android.phone 独占。
                     ProbeHooker.install(lpparam)
                 } catch (t: Throwable) {
                     // 宿主版本变化可能让类加载失败；绝不能让微信/支付宝崩溃。

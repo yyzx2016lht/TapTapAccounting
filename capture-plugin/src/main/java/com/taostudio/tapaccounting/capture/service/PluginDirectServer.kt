@@ -115,16 +115,33 @@ object PluginDirectServer {
                     writeResponse(output, JSONObject().put("ok", false).put("error", "no context").toString())
                     return
                 }
-
-                val ackJson = CaptureIngestHandler.ingest(ctx, token, payload)
-                writeResponse(output, ackJson)
-                Log.i(TAG, "direct ingest done id=$relayId ack=$ackJson")
-
-                if (relayId.isNotEmpty() && JSONObject(ackJson).optBoolean("ok", false)) {
-                    executor.execute { sendRelayAck(relayId) }
+                if (token != BuildConfig.CAPTURE_INGEST_TOKEN || payload.isBlank()) {
+                    writeResponse(output, JSONObject().put("ok", false).put("error", "invalid token/payload").toString())
+                    return
                 }
+
+                // 立即返回 TCP ACK（<2ms），避免发送方在 soTimeout 上阻塞等待 QuickJS/DB；
+                // 进程被 Hans 冻结时 accept 线程不会运行，发送方 80ms 超时即可立即识别出进程已冻结并切换唤醒通道。
+                writeResponse(output, JSONObject().put("ok", true).put("captureId", relayId).toString())
+                ingestAsync(ctx, token, payload, relayId)
             } catch (t: Throwable) {
                 Log.w(TAG, "client handle failed: ${t.javaClass.simpleName}: ${t.message}")
+            }
+        }
+    }
+
+    fun ingestAsync(context: Context, token: String, payload: String, relayId: String) {
+        val app = context.applicationContext ?: context
+        appContext = app
+        executor.execute {
+            try {
+                val ackJson = CaptureIngestHandler.ingest(app, token, payload)
+                Log.i(TAG, "direct ingest done id=$relayId ack=$ackJson")
+                if (relayId.isNotEmpty() && JSONObject(ackJson).optBoolean("ok", false)) {
+                    sendRelayAck(relayId)
+                }
+            } catch (t: Throwable) {
+                Log.w(TAG, "async ingest failed id=$relayId: ${t.message}")
             }
         }
     }

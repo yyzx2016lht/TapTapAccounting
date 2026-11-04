@@ -25,6 +25,7 @@ import com.taostudio.tapaccounting.capture.contract.AccountingContext
 import com.taostudio.tapaccounting.capture.data.AssetMappingRule
 import com.taostudio.tapaccounting.capture.data.CapturePrefs
 import com.taostudio.tapaccounting.capture.data.CategoryRule
+import com.taostudio.tapaccounting.capture.history.AutoAccountingRuleImporter
 import com.taostudio.tapaccounting.capture.notify.CaptureBubbleManager
 import com.taostudio.tapaccounting.capture.notify.CaptureNotifier
 import com.taostudio.tapaccounting.capture.parse.CaptureRuleMatcher
@@ -98,25 +99,35 @@ internal class RuleMappingViews(
                     textColor = Color.WHITE,
                     bgColor = CaptureUi.BRAND,
                 ) { showEditAssetMappingDialog(null, appAssets) },
-                LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginEnd = dp(8) },
+                LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1.1f).apply { marginEnd = dp(6) },
             )
             btnRow.addView(
                 CaptureUi.button(
                     activity = activity,
-                    text = "恢复默认预置",
+                    text = "从自动记账导入",
                     textColor = CaptureUi.BRAND_DARK,
                     bgColor = CaptureUi.BRAND_SOFT,
                     strokeColor = CaptureUi.BRAND_BORDER,
+                ) { triggerAutoAccountingImport() },
+                LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1.4f).apply { marginEnd = dp(6) },
+            )
+            btnRow.addView(
+                CaptureUi.button(
+                    activity = activity,
+                    text = "恢复通用",
+                    textColor = CaptureUi.TEXT_SECONDARY,
+                    bgColor = Color.parseColor("#F1F5F9"),
+                    strokeColor = Color.parseColor("#CBD5E1"),
                 ) {
                     AlertDialog.Builder(activity)
-                        .setTitle("恢复预置映射与分类规则")
-                        .setMessage("将重新补齐默认资产映射与日常分类关键词，不会删除你已新增的自定义规则。")
+                        .setTitle("恢复通用通道预置")
+                        .setMessage("将补齐微信、支付宝、花呗等通用渠道基础映射（不含任何具体个人银行卡）。不会删除你已自定义的规则。")
                         .setPositiveButton("恢复") { _, _ ->
                             scope.launch {
                                 withContext(Dispatchers.IO) {
                                     CaptureRuleMatcher.ensureSeeded(activity, force = true)
                                 }
-                                toast("已恢复预置映射与分类规则")
+                                toast("已恢复通用基础映射")
                                 onDataChanged()
                             }
                         }
@@ -402,14 +413,27 @@ internal class RuleMappingViews(
                 setLineSpacing(0f, 1.2f)
                 setPadding(0, dp(4), 0, dp(12))
             })
-            addView(
+            val catBtnRow = LinearLayout(activity).apply { orientation = LinearLayout.HORIZONTAL }
+            catBtnRow.addView(
                 CaptureUi.button(
                     activity = activity,
                     text = "+ 新增分类规则",
                     textColor = Color.WHITE,
                     bgColor = CaptureUi.BRAND,
-                ) { showEditCategoryRuleDialog(null, categoryPaths) }
+                ) { showEditCategoryRuleDialog(null, categoryPaths) },
+                LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1.2f).apply { marginEnd = dp(8) },
             )
+            catBtnRow.addView(
+                CaptureUi.button(
+                    activity = activity,
+                    text = "从自动记账导入",
+                    textColor = CaptureUi.BRAND_DARK,
+                    bgColor = CaptureUi.BRAND_SOFT,
+                    strokeColor = CaptureUi.BRAND_BORDER,
+                ) { triggerAutoAccountingImport() },
+                LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1.2f),
+            )
+            addView(catBtnRow)
         }
         container.addView(infoCard)
 
@@ -901,6 +925,34 @@ internal class RuleMappingViews(
         gravity = Gravity.CENTER
         setTextColor(CaptureUi.TEXT_MUTED)
         setPadding(dp(16), dp(24), dp(16), dp(24))
+    }
+
+    private fun triggerAutoAccountingImport() {
+        val progressDialog = AlertDialog.Builder(activity)
+            .setTitle("正在从自动记账导入")
+            .setMessage("正在连接本地 127.0.0.1:52045 拉取资产映射与分类规则...")
+            .setCancelable(false)
+            .create()
+        progressDialog.show()
+
+        scope.launch {
+            val result = AutoAccountingRuleImporter.importFromLocalServer(activity)
+            progressDialog.dismiss()
+            if (result.isSuccess) {
+                AlertDialog.Builder(activity)
+                    .setTitle("导入成功")
+                    .setMessage("成功同步导入：\n• 资产映射：${result.assetCount} 条\n• 分类规则：${result.categoryCount} 条")
+                    .setPositiveButton("好的", null)
+                    .show()
+                onDataChanged()
+            } else {
+                AlertDialog.Builder(activity)
+                    .setTitle("连接自动记账服务失败")
+                    .setMessage("${result.error}\n\n排查建议：\n1. 确保同机已安装并运行「自动记账」\n2. 确保自动记账的本地核心服务已启动（端口 52045）\n3. 检查是否有权限或省电策略拦截了本机环回通信")
+                    .setPositiveButton("知道了", null)
+                    .show()
+            }
+        }
     }
 
     private fun toast(msg: String) {

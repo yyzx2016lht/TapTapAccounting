@@ -8,7 +8,8 @@ import com.taostudio.tapaccounting.capture.contract.BillTypeLocalizer
 import com.taostudio.tapaccounting.capture.contract.CaptureSource
 import com.taostudio.tapaccounting.capture.contract.LocalBillType
 import com.taostudio.tapaccounting.capture.contract.LocalBillTypeMapping
-import org.json.JSONArray
+import com.taostudio.tapaccounting.capture.data.RuleBundleCodec
+import com.taostudio.tapaccounting.capture.data.RuleBundleStore
 import org.json.JSONObject
 import java.util.Locale
 import kotlin.math.roundToLong
@@ -33,7 +34,6 @@ object AutoAccountingRuleEngine {
     const val RULE_VERSION: String = "autoaccounting-1"
 
     private const val TAG = "TapCaptureRule"
-    private const val ASSET_NAME = "autoaccounting_rules.json"
     private const val SECONDS_THRESHOLD = 10_000_000_000L
     private const val DEFAULT_CURRENCY = "CNY"
     private const val MAX_FAILURE_LOGS = 3
@@ -99,6 +99,10 @@ object AutoAccountingRuleEngine {
     @Volatile
     private var ruleSet: RuleSet? = null
 
+    /** 规则写入/同步/启停时递增，防止预热线程把旧规则重新写回缓存。 */
+    @Volatile
+    private var generation = 0
+
     /** QuickJS 实例本身无状态；runtime/context 每次 parse 新建。 */
     private val quickJs: QuickJS by lazy {
         QuickJS.init()
@@ -125,6 +129,85 @@ object AutoAccountingRuleEngine {
     }
 
     /**
+     * 规则 bundle 写入、本机同步、导入、启停后调用。
+     * 下一次 parse 会从 `filesDir/rule_bundle.json` 重新加载，无需重启 App。
+     */
+    fun invalidate() {
+        generation++
+        ruleSet = null
+        log("rule set invalidated")
+    }
+
+    /** 规则页“样本测试”的结果；[fields] 已按中文标签排好，UI 直接展示。 */
+    data class RuleTestResult(
+        val matched: Boolean,
+        val output: String? = null,
+        val fields: List<Pair<String, String>> = emptyList(),
+        val error: String? = null,
+    )
+
+    /**
+     * 用 QuickJS 单独跑一条规则，不写入任何状态；供规则页样本测试使用。
+     * 与 [parse] 共用 common.js、console shim 与 data 全局变量，命中字段含义完全一致。
+     */
+    @Synchronized
+    fun testRule(
+        common: String,
+        js: String,
+        systemRuleName: String,
+        rawJson: String,
+    ): RuleTestResult {
+        if (common.isBlank()) return RuleTestResult(false, error = "缺少 common 规则脚本")
+        if (js.isBlank()) return RuleTestResult(false, error = "规则 JS 为空")
+        if (!SYSTEM_RULE_NAME.matches(systemRuleName)) {
+            return RuleTestResult(false, error = "规则变量名非法：$systemRuleName")
+        }
+        return try {
+            quickJs.createJSRuntime().use { runtime ->
+                runtime.createJSContext().use { ctx ->
+                    installGlobals(ctx, rawJson)
+                    try {
+                        ctx.evaluate(common, "common.js")
+                        ctx.evaluate(CONSOLE_SHIM, "console.js")
+                    } catch (t: Throwable) {
+                        return RuleTestResult(false, error = "common.js 执行失败：${describe(t)}")
+                    }
+                    val output = try {
+                        ctx.evaluate(
+                            js + "\nJSON.stringify(" + systemRuleName + ".get(data))",
+                            "rule_test.js",
+                            String::class.java,
+                        )
+                    } catch (_: ClassCastException) {
+                        null
+                    } catch (t: Throwable) {
+                        return RuleTestResult(false, error = "规则执行失败：${describe(t)}")
+                    }
+                    if (output.isNullOrBlank() || output == "null" || output == "undefined") {
+                        return RuleTestResult(false)
+                    }
+                    val obj = try {
+                        JSONObject(output)
+                    } catch (t: Throwable) {
+                        return RuleTestResult(
+                            false,
+                            output = output,
+                            error = "规则输出不是 JSON 对象",
+                        )
+                    }
+                    RuleTestResult(
+                        matched = true,
+                        output = obj.toString(),
+                        fields = describeFields(obj),
+                    )
+                }
+            }
+        } catch (t: Throwable) {
+            RuleTestResult(false, error = "测试失败：${describe(t)}")
+        }
+    }
+
+    /**
      * @param source WECHAT / ALIPAY（也接受包名）
      * @param dataType DATA / NOTICE
      * @param rawJson hook 投递的原始 JSON 字符串
@@ -134,7 +217,9 @@ object AutoAccountingRuleEngine {
     @Synchronized
     fun parse(source: String, dataType: String, rawJson: String): ParseOutcome {
         if (rawJson.isBlank()) return ParseOutcome.NoMatch
-        val pkg = packageForSource(source) ?: run {
+        // 包名统一小写：资产里的支付宝包名是 com.eg.android.AlipayGphone，而用户/同步规则
+        // 可能大小写不统一；key 两侧必须同一口径，否则会漏掉全部支付宝规则。
+        val pkg = packageForSource(source)?.lowercase(Locale.US) ?: run {
             log("unknown source: $source")
             return ParseOutcome.NoMatch
         }
@@ -311,7 +396,13 @@ object AutoAccountingRuleEngine {
     private fun ruleSetOrNull(): RuleSet? {
         ruleSet?.let { return it }
         return try {
-            loadRuleSet().also { ruleSet = it }
+            val startGeneration = generation
+            val loaded = loadRuleSet()
+            // 加载期间用户可能刚保存了规则：旧结果不能覆盖 invalidate 后的空缓存。
+            synchronized(this) {
+                if (generation == startGeneration) ruleSet = loaded
+            }
+            loaded
         } catch (t: Throwable) {
             log("load rules failed: ${describe(t)}")
             null
@@ -320,34 +411,62 @@ object AutoAccountingRuleEngine {
 
     private fun loadRuleSet(): RuleSet {
         val context = appContext ?: throw IllegalStateException("AutoAccountingRuleEngine.init not called")
-        val text = context.assets.open(ASSET_NAME).bufferedReader().use { it.readText() }
-        val root = JSONObject(text)
-        val common = root.optString("common")
-        require(common.isNotBlank()) { "rules asset missing common.js" }
+        // bundle 存在时以 bundle 为准；不存在/损坏时 RuleBundleStore 回退内置资产。
+        val bundle = RuleBundleStore.load(context)
+        val common = bundle.common
+        require(common.isNotBlank()) { "rules bundle missing common.js" }
 
-        val rules = root.optJSONArray("rules") ?: JSONArray()
         val byKey = LinkedHashMap<String, MutableList<RuleDef>>()
         var skipped = 0
-        for (index in 0 until rules.length()) {
-            val item = rules.optJSONObject(index) ?: continue
-            if (!item.optBoolean("enabled", false)) continue
-            val app = item.optString("app")
-            val type = item.optString("type").uppercase(Locale.US)
-            val js = item.optString("js")
-            val systemRuleName = item.optString("systemRuleName")
-            val name = item.optString("name")
+        var userRules = 0
+        // 用户规则优先执行：先匹配“我的”，再匹配系统/导入规则。
+        for (rule in RuleBundleCodec.orderedForEngine(bundle.rules)) {
+            if (!rule.enabled) continue
+            val app = rule.app.trim().lowercase(Locale.US)
+            val type = rule.type.trim().uppercase(Locale.US)
+            val js = rule.js
+            val systemRuleName = rule.systemRuleName
             if (app.isBlank() || type.isBlank() || js.isBlank() ||
                 !SYSTEM_RULE_NAME.matches(systemRuleName)
             ) {
                 skipped++
                 continue
             }
+            if (rule.isUser) userRules++
             val code = js + "\nJSON.stringify(" + systemRuleName + ".get(data))"
             byKey.getOrPut("$app|$type") { ArrayList() }
-                .add(RuleDef(name = name, systemRuleName = systemRuleName, code = code))
+                .add(RuleDef(name = rule.name, systemRuleName = systemRuleName, code = code))
         }
-        log("rules loaded total=${rules.length()} skipped=$skipped")
+        log(
+            "rules loaded total=${bundle.rules.size} user=$userRules " +
+                "enabled=${bundle.enabledCount} skipped=$skipped source=${bundle.source}",
+        )
         return RuleSet(common = common, byKey = byKey)
+    }
+
+    private fun describeFields(obj: JSONObject): List<Pair<String, String>> {
+        val fields = ArrayList<Pair<String, String>>()
+        fun add(label: String, key: String) {
+            if (!obj.has(key) || obj.isNull(key)) return
+            val value = obj.opt(key)
+            val text = when (value) {
+                null, JSONObject.NULL -> return
+                is String -> value.trim()
+                else -> value.toString()
+            }
+            if (text.isNotEmpty()) fields.add(label to text)
+        }
+        add("类型", "type")
+        add("金额", "money")
+        add("商户", "shopName")
+        add("商品", "shopItem")
+        add("转出账户", "accountNameFrom")
+        add("转入账户", "accountNameTo")
+        add("手续费", "fee")
+        add("币种", "currency")
+        add("时间", "time")
+        add("渠道", "channel")
+        return fields
     }
 
     private fun packageForSource(source: String): String? {

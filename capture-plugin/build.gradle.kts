@@ -81,4 +81,6 @@ dependencies {
     compileOnly("de.robv.android.xposed:api:82")
 
     testImplementation("junit:junit:4.13.2")
+    // Android 单元测试里的 org.json 是空桩；补一份 JVM 实现，才能测 bundle 编解码。
+    testImplementation("org.json:json:20240303")
 }

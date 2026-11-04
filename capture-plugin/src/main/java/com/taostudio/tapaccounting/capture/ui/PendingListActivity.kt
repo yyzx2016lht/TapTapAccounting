@@ -2,6 +2,7 @@ package com.taostudio.tapaccounting.capture.ui
 
 import android.app.Activity
 import android.app.AlertDialog
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color
 import android.graphics.Typeface
@@ -40,6 +41,8 @@ import com.taostudio.tapaccounting.capture.data.CaptureRepository
 import com.taostudio.tapaccounting.capture.data.CategoryRule
 import com.taostudio.tapaccounting.capture.data.CategorySource
 import com.taostudio.tapaccounting.capture.data.PaymentCapture
+import com.taostudio.tapaccounting.capture.data.RuleBundleCodec
+import com.taostudio.tapaccounting.capture.data.RuleBundleStore
 import com.taostudio.tapaccounting.capture.hook.CaptureForwarder
 import com.taostudio.tapaccounting.capture.hook.WechatEnvelope
 import com.taostudio.tapaccounting.capture.notify.CaptureBubbleManager
@@ -73,13 +76,25 @@ class PendingListActivity : Activity() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val bridge by lazy { CaptureBridgeClient(this) }
     private val ruleViews by lazy { RuleMappingViews(this, scope) { load() } }
+    private val dataRuleViews by lazy {
+        DataRuleViews(
+            activity = this,
+            scope = scope,
+            onDataChanged = { load() },
+            onExport = { exportRuleBundle() },
+            onImport = { importRuleBundle() },
+        )
+    }
     private val rowTimeFormat = SimpleDateFormat("MM-dd HH:mm", Locale.getDefault())
     private val prefillTimeFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
 
     private var currentTab = 0
+    /** 规则页内分段：0 数据规则 / 1 分类规则 / 2 资产映射。 */
+    private var rulesSection = 0
     private var latestSnapshot: Snapshot? = null
     private var isAiBusy = false
     private var ignoredExpanded = false
+    private var pendingExportJson: String? = null
     private val noteSaveJobs = mutableMapOf<String, Job>()
 
     private lateinit var bridgeDot: View
@@ -136,7 +151,7 @@ class PendingListActivity : Activity() {
             setTextColor(CaptureUi.TEXT_PRIMARY)
         })
         titleBlock.addView(TextView(this).apply {
-            text = "${CaptureSources.all.joinToString(" · ") { it.displayName }}收件箱"
+            text = "${CaptureSources.all.joinToString(" · ") { it.displayName }}收件箱与规则工作台"
             textSize = 11.5f
             setTextColor(CaptureUi.TEXT_MUTED)
             setPadding(0, dp(1), 0, 0)
@@ -175,7 +190,7 @@ class PendingListActivity : Activity() {
                 ViewGroup.LayoutParams.WRAP_CONTENT,
             ).apply { topMargin = dp(12) }
         }
-        val tabLabels = listOf("待记", "资产映射", "分类规则", "设置")
+        val tabLabels = listOf("待记", "规则", "设置")
         tabViews = tabLabels.mapIndexed { index, label ->
             TextView(this).apply {
                 text = label
@@ -252,6 +267,7 @@ class PendingListActivity : Activity() {
                         ignoredItems = repository.listIgnored(50),
                         assetRules = db.assetMappingDao().listAll(),
                         categoryRules = db.categoryRuleDao().listAll(),
+                        ruleBundle = RuleBundleStore.load(this@PendingListActivity),
                         accountingContext = accountingCtx,
                         bridgeAvailable = ping.ok,
                         aiEnabled = ping.aiEnabled,
@@ -292,8 +308,7 @@ class PendingListActivity : Activity() {
         bodyFrame.removeAllViews()
         val view = when (currentTab) {
             0 -> buildInboxTab(snapshot)
-            1 -> ruleViews.buildAssetMappingTab(snapshot.assetRules, snapshot.accountingContext)
-            2 -> ruleViews.buildCategoryRuleTab(snapshot.categoryRules, snapshot.accountingContext)
+            1 -> buildRulesTab(snapshot)
             else -> ruleViews.buildSettingsTab(
                 onSimulateExpense = { simulateCapture() },
                 onSimulateWcdb = { simulateWcdbSamples() },
@@ -301,6 +316,84 @@ class PendingListActivity : Activity() {
             )
         }
         bodyFrame.addView(view)
+    }
+
+    /** 规则页：顶部固定「数据规则 / 分类规则 / 资产映射」分段，复用现有分类/资产页面。 */
+    private fun buildRulesTab(snapshot: Snapshot): View {
+        val root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(CaptureUi.BG_PAGE)
+        }
+        val track = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(dp(4), dp(4), dp(4), dp(4))
+            background = CaptureUi.roundedBg(CaptureUi.BG_SEGMENT, dp(12))
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+            ).apply {
+                leftMargin = dp(14)
+                rightMargin = dp(14)
+                topMargin = dp(10)
+            }
+        }
+        val content = FrameLayout(this).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                0,
+                1f,
+            )
+        }
+        val sectionTabs = ArrayList<TextView>()
+
+        fun updateSectionSelection() {
+            sectionTabs.forEachIndexed { index, tv ->
+                val selected = index == rulesSection
+                tv.setTypeface(null, if (selected) Typeface.BOLD else Typeface.NORMAL)
+                tv.setTextColor(if (selected) CaptureUi.TEXT_PRIMARY else CaptureUi.TEXT_SECONDARY)
+                tv.background = if (selected) {
+                    CaptureUi.roundedBg(Color.WHITE, dp(9), dp(1), CaptureUi.BORDER)
+                } else {
+                    null
+                }
+                tv.elevation = if (selected) dp(1).toFloat() else 0f
+            }
+        }
+
+        fun renderSection() {
+            content.removeAllViews()
+            content.addView(
+                when (rulesSection) {
+                    1 -> ruleViews.buildCategoryRuleTab(snapshot.categoryRules, snapshot.accountingContext)
+                    2 -> ruleViews.buildAssetMappingTab(snapshot.assetRules, snapshot.accountingContext)
+                    else -> dataRuleViews.buildDataRuleTab(snapshot.ruleBundle)
+                },
+            )
+        }
+
+        listOf("数据规则", "分类规则", "资产映射").forEachIndexed { index, label ->
+            val tv = TextView(this).apply {
+                text = label
+                textSize = 12.5f
+                gravity = Gravity.CENTER
+                setPadding(dp(6), dp(8), dp(6), dp(8))
+                layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+                setOnClickListener {
+                    if (rulesSection != index) {
+                        rulesSection = index
+                        updateSectionSelection()
+                        renderSection()
+                    }
+                }
+            }
+            sectionTabs.add(tv)
+            track.addView(tv)
+        }
+        root.addView(track)
+        root.addView(content)
+        updateSectionSelection()
+        renderSection()
+        return root
     }
 
     // ════════════════════════════════════════════════════════
@@ -1695,6 +1788,7 @@ class PendingListActivity : Activity() {
         val ignoredItems: List<PaymentCapture> = emptyList(),
         val assetRules: List<AssetMappingRule>,
         val categoryRules: List<CategoryRule>,
+        val ruleBundle: RuleBundleCodec.Bundle,
         val accountingContext: AccountingContext?,
         val bridgeAvailable: Boolean,
         val aiEnabled: Boolean,
@@ -1708,6 +1802,107 @@ class PendingListActivity : Activity() {
             return
         }
         requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), REQUEST_NOTIFICATIONS)
+    }
+
+    // ════════════════════════════════════════════════════════
+    //  规则 bundle 导入 / 导出（SAF，不申请存储权限）
+    // ════════════════════════════════════════════════════════
+
+    private fun exportRuleBundle() {
+        scope.launch {
+            val exported = withContext(Dispatchers.IO) {
+                runCatching { RuleBundleStore.exportJson(this@PendingListActivity) }
+            }
+            val json = exported.getOrElse { error ->
+                toast("导出失败：${error.message ?: error.javaClass.simpleName}")
+                return@launch
+            }
+            pendingExportJson = json
+            val fileName = "tap-capture-rule-bundle-" +
+                SimpleDateFormat("yyyyMMdd-HHmm", Locale.US).format(Date()) + ".json"
+            val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+                addCategory(Intent.CATEGORY_OPENABLE)
+                type = "application/json"
+                putExtra(Intent.EXTRA_TITLE, fileName)
+            }
+            runCatching { startActivityForResult(intent, REQUEST_EXPORT_RULES) }
+                .onFailure {
+                    pendingExportJson = null
+                    toast("系统没有可用的文件导出器")
+                }
+        }
+    }
+
+    private fun importRuleBundle() {
+        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = "application/json"
+            putExtra(
+                Intent.EXTRA_MIME_TYPES,
+                arrayOf("application/json", "text/plain", "application/octet-stream"),
+            )
+        }
+        runCatching { startActivityForResult(intent, REQUEST_IMPORT_RULES) }
+            .onFailure { toast("系统没有可用的文件选择器") }
+    }
+
+    @Deprecated("Activity#onActivityResult 在 Android 13 起被标记，但本插件保持零额外依赖，继续沿用。")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == REQUEST_EXPORT_RULES) {
+            val json = pendingExportJson
+            pendingExportJson = null
+            if (resultCode != RESULT_OK || json == null) return
+            val uri = data?.data ?: return
+            scope.launch {
+                val ok = withContext(Dispatchers.IO) {
+                    runCatching {
+                        contentResolver.openOutputStream(uri)?.use {
+                            it.write(json.toByteArray(Charsets.UTF_8))
+                        } ?: error("无法打开输出文件")
+                    }.isSuccess
+                }
+                toast(if (ok) "已导出当前规则 JSON" else "导出失败，请换一个保存位置")
+            }
+            return
+        }
+        if (requestCode != REQUEST_IMPORT_RULES || resultCode != RESULT_OK) return
+        val uri = data?.data ?: return
+        scope.launch {
+            val text = withContext(Dispatchers.IO) {
+                runCatching {
+                    contentResolver.openInputStream(uri)?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }
+                }.getOrNull()
+            }
+            if (text.isNullOrBlank()) {
+                toast("读取规则文件失败")
+                return@launch
+            }
+            val imported = withContext(Dispatchers.IO) {
+                runCatching { RuleBundleStore.importJson(this@PendingListActivity, text) }
+            }
+            imported.onSuccess { bundle ->
+                AlertDialog.Builder(this@PendingListActivity)
+                    .setTitle("导入成功")
+                    .setMessage(
+                        "已导入 ${bundle.rules.size} 条规则（我的 ${bundle.userCount} 条）。\n" +
+                            "原有规则已被这份文件替换；规则已立即生效。",
+                    )
+                    .setPositiveButton("好的", null)
+                    .show()
+                rulesSection = 0
+                load()
+            }.onFailure { error ->
+                AlertDialog.Builder(this@PendingListActivity)
+                    .setTitle("导入失败")
+                    .setMessage(
+                        "规则文件未通过校验，现有规则没有被修改。\n\n" +
+                            (error.message ?: error.javaClass.simpleName),
+                    )
+                    .setPositiveButton("知道了", null)
+                    .show()
+            }
+        }
     }
 
     private fun sourceLabel(source: String): String = CaptureSources.displayName(source)
@@ -1729,6 +1924,8 @@ class PendingListActivity : Activity() {
 
     private companion object {
         const val REQUEST_NOTIFICATIONS = 1001
+        const val REQUEST_EXPORT_RULES = 1002
+        const val REQUEST_IMPORT_RULES = 1003
 
         const val SAMPLE_WECHAT_PAY =
             """{"mMap":{"description":"使用招商银行储蓄卡(4852)支付￥9.00","source":"微信支付","title":"已支付¥9.00","display_name":"同程旅行","cachedPayTools":"","cachedPayMoney":"","cachedPayShop":"","t":1770696436886}}"""

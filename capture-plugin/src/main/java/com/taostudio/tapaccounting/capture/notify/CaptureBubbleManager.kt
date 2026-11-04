@@ -1,6 +1,7 @@
 package com.taostudio.tapaccounting.capture.notify
 
 import android.content.Context
+import android.content.res.ColorStateList
 import android.graphics.Color
 import android.graphics.PixelFormat
 import android.graphics.Typeface
@@ -18,6 +19,7 @@ import android.view.WindowManager
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
 import android.widget.EditText
+import android.widget.CheckBox
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
@@ -33,6 +35,7 @@ import com.taostudio.tapaccounting.capture.contract.ImportItemStatus
 import com.taostudio.tapaccounting.capture.contract.LocalBillType
 import com.taostudio.tapaccounting.capture.data.CategorySource
 import com.taostudio.tapaccounting.capture.data.PaymentCapture
+import com.taostudio.tapaccounting.capture.ui.SplitConfirmSheet
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -65,7 +68,7 @@ object CaptureBubbleManager {
     private var dismissRunnable: Runnable? = null
     private var session: BubbleSession? = null
 
-    private enum class BubbleState { SUMMARY, INPUT, CLASSIFYING, RESULT, RECORDED }
+    private enum class BubbleState { SUMMARY, INPUT, CLASSIFYING, SPLIT, RESULT, RECORDED }
 
     private class BubbleSession(
         val app: Context,
@@ -74,6 +77,7 @@ object CaptureBubbleManager {
         val statusText: TextView,
         val noteRow: LinearLayout,
         val noteInput: EditText,
+        val splitCheck: CheckBox,
         val summaryActions: LinearLayout,
         val inputActions: LinearLayout,
         val resultActions: LinearLayout,
@@ -195,6 +199,15 @@ object CaptureBubbleManager {
         }
         etNote.setText(capture.note.orEmpty())
         noteRow.addView(etNote)
+        val cbSplit = CheckBox(app).apply {
+            text = "拆分记账（按备注拆成多条明细）"
+            textSize = 12f
+            setTextColor(Color.parseColor("#CBD5E1"))
+            buttonTintList = ColorStateList.valueOf(Color.parseColor("#93C5FD"))
+            isChecked = capture.splitRequested
+            setPadding(0, dp(6), 0, 0)
+        }
+        noteRow.addView(cbSplit)
         root.addView(noteRow)
 
         fun actionRow(): LinearLayout = LinearLayout(app).apply {
@@ -272,6 +285,7 @@ object CaptureBubbleManager {
             statusText = tvStatus,
             noteRow = noteRow,
             noteInput = etNote,
+            splitCheck = cbSplit,
             summaryActions = summaryActions,
             inputActions = inputActions,
             resultActions = resultActions,
@@ -307,7 +321,21 @@ object CaptureBubbleManager {
                 append(amountStr)
                 item.merchant?.takeIf { it.isNotBlank() }?.let { append(" · ").append(it.take(10)) }
                 assetStr?.takeIf { it.isNotBlank() }?.let { append(" (").append(it.take(8)).append(")") }
+                if (s.splitCheck.isChecked) append(" · 拆分")
                 append(" · 待记 ").append(s.pendingCount).append(" 笔")
+            }
+        }
+
+        cbSplit.setOnCheckedChangeListener { _, checked ->
+            s.capture = s.capture.copy(splitRequested = checked)
+            updateSummary()
+            scope.launch {
+                withContext(Dispatchers.IO) {
+                    runCatching {
+                        CaptureApp.from(app).repository
+                            .updateSplitRequested(s.capture.id, checked)
+                    }
+                }
             }
         }
 
@@ -340,6 +368,10 @@ object CaptureBubbleManager {
                 BubbleState.CLASSIFYING -> {
                     cancelAutoDismiss()
                     setStatus("正在智能归类…", "#94A3B8")
+                }
+
+                BubbleState.SPLIT -> {
+                    cancelAutoDismiss()
                 }
 
                 BubbleState.RESULT -> {
@@ -393,6 +425,93 @@ object CaptureBubbleManager {
             }
         }
 
+        suspend fun importGroupAndToast(
+            capture: PaymentCapture,
+            items: List<CaptureBridgeClient.SplitItem>,
+            totalCents: Long,
+        ) {
+            val result = CaptureBridgeClient(app).importBillGroup(
+                capture = capture,
+                items = items,
+                requestId = UUID.randomUUID().toString(),
+            )
+            if (result == null) {
+                toast("拆分入账失败：敲敲记账桥接不可用，已保留待记")
+                return
+            }
+            if (result.ok || result.duplicate) {
+                withContext(Dispatchers.IO) {
+                    CaptureApp.from(app).repository
+                        .updateStatus(capture.id, CaptureStatus.RECORDED)
+                }
+                CaptureNotifier.refreshAll(app)
+                toast(
+                    if (result.duplicate) {
+                        "这笔已入账，未重复建单"
+                    } else {
+                        "已拆成 ${items.size} 笔；账单页显示明细，资产详情按 " +
+                            "¥" + String.format(Locale.CHINA, "%.2f", totalCents / 100.0) +
+                            " 合并显示"
+                    }
+                )
+            } else {
+                toast("拆分入账失败：${humanizeSplitError(result.error, result.message)}")
+            }
+        }
+
+        /**
+         * 勾选拆分时：调用 App 只拆条目/金额，再弹确认页；不勾选不会走这里。
+         * 取消确认页只关闭气泡，待记保持 PENDING。
+         */
+        suspend fun previewSplitThenConfirm(base: PaymentCapture) {
+            val amountCents = base.amountCents ?: 0L
+            val billType = base.billType ?: LocalBillType.TYPE_EXPENSE
+            if (amountCents <= 0L) {
+                fineTune(base.note, BubbleRecordPolicy.Block.AMOUNT_MISSING.message)
+                return
+            }
+            if (isActive()) setStatus("正在按备注拆分…", "#94A3B8")
+            val preview = CaptureBridgeClient(app).previewSplit(
+                captureId = base.id,
+                note = base.note,
+                totalCents = amountCents,
+                billType = billType,
+            )
+            if (!preview.ok) {
+                if (isActive()) {
+                    setStatus(
+                        "拆分未完成：${humanizeSplitError(preview.error, preview.message)}",
+                        "#FCA5A5",
+                    )
+                    applyState(BubbleState.INPUT)
+                }
+                return
+            }
+            if (!isActive()) return
+            cancelAutoDismiss()
+            s.state = BubbleState.SPLIT
+            s.root.removeAllViews()
+            s.root.setPadding(0, 0, 0, 0)
+            s.root.background = null
+            s.root.addView(
+                SplitConfirmSheet.buildOverlayContent(
+                    context = app,
+                    capture = base,
+                    preview = preview,
+                    onCancel = { dismissImmediate(app) },
+                    onEdit = {
+                        dismissImmediate(app)
+                        toast("已保留待记，可在待记列表改备注后重试")
+                    },
+                    onConfirm = { items ->
+                        val total = base.amountCents ?: 0L
+                        dismissImmediate(app)
+                        scope.launch { importGroupAndToast(base, items, total) }
+                    },
+                )
+            )
+        }
+
         suspend fun classifyThenResult() {
             val noteText = etNote.text?.toString()?.trim().orEmpty()
             val repository = CaptureApp.from(app).repository
@@ -409,6 +528,11 @@ object CaptureBubbleManager {
             val earlyBlock = BubbleRecordPolicy.preClassificationBlock(base, bridgeAvailable = true)
             if (earlyBlock != null) {
                 fineTune(noteText, earlyBlock.message)
+                return
+            }
+
+            if (s.splitCheck.isChecked) {
+                previewSplitThenConfirm(base)
                 return
             }
 
@@ -699,6 +823,48 @@ object CaptureBubbleManager {
         note = note,
         bookName = bookName,
     )
+
+    private fun humanizeSplitError(rawError: String?, rawMessage: String?): String {
+        val code = rawError?.trim().orEmpty()
+        val message = rawMessage?.trim().orEmpty()
+        return when {
+            code == "split_empty" -> message.ifEmpty {
+                "没从备注里拆出条目，请把备注写成「苹果30 雪梨40」"
+            }
+            code == "split_total_exceeds" -> message.ifEmpty { "明细合计超过付款，请改备注" }
+            code == "split_amount_missing" -> message.ifEmpty { "有多项缺金额，请补金额或改备注" }
+            code == "split_amount_invalid" -> message.ifEmpty { "有条目金额无效，请改备注" }
+            code == "split_total_mismatch" -> message.ifEmpty { "拆分合计与付款不一致，请重新确认" }
+            code == "split_unsupported_type" -> message.ifEmpty { "转账/还款/退款不支持文字拆分" }
+            code == "ai_not_configured" -> message.ifEmpty { "请先在敲敲记账中配置 AI API Key" }
+            code == "ai_timeout" -> message.ifEmpty { "AI 拆分超时，请重试或改备注" }
+            code == "split_ai_failed" -> message.ifEmpty { "AI 拆分失败，请检查 AI 设置或改备注" }
+            code == "bridge_unavailable" -> "敲敲记账桥接不可用"
+            code == "missing_category" -> message.ifEmpty { "有条目缺少分类，请改备注或配置 AI/规则" }
+            code == "category_not_found" || code.startsWith("category_not_found:") -> {
+                val name = code.removePrefix("category_not_found:")
+                    .ifBlank { message.removePrefix("category_not_found:") }
+                if (name.isNotBlank()) {
+                    "敲敲记账中不存在分类「$name」，请改备注或先建分类"
+                } else {
+                    "敲敲记账中没有对应分类，请改备注或先建分类"
+                }
+            }
+            code == "asset_not_found" || code.startsWith("asset_not_found:") -> {
+                val name = code.removePrefix("asset_not_found:")
+                    .ifBlank { message.removePrefix("asset_not_found:") }
+                if (name.isNotBlank()) {
+                    "敲敲记账中不存在账户「$name」，请先绑定资产"
+                } else {
+                    "敲敲记账中没有对应账户，请先绑定资产"
+                }
+            }
+            code == "missing_asset" -> "缺少账户，请先绑定资产"
+            message.isNotEmpty() -> message
+            code.isNotEmpty() -> code
+            else -> "请检查分类、账户与备注"
+        }
+    }
 
     private fun humanizeImportError(rawError: String?): String {
         val err = rawError?.trim().orEmpty()

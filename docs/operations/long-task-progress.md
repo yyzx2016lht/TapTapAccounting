@@ -10,8 +10,8 @@
 | F02 | 分类语义重构 | DONE | ses_e5894643efferHVaaqFBhgRa9Z | 16acb2f | dist/long-task/F02-classification-semantics | 编译通过；插件单测 6 项通过；DB v7 迁移加 categorySource，历史分类保留 |
 | F03 | 轻量智能归类与无备注跳过 | DONE | ses_e588dc85fffeA6q1rkhUdCrwyk | 7fe07db | dist/long-task/F03-smart-classification | 子代理网络中断未回报，编排者复核 diff+编译通过；app 单测 6 项通过；缺分类弹窗补分类 |
 | F04 | 气泡三态 + 直接记账 + 不计/恢复 | DONE | ses_e586187f4ffevuy5fdv0rQEJBx | 503b0af | dist/long-task/F04-bubble-three-states | 编译通过；插件单测 7 项通过；已不计可恢复，✕ 不改状态 |
-| F05 | AI 规则学习 | DONE | ses_e585864e1ffedSmJhGBR6mS74Z | 待记录 | dist/long-task/F05-ai-rule-learning | 编译通过；app 586 项、插件 25 项测试通过；DB v8 加规则来源与学习任务表 |
-| F06 | 文字拆分记账 + 支付组合并 | TODO | - | - | - | |
+| F05 | AI 规则学习 | DONE | ses_e585864e1ffedSmJhGBR6mS74Z | 409e177 | dist/long-task/F05-ai-rule-learning | 编译通过；app 586 项、插件 25 项测试通过；DB v8 加规则来源与学习任务表 |
+| F06 | 文字拆分记账 + 支付组合并 | DONE | ses_e584a64edffeXhme3ysgRUSr7L | 待记录 | dist/long-task/F06-text-split-payment-group | 编译通过；632 项测试通过；App DB v41 + 插件 DB v9；importBillGroup 原子幂等 |
 | F07 | 悬浮窗待记上下文条 + 待记/新账切换 | TODO | - | - | - | |
 | F08 | AI 面板缩小常驻小圆 | TODO | - | - | - | |
 | F09 | 规则页 + 数据规则 + 本机同步 + 自定义规则 | TODO | - | - | - | |

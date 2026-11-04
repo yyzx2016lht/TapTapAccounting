@@ -244,6 +244,11 @@ object BillMutationService {
         }
     }
 
+    /** 分组导入在事务提交后补一次 BILL_CREATED；只用于插件加速对账。 */
+    fun notifyBillCreated(bill: Bill, captureId: String) {
+        broadcastBillCreated(bill, captureId)
+    }
+
     suspend fun insertBillWithinActiveTransaction(
         db: AppDatabase,
         bill: Bill,

@@ -443,9 +443,10 @@ class PendingListActivity : Activity() {
             .filter { it.billType == LocalBillType.TYPE_INCOME || it.subType == LocalBillType.SUBTYPE_REFUND }
             .mapNotNull { it.amountCents }
             .sum()
-        val readyItems = items.filter { !it.categoryName.isNullOrBlank() && (it.amountCents ?: 0L) > 0L }
-        val missingCategoryItems = items.filter { it.needsCategory() }
-        val unmappedCount = items.count { it.categoryName.isNullOrBlank() }
+        val batchItems = items.filterNot { it.splitRequested }
+        val readyItems = batchItems.filter { !it.categoryName.isNullOrBlank() && (it.amountCents ?: 0L) > 0L }
+        val missingCategoryItems = batchItems.filter { it.needsCategory() }
+        val unmappedCount = batchItems.count { it.categoryName.isNullOrBlank() }
 
         val card = CaptureUi.card(
             activity = this,
@@ -477,10 +478,11 @@ class PendingListActivity : Activity() {
             setTextColor(CaptureUi.TEXT_PRIMARY)
         })
         leftCol.addView(TextView(this).apply {
-            text = if (unmappedCount == 0) {
-                "全部已匹配分类，可直接一键入账"
-            } else {
-                "已就绪 ${readyItems.size} 笔 · 待分类 $unmappedCount 笔"
+            text = when {
+                batchItems.isEmpty() && items.isNotEmpty() ->
+                    "已勾选拆分 ${items.size} 笔，请逐笔点“拆分入账”"
+                unmappedCount == 0 -> "全部已匹配分类，可直接一键入账"
+                else -> "已就绪 ${readyItems.size} 笔 · 待分类 $unmappedCount 笔"
             }
             textSize = 12f
             setTextColor(if (unmappedCount == 0) CaptureUi.SUCCESS else CaptureUi.TEXT_SECONDARY)
@@ -536,10 +538,11 @@ class PendingListActivity : Activity() {
             textColor = if (canImportAll) Color.WHITE else CaptureUi.TEXT_MUTED,
             bgColor = if (canImportAll) CaptureUi.BRAND else CaptureUi.BG_SEGMENT,
             onClick = {
-                if (!canImportAll) {
-                    toast("请先点左侧“智能归类”或为账单选择分类")
-                } else {
-                    batchImportWithMissing(readyItems, missingCategoryItems)
+                when {
+                    canImportAll -> batchImportWithMissing(readyItems, missingCategoryItems)
+                    items.any { it.splitRequested } ->
+                        toast("勾选拆分的账单请逐笔点“拆分入账”")
+                    else -> toast("请先点左侧“智能归类”或为账单选择分类")
                 }
             },
         )
@@ -861,30 +864,58 @@ class PendingListActivity : Activity() {
         }
         card.addView(noteInput)
 
-        // 第四行：操作栏（直接入账 / 悬浮窗改 / 不计）
+        // 备注框下的“拆分记账”：只有勾选时才走 previewSplit；不勾选永远一笔。
+        var splitRequested = item.splitRequested
+        val splitBox = CheckBox(this).apply {
+            text = "拆分记账（按备注拆成多条明细）"
+            textSize = 12f
+            setTextColor(CaptureUi.TEXT_SECONDARY)
+            isChecked = item.splitRequested
+            setPadding(dp(2), dp(6), 0, 0)
+        }
+        card.addView(splitBox)
+
+        // 第四行：操作栏（直接入账 / 拆分入账 / 悬浮窗改 / 不计）
         val actionRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             setPadding(0, dp(10), 0, 0)
         }
+        val primaryButton = CaptureUi.button(
+            activity = this,
+            text = if (splitRequested) "拆分入账" else "直接入账",
+            textColor = Color.WHITE,
+            bgColor = CaptureUi.BRAND,
+            radiusDp = 10,
+            paddingV = 8,
+            textSizeSp = 13f,
+        ) {
+            val draftNote = noteInput.text?.toString()?.trim().orEmpty()
+            val draft = item.copy(
+                note = draftNote.ifBlank { item.note },
+                categoryName = currentCategory ?: item.categoryName,
+                splitRequested = splitRequested,
+            )
+            if (splitRequested) {
+                startSplitImport(draft, noteInput)
+            } else {
+                directImport(draft)
+            }
+        }
+        splitBox.setOnCheckedChangeListener { _, checked ->
+            splitRequested = checked
+            primaryButton.text = if (checked) "拆分入账" else "直接入账"
+            scope.launch {
+                withContext(Dispatchers.IO) {
+                    runCatching {
+                        CaptureApp.from(this@PendingListActivity).repository
+                            .updateSplitRequested(item.id, checked)
+                    }
+                }
+            }
+        }
         actionRow.addView(
-            CaptureUi.button(
-                activity = this,
-                text = "直接入账",
-                textColor = Color.WHITE,
-                bgColor = CaptureUi.BRAND,
-                radiusDp = 10,
-                paddingV = 8,
-                textSizeSp = 13f,
-            ) {
-                val draftNote = noteInput.text?.toString()?.trim().orEmpty()
-                directImport(
-                    item.copy(
-                        note = draftNote.ifBlank { item.note },
-                        categoryName = currentCategory ?: item.categoryName,
-                    )
-                )
-            },
+            primaryButton,
             LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1.2f).apply { marginEnd = dp(8) },
         )
         actionRow.addView(
@@ -1066,7 +1097,8 @@ class PendingListActivity : Activity() {
                 }
                 // 没备注不调 AI；已有本地规则/手动分类的也不重复调。
                 val targets = freshItems.filter {
-                    !it.note.isNullOrBlank() &&
+                    !it.splitRequested &&
+                        !it.note.isNullOrBlank() &&
                         it.categoryName.isNullOrBlank() &&
                         it.billType != LocalBillType.TYPE_TRANSFER
                 }
@@ -1140,9 +1172,12 @@ class PendingListActivity : Activity() {
                 requestedIds.mapNotNull { repo.findById(it) }
             }
             val freshReady = freshItems.filter {
-                !it.categoryName.isNullOrBlank() && (it.amountCents ?: 0L) > 0L
+                !it.splitRequested &&
+                    !it.categoryName.isNullOrBlank() &&
+                    (it.amountCents ?: 0L) > 0L
             }
-            val freshMissing = freshItems.filter { it.needsCategory() }
+            val freshMissing = freshItems.filter { !it.splitRequested && it.needsCategory() }
+            val splitSkipped = freshItems.count { it.splitRequested }
 
             if (freshReady.isNotEmpty()) {
                 val bills = freshReady.map { item ->
@@ -1197,6 +1232,9 @@ class PendingListActivity : Activity() {
                 }
             } else if (freshMissing.isEmpty()) {
                 toast("没有可入账的账单")
+            }
+            if (splitSkipped > 0) {
+                toast("已跳过 $splitSkipped 笔勾选拆分的账单，请逐笔点“拆分入账”")
             }
 
             load()
@@ -1278,6 +1316,147 @@ class PendingListActivity : Activity() {
             } catch (t: Throwable) {
                 toast("操作失败：${t.message ?: t.javaClass.simpleName}")
             }
+        }
+    }
+
+    /**
+     * 勾选“拆分记账”后的入口：先持久化备注，再 previewSplit，最后弹确认页。
+     * 取消/关闭确认页不会把待记改成已记。
+     */
+    private fun startSplitImport(item: PaymentCapture, noteInput: EditText) {
+        val type = item.billType ?: LocalBillType.TYPE_EXPENSE
+        val amountCents = item.amountCents ?: 0L
+        if (amountCents <= 0L) {
+            toast("金额缺失，不能拆分入账")
+            return
+        }
+        if (type !in setOf(LocalBillType.TYPE_EXPENSE, LocalBillType.TYPE_INCOME) ||
+            item.subType == LocalBillType.SUBTYPE_REFUND ||
+            item.needsRefundLink
+        ) {
+            toast("转账/还款/退款不支持文字拆分")
+            return
+        }
+        if (item.note.isNullOrBlank()) {
+            toast("请先在备注里写「苹果30 雪梨40」再拆分")
+            noteInput.requestFocus()
+            return
+        }
+
+        scope.launch {
+            noteSaveJobs[item.id]?.join()
+            withContext(Dispatchers.IO) {
+                runCatching {
+                    CaptureApp.from(this@PendingListActivity).repository.updateDraft(
+                        context = this@PendingListActivity,
+                        id = item.id,
+                        note = item.note,
+                        assetName = item.assetName,
+                        categoryName = item.categoryName,
+                    )
+                }
+            }
+            toast("正在按备注拆分…")
+            val preview = bridge.previewSplit(
+                captureId = item.id,
+                note = item.note,
+                totalCents = amountCents,
+                billType = type,
+            )
+            if (!preview.ok) {
+                showSplitError(preview.error, preview.message)
+                return@launch
+            }
+            SplitConfirmSheet.show(
+                activity = this@PendingListActivity,
+                capture = item,
+                preview = preview,
+                onEdit = {
+                    noteInput.requestFocus()
+                    toast("已保留待记，改完备注后再点“拆分入账”")
+                },
+                onConfirm = { items ->
+                    scope.launch { performGroupImport(item, items) }
+                },
+            )
+        }
+    }
+
+    private fun showSplitError(error: String?, message: String?) {
+        AlertDialog.Builder(this)
+            .setTitle("拆分未完成")
+            .setMessage(humanizeSplitError(error, message))
+            .setPositiveButton("知道了", null)
+            .show()
+    }
+
+    private suspend fun performGroupImport(
+        item: PaymentCapture,
+        items: List<CaptureBridgeClient.SplitItem>,
+    ) {
+        val result = bridge.importBillGroup(item, items, UUID.randomUUID().toString())
+        if (result == null) {
+            toast("拆分入账失败：敲敲记账桥接不可用，已保留待记")
+            return
+        }
+        if (result.ok || result.duplicate) {
+            withContext(Dispatchers.IO) {
+                CaptureApp.from(this@PendingListActivity).repository
+                    .updateStatus(item.id, CaptureStatus.RECORDED)
+            }
+            if (result.duplicate) {
+                toast("这笔已入账，未重复建单")
+            } else {
+                toast(splitSuccessToast(items.size, item.amountCents ?: 0L))
+            }
+            load()
+        } else {
+            toast("拆分入账失败：${humanizeSplitError(result.error, result.message)}")
+        }
+    }
+
+    private fun splitSuccessToast(count: Int, totalCents: Long): String =
+        "已拆成 $count 笔；账单页显示明细，资产详情按 ${formatAmount(totalCents)} 合并显示"
+
+    private fun humanizeSplitError(error: String?, message: String?): String {
+        val code = error?.trim().orEmpty()
+        val fallback = message?.trim().orEmpty()
+        return when {
+            code == "split_empty" -> fallback.ifEmpty {
+                "没从备注里拆出条目，请把备注写成「苹果30 雪梨40」"
+            }
+            code == "split_total_exceeds" -> fallback.ifEmpty { "明细合计超过付款，请改备注" }
+            code == "split_amount_missing" -> fallback.ifEmpty { "有多项缺金额，请补金额或改备注" }
+            code == "split_amount_invalid" -> fallback.ifEmpty { "有条目金额无效，请改备注" }
+            code == "split_total_mismatch" -> fallback.ifEmpty { "拆分合计与付款不一致，请重新确认" }
+            code == "split_unsupported_type" -> fallback.ifEmpty { "转账/还款/退款不支持文字拆分" }
+            code == "ai_not_configured" -> fallback.ifEmpty { "请先在敲敲记账中配置 AI API Key" }
+            code == "ai_timeout" -> fallback.ifEmpty { "AI 拆分超时，请重试或改备注" }
+            code == "split_ai_failed" -> fallback.ifEmpty { "AI 拆分失败，请检查 AI 设置或改备注" }
+            code == "bridge_unavailable" -> "敲敲记账桥接不可用"
+            code == "missing_category" -> fallback.ifEmpty { "有条目缺少分类，请改备注或配置 AI/规则" }
+            code == "category_not_found" || code.startsWith("category_not_found:") -> {
+                val name = code.removePrefix("category_not_found:")
+                    .ifBlank { fallback.removePrefix("category_not_found:") }
+                if (name.isNotBlank()) {
+                    "敲敲记账中不存在分类「$name」，请改备注或先建分类"
+                } else {
+                    "敲敲记账中没有对应分类，请改备注或先建分类"
+                }
+            }
+            code == "asset_not_found" || code.startsWith("asset_not_found:") -> {
+                val name = code.removePrefix("asset_not_found:")
+                    .ifBlank { fallback.removePrefix("asset_not_found:") }
+                if (name.isNotBlank()) {
+                    "敲敲记账中不存在账户「$name」，请先绑定资产"
+                } else {
+                    "敲敲记账中没有对应账户，请先绑定资产"
+                }
+            }
+            code == "missing_asset" -> "缺少账户，请先绑定资产"
+            fallback.isNotEmpty() -> fallback
+            code.isNotEmpty() -> code
+            else -> "请检查分类、账户与备注"
         }
     }
 

@@ -15,7 +15,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         CategoryRule::class,
         RuleLearningTask::class,
     ],
-    version = 8,
+    version = 9,
     exportSchema = false,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -161,6 +161,20 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * v8 -> v9：文字拆分记账的用户勾选状态。
+         *
+         * 历史记录一律默认 0（不拆分），保证升级后行为不变。
+         */
+        val MIGRATION_8_9: Migration = object : Migration(8, 9) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "ALTER TABLE payment_captures ADD COLUMN splitRequested " +
+                        "INTEGER NOT NULL DEFAULT 0"
+                )
+            }
+        }
+
         @Volatile
         private var instance: AppDatabase? = null
 
@@ -179,6 +193,7 @@ abstract class AppDatabase : RoomDatabase() {
                         MIGRATION_5_6,
                         MIGRATION_6_7,
                         MIGRATION_7_8,
+                        MIGRATION_8_9,
                     )
                     .build()
                     .also { instance = it }

@@ -11,6 +11,7 @@ import com.taostudio.tapaccounting.capture.contract.CaptureContract
 import com.taostudio.tapaccounting.capture.contract.CategoryInfo
 import com.taostudio.tapaccounting.capture.contract.ImportBill
 import com.taostudio.tapaccounting.capture.data.PaymentCapture
+import com.taostudio.tapaccounting.capture.parse.CaptureRuleMatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
@@ -56,6 +57,37 @@ class CaptureBridgeClient(context: Context) {
         val ok: Boolean,
         val keyword: String = "",
         val error: String? = null,
+    )
+
+    /** 拆分预览的一条明细；金额已由 App 用付款差额补齐（必要时 inferred=true）。 */
+    data class SplitItem(
+        val name: String,
+        val amountCents: Long,
+        val categoryName: String? = null,
+        /** 金额是否按付款差额推算，确认页显示“按差额”。 */
+        val inferred: Boolean = false,
+    )
+
+    data class SplitPreviewResult(
+        val ok: Boolean,
+        val items: List<SplitItem> = emptyList(),
+        val totalCents: Long = 0L,
+        val sumCents: Long = 0L,
+        val diffCents: Long = 0L,
+        val fallbackCategoryName: String? = null,
+        val error: String? = null,
+        val message: String? = null,
+    )
+
+    data class GroupImportResult(
+        val ok: Boolean,
+        val duplicate: Boolean = false,
+        val captureId: String = "",
+        val paymentGroupId: String? = null,
+        val billIds: List<Long> = emptyList(),
+        val count: Int = 0,
+        val error: String? = null,
+        val message: String? = null,
     )
 
     /** App 桥接是否可用。 */
@@ -277,6 +309,223 @@ class CaptureBridgeClient(context: Context) {
             }
             ClassifyNotesResult(ok = true, categories = categories)
         }
+
+    /**
+     * 文字拆分记账预览：App 只拆条目 + 金额；这里再补分类。
+     *
+     * 每个条目先跑本地备注规则 [CaptureRuleMatcher.resolveNoteCategory]；
+     * 没命中的条目用 F03 的轻量 AI 分类批量兜底；仍无分类时用 App 返回的
+     * `fallbackCategoryName`（通常是“其他”）。
+     *
+     * 只有用户勾选“拆分记账”时才调用；未勾选不会走这里。
+     */
+    suspend fun previewSplit(
+        captureId: String,
+        note: String?,
+        totalCents: Long,
+        billType: Int,
+    ): SplitPreviewResult = withContext(Dispatchers.IO) {
+        val cleanNote = note?.trim().orEmpty()
+        if (cleanNote.isEmpty()) {
+            return@withContext SplitPreviewResult(
+                ok = false,
+                error = "split_empty",
+                message = "备注为空，请先写「苹果30 雪梨40」",
+            )
+        }
+        if (totalCents <= 0L) {
+            return@withContext SplitPreviewResult(
+                ok = false,
+                error = "invalid_total",
+                message = "付款金额无效，无法拆分",
+            )
+        }
+        if (billType != 0 && billType != 1) {
+            return@withContext SplitPreviewResult(
+                ok = false,
+                error = "split_unsupported_type",
+                message = "转账/还款/退款不支持文字拆分",
+            )
+        }
+
+        val payload = JSONObject()
+            .put("captureId", captureId)
+            .put("note", cleanNote)
+            .put("totalCents", totalCents)
+            .put("billType", billType)
+        val extras = Bundle().apply {
+            putString(CaptureContract.EXTRA_SPLIT_PAYLOAD, payload.toString())
+        }
+        val res = try {
+            callForObject(CaptureContract.METHOD_PREVIEW_SPLIT, payload.toString(), extras)
+        } catch (t: kotlinx.coroutines.CancellationException) {
+            throw t
+        } catch (t: Throwable) {
+            Log.w(TAG, "previewSplit failed", t)
+            null
+        } ?: return@withContext SplitPreviewResult(
+            ok = false,
+            error = "bridge_unavailable",
+            message = "无法连接敲敲记账",
+        )
+
+        if (!res.optBoolean("ok", false)) {
+            return@withContext SplitPreviewResult(
+                ok = false,
+                error = res.optString("error", "").trim()
+                    .takeUnless { it.isEmpty() || it == "null" }
+                    ?: "split_failed",
+                message = res.optString("message", "").trim()
+                    .takeUnless { it.isEmpty() || it == "null" },
+            )
+        }
+
+        val itemsArr = res.optJSONArray("items") ?: JSONArray()
+        val rawItems = buildList {
+            for (i in 0 until itemsArr.length()) {
+                val obj = itemsArr.optJSONObject(i) ?: continue
+                val name = obj.optString("name", "").trim()
+                if (name.isEmpty()) continue
+                add(
+                    ParsedSplitItem(
+                        name = name,
+                        amountCents = obj.optLong("amountCents", 0L),
+                        inferred = obj.optBoolean("inferred", false),
+                    )
+                )
+            }
+        }
+        if (rawItems.isEmpty()) {
+            return@withContext SplitPreviewResult(
+                ok = false,
+                error = "split_empty",
+                message = "没从备注里拆出条目，请改备注",
+            )
+        }
+
+        val ruleCategories = mutableMapOf<Int, String>()
+        rawItems.forEachIndexed { index, item ->
+            CaptureRuleMatcher.resolveNoteCategory(appContext, item.name)
+                ?.takeIf { it.isNotBlank() }
+                ?.let { ruleCategories[index] = it }
+        }
+
+        val aiCategories = mutableMapOf<Int, String>()
+        val missing = rawItems.indices.filter { ruleCategories[it] == null }
+        if (missing.isNotEmpty()) {
+            val classified = classifyNotes(
+                missing.map { index ->
+                    NoteClassifyInput(
+                        captureId = "$captureId#split$index",
+                        note = rawItems[index].name,
+                        billType = billType,
+                    )
+                }
+            )
+            if (classified.ok) {
+                missing.forEach { index ->
+                    classified.categories["$captureId#split$index"]
+                        ?.takeIf { it.isNotBlank() }
+                        ?.let { aiCategories[index] = it }
+                }
+            }
+        }
+
+        val fallbackCategory = res.optString("fallbackCategoryName", "")
+            .trim()
+            .takeUnless { it.isEmpty() || it == "null" }
+        val items = rawItems.mapIndexed { index, item ->
+            SplitItem(
+                name = item.name,
+                amountCents = item.amountCents,
+                categoryName = ruleCategories[index] ?: aiCategories[index] ?: fallbackCategory,
+                inferred = item.inferred,
+            )
+        }
+        SplitPreviewResult(
+            ok = true,
+            items = items,
+            totalCents = res.optLong("totalCents", totalCents),
+            sumCents = res.optLong("sumCents", items.sumOf { it.amountCents }),
+            diffCents = res.optLong("diffCents", 0L),
+            fallbackCategoryName = fallbackCategory,
+        )
+    }
+
+    private data class ParsedSplitItem(
+        val name: String,
+        val amountCents: Long,
+        val inferred: Boolean,
+    )
+
+    /**
+     * 拆分入账：把 capture 的资产/时间/账本和确认后的明细交给 App，
+     * App 在同一事务里写 N 条账单 + 一条 captureId 回执。
+     */
+    suspend fun importBillGroup(
+        capture: PaymentCapture,
+        items: List<SplitItem>,
+        requestId: String?,
+    ): GroupImportResult? = withContext(Dispatchers.IO) {
+        if (items.isEmpty()) return@withContext null
+        val itemArray = JSONArray()
+        items.forEach { item ->
+            itemArray.put(
+                JSONObject()
+                    .put("name", item.name)
+                    .put("amountCents", item.amountCents)
+                    .put("categoryName", item.categoryName ?: JSONObject.NULL)
+            )
+        }
+        val payload = JSONObject()
+            .put("captureId", capture.id)
+            .put("type", capture.billType ?: 0)
+            .put("subType", capture.subType ?: 0)
+            .put("needsRefundLink", capture.needsRefundLink)
+            .put("totalCents", capture.amountCents ?: items.sumOf { it.amountCents })
+            .put("currency", capture.currency)
+            .put("paidAt", capture.paidAt)
+        capture.assetId?.let { payload.put("assetId", it) }
+        (capture.assetName ?: capture.paymentMethodRaw)?.let { payload.put("assetName", it) }
+        capture.bookName?.let { payload.put("bookName", it) }
+        payload.put("items", itemArray)
+        val extras = Bundle().apply {
+            putString(CaptureContract.EXTRA_BILL_GROUP_PAYLOAD, payload.toString())
+            if (!requestId.isNullOrBlank()) {
+                putString(CaptureContract.EXTRA_REQUEST_ID, requestId)
+            }
+        }
+        val res = try {
+            callForObject(CaptureContract.METHOD_IMPORT_BILL_GROUP, payload.toString(), extras)
+        } catch (t: kotlinx.coroutines.CancellationException) {
+            throw t
+        } catch (t: Throwable) {
+            Log.w(TAG, "importBillGroup failed", t)
+            null
+        } ?: return@withContext null
+
+        val billIds = buildList {
+            val arr = res.optJSONArray("billIds") ?: JSONArray()
+            for (i in 0 until arr.length()) {
+                val id = arr.optLong(i, -1L)
+                if (id > 0L) add(id)
+            }
+        }
+        GroupImportResult(
+            ok = res.optBoolean("ok", false),
+            duplicate = res.optBoolean("duplicate", false),
+            captureId = res.optString("captureId", capture.id),
+            paymentGroupId = res.optString("paymentGroupId", "")
+                .trim()
+                .takeUnless { it.isEmpty() || it == "null" },
+            billIds = billIds,
+            count = res.optInt("count", billIds.size),
+            error = res.optString("error", "").trim()
+                .takeUnless { it.isEmpty() || it == "null" },
+            message = res.optString("message", "").trim()
+                .takeUnless { it.isEmpty() || it == "null" },
+        )
+    }
 
     /**
      * AI 规则学习：只发备注、已确认分类和账单类型，取回 1-8 字可复用关键词。

@@ -47,6 +47,9 @@ data class PaymentCapture(
     @ColumnInfo(defaultValue = "0")
     val needsRefundLink: Boolean = false,
     val status: String = CaptureStatus.PENDING,
+    /** 用户勾选“拆分记账”；只影响插件入账分支，false 时永远按一笔入账。 */
+    @ColumnInfo(defaultValue = "0")
+    val splitRequested: Boolean = false,
     val needsAmount: Boolean = false,
     val rawJson: String? = null,
     val ruleVersion: String? = null,

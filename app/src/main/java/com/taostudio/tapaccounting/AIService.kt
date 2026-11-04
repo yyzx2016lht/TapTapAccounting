@@ -10,6 +10,8 @@ import com.taostudio.tapaccounting.data.local.entity.Asset
 import com.taostudio.tapaccounting.data.local.entity.AiRule as DbAiRule
 import com.taostudio.tapaccounting.data.local.entity.Bill
 import com.taostudio.tapaccounting.data.local.entity.Category
+import com.taostudio.tapaccounting.logic.SplitAmounts
+import com.taostudio.tapaccounting.logic.SplitPreviewException
 import com.google.gson.JsonObject
 import android.util.Base64
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
@@ -65,6 +67,8 @@ object AIService {
     /** 轻量归类只等一小会儿；超时就按“判断不了”处理，绝不拖住待记提交。 */
     private const val CATEGORY_CLASSIFY_TIMEOUT_MS = 15_000L
     private const val CATEGORY_CLASSIFY_BATCH_TIMEOUT_MS = 25_000L
+    /** 文字拆分只做一次轻量解析；超时由调用方提示改备注或重试。 */
+    private const val SPLIT_PREVIEW_TIMEOUT_MS = 20_000L
     /** 规则关键词只是后台副作用，超时就留给插件下次启动补跑。 */
     private const val RULE_KEYWORD_TIMEOUT_MS = 10_000L
     private const val DEFAULT_CUSTOM_REPLY_STYLE_GUIDE =
@@ -1116,6 +1120,123 @@ object AIService {
             "classifyCategories: notes=${cleanNotes.size}, resolved=${result.count { it != null }}"
         )
         return result
+    }
+
+    /**
+     * 文字拆分记账：只把备注拆成条目 + 金额，不决定是否需要拆分。
+     *
+     * 金额单位固定为分；AI 没写金额的条目返回 null，由上层用付款差额推算。
+     * 解析失败会抛出带明确错误码的 [SplitPreviewException]。
+     */
+    suspend fun splitNoteItems(
+        ctx: Context,
+        note: String,
+        totalCents: Long,
+        billType: Int,
+    ): List<SplitAmounts.RawItem> {
+        val cleanNote = note.trim()
+        if (cleanNote.isEmpty()) {
+            throw SplitPreviewException("split_empty", "备注为空，请先写「苹果30 雪梨40」")
+        }
+        if (billType != Bill.TYPE_EXPENSE && billType != Bill.TYPE_INCOME) {
+            throw SplitPreviewException("split_unsupported_type", "转账/还款/退款不支持文字拆分")
+        }
+        if (totalCents <= 0L) {
+            throw SplitPreviewException("invalid_total", "付款金额无效，无法拆分")
+        }
+
+        val apiKey = Prefs.getAiKey(ctx)
+        if (apiKey.isBlank()) {
+            throw SplitPreviewException("ai_not_configured", "请先在敲敲记账中配置 AI API Key")
+        }
+        val model = AiModelSlots.resolveTextModel(ctx)
+        if (model.isBlank()) {
+            throw SplitPreviewException("ai_not_configured", "请先在敲敲记账中配置文本模型")
+        }
+
+        val typeLabel = if (billType == Bill.TYPE_EXPENSE) "支出" else "收入"
+        val userPrompt = buildString {
+            append("用户备注：")
+                .append(cleanNote.replace('\n', ' ').replace('\r', ' '))
+                .append('\n')
+            append("付款总额（分）：").append(totalCents).append('\n')
+            append("账单类型：").append(typeLabel)
+        }
+
+        val content = try {
+            withTimeoutOrNull(SPLIT_PREVIEW_TIMEOUT_MS) {
+                val requestJson = buildTextChatRequest(
+                    model = model,
+                    temperature = 0.1,
+                    systemPrompt = AIPrompts.SPLIT_BILL_PROMPT_DEFAULT,
+                    userText = userPrompt,
+                    jsonObjectResponse = true,
+                    enableThinking = false,
+                )
+                val response = getApi(ctx).chatRaw(
+                    "Bearer $apiKey",
+                    adaptChatRequestForProvider(Prefs.getAiProvider(ctx), requestJson),
+                )
+                response.choices.firstOrNull()?.message?.content?.trim().orEmpty()
+            }
+        } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+            Logger.dPriv(
+                ctx,
+                "AIService",
+                "splitNoteItems failed: errType=${e.javaClass.simpleName}",
+                "Split preview failure detail=${detailedHttpError(e)}",
+            )
+            throw SplitPreviewException("split_ai_failed", "AI 拆分失败，请检查 AI 设置或改备注")
+        }
+        if (content == null) {
+            Logger.d(ctx, CATEGORY_CLASSIFY_LOG_TAG, "splitNoteItems timeout after ${SPLIT_PREVIEW_TIMEOUT_MS}ms")
+            throw SplitPreviewException("ai_timeout", "AI 拆分超时，请重试或改备注")
+        }
+        if (content.isBlank()) {
+            throw SplitPreviewException("split_ai_failed", "AI 没有返回拆分结果，请改备注")
+        }
+
+        val jsonText = extractFirstJsonObjectText(cleanJsonString(content))
+        val root = runCatching { jsonText?.let { JSONObject(it) } }.getOrNull()
+            ?: throw SplitPreviewException("split_ai_failed", "AI 返回的不是有效 JSON，请改备注")
+        val arr = root.optJSONArray("items")
+            ?: throw SplitPreviewException("split_ai_failed", "AI 没有返回条目列表，请改备注")
+
+        val items = buildList {
+            for (i in 0 until arr.length()) {
+                val obj = arr.optJSONObject(i) ?: continue
+                val name = obj.optString("name", "").trim()
+                if (name.isEmpty()) continue
+                add(
+                    SplitAmounts.RawItem(
+                        name = name,
+                        amountCents = obj.optAmountCents("amountCents"),
+                    )
+                )
+            }
+        }
+        if (items.isEmpty()) {
+            throw SplitPreviewException(
+                "split_empty",
+                "没从备注里拆出条目，请把备注写成「苹果30 雪梨40」",
+            )
+        }
+        Logger.d(
+            ctx,
+            CATEGORY_CLASSIFY_LOG_TAG,
+            "splitNoteItems: items=${items.size}, withAmount=${items.count { it.amountCents != null }}",
+        )
+        return SplitAmounts.normalizeYuanAmounts(totalCents, items)
+    }
+
+    private fun JSONObject.optAmountCents(key: String): Long? {
+        if (!has(key) || isNull(key)) return null
+        return when (val value = opt(key)) {
+            is Number -> value.toLong()
+            is String -> value.trim().toDoubleOrNull()?.let { Math.round(it) }
+            else -> null
+        }
     }
 
     /**

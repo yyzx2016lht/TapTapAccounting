@@ -40,6 +40,9 @@ interface PaymentCaptureDao {
     @Query("UPDATE payment_captures SET assetName = :assetName, updatedAt = :updatedAt WHERE id = :id")
     suspend fun updateAssetName(id: String, assetName: String?, updatedAt: Long): Int
 
+    @Query("UPDATE payment_captures SET splitRequested = :splitRequested, updatedAt = :updatedAt WHERE id = :id")
+    suspend fun updateSplitRequested(id: String, splitRequested: Boolean, updatedAt: Long): Int
+
     @Query("UPDATE payment_captures SET categoryName = :categoryName, updatedAt = :updatedAt WHERE id = :id")
     suspend fun updateCategoryName(id: String, categoryName: String?, updatedAt: Long): Int
 

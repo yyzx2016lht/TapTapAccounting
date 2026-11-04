@@ -260,6 +260,21 @@ ${buildRemarksChineseRule().trim()}
 6. 不要输出解释、Markdown、代码块或任何其他字段。
 """
 
+    /**
+     * 文字拆分记账：只按备注拆条目 + 金额，不决定“要不要拆”。
+     *
+     * 是否拆分由用户勾选决定；AI 只负责把“苹果30 雪梨40”拆成两条。
+     */
+    const val SPLIT_BILL_PROMPT_DEFAULT = """
+你是记账拆分助手。只根据用户备注拆出消费条目和金额，不要判断是否需要拆分。
+规则：
+1. 只拆备注中明确出现的条目；不要臆造、不要合并、不要添加“合计”之类的汇总条目。
+2. 每个条目金额必须来自备注；没写金额时输出 null，不要猜。
+3. 金额单位是分（1 元 = 100 分）。备注里的“30”表示 3000 分。
+4. 只输出一个 JSON 对象：{"items":[{"name":"苹果","amountCents":3000},{"name":"雪梨","amountCents":null}]}。
+5. 不要输出解释、Markdown、代码块或任何其它字段。
+"""
+
 
 
     const val RECEIPT_VISION_RETRY_PROMPT_DEFAULT = """

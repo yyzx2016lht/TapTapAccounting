@@ -115,6 +115,10 @@ class CaptureRepository(private val dao: PaymentCaptureDao) {
     suspend fun updateNote(id: String, note: String?): Boolean =
         dao.updateNote(id, note?.takeIf { it.isNotBlank() }, System.currentTimeMillis()) > 0
 
+    /** 只更新“拆分记账”勾选；不影响备注/分类，也不触发 AI。 */
+    suspend fun updateSplitRequested(id: String, requested: Boolean): Boolean =
+        dao.updateSplitRequested(id, requested, System.currentTimeMillis()) > 0
+
     /**
      * 更新备注并立即用“备注分类规则”重新推断分类（如手写“咖啡”立即命中“餐饮 - 咖啡”）。
      *

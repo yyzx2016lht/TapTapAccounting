@@ -1,6 +1,7 @@
 package com.taostudio.tapaccounting.capturebridge
 
 import android.content.Context
+import androidx.room.withTransaction
 import com.taostudio.tapaccounting.AIService
 import com.taostudio.tapaccounting.BookAccountManager
 import com.taostudio.tapaccounting.Prefs
@@ -14,6 +15,9 @@ import com.taostudio.tapaccounting.logic.AssetNameResolver
 import com.taostudio.tapaccounting.logic.BillMutationService
 import com.taostudio.tapaccounting.logic.CategoryNameResolver
 import com.taostudio.tapaccounting.logic.DuplicateCaptureException
+import com.taostudio.tapaccounting.logic.PaymentGroups
+import com.taostudio.tapaccounting.logic.SplitAmounts
+import com.taostudio.tapaccounting.logic.SplitPreviewException
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -423,6 +427,263 @@ internal object CaptureImportService {
             feeCents = obj.optLong("feeCents", 0L),
             relatedBillId = obj.longOrNull("relatedBillId"),
         )
+    }
+
+    // ---------------- 文字拆分记账 ----------------
+
+    /**
+     * 只让 AI 按备注拆条目和金额；每个条目的分类由插件先跑本地规则、再用
+     * [classifyNotes] 兜底。这里不决定“要不要拆”，也不写任何账单。
+     *
+     * 返回 `{ok, items:[{name, amountCents, inferred}], sumCents, diffCents,
+     * totalCents, fallbackCategoryName}`；失败返回明确错误码。
+     */
+    suspend fun previewSplit(ctx: Context, payload: JSONObject): JSONObject {
+        val note = payload.optString("note", "").trim()
+        val totalCents = payload.optLong("totalCents", -1L)
+        val billType = payload.optInt("billType", Bill.TYPE_EXPENSE)
+        if (note.isEmpty()) {
+            return errorJson("split_empty", "备注为空，请先写「苹果30 雪梨40」")
+        }
+        if (totalCents <= 0L) {
+            return errorJson("invalid_total", "付款金额无效，无法拆分")
+        }
+        if (billType != Bill.TYPE_EXPENSE && billType != Bill.TYPE_INCOME) {
+            return errorJson("split_unsupported_type", "转账/还款/退款不支持文字拆分")
+        }
+
+        val rawItems = try {
+            AIService.splitNoteItems(
+                ctx = ctx,
+                note = note,
+                totalCents = totalCents,
+                billType = billType,
+            )
+        } catch (t: SplitPreviewException) {
+            return errorJson(t.code, t.message.orEmpty())
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (t: Throwable) {
+            return errorJson("split_ai_failed", t.message ?: "AI 拆分失败，请改备注")
+        }
+
+        return when (val outcome = SplitAmounts.validate(totalCents, rawItems)) {
+            is SplitAmounts.Outcome.Ok -> {
+                val items = JSONArray()
+                outcome.items.forEach { item ->
+                    items.put(
+                        JSONObject()
+                            .put("name", item.name)
+                            .put("amountCents", item.amountCents)
+                            .put("inferred", item.inferred)
+                    )
+                }
+                val db = AppDatabase.getDatabase(ctx)
+                val fallbackCategory = resolveFallbackCategory(db, billType)
+                JSONObject()
+                    .put("ok", true)
+                    .put("items", items)
+                    .put("sumCents", outcome.sumCents)
+                    .put("diffCents", outcome.diffCents)
+                    .put("totalCents", totalCents)
+                    .put("fallbackCategoryName", fallbackCategory ?: JSONObject.NULL)
+            }
+
+            is SplitAmounts.Outcome.Error -> errorJson(outcome.code, outcome.message)
+        }
+    }
+
+    private suspend fun resolveFallbackCategory(db: AppDatabase, billType: Int): String? {
+        val categories = db.categoryDao().getAllCategoriesList()
+        return CategoryNameResolver.resolve(categories, "其他", billType)?.name
+            ?: CategoryNameResolver.resolve(categories, "其它", billType)?.name
+    }
+
+    private data class GroupItem(
+        val name: String,
+        val amountCents: Long,
+        val categoryName: String?,
+    )
+
+    private data class GroupImportOutcome(
+        val duplicate: Boolean,
+        val paymentGroupId: String?,
+        val billIds: List<Long>,
+    )
+
+    /**
+     * 拆分入账：N 条账单同一 paymentGroupId，一条 captureId 回执。
+     *
+     * 整个写入在 [androidx.room.withTransaction] 内完成；重复 captureId 直接回
+     * duplicate，不重复建单。广播在事务提交后补一次，供插件加速对账。
+     */
+    suspend fun importBillGroup(
+        ctx: Context,
+        payload: JSONObject,
+        requestId: String?,
+    ): JSONObject {
+        val captureId = payload.optString("captureId", "").trim()
+        if (captureId.isEmpty()) return errorJson("missing_captureId", "缺少 captureId")
+
+        val type = payload.optInt("type", Bill.TYPE_EXPENSE)
+        val subType = payload.optInt("subType", Bill.SUBTYPE_NORMAL)
+        val needsRefundLink = payload.optBoolean("needsRefundLink", false)
+        if (type != Bill.TYPE_EXPENSE && type != Bill.TYPE_INCOME) {
+            return errorJson("split_unsupported_type", "转账/还款/退款不支持文字拆分")
+        }
+        if (subType != Bill.SUBTYPE_NORMAL || needsRefundLink) {
+            return errorJson("split_unsupported_type", "退款/还款账单不支持文字拆分")
+        }
+
+        val itemArray = payload.optJSONArray("items")
+            ?: return errorJson("split_empty", "缺少拆分条目")
+        val items = buildList {
+            for (i in 0 until itemArray.length()) {
+                val obj = itemArray.optJSONObject(i) ?: continue
+                val name = obj.optString("name", "").trim()
+                val amountCents = obj.optLong("amountCents", -1L)
+                val categoryName = obj.optString("categoryName", "")
+                    .trim()
+                    .takeIf { it.isNotEmpty() }
+                if (name.isEmpty()) return errorJson("split_item_name_missing", "有条目缺少名称")
+                if (amountCents <= 0L) return errorJson("split_amount_invalid", "有条目金额无效")
+                if (categoryName.isNullOrEmpty()) {
+                    return errorJson("missing_category", "「$name」缺少分类")
+                }
+                add(GroupItem(name = name, amountCents = amountCents, categoryName = categoryName))
+            }
+        }
+        if (items.isEmpty()) return errorJson("split_empty", "缺少拆分条目")
+
+        val sumCents = items.sumOf { it.amountCents }
+        val totalCents = payload.optLong("totalCents", sumCents)
+        if (totalCents != sumCents) {
+            return errorJson(
+                "split_total_mismatch",
+                "拆分合计与付款不一致，请重新确认",
+            )
+        }
+
+        val db = AppDatabase.getDatabase(ctx)
+        val bookRows = db.bookDao().getAll()
+        val books = BookAccountManager.getBookAccounts(ctx, bookRows.map { it.name })
+        val defaultBook = BookAccountManager.getDefaultBook(ctx, books)
+        val paidAt = normalizeMillis(payload.optLong("paidAt", System.currentTimeMillis()))
+        val currency = payload.optString("currency", "CNY").ifBlank { "CNY" }
+        val assetId = payload.longOrNull("assetId")
+        val assetName = payload.optString("assetName", "")
+            .takeUnless { it.isBlank() || it == "null" }
+        val bookName = payload.optString("bookName", "")
+            .takeUnless { it.isBlank() || it == "null" }
+            ?: defaultBook
+
+        val outcome = try {
+            db.withTransaction {
+                val existing = db.externalImportDao().getByCaptureId(captureId)
+                if (existing != null) {
+                    val existingBill = db.billDao().getBillById(existing.billId)
+                    if (existingBill != null) {
+                        return@withTransaction GroupImportOutcome(
+                            duplicate = true,
+                            paymentGroupId = existing.paymentGroupId,
+                            billIds = listOf(existing.billId),
+                        )
+                    }
+                    // 首条账单已被删除：回执失效，允许这次重新入账。
+                    db.externalImportDao().deleteByCaptureId(captureId)
+                }
+
+                val asset = resolveAsset(db, assetId, assetName)
+                val categories = db.categoryDao().getAllCategoriesList()
+                val groupId = PaymentGroups.newGroupId()
+                val billIds = ArrayList<Long>(items.size)
+                items.forEach { item ->
+                    val category = CategoryNameResolver.resolve(categories, item.categoryName, type)
+                        ?: throw IllegalArgumentException("category_not_found:${item.categoryName}")
+                    val amount = item.amountCents / 100.0
+                    val bill = Bill(
+                        type = type,
+                        subType = Bill.SUBTYPE_NORMAL,
+                        amount = amount,
+                        originalAmount = amount,
+                        currency = currency,
+                        categoryId = category.id,
+                        categoryName = category.name,
+                        accountId = asset?.id,
+                        accountName = asset?.name.orEmpty(),
+                        time = paidAt,
+                        remark = item.name,
+                        bookName = bookName,
+                        paymentGroupId = groupId,
+                    )
+                    val saved = BillMutationService.insertBillWithinActiveTransaction(
+                        db = db,
+                        bill = bill,
+                        applyAssetImpact = true,
+                        captureId = null,
+                        requestId = requestId,
+                    )
+                    billIds.add(saved.id)
+                }
+
+                val inserted = db.externalImportDao().insertIgnore(
+                    ExternalImport(
+                        captureId = captureId,
+                        billId = billIds.first(),
+                        requestId = requestId,
+                        paymentGroupId = groupId,
+                        createdAt = System.currentTimeMillis(),
+                    )
+                )
+                if (inserted == -1L) {
+                    val existing = db.externalImportDao().getByCaptureId(captureId)
+                    throw DuplicateCaptureException(captureId, existing?.billId ?: billIds.first())
+                }
+                GroupImportOutcome(
+                    duplicate = false,
+                    paymentGroupId = groupId,
+                    billIds = billIds,
+                )
+            }
+        } catch (t: DuplicateCaptureException) {
+            val existing = db.externalImportDao().getByCaptureId(t.captureId)
+            return JSONObject()
+                .put("ok", true)
+                .put("duplicate", true)
+                .put("captureId", t.captureId)
+                .put("paymentGroupId", existing?.paymentGroupId ?: JSONObject.NULL)
+                .put("billIds", JSONArray().put(existing?.billId ?: t.existingBillId))
+                .put("count", 1)
+        } catch (t: IllegalArgumentException) {
+            val message = t.message.orEmpty().ifBlank { "invalid_bill_group" }
+            val code = when {
+                message.startsWith("category_not_found:") -> "category_not_found"
+                message.startsWith("asset_not_found:") -> "asset_not_found"
+                message == "missing_asset" -> "missing_asset"
+                message == "missing_category" -> "missing_category"
+                else -> message
+            }
+            return errorJson(code, message)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (t: Throwable) {
+            return errorJson("import_failed", t.message ?: t.javaClass.simpleName)
+        }
+
+        if (!outcome.duplicate) {
+            db.billDao().getBillById(outcome.billIds.firstOrNull() ?: -1L)?.let { bill ->
+                BillMutationService.notifyBillCreated(bill, captureId)
+            }
+        }
+        val billIds = JSONArray()
+        outcome.billIds.forEach { billIds.put(it) }
+        return JSONObject()
+            .put("ok", true)
+            .put("duplicate", outcome.duplicate)
+            .put("captureId", captureId)
+            .put("paymentGroupId", outcome.paymentGroupId ?: JSONObject.NULL)
+            .put("billIds", billIds)
+            .put("count", outcome.billIds.size)
     }
 
     // ---------------- 轻量智能归类 ----------------

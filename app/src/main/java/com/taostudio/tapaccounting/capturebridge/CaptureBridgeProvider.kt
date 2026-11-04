@@ -63,6 +63,8 @@ class CaptureBridgeProvider : ContentProvider() {
             CaptureContract.METHOD_GET_RECENT_BILLS -> getRecentBills(ctx, extras)
             CaptureContract.METHOD_OPEN_QUICK_RECORD -> openQuickRecord(ctx, extras)
             CaptureContract.METHOD_IMPORT_BILLS -> importBills(ctx, arg, extras)
+            CaptureContract.METHOD_IMPORT_BILL_GROUP -> importBillGroup(ctx, arg, extras)
+            CaptureContract.METHOD_PREVIEW_SPLIT -> previewSplit(ctx, arg, extras)
             CaptureContract.METHOD_GET_IMPORT_STATUS -> getImportStatus(ctx, arg, extras)
             CaptureContract.METHOD_SUGGEST_RULE -> suggestRuleKeyword(ctx, arg, extras)
             CaptureContract.METHOD_CLASSIFY_CAPTURES,
@@ -264,6 +266,36 @@ class CaptureBridgeProvider : ContentProvider() {
             return errorJson("invalid_bills", "bills 不是合法 JSON：${t.message}")
         }
         return CaptureImportService.importBills(ctx, array, requestId)
+    }
+
+    /** 文字拆分：只拆条目 + 金额，不写账单、不决定是否拆分。 */
+    private suspend fun previewSplit(ctx: Context, arg: String?, extras: Bundle?): JSONObject {
+        val raw = extras?.getString(CaptureContract.EXTRA_SPLIT_PAYLOAD) ?: arg
+            ?: return errorJson("missing_split_payload", "缺少拆分 JSON")
+        val payload = try {
+            JSONObject(raw)
+        } catch (t: Throwable) {
+            return errorJson("invalid_split_payload", "拆分 JSON 不合法：${t.message}")
+        }
+        // AI 内部 20 秒超时；这里再兜一层，避免 binder 被异常网络拖死。
+        return withTimeoutOrNull(30_000L) {
+            CaptureImportService.previewSplit(ctx, payload)
+        } ?: errorJson("ai_timeout", "AI 拆分超时，请重试或改备注")
+    }
+
+    /** 拆分入账：N 条账单同一 paymentGroupId，一条 captureId 回执。 */
+    private suspend fun importBillGroup(ctx: Context, arg: String?, extras: Bundle?): JSONObject {
+        val raw = extras?.getString(CaptureContract.EXTRA_BILL_GROUP_PAYLOAD) ?: arg
+            ?: return errorJson("missing_bill_group", "缺少拆分入账 JSON")
+        val payload = try {
+            JSONObject(raw)
+        } catch (t: Throwable) {
+            return errorJson("invalid_bill_group", "拆分入账 JSON 不合法：${t.message}")
+        }
+        val requestId = extras?.getString(CaptureContract.EXTRA_REQUEST_ID)
+        return withTimeoutOrNull(20_000L) {
+            CaptureImportService.importBillGroup(ctx, payload, requestId)
+        } ?: errorJson("import_timeout", "拆分入账超时，请重试")
     }
 
     /**

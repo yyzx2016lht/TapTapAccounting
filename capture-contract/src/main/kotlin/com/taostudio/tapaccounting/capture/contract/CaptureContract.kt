@@ -31,6 +31,23 @@ object CaptureContract {
     /** 接收 [ACTION_INGEST] 的 Receiver 类名。 */
     const val INGEST_RECEIVER_CLASS: String = "$PLUGIN_PACKAGE.ingest.CaptureIngestReceiver"
 
+    // ---- hook/relay -> 主应用：P1 起的第二个入库目标（双写过渡） ----
+    /**
+     * 主应用导出的 ingestion Provider authority。
+     *
+     * 注意不能与插件 authority 相同：插件是 `$PLUGIN_PACKAGE.ingest`，
+     * 主应用使用 `$APP_PACKAGE.ingest`。
+     */
+    const val APP_INGEST_AUTHORITY: String = "$APP_PACKAGE.ingest"
+    const val APP_INGEST_ACTION: String = "$APP_PACKAGE.action.CAPTURE_INGEST"
+    const val APP_INGEST_RECEIVER_CLASS: String = "$APP_PACKAGE.capture.ingest.CaptureIngestReceiver"
+    const val APP_INGEST_PROVIDER_CLASS: String = "$APP_PACKAGE.capture.ingest.CaptureIngestProvider"
+    const val APP_INGEST_METHOD: String = "ingest"
+
+    /** 插件旧规则包导出：Provider.openFile 的 path；call() 只返回元信息。 */
+    const val LEGACY_RULE_BUNDLE_PATH: String = "rule_bundle"
+    const val METHOD_EXPORT_LEGACY_RULE_BUNDLE: String = "exportLegacyRuleBundle"
+
     // ---- 常驻 relay & 插件直连：hook 进程 -> localhost TCP -> 插件 ----
     /** relay 监听端口（仅 127.0.0.1）。 */
     const val RELAY_PORT: Int = 52046

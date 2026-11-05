@@ -17,6 +17,9 @@ import com.taostudio.tapaccounting.data.backup.BackupInitHelper
 import com.taostudio.tapaccounting.data.backup.BackupCacheCleaner
 import com.taostudio.tapaccounting.data.sync.SharedSyncScheduler
 import com.taostudio.tapaccounting.data.sync.SharedMutationHooks
+import com.taostudio.tapaccounting.capture.notify.CaptureNotifier
+import com.taostudio.tapaccounting.capture.parse.AutoAccountingRuleEngine
+import com.taostudio.tapaccounting.capture.rule.CaptureRuleBundleBootstrap
 
 class TapApplication : Application() {
 
@@ -55,6 +58,15 @@ class TapApplication : Application() {
 
         // 首次启动：初始化默认备份目录并启用自动备份
         BackupInitHelper.initializeIfNeeded(this)
+
+        // 待记收件箱：通知渠道 + 规则包引导。
+        // 主 APK 不内置 GPL 规则包，首次从已安装插件导出到 filesDir/rule_bundle.json；
+        // 插件没装/导出失败时规则引擎只跑本地备注/资产规则。
+        CaptureNotifier.ensureChannel(this)
+        CoroutineScope(Dispatchers.IO).launch {
+            CaptureRuleBundleBootstrap.ensureImported(this@TapApplication)
+            AutoAccountingRuleEngine.init(this@TapApplication)
+        }
 
         // 启动时在后台协程检查并执行数据迁移
         CoroutineScope(Dispatchers.IO).launch {

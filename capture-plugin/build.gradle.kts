@@ -1,10 +1,14 @@
-import java.util.UUID
-
 plugins {
     id("com.android.application")
     kotlin("android")
     alias(libs.plugins.ksp)
 }
+
+// 必须和主应用 app/build.gradle.kts 里的 CAPTURE_INGEST_TOKEN 一致。
+val captureIngestToken = System.getenv("CAPTURE_INGEST_TOKEN")
+    ?.takeIf { it.isNotBlank() }
+    ?: (project.findProperty("CAPTURE_INGEST_TOKEN") as? String)?.takeIf { it.isNotBlank() }
+    ?: "dev-token"
 
 android {
     namespace = "com.taostudio.tapaccounting.capture"
@@ -17,8 +21,8 @@ android {
         versionCode = 1
         versionName = "0.1"
 
-        // hook -> 插件 ingestion 的 token；不是强安全边界，个人使用足够。
-        buildConfigField("String", "CAPTURE_INGEST_TOKEN", "\"dev-token\"")
+        // hook -> 插件/主应用 ingestion 的 token；不是强安全边界，个人使用足够。
+        buildConfigField("String", "CAPTURE_INGEST_TOKEN", "\"$captureIngestToken\"")
     }
 
     buildFeatures {
@@ -27,15 +31,10 @@ android {
 
     buildTypes {
         getByName("debug") {
-            // 让 hook 侧的调试版本可以直接使用固定 token。
-            buildConfigField("String", "CAPTURE_INGEST_TOKEN", "\"dev-token\"")
+            // 和主应用默认值保持一致，hook 侧调试包可直接使用。
+            buildConfigField("String", "CAPTURE_INGEST_TOKEN", "\"$captureIngestToken\"")
         }
         getByName("release") {
-            // 可用 CAPTURE_INGEST_TOKEN 环境变量固定；否则每次构建随机生成。
-            val token = System.getenv("CAPTURE_INGEST_TOKEN")
-                ?.takeIf { it.isNotBlank() }
-                ?: UUID.randomUUID().toString()
-            buildConfigField("String", "CAPTURE_INGEST_TOKEN", "\"$token\"")
             // P0 骨架先不混淆，避免 Xposed 入口/反射锚点被 R8 改名。
             isMinifyEnabled = false
         }

@@ -95,6 +95,11 @@ internal object CaptureForwarder {
                 now = now,
             )
 
+            // P1 双写过渡：先把同一份 payload 投给主应用；插件原本的直连/relay/广播链路保持不动。
+            // 主应用暂时没有 UI，只负责落库；旧插件仍照常入库、弹气泡、发通知，联调不断档。
+            val appCtx = contextOverride ?: appContext()
+            forwardToApp(appCtx, payload, captureId)
+
             // 1. 首选直连插件进程内 TCP 端口（127.0.0.1:52047）：
             //    插件未冻结时 1~3ms 内立即返回 ACK 并完成入库与弹窗；
             //    若插件在后台被 ColorOS Hans 冻结，100ms 快速超时后立即交由 com.android.phone (52046) 强制解冻。
@@ -124,7 +129,7 @@ internal object CaptureForwarder {
             }
 
             // 3. 若当前宿主（如微信/支付宝）本身在前台，也并行发送前台唤醒作为双保险（插件侧按 captureId 幂等去重）。
-            val context = contextOverride ?: appContext()
+            val context = appCtx
             if (context != null) {
                 wakePluginViaContext(context, payload, captureId)
             } else if (!relayDelivered) {
@@ -172,6 +177,32 @@ internal object CaptureForwarder {
         } catch (t: Throwable) {
             log("socket($port) unavailable: ${t.javaClass.simpleName}: ${t.message}")
             false
+        }
+    }
+
+    /**
+     * P1 双写：显式广播给主应用。
+     *
+     * 目标组件是固定的 `com.taostudio.tapaccounting/.capture.ingest.CaptureIngestReceiver`，
+     * 显式 Intent 不受 Android 11+ 包可见性影响；主应用没装/版本旧时广播会被系统静默丢弃，
+     * 不影响下面继续走插件原有的直连/relay 链路。
+     */
+    private fun forwardToApp(context: Context?, payload: String, captureId: String) {
+        if (context == null) return
+        try {
+            val intent = Intent(CaptureContract.APP_INGEST_ACTION).apply {
+                component = ComponentName(
+                    CaptureContract.APP_PACKAGE,
+                    CaptureContract.APP_INGEST_RECEIVER_CLASS,
+                )
+                putExtra(CaptureContract.EXTRA_TOKEN, BuildConfig.CAPTURE_INGEST_TOKEN)
+                putExtra(CaptureContract.EXTRA_PAYLOAD, payload)
+                addFlags(Intent.FLAG_RECEIVER_FOREGROUND or Intent.FLAG_INCLUDE_STOPPED_PACKAGES)
+            }
+            context.sendBroadcast(intent)
+            log("forward app broadcast sent captureId=$captureId")
+        } catch (t: Throwable) {
+            log("forward app broadcast failed: ${t.javaClass.simpleName}: ${t.message}")
         }
     }
 

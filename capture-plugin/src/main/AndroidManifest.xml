@@ -22,6 +22,8 @@
         <package android:name="com.taostudio.tapaccounting" />
         <!-- ContentResolver.call() 还需要显式声明 provider authority；只写 package 在部分 ROM 上会报 Unknown authority。 -->
         <provider android:authorities="com.taostudio.tapaccounting.capturebridge" />
+        <!-- P1：hook/relay -> 主应用 ingestion Provider（token 校验，不走 signature）。 -->
+        <provider android:authorities="com.taostudio.tapaccounting.ingest" />
     </queries>
 
     <application

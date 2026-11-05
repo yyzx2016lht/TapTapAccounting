@@ -488,7 +488,34 @@ exportPrefs() -> {ok, promptMode, onlyExpense}
 
 ---
 
-## 10. 已确认的决策
+## 10. P1 落地记录（2026-11-05）
+
+P1 已完成的部分：
+
+- 主应用 `AppDatabase` 升到 v42，新增 5 张待记表 + `MIGRATION_41_42`；SQL 从插件
+  `AppDatabase_Impl` 生成 schema 对齐，`CaptureSchemaMigrationTest` 用 JVM SQLite +
+  Room 导出的 `42.json` 逐列/逐索引校验通过。
+- 主应用新增 `CaptureIngestReceiver` / `CaptureIngestProvider`（token 鉴权），
+  以及 `CaptureIngestCoordinator`（规则 → 资产映射 → 去重 → 落库 → 通知）。
+- 主应用 `RuleBundleStore` 只读 `filesDir/rule_bundle.json`；`CaptureRuleBundleBootstrap`
+  首次从插件 `openFile("rule_bundle")` / `exportLegacyRuleBundle()` 拉取并落盘。
+  另提供 adb 导入/重载入口（见 `docs/operations/capture-p1-dual-write-test.md`）。
+- 主应用通知 + RemoteInput 补备注/不计（P1 默认静默，避免和旧插件重复提醒）。
+- 插件 `CaptureForwarder` 在原有直连/relay 之前，额外显式广播给主应用；
+  插件原本的本地入库、气泡、通知、relay 全部保留（双写过渡）。
+- 插件 `CaptureIngestProvider` 新增 `openFile` 规则包导出和
+  `exportLegacyRuleBundle()` 方法；compact JSON 避免 Binder 1MB 限制。
+- 新增 P1 联调手册：`docs/operations/capture-p1-dual-write-test.md`。
+
+P1 明确未做的部分（按计划留到后续）：
+
+- 主应用待记 UI / 气泡（P2/P3）；
+- relay 从“投插件”改为“投主应用”（P5）；
+- `.bak` 备份纳入 5 张待记表（P4）；
+- 旧插件数据分页迁移（P4，当前只做了规则包迁移）；
+- 插件瘦身/删除旧 UI（P5）。
+
+## 11. 已确认的决策
 
 1. **入口位置**：主页顶部胶囊 + 设置页入口都做。
 2. **过渡策略**：插件 0.2 去掉待记 UI，但前提是 P2/P4 已把对应 UI 搬进主应用并通过回归；插件只保留状态页 + 转发 + 迁移接口。旧 UI 代码在 Git 历史/旧 APK 中保留，`capture.db` 不删除。

@@ -3,10 +3,12 @@ package com.taostudio.tapaccounting.capture.ingest
 import android.content.ContentProvider
 import android.content.ContentValues
 import android.content.Context
+import android.content.pm.PackageManager
 import android.database.Cursor
 import android.net.Uri
 import android.os.Binder
 import android.os.Bundle
+import android.os.ParcelFileDescriptor
 import android.os.Process
 import com.taostudio.tapaccounting.capture.BuildConfig
 import com.taostudio.tapaccounting.capture.CaptureApp
@@ -16,8 +18,12 @@ import com.taostudio.tapaccounting.capture.contract.CaptureContract
 import com.taostudio.tapaccounting.capture.contract.CaptureStatus
 import com.taostudio.tapaccounting.capture.data.CapturePrefs
 import com.taostudio.tapaccounting.capture.data.CategorySource
+import com.taostudio.tapaccounting.capture.data.RuleBundleCodec
+import com.taostudio.tapaccounting.capture.data.RuleBundleStore
 import com.taostudio.tapaccounting.capture.notify.CaptureNotifier
 import com.taostudio.tapaccounting.capture.parse.CaptureRuleMatcher
+import java.io.File
+import java.io.FileNotFoundException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import org.json.JSONArray
@@ -186,6 +192,15 @@ class CaptureIngestProvider : ContentProvider() {
                     .toString()
             }
 
+            CaptureContract.METHOD_EXPORT_LEGACY_RULE_BUNDLE -> {
+                val json = RuleBundleCodec.encode(RuleBundleStore.load(app), pretty = false)
+                JSONObject()
+                    .put("ok", true)
+                    .put("size", json.length)
+                    .put("json", json)
+                    .toString()
+            }
+
             CaptureContract.METHOD_MARK_CAPTURES_RECORDED -> {
                 val rawIds = extras?.getString(CaptureContract.EXTRA_CAPTURE_IDS) ?: arg.orEmpty()
                 val ids = runCatching {
@@ -213,6 +228,43 @@ class CaptureIngestProvider : ContentProvider() {
 
             else -> error("unknown method: $method")
         }
+    }
+
+    /**
+     * 主应用迁移用：把插件当前规则包（filesDir/rule_bundle.json 或内置 assets）以文件流导出。
+     * 走 openFile 而不是 call()，避免 594KB 规则包把 Binder 1MB 事务撑爆。
+     */
+    override fun openFile(uri: Uri, mode: String): ParcelFileDescriptor? {
+        val ctx = context ?: throw FileNotFoundException("provider not attached")
+        if (uri.path?.trim('/') != CaptureContract.LEGACY_RULE_BUNDLE_PATH) {
+            return super.openFile(uri, mode)
+        }
+        if (!isAuthorizedCaller(ctx)) {
+            throw SecurityException("unauthorized caller")
+        }
+        val app = ctx.applicationContext as? CaptureApp
+            ?: throw FileNotFoundException("app not attached")
+        val json = RuleBundleCodec.encode(RuleBundleStore.load(app), pretty = false)
+        val file = File(ctx.cacheDir, "rule_bundle_export.json")
+        file.writeText(json, Charsets.UTF_8)
+        return ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY)
+    }
+
+    private fun isAuthorizedCaller(ctx: Context): Boolean {
+        val callingUid = Binder.getCallingUid()
+        if (callingUid == Process.myUid() ||
+            callingUid == Process.ROOT_UID ||
+            callingUid == Process.SHELL_UID
+        ) {
+            return true
+        }
+        if (ctx.checkCallingPermission(CaptureContract.BRIDGE_PERMISSION) ==
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            return true
+        }
+        return ctx.packageManager.checkSignatures(Process.myUid(), callingUid) ==
+            PackageManager.SIGNATURE_MATCH
     }
 
     private fun error(message: String): String =

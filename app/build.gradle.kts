@@ -17,6 +17,13 @@ if (keystorePropertiesFile.exists()) {
 // debug 照常可用。注意：原 release-keystore 丢失后即使重建，签名也会变化。
 val hasReleaseKey = keystorePropertiesFile.exists()
 
+// hook/relay -> 主应用 ingestion 的 token；必须和 capture-plugin 用同一个值。
+// debug 默认 dev-token；release 可用同名环境变量或 gradle 属性覆盖。
+val captureIngestToken = System.getenv("CAPTURE_INGEST_TOKEN")
+    ?.takeIf { it.isNotBlank() }
+    ?: (project.findProperty("CAPTURE_INGEST_TOKEN") as? String)?.takeIf { it.isNotBlank() }
+    ?: "dev-token"
+
 android {
     namespace = "com.taostudio.tapaccounting"
     compileSdk = 34
@@ -30,9 +37,15 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
+        buildConfigField("String", "CAPTURE_INGEST_TOKEN", "\"$captureIngestToken\"")
+
         ndk {
             abiFilters.add("arm64-v8a")
         }
+    }
+
+    buildFeatures {
+        buildConfig = true
     }
 
     if (hasReleaseKey) {
@@ -90,6 +103,11 @@ android {
     }
 }
 
+ksp {
+    arg("room.schemaLocation", "$projectDir/schemas")
+    arg("room.incremental", "true")
+}
+
 dependencies {
     val sherpaAar = file("libs/sherpa-onnx.aar")
     if (!sherpaAar.exists()) {
@@ -119,6 +137,10 @@ dependencies {
 
     // 支付捕获桥接的共享契约（authority/权限/extra 常量）。
     implementation(project(":capture-contract"))
+
+    // 待记规则执行：在应用进程内跑 AutoAccounting 云端规则（QuickJS，Apache-2.0）。
+    // 规则包本身不内置 APK，运行时从插件/文件导入。
+    implementation("com.github.AutoAccountingOrg:quickjs-android:35726a9d28")
 
     // 本地语音识别：显式引入 AAR，避免 fileTree 对 AAR 的处理不稳定
     // 必须是 16KB 对齐的版本（>= v1.12.x，见 k2-fsa/sherpa-onnx#2520）；
@@ -171,4 +193,6 @@ dependencies {
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.json:json:20240303")
+    // 仅用于 JVM 里执行 MIGRATION_41_42 的建表 SQL，和 Room 导出的 42.json 做 schema 校验。
+    testImplementation("org.xerial:sqlite-jdbc:3.45.3.0")
 }

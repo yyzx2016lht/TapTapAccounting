@@ -21,6 +21,7 @@ class DuplicateDetectorTest {
         channel: String? = "微信支付",
         merchant: String? = "瑞幸咖啡",
         assetName: String? = "微信零钱",
+        toAssetName: String? = null,
         paymentMethodRaw: String? = null,
         billType: Int? = LocalBillType.TYPE_EXPENSE,
         status: String = CaptureStatus.PENDING,
@@ -37,7 +38,7 @@ class DuplicateDetectorTest {
         categoryName = "餐饮",
         paymentMethodRaw = paymentMethodRaw,
         assetName = assetName,
-        toAssetName = null,
+        toAssetName = toAssetName,
         billType = billType,
         subType = null,
         needsRefundLink = false,
@@ -195,6 +196,151 @@ class DuplicateDetectorTest {
         val found = DuplicateDetector.findDuplicate(incoming, candidates)
         assertNotNull(found)
         assertEquals("1", found!!.id)
+    }
+
+    @Test
+    fun `transfer income after wechat withdrawal is duplicate`() {
+        // 真机数据（2026-11-05 22:02）：微信零钱提现到招商银行，2 秒后招行再推送收款。
+        val transfer = createCapture(
+            id = "transfer",
+            amountCents = 1000L,
+            paidAt = 1793887365000L,
+            source = "WECHAT",
+            channel = "微信[微信支付-零钱提现到账]",
+            merchant = "零钱提现已到账",
+            assetName = "微信",
+            toAssetName = "招商银行",
+            billType = LocalBillType.TYPE_TRANSFER,
+        )
+        val bankIncome = createCapture(
+            id = "income",
+            amountCents = 1000L,
+            paidAt = 1793887367023L,
+            source = "cmb.pb",
+            channel = "招商银行[收款]",
+            merchant = "招商银行",
+            assetName = "招商银行",
+            billType = LocalBillType.TYPE_INCOME,
+        )
+        assertTrue(DuplicateDetector.isTransferIncomeDuplicate(bankIncome, transfer))
+    }
+
+    @Test
+    fun `transfer income beyond configured window is NOT duplicate`() {
+        val transfer = createCapture(
+            id = "transfer",
+            amountCents = 1000L,
+            paidAt = 100000L,
+            assetName = "微信",
+            toAssetName = "招商银行",
+            billType = LocalBillType.TYPE_TRANSFER,
+        )
+        val bankIncome = createCapture(
+            id = "income",
+            amountCents = 1000L,
+            paidAt = 100000L + 301_000L,
+            assetName = "招商银行",
+            billType = LocalBillType.TYPE_INCOME,
+        )
+        assertFalse(DuplicateDetector.isTransferIncomeDuplicate(bankIncome, transfer))
+    }
+
+    @Test
+    fun `income to a different asset than transfer target is NOT duplicate`() {
+        val transfer = createCapture(
+            id = "transfer",
+            amountCents = 1000L,
+            assetName = "微信",
+            toAssetName = "招商银行",
+            billType = LocalBillType.TYPE_TRANSFER,
+        )
+        val bankIncome = createCapture(
+            id = "income",
+            amountCents = 1000L,
+            paidAt = 100500L,
+            assetName = "建设银行",
+            billType = LocalBillType.TYPE_INCOME,
+        )
+        assertFalse(DuplicateDetector.isTransferIncomeDuplicate(bankIncome, transfer))
+    }
+
+    @Test
+    fun `income without matching amount is NOT duplicate`() {
+        val transfer = createCapture(
+            id = "transfer",
+            amountCents = 1000L,
+            assetName = "微信",
+            toAssetName = "招商银行",
+            billType = LocalBillType.TYPE_TRANSFER,
+        )
+        val bankIncome = createCapture(
+            id = "income",
+            amountCents = 1200L,
+            paidAt = 100500L,
+            assetName = "招商银行",
+            billType = LocalBillType.TYPE_INCOME,
+        )
+        assertFalse(DuplicateDetector.isTransferIncomeDuplicate(bankIncome, transfer))
+    }
+
+    @Test
+    fun `income to same bank with parenthesized card suffix still matches`() {
+        val transfer = createCapture(
+            id = "transfer",
+            amountCents = 1000L,
+            assetName = "微信",
+            toAssetName = "招商银行(4852)",
+            billType = LocalBillType.TYPE_TRANSFER,
+        )
+        val bankIncome = createCapture(
+            id = "income",
+            amountCents = 1000L,
+            paidAt = 100500L,
+            assetName = "招商银行",
+            billType = LocalBillType.TYPE_INCOME,
+        )
+        assertTrue(DuplicateDetector.isTransferIncomeDuplicate(bankIncome, transfer))
+    }
+
+    @Test
+    fun `income within window but transfer has no target asset is NOT duplicate`() {
+        // 转账给对方个人时没有目标资产；不能因为金额相同就吞掉真实收款。
+        val transfer = createCapture(
+            id = "transfer",
+            amountCents = 1000L,
+            assetName = "微信",
+            toAssetName = null,
+            merchant = "转账-张三",
+            billType = LocalBillType.TYPE_TRANSFER,
+        )
+        val income = createCapture(
+            id = "income",
+            amountCents = 1000L,
+            paidAt = 100500L,
+            assetName = "微信",
+            billType = LocalBillType.TYPE_INCOME,
+        )
+        assertFalse(DuplicateDetector.isTransferIncomeDuplicate(income, transfer))
+    }
+
+    @Test
+    fun `different mapped cards with same bank prefix are NOT duplicate`() {
+        // 用户把两张卡分别映射成“招商银行1”“招商银行2”，不能因为共享前缀互判重复。
+        val transferToCard1 = createCapture(
+            id = "transfer",
+            amountCents = 1000L,
+            assetName = "微信",
+            toAssetName = "招商银行1",
+            billType = LocalBillType.TYPE_TRANSFER,
+        )
+        val card2Income = createCapture(
+            id = "income",
+            amountCents = 1000L,
+            paidAt = 100500L,
+            assetName = "招商银行2",
+            billType = LocalBillType.TYPE_INCOME,
+        )
+        assertFalse(DuplicateDetector.isTransferIncomeDuplicate(card2Income, transferToCard1))
     }
 
     @Test

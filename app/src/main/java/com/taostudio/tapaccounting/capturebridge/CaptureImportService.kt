@@ -8,6 +8,7 @@ import com.taostudio.tapaccounting.AiImageCompressor
 import com.taostudio.tapaccounting.AIService
 import com.taostudio.tapaccounting.BookAccountManager
 import com.taostudio.tapaccounting.Prefs
+import com.taostudio.tapaccounting.capture.CaptureInboxEvents
 import com.taostudio.tapaccounting.capture.contract.ImportBill
 import com.taostudio.tapaccounting.capture.contract.ImportItemStatus
 import com.taostudio.tapaccounting.data.local.AppDatabase
@@ -98,6 +99,18 @@ internal object CaptureImportService {
                 false
             }
         }
+
+        // 入账成功的待记统一推进状态；悬浮窗批量入账时列表不会走生命周期，必须主动通知刷新。
+        val recordedIds = buildList {
+            for (i in 0 until results.length()) {
+                val r = results.optJSONObject(i) ?: continue
+                val status = r.optString("status")
+                if (status == ImportItemStatus.CREATED || status == ImportItemStatus.DUPLICATE) {
+                    r.optString("captureId").takeIf { it.isNotBlank() }?.let { add(it) }
+                }
+            }
+        }
+        CaptureInboxEvents.markRecorded(db, recordedIds)
 
         return JSONObject()
             .put("ok", allOk)
@@ -781,6 +794,8 @@ internal object CaptureImportService {
                 BillMutationService.notifyBillCreated(bill, captureId)
             }
         }
+        // 拆分入账同样要把待记推进到 RECORDED，并通知收件箱刷新（悬浮窗后面可能正开着列表）。
+        CaptureInboxEvents.markRecorded(db, captureId)
         val billIds = JSONArray()
         outcome.billIds.forEach { billIds.put(it) }
         return JSONObject()

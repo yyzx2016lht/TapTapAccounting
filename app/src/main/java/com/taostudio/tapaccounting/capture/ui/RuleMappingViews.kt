@@ -862,6 +862,89 @@ internal class RuleMappingViews(
         }
         container.addView(filterCard)
 
+        val transferDedupCard = CaptureUi.card(activity).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+            ).apply { bottomMargin = dp(12) }
+
+            val headerRow = LinearLayout(activity).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+            }
+            val headerText = LinearLayout(activity).apply {
+                orientation = LinearLayout.VERTICAL
+                layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+            }
+            headerText.addView(TextView(activity).apply {
+                text = "转账到账自动判重"
+                textSize = 15f
+                setTypeface(typeface, Typeface.BOLD)
+                setTextColor(CaptureUi.TEXT_PRIMARY)
+            })
+            headerText.addView(TextView(activity).apply {
+                text = "给账户转账/提现后，收款方再推送的“入账/收款”通知默认归入「重复」，不再多记一笔收入。"
+                textSize = 12f
+                setTextColor(CaptureUi.TEXT_SECONDARY)
+                setLineSpacing(0f, 1.2f)
+                setPadding(0, dp(2), dp(8), 0)
+            })
+            headerRow.addView(headerText)
+            headerRow.addView(Switch(activity).apply {
+                isChecked = CapturePrefs.isTransferIncomeDedupEnabled(activity)
+                setOnCheckedChangeListener { _, checked ->
+                    CapturePrefs.setTransferIncomeDedupEnabled(activity, checked)
+                    onDataChanged()
+                }
+            })
+            addView(headerRow)
+
+            addView(TextView(activity).apply {
+                text = "判重时间窗（转账与到账通知的最大间隔）"
+                textSize = 12f
+                setTextColor(CaptureUi.TEXT_MUTED)
+                setPadding(0, dp(12), 0, 0)
+            })
+
+            val windowRow = LinearLayout(activity).apply {
+                orientation = LinearLayout.HORIZONTAL
+                setPadding(0, dp(8), 0, 0)
+            }
+            val currentWindow = CapturePrefs.getTransferIncomeDedupWindowSeconds(activity)
+            val windowOptions = listOf(
+                60 to "1分钟",
+                180 to "3分钟",
+                300 to "5分钟",
+                600 to "10分钟",
+            )
+            windowOptions.forEachIndexed { index, (seconds, label) ->
+                val selected = currentWindow == seconds
+                windowRow.addView(TextView(activity).apply {
+                    text = label
+                    textSize = 12.5f
+                    gravity = Gravity.CENTER
+                    setTypeface(typeface, if (selected) Typeface.BOLD else Typeface.NORMAL)
+                    setTextColor(if (selected) CaptureUi.BRAND_DARK else CaptureUi.TEXT_SECONDARY)
+                    setPadding(dp(8), dp(7), dp(8), dp(7))
+                    background = CaptureUi.rippleBg(
+                        fillColor = if (selected) CaptureUi.BRAND_SOFT else CaptureUi.BG_SUBTLE,
+                        radiusPx = dp(999),
+                        strokeWidthPx = dp(1),
+                        strokeColor = if (selected) CaptureUi.BRAND else CaptureUi.BORDER,
+                    )
+                    layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
+                        if (index > 0) marginStart = dp(6)
+                    }
+                    setOnClickListener {
+                        CapturePrefs.setTransferIncomeDedupWindowSeconds(activity, seconds)
+                        onDataChanged()
+                    }
+                })
+            }
+            addView(windowRow)
+        }
+        container.addView(transferDedupCard)
+
         val debugCard = CaptureUi.card(activity).apply {
             addView(TextView(activity).apply {
                 text = "调试与验证工具箱"

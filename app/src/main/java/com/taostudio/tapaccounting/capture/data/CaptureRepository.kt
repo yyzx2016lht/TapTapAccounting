@@ -17,6 +17,9 @@ data class InsertOutcome(
 class CaptureRepository(private val dao: PaymentCaptureDao) {
 
     private companion object {
+        /** 自动判重窗口上限：防止用户配置异常导致全表扫描。 */
+        const val MAX_DEDUP_WINDOW_MILLIS: Long = 3_600_000L
+
         val HISTORY_STATUSES = listOf(
             CaptureStatus.RECORDED,
             CaptureStatus.IGNORED,
@@ -24,7 +27,11 @@ class CaptureRepository(private val dao: PaymentCaptureDao) {
         )
     }
 
-    suspend fun insert(payload: CapturePayload): InsertOutcome {
+    suspend fun insert(
+        payload: CapturePayload,
+        transferIncomeDedupEnabled: Boolean = true,
+        transferIncomeDedupWindowMillis: Long = DuplicateDetector.DEFAULT_WINDOW_MILLIS,
+    ): InsertOutcome {
         val now = System.currentTimeMillis()
 
         // 订单号优先去重；没有订单号时不做“金额+时间”自动合并（见需求 10.1）。
@@ -95,6 +102,32 @@ class CaptureRepository(private val dao: PaymentCaptureDao) {
 
                 return InsertOutcome(mergedParent, inserted = false)
             }
+
+            // 转账 → 到账收款：微信/支付宝先记一笔转账，收款银行随后推送“入账/收款”。
+            // 两边来源和 billType 都不同，普通去重会放过；这里按用户配置的窗口归入「重复」。
+            if (transferIncomeDedupEnabled) {
+                val transferWindow = transferIncomeDedupWindowMillis.coerceIn(0L, MAX_DEDUP_WINDOW_MILLIS)
+                val transferCandidates = dao.findPotentialDuplicates(
+                    amount,
+                    entity.paidAt - transferWindow,
+                    entity.paidAt + transferWindow,
+                    candidateStatuses,
+                )
+                val transferParent = transferCandidates.firstOrNull { candidate ->
+                    candidate.groupId == null &&
+                        candidate.status != CaptureStatus.DUPLICATE &&
+                        DuplicateDetector.isTransferIncomeDuplicate(entity, candidate, transferWindow)
+                }
+                if (transferParent != null) {
+                    val child = entity.copy(
+                        status = CaptureStatus.DUPLICATE,
+                        groupId = transferParent.id,
+                        updatedAt = now,
+                    )
+                    dao.insert(child)
+                    return InsertOutcome(child, inserted = false)
+                }
+            }
         }
 
         val rowId = dao.insert(entity)
@@ -102,7 +135,44 @@ class CaptureRepository(private val dao: PaymentCaptureDao) {
             val existing = dao.findById(entity.id) ?: entity
             return InsertOutcome(existing, inserted = false)
         }
+
+        // 反向顺序：银行到账通知先到、微信/支付宝转账记录后到。
+        if (transferIncomeDedupEnabled && entity.billType == LocalBillType.TYPE_TRANSFER) {
+            markEarlierIncomeAsDuplicate(entity, now, transferIncomeDedupWindowMillis)
+        }
         return InsertOutcome(entity, inserted = true)
+    }
+
+    /**
+     * 反向顺序的转账判重：只处理还没入账的待记。
+     * RECORDED 的收入已经写成账单，再标重复会造成“账单还在、待记没了”的漏账。
+     */
+    private suspend fun markEarlierIncomeAsDuplicate(
+        transfer: PaymentCapture,
+        now: Long,
+        transferIncomeDedupWindowMillis: Long,
+    ) {
+        val amount = transfer.amountCents ?: return
+        if (amount <= 0L) return
+        val window = transferIncomeDedupWindowMillis.coerceIn(0L, MAX_DEDUP_WINDOW_MILLIS)
+        val candidates = dao.findPotentialDuplicates(
+            amount,
+            transfer.paidAt - window,
+            transfer.paidAt + window,
+            CaptureStatus.PENDING_COUNT_STATUSES.toList(),
+        )
+        val income = candidates.firstOrNull { candidate ->
+            candidate.groupId == null &&
+                candidate.status != CaptureStatus.DUPLICATE &&
+                DuplicateDetector.isTransferIncomeDuplicate(candidate, transfer, window)
+        } ?: return
+        dao.update(
+            income.copy(
+                status = CaptureStatus.DUPLICATE,
+                groupId = transfer.id,
+                updatedAt = now,
+            )
+        )
     }
 
     suspend fun findById(id: String): PaymentCapture? = dao.findById(id)

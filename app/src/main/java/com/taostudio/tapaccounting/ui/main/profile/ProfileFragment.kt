@@ -10,6 +10,7 @@ import android.os.Build
 import android.provider.Settings
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.fragment.app.Fragment
+import androidx.room.InvalidationTracker
 import android.content.Intent
 import android.graphics.Bitmap
 import androidx.core.content.ContextCompat
@@ -48,6 +49,8 @@ class ProfileFragment : Fragment(R.layout.fragment_profile) {
     private val viewScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var suppressHomeTrendCardSwitchCallback = false
     private var trashEntrySubtitle: TextView? = null
+    private var captureCenterSubtitle: TextView? = null
+    private var capturePendingObserver: InvalidationTracker.Observer? = null
     private data class ToggleTracker(var count: Int = 0, var firstToggleAtMs: Long = 0L)
     private val toggleTimers = mutableMapOf<String, ToggleTracker>()
     private var pendingEditUserAvatarView: ImageView? = null
@@ -99,6 +102,7 @@ class ProfileFragment : Fragment(R.layout.fragment_profile) {
         rootRef?.let { refreshUserAvatarCard(it) }
         rootRef?.let { refreshHomeTrendCardSwitch(it) }
         refreshTrashEntryCount()
+        refreshCaptureCenterEntryCount()
     }
 
     /** 回收站入口副标题：实时显示已删除账单条数，从回收站返回后也要刷新。 */
@@ -120,11 +124,33 @@ class ProfileFragment : Fragment(R.layout.fragment_profile) {
         }
     }
 
+    /** 待记收件箱入口副标题：有新待记 / 处理完待记时同步刷新。 */
+    private fun refreshCaptureCenterEntryCount() {
+        val tv = captureCenterSubtitle ?: return
+        val ctx = context ?: return
+        viewScope.launch {
+            val pendingCount = runCatching {
+                com.taostudio.tapaccounting.capture.data.CaptureRepository(
+                    AppDatabase.getDatabase(ctx).paymentCaptureDao()
+                ).countPending()
+            }.getOrDefault(0)
+            withContext(Dispatchers.Main) {
+                if (!isAdded) return@withContext
+                tv.text = if (pendingCount > 0) {
+                    "待记 $pendingCount 笔 · 点此补备注/分类"
+                } else {
+                    "支付后自动留痕，有空再补备注/分类"
+                }
+            }
+        }
+    }
+
     override fun onHiddenChanged(hidden: Boolean) {
         super.onHiddenChanged(hidden)
         if (!hidden) {
             applyProfileStatusBarStyle()
             rootRef?.let { refreshHomeTrendCardSwitch(it) }
+            refreshCaptureCenterEntryCount()
         }
     }
 
@@ -146,6 +172,15 @@ class ProfileFragment : Fragment(R.layout.fragment_profile) {
     }
 
     override fun onDestroyView() {
+        capturePendingObserver?.let { observer ->
+            context?.let {
+                runCatching {
+                    AppDatabase.getDatabase(it).invalidationTracker.removeObserver(observer)
+                }
+            }
+        }
+        capturePendingObserver = null
+        captureCenterSubtitle = null
         // P1-29: 取消本视图协程
         viewScope.cancel()
         rootRef = null
@@ -233,24 +268,17 @@ class ProfileFragment : Fragment(R.layout.fragment_profile) {
                 )
             )
         }
-        val captureCenterSubtitle = view.findViewById<TextView>(R.id.tv_capture_center_subtitle)
-        val appContext = requireContext().applicationContext
-        viewScope.launch {
-            val pendingCount = runCatching {
-                withContext(Dispatchers.IO) {
-                    com.taostudio.tapaccounting.capture.data.CaptureRepository(
-                        com.taostudio.tapaccounting.data.local.AppDatabase
-                            .getDatabase(appContext).paymentCaptureDao()
-                    ).countPending()
-                }
-            }.getOrDefault(0)
-            withContext(Dispatchers.Main) {
-                captureCenterSubtitle?.text = if (pendingCount > 0) {
-                    "待记 $pendingCount 笔 · 点此补备注/分类"
-                } else {
-                    "支付后自动留痕，有空再补备注/分类"
+        captureCenterSubtitle = view.findViewById<TextView>(R.id.tv_capture_center_subtitle)
+        refreshCaptureCenterEntryCount()
+        // 待记可能在任意页面产生（hook/插件/悬浮窗），监听 payment_captures 表让入口数字实时跟上。
+        runCatching { AppDatabase.getDatabase(requireContext()).invalidationTracker }.getOrNull()?.let { tracker ->
+            val observer = object : InvalidationTracker.Observer("payment_captures") {
+                override fun onInvalidated(tables: Set<String>) {
+                    view?.post { refreshCaptureCenterEntryCount() }
                 }
             }
+            capturePendingObserver = observer
+            tracker.addObserver(observer)
         }
         val layoutStorageCleanupEntry = view.findViewById<View>(R.id.layout_storage_cleanup_entry)
         view.findViewById<View>(R.id.layout_storage_cleanup_entry)?.setOnClickListener {

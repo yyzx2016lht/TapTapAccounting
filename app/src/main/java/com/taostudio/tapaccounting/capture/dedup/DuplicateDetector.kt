@@ -40,6 +40,57 @@ object DuplicateDetector {
     }
 
     /**
+     * 转账 ↔ 到账收款 判重。
+     *
+     * 典型场景（真机 2026-11-05）：微信零钱提现到招商银行，微信先产生一条转账记录，
+     * 两秒后招商银行再推送一条“收款人民币 10.00”。来源渠道不同、billType 一边是转账
+     * 一边是收入，普通去重会认为是两笔；但它其实是同一笔资金动作的流出与流入。
+     *
+     * 判定条件（全部满足）：
+     * 1. [income] 是收入，[transfer] 是转账；
+     * 2. 金额完全一致（宁可漏判，也不把金额不同的人情往来吞掉）；
+     * 3. 时间差在用户配置的窗口内（默认 300 秒）；
+     * 4. 入账账户与转账的目标账户**映射后完全一致**（两侧都必须有资产名；
+     *    招商银行1 / 招商银行2 这类同前缀的不同卡不会互判；转给对方个人不参与判重）。
+     */
+    fun isTransferIncomeDuplicate(
+        income: PaymentCapture,
+        transfer: PaymentCapture,
+        windowMillis: Long = DEFAULT_WINDOW_MILLIS,
+    ): Boolean {
+        if (income.id == transfer.id) return false
+        if (income.billType != LocalBillType.TYPE_INCOME) return false
+        if (transfer.billType != LocalBillType.TYPE_TRANSFER) return false
+
+        val amount = income.amountCents ?: return false
+        if (amount <= 0L || amount != transfer.amountCents) return false
+
+        if (abs(income.paidAt - transfer.paidAt) > windowMillis.coerceAtLeast(0L)) return false
+
+        return assetsCompatible(income.assetName, transfer.toAssetName)
+    }
+
+    /**
+     * 入账账户 vs 转账目标账户。
+     *
+     * 只看**映射后的资产名**：两边都是“招商银行”才算同一账户。
+     * 不再做前缀/包含匹配 —— 用户给两张卡分别映射“招商银行1”“招商银行2”时，
+     * 它们共享“招商银行”前缀，但必须是两个不同资产，不能互判重复。
+     * 卡号后缀（如“(4852)”）在归一化时去掉；两侧都必须有资产名。
+     */
+    private fun assetsCompatible(incomeAsset: String?, transferTargetAsset: String?): Boolean {
+        val a = normalizeAssetName(incomeAsset)
+        val b = normalizeAssetName(transferTargetAsset)
+        if (a.isEmpty() || b.isEmpty()) return false
+        return a == b
+    }
+
+    private fun normalizeAssetName(raw: String?): String = raw.orEmpty()
+        .replace(Regex("""[（(][^）)]*[）)]"""), "")
+        .replace(Regex("""[\s\-_·•/]"""), "")
+        .trim()
+
+    /**
      * 重复裁决规则：
      * 1. 金额必须完全一致。
      * 2. 交易类型（支出/收入）若均存在，必须一致。

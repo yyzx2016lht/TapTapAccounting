@@ -25,6 +25,7 @@ import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 import com.taostudio.tapaccounting.capture.CaptureApp
+import com.taostudio.tapaccounting.capture.CaptureInboxEvents
 import com.taostudio.tapaccounting.capture.bridge.CaptureBridgeClient
 import com.taostudio.tapaccounting.capture.bridge.CaptureNoteClassifier
 import com.taostudio.tapaccounting.capture.bridge.CaptureReconciler
@@ -106,6 +107,8 @@ class PendingListActivity : Activity() {
     private val noteSaveJobs = mutableMapOf<String, Job>()
     private val splitDrafts = mutableMapOf<String, MutableList<CaptureBridgeClient.SplitItem>>()
     private var skipNextResumeLoad = false
+    private var loadJob: Job? = null
+    private var inboxEventsJob: Job? = null
 
     private lateinit var bridgeDot: View
     private lateinit var bridgeBadge: TextView
@@ -126,6 +129,22 @@ class PendingListActivity : Activity() {
             return
         }
         load()
+    }
+
+    override fun onStart() {
+        super.onStart()
+        // 悬浮窗是浮层，不会让本页走 onResume；入账后靠这个信号即时刷新列表。
+        if (inboxEventsJob == null) {
+            inboxEventsJob = scope.launch {
+                CaptureInboxEvents.changes.collect { load() }
+            }
+        }
+    }
+
+    override fun onStop() {
+        inboxEventsJob?.cancel()
+        inboxEventsJob = null
+        super.onStop()
     }
 
     override fun onDestroy() {
@@ -261,7 +280,8 @@ class PendingListActivity : Activity() {
     }
 
     private fun load() {
-        scope.launch {
+        loadJob?.cancel()
+        loadJob = scope.launch {
             try {
                 val app = CaptureApp.from(this@PendingListActivity)
                 val repository = app.repository
@@ -2857,7 +2877,11 @@ class PendingListActivity : Activity() {
                         ruleVersion = "simulated",
                     )
                     val repo = CaptureApp.from(this@PendingListActivity).repository
-                    repo.insert(payload)
+                    repo.insert(
+                        payload,
+                        transferIncomeDedupEnabled = CapturePrefs.isTransferIncomeDedupEnabled(scopeCtx),
+                        transferIncomeDedupWindowMillis = CapturePrefs.getTransferIncomeDedupWindowMillis(scopeCtx),
+                    )
                     val pendingList = repo.listPending(10, true)
                     Pair(payload, pendingList)
                 }

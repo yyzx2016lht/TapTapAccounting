@@ -128,7 +128,13 @@ internal object CaptureIngestCoordinator {
                     }
                 }
 
-                val outcome = enriched?.let { repository.insert(it) }
+                val outcome = enriched?.let {
+                    repository.insert(
+                        it,
+                        transferIncomeDedupEnabled = CapturePrefs.isTransferIncomeDedupEnabled(app),
+                        transferIncomeDedupWindowMillis = CapturePrefs.getTransferIncomeDedupWindowMillis(app),
+                    )
+                }
                 val onlyExpense = CapturePrefs.isOnlyExpense(app)
                 val pendingItems = repository.listPending(50, onlyExpense = onlyExpense)
                 val count = pendingItems.size

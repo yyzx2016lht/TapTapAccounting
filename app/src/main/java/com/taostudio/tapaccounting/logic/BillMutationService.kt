@@ -5,6 +5,7 @@ import androidx.room.withTransaction
 import com.taostudio.tapaccounting.TapApplication
 import com.taostudio.tapaccounting.Logger
 import com.taostudio.tapaccounting.Prefs
+import com.taostudio.tapaccounting.capture.CaptureInboxEvents
 import com.taostudio.tapaccounting.capture.contract.CaptureContract
 import com.taostudio.tapaccounting.data.local.AppDatabase
 import com.taostudio.tapaccounting.data.local.entity.Asset
@@ -222,6 +223,11 @@ object BillMutationService {
         notifyWidgetsChanged()
         // 广播必须在事务提交之后；显式 setPackage，避免 Android 11+ 包可见性/隐式广播限制。
         capturedBill?.let { broadcastBillCreated(it, captureId!!) }
+        // 悬浮窗入账不会让收件箱走生命周期回调：主动推进待记状态并通知列表刷新。
+        // 重复入账（回执已存在）也直接推进，避免历史待记一直停在收件箱。
+        if (captureId != null) {
+            CaptureInboxEvents.markRecorded(db, captureId)
+        }
         return result
     }
 
@@ -340,6 +346,29 @@ object BillMutationService {
         requestId: String? = null
     ): Bill {
         return insertBillAndApplyImpact(db, bill, applyAssetImpact, captureId, requestId)
+    }
+
+    /**
+     * 补写“capture 已入账”的回执。
+     *
+     * 退款、带理财计划的转账等分支不经过带 captureId 的常规入账；
+     * 缺回执时待记会一直停在收件箱里（尤其在悬浮窗细改保存后）。
+     */
+    suspend fun recordCaptureImport(
+        db: AppDatabase,
+        captureId: String,
+        billId: Long,
+        requestId: String?
+    ) {
+        db.externalImportDao().insertIgnore(
+            ExternalImport(
+                captureId = captureId,
+                billId = billId,
+                requestId = requestId,
+                createdAt = System.currentTimeMillis()
+            )
+        )
+        CaptureInboxEvents.markRecorded(db, captureId)
     }
 
     suspend fun replaceBill(

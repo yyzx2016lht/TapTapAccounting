@@ -8,6 +8,13 @@ object CapturePrefs {
     private const val KEY_ONLY_EXPENSE = "only_expense_v2"
     private const val KEY_SEEDED_DEFAULTS = "seeded_defaults_v1"
     private const val KEY_LEGACY_IMPORTED = "legacy_imported_v1"
+    private const val KEY_TRANSFER_INCOME_DEDUP = "transfer_income_dedup_enabled"
+    private const val KEY_TRANSFER_INCOME_DEDUP_WINDOW = "transfer_income_dedup_window_seconds"
+
+    /** 转账到账后，收款方通知通常晚到几十秒；默认 5 分钟内视为同一笔。 */
+    const val DEFAULT_TRANSFER_INCOME_DEDUP_WINDOW_SECONDS: Int = 300
+    private const val MIN_TRANSFER_INCOME_DEDUP_WINDOW_SECONDS: Int = 30
+    private const val MAX_TRANSFER_INCOME_DEDUP_WINDOW_SECONDS: Int = 1800
 
     /** 付款时弹出底部轻气泡 + 通知栏 */
     const val MODE_BUBBLE = "BUBBLE"
@@ -42,6 +49,31 @@ object CapturePrefs {
 
     fun setDefaultsSeeded(context: Context, seeded: Boolean) {
         prefs(context).edit().putBoolean(KEY_SEEDED_DEFAULTS, seeded).apply()
+    }
+
+    /**
+     * 转账到账自动判重：给某账户转账/提现后，收款方再推送的“入账/收款”通知默认归入「重复」。
+     * 默认开启；关闭后所有到账通知仍会进待记。
+     */
+    fun isTransferIncomeDedupEnabled(context: Context): Boolean =
+        prefs(context).getBoolean(KEY_TRANSFER_INCOME_DEDUP, true)
+
+    fun setTransferIncomeDedupEnabled(context: Context, enabled: Boolean) {
+        prefs(context).edit().putBoolean(KEY_TRANSFER_INCOME_DEDUP, enabled).apply()
+    }
+
+    fun getTransferIncomeDedupWindowSeconds(context: Context): Int =
+        prefs(context).getInt(
+            KEY_TRANSFER_INCOME_DEDUP_WINDOW,
+            DEFAULT_TRANSFER_INCOME_DEDUP_WINDOW_SECONDS,
+        ).coerceIn(MIN_TRANSFER_INCOME_DEDUP_WINDOW_SECONDS, MAX_TRANSFER_INCOME_DEDUP_WINDOW_SECONDS)
+
+    fun getTransferIncomeDedupWindowMillis(context: Context): Long =
+        getTransferIncomeDedupWindowSeconds(context) * 1000L
+
+    fun setTransferIncomeDedupWindowSeconds(context: Context, seconds: Int) {
+        val safe = seconds.coerceIn(MIN_TRANSFER_INCOME_DEDUP_WINDOW_SECONDS, MAX_TRANSFER_INCOME_DEDUP_WINDOW_SECONDS)
+        prefs(context).edit().putInt(KEY_TRANSFER_INCOME_DEDUP_WINDOW, safe).apply()
     }
 
     /** 旧插件 capture.db 是否已经并入主应用主库。 */

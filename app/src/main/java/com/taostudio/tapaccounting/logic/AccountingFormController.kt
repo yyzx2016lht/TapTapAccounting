@@ -2157,6 +2157,19 @@ class AccountingFormController(
                         )
                     }
                 }
+                // 退款/投资转账等分支不经过带 captureId 的入账：补一条回执，
+                // 否则这笔待记会一直停在收件箱里（悬浮窗细改保存后最明显）。
+                val pendingCaptureId = captureId
+                if (pendingCaptureId != null &&
+                    db.externalImportDao().getByCaptureId(pendingCaptureId) == null
+                ) {
+                    BillMutationService.recordCaptureImport(
+                        db = db,
+                        captureId = pendingCaptureId,
+                        billId = rBill.id,
+                        requestId = requestId
+                    )
+                }
                 // 本次捕获已消费：表单可能继续留着记下一笔，不能复用同一个 captureId。
                 captureId = null
                 requestId = null

@@ -355,20 +355,6 @@
             android:grantUriPermissions="false"
             tools:ignore="ExportedContentProvider" />
 
-        <!-- P1 adb 调试：规则包重载/导入、提示模式、状态查询。 -->
-        <receiver
-            android:name=".capture.debug.CaptureDebugReceiver"
-            android:exported="true"
-            tools:ignore="ExportedReceiver">
-            <intent-filter>
-                <action android:name="com.taostudio.tapaccounting.action.CAPTURE_SET_PROMPT_MODE" />
-                <action android:name="com.taostudio.tapaccounting.action.CAPTURE_RELOAD_RULES" />
-                <action android:name="com.taostudio.tapaccounting.action.CAPTURE_IMPORT_RULES" />
-                <action android:name="com.taostudio.tapaccounting.action.CAPTURE_PING" />
-                <action android:name="com.taostudio.tapaccounting.action.CAPTURE_SIMULATE" />
-            </intent-filter>
-        </receiver>
-
         <receiver
             android:name=".capture.notify.NotificationActionReceiver"
             android:exported="false" />

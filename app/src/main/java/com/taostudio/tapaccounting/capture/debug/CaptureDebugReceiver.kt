@@ -44,6 +44,7 @@ import java.util.UUID
 class CaptureDebugReceiver : BroadcastReceiver() {
 
     override fun onReceive(context: Context?, intent: Intent?) {
+        if (!BuildConfig.DEBUG) return
         val app = context?.applicationContext ?: return
         when (intent?.action) {
             ACTION_SET_PROMPT_MODE -> {

@@ -2,7 +2,7 @@
 
 > 文档：`C:\Users\tao\.opencode\plan\flipaccounting-ai-long-task.md`
 > 编排者 session：`ses_e58a13a2dffe1cW2WQTkPXVACV`
-> 分支：`tap`
+> 分支：`test-daiji`
 
 | ID | 功能 | 状态 | 子代理 session | 最近 commit | APK 目录 | 备注 |
 |---|---|---|---|---|---|---|

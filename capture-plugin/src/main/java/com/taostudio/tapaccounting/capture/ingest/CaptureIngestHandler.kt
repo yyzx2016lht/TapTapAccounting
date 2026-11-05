@@ -86,12 +86,14 @@ internal object CaptureIngestHandler {
                             toAssetName = mappedToAsset,
                             categoryName = null,
                             status = CaptureStatus.PENDING,
+                            channel = item.channel ?: analysis.channel,
                         )
                     }
 
-                    // 先留原始事件（AutoAccounting AppDataModel 等价物）
+                    // 仅当规则命中，或者已解析出待记实体（含金额）时才落库原始事件；
+                    // 彻底避免未命中的噪声事件塞满用户事件库
                     val rawJson = payload.rawJson
-                    if (!rawJson.isNullOrBlank()) {
+                    if (!rawJson.isNullOrBlank() && (analysis.matched || enriched != null || (payload.amountCents ?: 0L) > 0L)) {
                         app.eventRepository.insert(
                             source = payload.source,
                             rawType = payload.rawType,
@@ -245,6 +247,7 @@ internal object CaptureIngestHandler {
                         if (parsed.localType != null) parsed.needsRefundLink else payload.needsRefundLink,
                     ruleVersion = AutoAccountingRuleEngine.RULE_VERSION,
                     needsAmount = false,
+                    channel = parsed.channel ?: payload.channel,
                 )
                 Log.i(
                     TAG,
@@ -309,6 +312,9 @@ internal object CaptureIngestHandler {
             ruleVersion = obj.stringOrNull("ruleVersion", "rule_version"),
             sourceAppVersion = obj.stringOrNull("sourceAppVersion", "source_app_version"),
             needsAmount = obj.booleanOrNull("needsAmount", "needs_amount") ?: (amountCents == null),
+            excludeFromStats = obj.booleanOrNull("excludeFromStats", "exclude_from_stats") ?: false,
+            channel = obj.stringOrNull("channel"),
+            groupId = obj.stringOrNull("groupId", "group_id"),
         )
     }
 

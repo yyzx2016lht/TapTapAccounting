@@ -7,6 +7,7 @@ import android.content.Intent
 import android.database.Cursor
 import android.net.Uri
 import android.os.Bundle
+import android.os.ParcelFileDescriptor
 import android.provider.Settings
 import com.taostudio.tapaccounting.AIService
 import com.taostudio.tapaccounting.BookAccountManager
@@ -67,8 +68,10 @@ class CaptureBridgeProvider : ContentProvider() {
             CaptureContract.METHOD_IMPORT_BILLS -> importBills(ctx, arg, extras)
             CaptureContract.METHOD_IMPORT_BILL_GROUP -> importBillGroup(ctx, arg, extras)
             CaptureContract.METHOD_PREVIEW_SPLIT -> previewSplit(ctx, arg, extras)
+            CaptureContract.METHOD_PREVIEW_IMAGE_SPLIT -> previewImageSplit(ctx, arg, extras)
             CaptureContract.METHOD_GET_IMPORT_STATUS -> getImportStatus(ctx, arg, extras)
             CaptureContract.METHOD_SUGGEST_RULE -> suggestRuleKeyword(ctx, arg, extras)
+            CaptureContract.METHOD_GENERATE_RULE -> generateRule(ctx, arg, extras)
             CaptureContract.METHOD_CLASSIFY_CAPTURES,
             CaptureContract.METHOD_CLASSIFY_NOTES,
             CaptureContract.METHOD_START_CLASSIFY -> classifyNotes(ctx, arg, extras)
@@ -121,9 +124,15 @@ class CaptureBridgeProvider : ContentProvider() {
         val categories = db.categoryDao().getAllCategoriesList().map {
             CategoryInfo(id = it.id, name = it.name, type = it.type, parentId = it.parentId)
         }
+        val currentBook = BookAccountManager.resolveWritableBook(
+            ctx,
+            BookAccountManager.getSelectedBook(ctx, bookNames)
+        )
+        val defaultBook = BookAccountManager.getDefaultBook(ctx, bookNames)
         val context = AccountingContext(
             contractVersion = CaptureContract.CONTRACT_VERSION,
-            defaultBookName = BookAccountManager.getDefaultBook(ctx, bookNames),
+            defaultBookName = currentBook.ifBlank { defaultBook },
+            currentBookName = currentBook.ifBlank { defaultBook },
             assetFeatureEnabled = Prefs.isAssetFeatureEnabled(ctx),
             books = books,
             assets = assets,
@@ -133,6 +142,7 @@ class CaptureBridgeProvider : ContentProvider() {
             .put("ok", true)
             .put("contractVersion", context.contractVersion)
             .put("defaultBookName", context.defaultBookName ?: JSONObject.NULL)
+            .put("currentBookName", context.currentBookName ?: JSONObject.NULL)
             .put("assetFeatureEnabled", context.assetFeatureEnabled)
             .put("books", JSONArray().apply {
                 context.books.forEach { book ->
@@ -272,9 +282,6 @@ class CaptureBridgeProvider : ContentProvider() {
         if (payload.optLong("amountCents", 0L) <= 0L) {
             return errorJson("invalid_capture_amount", "待记金额缺失，请先补金额再图片记账")
         }
-        if (Prefs.getAiKey(ctx).isBlank()) {
-            return errorJson("ai_not_configured", "请先在敲敲记账中配置 AI API Key")
-        }
 
         // 第二道幂等：已导入过就直接回执，不再打开图片选择器。
         val db = AppDatabase.getDatabase(ctx)
@@ -355,6 +362,23 @@ class CaptureBridgeProvider : ContentProvider() {
         return withTimeoutOrNull(30_000L) {
             CaptureImportService.previewSplit(ctx, payload)
         } ?: errorJson("ai_timeout", "AI 拆分超时，请重试或改备注")
+    }
+
+    /** 图片拆分预览：后台多模态解析小票并分类。 */
+    private suspend fun previewImageSplit(ctx: Context, arg: String?, extras: Bundle?): JSONObject {
+        val raw = extras?.getString(CaptureContract.EXTRA_SPLIT_PAYLOAD) ?: arg
+            ?: return errorJson("missing_split_payload", "缺少拆分 JSON")
+        val payload = try {
+            JSONObject(raw)
+        } catch (t: Throwable) {
+            return errorJson("invalid_split_payload", "拆分 JSON 不合法：${t.message}")
+        }
+        val pfd = extras?.getParcelable<ParcelFileDescriptor>(CaptureContract.EXTRA_IMAGE_PFD)
+            ?: return errorJson("missing_image", "缺少图片数据，请重新选择")
+        val mime = extras?.getString(CaptureContract.EXTRA_IMAGE_MIME) ?: "image/jpeg"
+        return withTimeoutOrNull(45_000L) {
+            CaptureImportService.previewImageSplit(ctx, pfd, mime, payload)
+        } ?: errorJson("ai_timeout", "AI 识图拆分超时，请重试或改用清晰图片")
     }
 
     /** 拆分入账：N 条账单同一 paymentGroupId，一条 captureId 回执。 */
@@ -503,6 +527,26 @@ class CaptureBridgeProvider : ContentProvider() {
             )
         }.orEmpty()
         return JSONObject().put("ok", true).put("keyword", keyword)
+    }
+
+    /** AI 自动生成记账规则：根据样本报文分析正则与字段映射。 */
+    private suspend fun generateRule(ctx: Context, arg: String?, extras: Bundle?): JSONObject {
+        val raw = extras?.getString(CaptureContract.EXTRA_GENERATE_RULE_PAYLOAD) ?: arg
+            ?: return errorJson("missing_payload", "缺少生成规则请求参数")
+        val payload = try {
+            JSONObject(raw)
+        } catch (t: Throwable) {
+            return errorJson("invalid_payload", "生成规则参数 JSON 不合法：${t.message}")
+        }
+        val app = payload.optString("app", "").trim()
+        val type = payload.optString("type", "DATA").trim()
+        val rawJson = payload.optString("rawJson", "").trim()
+        if (rawJson.isEmpty()) {
+            return errorJson("empty_raw_json", "缺少原始报文样本")
+        }
+        val result = AIService.generateAutoRule(ctx, app, type, rawJson)
+            ?: return errorJson("ai_failed", "AI 生成规则失败或超时，请检查网络与 AI 配置")
+        return JSONObject().put("ok", true).put("rule", result)
     }
 
     // ---------------- 工具 ----------------

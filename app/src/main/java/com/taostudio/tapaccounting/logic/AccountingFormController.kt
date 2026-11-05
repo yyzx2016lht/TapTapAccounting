@@ -244,6 +244,7 @@ class AccountingFormController(
     fun resetToBlankBill() {
         this.captureId = null
         this.requestId = null
+        this.formExcludeFromStats = false
         etMoney.setText("")
         spType.setSelection(0)
         tvAccount.text = ctx.getString(R.string.select_asset_dialog)
@@ -264,6 +265,7 @@ class AccountingFormController(
         scope.cancel()
     }
     private var editingBillId: Long? = null
+    private var formExcludeFromStats: Boolean = false
     private val saveLock = SaveReentryLock()
     private var isSaving: Boolean
         get() = saveLock.isLocked()
@@ -2062,7 +2064,7 @@ class AccountingFormController(
                 exchangeRate = finalRate,
                 fee = feeVal,
                 bookName = writableBook,
-                excludeFromStats = oldBill?.excludeFromStats ?: false,
+                excludeFromStats = oldBill?.excludeFromStats ?: formExcludeFromStats,
                 paymentGroupId = pendingQueuePaymentGroupId?.takeIf {
                     isProcessingPendingBillQueue && cbQueuePaymentGroup?.isChecked == true &&
                         (type == Bill.TYPE_EXPENSE || type == Bill.TYPE_INCOME) && subType == Bill.SUBTYPE_NORMAL
@@ -2653,6 +2655,11 @@ class AccountingFormController(
         }
 
         val isFromAi = json.has("original_text_from_user")
+        if (json.has("exclude_from_stats")) {
+            formExcludeFromStats = json.optBoolean("exclude_from_stats", false)
+        } else if (json.has("excludeFromStats")) {
+            formExcludeFromStats = json.optBoolean("excludeFromStats", false)
+        }
         if (isFromAi) {
             lastAiSuggestType = json.optInt("type", -1).takeIf { it != -1 }
             lastAiSuggestCategory = json.optString("category_name", json.optString("category", ""))

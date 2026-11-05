@@ -89,8 +89,12 @@ object CaptureContract {
     const val METHOD_PREVIEW_SPLIT: String = "previewSplit"
     /** 拆分入账：N 条账单共用 paymentGroupId，一条 captureId 回执。 */
     const val METHOD_IMPORT_BILL_GROUP: String = "importBillGroup"
-    /** 图片记账：带 capture 上下文打开系统图片选择器，识别后按支付组合并入账。 */
+    /** 图片拆单预览：带图片与待记上下文由 App 后台解析明细并分类，返回拆分项 JSON。 */
+    const val METHOD_PREVIEW_IMAGE_SPLIT: String = "previewImageSplit"
+    /** 图片记账（旧入口兼容）：带 capture 上下文打开系统图片选择器，识别后按支付组合并入账。 */
     const val METHOD_OPEN_IMAGE_ACCOUNTING: String = "openImageAccounting"
+    /** AI 生成自动记账规则：基于样本原始报文提取通用正则与字段映射。 */
+    const val METHOD_GENERATE_RULE: String = "generateRule"
 
     /** App -> 插件：查询待记数量与待记列表（signature 权限或同签名调用）。 */
     const val METHOD_GET_PENDING_COUNT: String = "getPendingCount"
@@ -117,6 +121,12 @@ object CaptureContract {
     const val EXTRA_BILL_GROUP_PAYLOAD: String = "billGroupPayload"
     /** `openImageAccounting` 的 JSON：amountCents/assetId/assetName/paidAt/bookName/type/subType/currency 等。 */
     const val EXTRA_CAPTURE_PAYLOAD: String = "capturePayload"
+    /** `previewImageSplit` 传递图片的 ParcelFileDescriptor。 */
+    const val EXTRA_IMAGE_PFD: String = "imagePfd"
+    /** `previewImageSplit` 图片的 MIME 类型。 */
+    const val EXTRA_IMAGE_MIME: String = "imageMime"
+    /** `generateRule` 的请求 JSON：{app, type, rawJson}。 */
+    const val EXTRA_GENERATE_RULE_PAYLOAD: String = "generateRulePayload"
 
     // ---- App -> 插件：广播 ----
     const val ACTION_PENDING_COUNT_CHANGED: String = "$PLUGIN_PACKAGE.action.PENDING_COUNT_CHANGED"

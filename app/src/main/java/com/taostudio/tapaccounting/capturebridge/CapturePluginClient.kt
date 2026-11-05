@@ -243,11 +243,30 @@ object CapturePluginClient {
         method: String,
         arg: String?,
         extras: Bundle?,
-    ): JSONObject? = try {
-        val bundle = context.applicationContext.contentResolver.call(pluginUri, method, arg, extras)
-        val raw = bundle?.getString(CaptureContract.ACK_RESULT)?.trim()?.takeIf { it.isNotEmpty() }
-        raw?.let { JSONObject(it) }
-    } catch (_: Throwable) {
-        null
+    ): JSONObject? {
+        val appCtx = context.applicationContext
+        var result = runCatching {
+            val bundle = appCtx.contentResolver.call(pluginUri, method, arg, extras)
+            val raw = bundle?.getString(CaptureContract.ACK_RESULT)?.trim()?.takeIf { it.isNotEmpty() }
+            raw?.let { JSONObject(it) }
+        }.getOrNull()
+
+        if (result == null && isPluginInstalled(appCtx)) {
+            // 插件可能被系统后台休眠冻结，发送前台唤醒广播并短暂重试一次
+            runCatching {
+                val wakeIntent = android.content.Intent(CaptureContract.ACTION_WAKE_INGEST).apply {
+                    setPackage(CaptureContract.PLUGIN_PACKAGE)
+                    addFlags(android.content.Intent.FLAG_INCLUDE_STOPPED_PACKAGES or android.content.Intent.FLAG_RECEIVER_FOREGROUND)
+                }
+                appCtx.sendBroadcast(wakeIntent)
+                Thread.sleep(120L)
+            }
+            result = runCatching {
+                val bundle = appCtx.contentResolver.call(pluginUri, method, arg, extras)
+                val raw = bundle?.getString(CaptureContract.ACK_RESULT)?.trim()?.takeIf { it.isNotEmpty() }
+                raw?.let { JSONObject(it) }
+            }.getOrNull()
+        }
+        return result
     }
 }

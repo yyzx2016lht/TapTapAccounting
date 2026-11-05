@@ -17,6 +17,7 @@ import com.taostudio.tapaccounting.capture.contract.CaptureStatus
         Index(value = ["status"]),
         Index(value = ["paidAt"]),
         Index(value = ["source", "sourceTxnId"]),
+        Index(value = ["groupId"]),
     ],
 )
 data class PaymentCapture(
@@ -50,10 +51,17 @@ data class PaymentCapture(
     /** 用户勾选“拆分记账”；只影响插件入账分支，false 时永远按一笔入账。 */
     @ColumnInfo(defaultValue = "0")
     val splitRequested: Boolean = false,
+    /** 是否不计入收支统计。 */
+    @ColumnInfo(defaultValue = "0")
+    val excludeFromStats: Boolean = false,
     val needsAmount: Boolean = false,
     val rawJson: String? = null,
     val ruleVersion: String? = null,
     val sourceAppVersion: String? = null,
+    /** 父账单 id；若当前记录被判定为重复并合并进另一条账单，此字段记录父账单 id。 */
+    val groupId: String? = null,
+    /** 来源渠道与合并记录描述（如 "微信支付" 或 "微信支付 + 招商银行短信"）。 */
+    val channel: String? = null,
     val createdAt: Long,
     val updatedAt: Long,
 )

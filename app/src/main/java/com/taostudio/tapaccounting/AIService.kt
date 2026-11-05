@@ -69,6 +69,7 @@ object AIService {
     private const val CATEGORY_CLASSIFY_BATCH_TIMEOUT_MS = 25_000L
     /** 文字拆分只做一次轻量解析；超时由调用方提示改备注或重试。 */
     private const val SPLIT_PREVIEW_TIMEOUT_MS = 20_000L
+    private const val IMAGE_SPLIT_PREVIEW_TIMEOUT_MS = 35_000L
     /** 规则关键词只是后台副作用，超时就留给插件下次启动补跑。 */
     private const val RULE_KEYWORD_TIMEOUT_MS = 10_000L
     private const val DEFAULT_CUSTOM_REPLY_STYLE_GUIDE =
@@ -1230,6 +1231,133 @@ object AIService {
         return SplitAmounts.normalizeYuanAmounts(totalCents, items)
     }
 
+    data class ImageSplitRawItem(
+        val name: String,
+        val amountCents: Long? = null,
+        val category: String? = null,
+    )
+
+    /**
+     * 图片拆单：多模态 AI 提取小票/订单中的商品名、折后实付净额与分类。
+     *
+     * 提示词参照主 App 识图逻辑（小票商品提取、同名合并、实付净额），但只做条目拆分与分类，
+     * 资产/时间/账本/币种等字段沿用 capture 上下文。
+     */
+    suspend fun splitImageItems(
+        ctx: Context,
+        imageBase64: String,
+        mimeType: String = "image/jpeg",
+        totalCents: Long,
+        billType: Int,
+        categories: List<Category>,
+    ): List<ImageSplitRawItem> {
+        if (imageBase64.isBlank()) {
+            throw SplitPreviewException("split_empty", "图片数据为空")
+        }
+        if (billType != Bill.TYPE_EXPENSE && billType != Bill.TYPE_INCOME) {
+            throw SplitPreviewException("split_unsupported_type", "转账/还款/退款不支持图片拆分")
+        }
+        if (totalCents <= 0L) {
+            throw SplitPreviewException("invalid_total", "付款金额无效，无法拆分")
+        }
+
+        val apiKey = Prefs.getAiKey(ctx)
+        if (apiKey.isBlank()) {
+            throw SplitPreviewException("ai_not_configured", "请先在敲敲记账中配置 AI API Key")
+        }
+        val model = AiModelSlots.resolveVisionModel(ctx).ifBlank { AiModelSlots.resolveTextModel(ctx) }
+        if (model.isBlank()) {
+            throw SplitPreviewException("ai_not_configured", "请先在敲敲记账中配置视觉模型")
+        }
+
+        val candidates = categories.filter { it.type == billType }
+        val typeLabel = if (billType == Bill.TYPE_EXPENSE) "支出" else "收入"
+        val userPrompt = buildString {
+            append("付款总额（分）：").append(totalCents).append('\n')
+            append("账单类型：").append(typeLabel).append('\n')
+            append("【分类候选】\n")
+            append(candidates.joinToString("\n") { it.name })
+        }
+
+        val dataUrl = "data:$mimeType;base64,$imageBase64"
+        val requestJson = buildVisionChatRequest(
+            model = model,
+            temperature = 0.1,
+            systemPrompt = AIPrompts.IMAGE_SPLIT_PROMPT_DEFAULT,
+            dataUrl = dataUrl,
+            userText = userPrompt,
+            jsonObjectResponse = true,
+            enableThinking = enableThinkingForVision(ctx),
+        )
+
+        val content = try {
+            withTimeoutOrNull(IMAGE_SPLIT_PREVIEW_TIMEOUT_MS) {
+                val streamed = requestChatContentStreamedWithReasoning(
+                    ctx = ctx,
+                    apiKey = apiKey,
+                    requestJson = requestJson,
+                    logReasoning = enableThinkingForVision(ctx),
+                    reasoningLogTag = RECEIPT_VISION_LOG_TAG,
+                )
+                if (!streamed.completed && streamed.content.isBlank()) {
+                    throw streamed.parseError ?: streamed.transportError
+                        ?: IllegalStateException("图片识别流式回复未完整结束")
+                }
+                streamed.content.trim()
+            }
+        } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+            Logger.dPriv(
+                ctx,
+                "AIService",
+                "splitImageItems failed: errType=${e.javaClass.simpleName}",
+                "Split image failure detail=${detailedHttpError(e)}",
+            )
+            throw SplitPreviewException("split_ai_failed", "AI 识图拆分失败，请检查 AI 设置或改用清晰图片")
+        }
+
+        if (content == null) {
+            Logger.d(ctx, CATEGORY_CLASSIFY_LOG_TAG, "splitImageItems timeout after ${IMAGE_SPLIT_PREVIEW_TIMEOUT_MS}ms")
+            throw SplitPreviewException("ai_timeout", "AI 识图拆分超时，请重试或换一张清晰图片")
+        }
+        if (content.isBlank()) {
+            throw SplitPreviewException("split_ai_failed", "AI 没有返回拆分结果，请重试")
+        }
+
+        val jsonText = extractFirstJsonObjectText(cleanJsonString(content))
+        val root = runCatching { jsonText?.let { JSONObject(it) } }.getOrNull()
+            ?: throw SplitPreviewException("split_ai_failed", "AI 返回的不是有效 JSON，请重试")
+        val arr = root.optJSONArray("items")
+            ?: throw SplitPreviewException("split_ai_failed", "AI 没有返回条目列表，请重试")
+
+        val rawItems = buildList {
+            for (i in 0 until arr.length()) {
+                val obj = arr.optJSONObject(i) ?: continue
+                val name = obj.optString("name", "").trim()
+                if (name.isEmpty()) continue
+                val cat = obj.optString("category", "").trim().takeIf { it.isNotEmpty() }
+                add(
+                    ImageSplitRawItem(
+                        name = name,
+                        amountCents = obj.optAmountCents("amountCents"),
+                        category = cat,
+                    )
+                )
+            }
+        }
+        if (rawItems.isEmpty()) {
+            throw SplitPreviewException("split_empty", "未能从图片识别出有效消费条目，请确认图片是否包含商品明细")
+        }
+
+        val normalizedAmounts = SplitAmounts.normalizeYuanAmounts(
+            totalCents,
+            rawItems.map { SplitAmounts.RawItem(it.name, it.amountCents) },
+        )
+        return rawItems.mapIndexed { index, item ->
+            item.copy(amountCents = normalizedAmounts.getOrNull(index)?.amountCents ?: item.amountCents)
+        }
+    }
+
     private fun JSONObject.optAmountCents(key: String): Long? {
         if (!has(key) || isNull(key)) return null
         return when (val value = opt(key)) {
@@ -1318,6 +1446,64 @@ object AIService {
             "suggestRuleKeyword: noteLen=${cleanNote.length}, category=$cleanCategory, result=${keyword.ifEmpty { "none" }}"
         )
         return keyword
+    }
+
+    /**
+     * AI 生成自动记账规则：基于 Hook 原始事件报文，生成正则规则表单 JSON。
+     */
+    suspend fun generateAutoRule(
+        ctx: Context,
+        app: String,
+        type: String,
+        rawJson: String,
+    ): JSONObject? {
+        val cleanRaw = rawJson.trim()
+        if (cleanRaw.isEmpty()) return null
+
+        val apiKey = Prefs.getAiKey(ctx)
+        if (apiKey.isBlank()) return null
+        val model = AiModelSlots.resolveTextModel(ctx)
+        if (model.isBlank()) return null
+
+        val userPrompt = buildString {
+            append("应用包名：").append(app).append('\n')
+            append("事件类型：").append(type).append('\n')
+            append("原始报文 JSON：\n").append(cleanRaw.take(4000))
+        }
+
+        val content = try {
+            withTimeoutOrNull(25_000L) {
+                val requestJson = buildTextChatRequest(
+                    model = model,
+                    temperature = 0.1,
+                    systemPrompt = AIPrompts.AUTOACCOUNTING_RULE_GENERATE_PROMPT,
+                    userText = userPrompt,
+                    jsonObjectResponse = true,
+                    enableThinking = false,
+                )
+                val response = getApi(ctx).chatRaw(
+                    "Bearer $apiKey",
+                    adaptChatRequestForProvider(Prefs.getAiProvider(ctx), requestJson),
+                )
+                response.choices.firstOrNull()?.message?.content?.trim().orEmpty()
+            }
+        } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+            Logger.dPriv(
+                ctx,
+                "AIService",
+                "generateAutoRule failed: errType=${e.javaClass.simpleName}",
+                "Rule generate failure detail=${detailedHttpError(e)}",
+            )
+            return null
+        }
+        if (content.isNullOrBlank()) {
+            Logger.d(ctx, "AIService", "generateAutoRule timeout after 25s")
+            return null
+        }
+
+        val jsonText = extractFirstJsonObjectText(cleanJsonString(content))
+        return runCatching { jsonText?.let { JSONObject(it) } }.getOrNull()
     }
 
     private fun buildCategoryClassifyUserPrompt(

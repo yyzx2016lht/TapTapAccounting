@@ -63,6 +63,11 @@ internal object CaptureForwarder {
         val raw = rawJson.trim()
         if (raw.isEmpty()) return
 
+        // 核心兜底过滤：非明确金额且不含记账关键词的内容一律不投递（杜绝唤醒与落库开销）
+        if (amountCents == null && !DataFilter.matches(raw) && !DataFilter.matches(merchant)) {
+            return
+        }
+
         val now = System.currentTimeMillis()
         val dedupKey = md5(raw)
         if (!markSeen(dedupKey, now)) {

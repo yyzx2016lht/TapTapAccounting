@@ -12,8 +12,59 @@ interface CaptureEventDao {
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertIgnore(event: CaptureEvent): Long
 
+    @Query("""
+        UPDATE capture_events
+        SET matched = :matched,
+            ruleName = :ruleName,
+            autoType = :autoType,
+            localType = :localType,
+            localSubType = :localSubType,
+            amountCents = :amountCents,
+            merchant = :merchant,
+            channel = :channel
+        WHERE id = :id
+    """)
+    suspend fun updateMatchResult(
+        id: Long,
+        matched: Boolean,
+        ruleName: String?,
+        autoType: String?,
+        localType: Int?,
+        localSubType: Int?,
+        amountCents: Long?,
+        merchant: String?,
+        channel: String?,
+    )
+
+    @Query("""
+        UPDATE capture_events
+        SET matched = :matched,
+            ruleName = :ruleName,
+            autoType = :autoType,
+            localType = :localType,
+            localSubType = :localSubType,
+            amountCents = :amountCents,
+            merchant = :merchant,
+            channel = :channel
+        WHERE rawHash = :rawHash
+    """)
+    suspend fun updateMatchResultByHash(
+        rawHash: String,
+        matched: Boolean,
+        ruleName: String?,
+        autoType: String?,
+        localType: Int?,
+        localSubType: Int?,
+        amountCents: Long?,
+        merchant: String?,
+        channel: String?,
+    )
+
     @Query("SELECT * FROM capture_events ORDER BY receivedAt DESC, id DESC LIMIT :limit")
     suspend fun listRecent(limit: Int): List<CaptureEvent>
+
+    @Query("SELECT * FROM capture_events WHERE matched = 0 ORDER BY receivedAt DESC, id DESC LIMIT :limit")
+    suspend fun listUnmatched(limit: Int): List<CaptureEvent>
 
     @Query("SELECT COUNT(*) FROM capture_events")
     suspend fun count(): Int

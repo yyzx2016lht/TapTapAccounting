@@ -173,14 +173,28 @@ internal object SystemNotificationHooker {
         if (normalizedPkg.isEmpty() || normalizedPkg !in WHITELIST) return
 
         val extras = notification.extras ?: return
-        val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString().orEmpty()
+        val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString().orEmpty().trim()
         val text = (
             extras.getCharSequence(Notification.EXTRA_BIG_TEXT)
                 ?: extras.getCharSequence(Notification.EXTRA_TEXT)
                 ?: extras.getCharSequence(Notification.EXTRA_SUB_TEXT)
                 ?: ""
-            ).toString()
+            ).toString().trim()
         if (title.isEmpty() && text.isEmpty()) return
+
+        // 1. 微信通知专用拦截：只允许官方微信支付、转账、零钱入账通知，100% 阻断普通聊天与群聊
+        if (normalizedPkg == "com.tencent.mm") {
+            if (!DataFilter.isWechatNoticeAllowed(title, text)) {
+                return
+            }
+        }
+
+        // 2. 通用账单关键词白名单（等价于 AutoAccounting DATA_FILTER）：
+        // 排除营销通知、快递物流、外卖骑手进度等不含动账金额的通知
+        val combined = "$title $text"
+        if (!DataFilter.matches(combined)) {
+            return
+        }
 
         val key = md5("$normalizedPkg|$title|$text")
         if (!markSeen(key)) {

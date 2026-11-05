@@ -3,6 +3,7 @@ package com.taostudio.tapaccounting
 import android.app.Activity
 import android.content.Context
 import android.content.Intent
+import android.graphics.Color
 import android.graphics.PixelFormat
 import android.net.Uri
 import android.os.Build
@@ -11,6 +12,7 @@ import android.os.Looper
 import android.os.SystemClock
 import android.provider.Settings
 import android.view.Gravity
+import android.view.HapticFeedbackConstants
 import android.view.LayoutInflater
 import android.view.MotionEvent
 import android.view.View
@@ -925,17 +927,65 @@ class AiAssistant(private val ctx: Context) {
 
     // ── 常驻小圆 ────────────────────────────────────────────
     private fun canUseFloatingBubble(): Boolean {
+        // 应用内弹窗（Activity 上下文）不缩小为桌面小圆，只在系统悬浮窗服务（OverlayService）中使用
         if (ctx is Activity) return false
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return true
         return Settings.canDrawOverlays(ctx)
     }
 
+    private var dismissZoneView: View? = null
+    private var isBubbleInDismissZone: Boolean = false
+
+    private fun ensureDismissZone(wm: WindowManager) {
+        if (dismissZoneView != null) return
+        val zone = TextView(ContextThemeWrapper(ctx.applicationContext, R.style.Theme_TapAccounting)).apply {
+            text = "✕ 拖到此处关闭"
+            setTextColor(Color.WHITE)
+            textSize = 13f
+            gravity = Gravity.CENTER
+            val bg = android.graphics.drawable.GradientDrawable().apply {
+                setColor(Color.parseColor("#E6EF4444"))
+                cornerRadius = dp(24).toFloat()
+            }
+            background = bg
+            setPadding(dp(20), dp(10), dp(20), dp(10))
+            elevation = dp(8).toFloat()
+        }
+        val params = WindowManager.LayoutParams().apply {
+            width = WindowManager.LayoutParams.WRAP_CONTENT
+            height = WindowManager.LayoutParams.WRAP_CONTENT
+            type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+            } else {
+                @Suppress("DEPRECATION")
+                WindowManager.LayoutParams.TYPE_PHONE
+            }
+            flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
+            format = PixelFormat.TRANSLUCENT
+            gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
+            y = dp(40)
+            windowAnimations = 0
+        }
+        runCatching {
+            wm.addView(zone, params)
+            dismissZoneView = zone
+        }
+    }
+
+    private fun removeDismissZone(wm: WindowManager) {
+        val zone = dismissZoneView ?: return
+        dismissZoneView = null
+        isBubbleInDismissZone = false
+        runCatching { wm.removeView(zone) }
+    }
+
     private fun showMiniBubble(): Boolean {
         if (miniBubble != null) return true
         if (!canUseFloatingBubble()) return false
-        val wm = ctx.getSystemService(Context.WINDOW_SERVICE) as? WindowManager ?: return false
+        val wm = ctx.applicationContext.getSystemService(Context.WINDOW_SERVICE) as? WindowManager ?: return false
         val size = dp(MINI_BUBBLE_SIZE_DP)
-        val bubble = LayoutInflater.from(ContextThemeWrapper(ctx, R.style.Theme_TapAccounting))
+        val bubble = LayoutInflater.from(ContextThemeWrapper(ctx.applicationContext, R.style.Theme_TapAccounting))
             .inflate(R.layout.layout_ai_mini_bubble, null)
         miniBubbleBadge = bubble.findViewById(R.id.view_ai_mini_bubble_badge)
 
@@ -985,6 +1035,9 @@ class AiAssistant(private val ctx: Context) {
         miniBubble = null
         miniBubbleWindowManager = null
         miniBubbleBadge = null
+        if (wm != null) {
+            removeDismissZone(wm)
+        }
         if (bubble != null) {
             bubble.animate().cancel()
             runCatching { wm?.removeView(bubble) }
@@ -1043,11 +1096,38 @@ class AiAssistant(private val ctx: Context) {
                     params.x = (bubbleTouchStartX + dx.toInt()).coerceIn(0, maxBubbleX(params.width))
                     params.y = (bubbleTouchStartY + dy.toInt()).coerceIn(0, maxBubbleY(params.height))
                     runCatching { wm.updateViewLayout(bubble, params) }
+
+                    ensureDismissZone(wm)
+                    val screenHeight = ctx.resources.displayMetrics.heightPixels
+                    val inZone = event.rawY >= screenHeight * 0.80f
+                    if (inZone != isBubbleInDismissZone) {
+                        isBubbleInDismissZone = inZone
+                        if (inZone) {
+                            bubble.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+                            dismissZoneView?.apply {
+                                scaleX = 1.15f
+                                scaleY = 1.15f
+                                (this as? TextView)?.text = "✕ 松手即可关闭"
+                            }
+                        } else {
+                            dismissZoneView?.apply {
+                                scaleX = 1.0f
+                                scaleY = 1.0f
+                                (this as? TextView)?.text = "✕ 拖到此处关闭"
+                            }
+                        }
+                    }
                 }
                 return true
             }
 
             MotionEvent.ACTION_UP -> {
+                val releasedInDismiss = isBubbleInDismissZone
+                removeDismissZone(wm)
+                if (releasedInDismiss) {
+                    closePanel()
+                    return true
+                }
                 if (bubbleTouchMoved) {
                     snapBubbleToEdge(bubble, params, wm)
                 } else if (SystemClock.uptimeMillis() - bubbleTouchDownAtMs <
@@ -1059,7 +1139,10 @@ class AiAssistant(private val ctx: Context) {
                 return true
             }
 
-            MotionEvent.ACTION_CANCEL -> return true
+            MotionEvent.ACTION_CANCEL -> {
+                removeDismissZone(wm)
+                return true
+            }
         }
         return false
     }

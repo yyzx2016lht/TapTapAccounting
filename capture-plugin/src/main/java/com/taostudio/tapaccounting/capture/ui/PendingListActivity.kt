@@ -9,6 +9,7 @@ import android.graphics.Typeface
 import android.os.Build
 import android.os.Bundle
 import android.text.Editable
+import android.text.InputType
 import android.text.TextUtils
 import android.text.TextWatcher
 import android.view.Gravity
@@ -18,6 +19,7 @@ import android.view.inputmethod.EditorInfo
 import android.widget.CheckBox
 import android.widget.EditText
 import android.widget.FrameLayout
+import android.widget.HorizontalScrollView
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
@@ -28,6 +30,7 @@ import com.taostudio.tapaccounting.capture.bridge.CaptureNoteClassifier
 import com.taostudio.tapaccounting.capture.bridge.CaptureReconciler
 import com.taostudio.tapaccounting.capture.bridge.RuleLearningManager
 import com.taostudio.tapaccounting.capture.contract.AccountingContext
+import com.taostudio.tapaccounting.capture.contract.CaptureContract
 import com.taostudio.tapaccounting.capture.contract.CapturePayload
 import com.taostudio.tapaccounting.capture.contract.CaptureSource
 import com.taostudio.tapaccounting.capture.contract.CaptureSources
@@ -75,7 +78,11 @@ class PendingListActivity : Activity() {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val bridge by lazy { CaptureBridgeClient(this) }
-    private val ruleViews by lazy { RuleMappingViews(this, scope) { load() } }
+    private val ruleViews by lazy {
+        RuleMappingViews(this, scope) { load() }.apply {
+            onSyncDataRules = { dataRuleViews.syncFromLocal() }
+        }
+    }
     private val dataRuleViews by lazy {
         DataRuleViews(
             activity = this,
@@ -96,6 +103,8 @@ class PendingListActivity : Activity() {
     private var ignoredExpanded = false
     private var pendingExportJson: String? = null
     private val noteSaveJobs = mutableMapOf<String, Job>()
+    private val splitDrafts = mutableMapOf<String, MutableList<CaptureBridgeClient.SplitItem>>()
+    private var skipNextResumeLoad = false
 
     private lateinit var bridgeDot: View
     private lateinit var bridgeBadge: TextView
@@ -112,6 +121,10 @@ class PendingListActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
+        if (skipNextResumeLoad) {
+            skipNextResumeLoad = false
+            return
+        }
         load()
     }
 
@@ -151,7 +164,7 @@ class PendingListActivity : Activity() {
             setTextColor(CaptureUi.TEXT_PRIMARY)
         })
         titleBlock.addView(TextView(this).apply {
-            text = "${CaptureSources.all.joinToString(" · ") { it.displayName }}收件箱与规则工作台"
+            text = "待记账单收件箱与规则工作台"
             textSize = 11.5f
             setTextColor(CaptureUi.TEXT_MUTED)
             setPadding(0, dp(1), 0, 0)
@@ -246,9 +259,10 @@ class PendingListActivity : Activity() {
                 val db = app.database
                 val snapshot = withContext(Dispatchers.IO) {
                     CaptureRuleMatcher.ensureSeeded(this@PendingListActivity)
+                    val dedupChanged = repository.deduplicatePendingItems()
                     val allItems = repository.list(200)
                     val changed = CaptureReconciler.reconcile(repository, bridge, allItems)
-                    val refreshed = if (changed > 0) repository.list(200) else allItems
+                    val refreshed = if (changed > 0 || dedupChanged > 0) repository.list(200) else allItems
                     val onlyExpense = CapturePrefs.isOnlyExpense(this@PendingListActivity)
                     val pendingItems = refreshed.filter { item ->
                         item.status in CaptureStatus.PENDING_COUNT_STATUSES &&
@@ -313,6 +327,7 @@ class PendingListActivity : Activity() {
                 onSimulateExpense = { simulateCapture() },
                 onSimulateWcdb = { simulateWcdbSamples() },
                 onTestRuleSamples = { parseSamples() },
+                onCustomSimulateExpense = { showCustomSimulateDialog() },
             )
         }
         bodyFrame.addView(view)
@@ -683,13 +698,18 @@ class PendingListActivity : Activity() {
         emptyCard.addView(
             CaptureUi.button(
                 activity = this,
-                text = "+ 模拟一笔示例支出 (¥3.00)",
+                text = "+ 模拟一笔示例支出 (长按自定义金额)",
                 textColor = CaptureUi.BRAND_DARK,
                 bgColor = CaptureUi.BRAND_SOFT,
                 strokeColor = CaptureUi.BRAND_BORDER,
                 paddingH = 18,
                 paddingV = 10,
-            ) { simulateCapture() }
+            ) { simulateCapture() }.apply {
+                setOnLongClickListener {
+                    showCustomSimulateDialog()
+                    true
+                }
+            }
         )
         return emptyCard
     }
@@ -811,6 +831,40 @@ class PendingListActivity : Activity() {
             })
         }
 
+        if (item.excludeFromStats) {
+            topRow.addView(TextView(this).apply {
+                text = "不计统计"
+                textSize = 10.5f
+                setTypeface(typeface, Typeface.BOLD)
+                setTextColor(Color.parseColor("#B45309"))
+                setPadding(dp(6), dp(2), dp(6), dp(2))
+                background = CaptureUi.roundedBg(Color.parseColor("#FEF3C7"), dp(6), dp(1), Color.parseColor("#FDE68A"))
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                ).apply { marginEnd = dp(6) }
+            })
+        }
+
+        val isMerged = item.channel?.contains("+") == true
+        if (isMerged) {
+            topRow.addView(TextView(this).apply {
+                text = "多渠道合并"
+                textSize = 10.5f
+                setTypeface(typeface, Typeface.BOLD)
+                setTextColor(Color.parseColor("#2563EB"))
+                setPadding(dp(6), dp(2), dp(6), dp(2))
+                background = CaptureUi.roundedBg(Color.parseColor("#EFF6FF"), dp(6), dp(1), Color.parseColor("#BFDBFE"))
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                ).apply { marginEnd = dp(6) }
+                setOnClickListener {
+                    showMergedDetailsDialog(item)
+                }
+            })
+        }
+
         val amountPrefix = when {
             isIncome || isRefund -> "+"
             isTransfer -> ""
@@ -824,12 +878,13 @@ class PendingListActivity : Activity() {
         })
         card.addView(topRow)
 
-        // 第二行：可点击【资产 Chip】+【分类 Chip】（实时更新 UI 引用）
-        val chipRow = LinearLayout(this).apply {
+        // 第二行：【账户 Chip】+【分类 Chip】
+        val chipRow1 = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(0, dp(10), 0, dp(8))
+            setPadding(0, dp(8), 0, dp(4))
         }
+
         val mappedAsset = item.assetName
         val rawChannel = item.paymentMethodRaw
         val hasAsset = !mappedAsset.isNullOrBlank()
@@ -847,7 +902,7 @@ class PendingListActivity : Activity() {
         ) {
             showAssetPickerDialog(item, ctx)
         }
-        chipRow.addView(
+        chipRow1.addView(
             assetChip,
             LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
                 marginEnd = dp(8)
@@ -875,8 +930,98 @@ class PendingListActivity : Activity() {
             showCategoryPickerDialog(item, ctx)
         }
         styleCategoryChip(categoryChip, currentCategory)
-        chipRow.addView(categoryChip)
-        card.addView(chipRow)
+        categoryChip.visibility = if (item.splitRequested) View.GONE else View.VISIBLE
+        chipRow1.addView(categoryChip)
+        card.addView(chipRow1)
+
+        // 第三行：【账本 Chip】+【不计入统计 Chip】
+        val chipRow2 = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(0, dp(2), 0, dp(8))
+        }
+
+        var currentBook = item.bookName?.takeIf { it.isNotBlank() }
+            ?: ctx?.currentBookName?.takeIf { it.isNotBlank() }
+            ?: ctx?.defaultBookName?.takeIf { it.isNotBlank() }
+            ?: "日常账本"
+        fun styleBookChip(tv: TextView, book: String) {
+            tv.text = "账本 · $book ▾"
+            tv.setTextColor(CaptureUi.TEXT_SECONDARY)
+            tv.background = CaptureUi.rippleBg(
+                fillColor = CaptureUi.BG_SUBTLE,
+                radiusPx = dp(8),
+                strokeWidthPx = dp(1),
+                strokeColor = CaptureUi.BORDER,
+            )
+        }
+        lateinit var bookChip: TextView
+        bookChip = CaptureUi.chip(
+            activity = this,
+            text = "",
+            textColor = CaptureUi.TEXT_SECONDARY,
+            bgColor = CaptureUi.BG_SUBTLE,
+        ) {
+            showBookPickerDialog(item, ctx) { selectedBook ->
+                currentBook = selectedBook
+                styleBookChip(bookChip, selectedBook)
+            }
+        }
+        styleBookChip(bookChip, currentBook)
+        chipRow2.addView(
+            bookChip,
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                marginEnd = dp(8)
+            },
+        )
+
+        var currentExcludeStats = item.excludeFromStats
+        val excludeStatsChip = TextView(this).apply {
+            textSize = 12f
+            setPadding(dp(10), dp(5), dp(10), dp(5))
+        }
+        fun styleExcludeStatsChip(tv: TextView, excluded: Boolean) {
+            if (excluded) {
+                tv.text = "🚫 不计统计"
+                tv.setTextColor(Color.parseColor("#B45309"))
+                tv.background = CaptureUi.rippleBg(
+                    fillColor = Color.parseColor("#FEF3C7"),
+                    radiusPx = dp(8),
+                    strokeWidthPx = dp(1),
+                    strokeColor = Color.parseColor("#FDE68A"),
+                )
+            } else {
+                tv.text = "不计统计"
+                tv.setTextColor(CaptureUi.TEXT_MUTED)
+                tv.background = CaptureUi.rippleBg(
+                    fillColor = CaptureUi.BG_SUBTLE,
+                    radiusPx = dp(8),
+                    strokeWidthPx = dp(1),
+                    strokeColor = CaptureUi.BORDER,
+                )
+            }
+        }
+        styleExcludeStatsChip(excludeStatsChip, currentExcludeStats)
+        excludeStatsChip.setOnClickListener {
+            currentExcludeStats = !currentExcludeStats
+            styleExcludeStatsChip(excludeStatsChip, currentExcludeStats)
+            scope.launch {
+                withContext(Dispatchers.IO) {
+                    CaptureApp.from(this@PendingListActivity).repository
+                        .updateExcludeFromStats(item.id, currentExcludeStats)
+                }
+            }
+            if (currentExcludeStats) {
+                toast("已设为「不计入统计」")
+            } else {
+                toast("已恢复为计入统计")
+            }
+        }
+        chipRow2.addView(
+            excludeStatsChip,
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT),
+        )
+        card.addView(chipRow2)
 
         // 第三行：无感自动保存备注框（打字 280ms 只落库并匹配本地规则；AI 只在失焦/完成时调一次）
         var aiRequestedFor: String? = null
@@ -915,7 +1060,40 @@ class PendingListActivity : Activity() {
 
         fun triggerAiClassify() {
             val note = noteInput.text?.toString()?.trim().orEmpty()
-            if (note.isEmpty() || !currentCategory.isNullOrBlank()) return
+            if (note.isEmpty()) return
+            if (!currentCategory.isNullOrBlank()) {
+                scope.launch {
+                    val matched = withContext(Dispatchers.IO) {
+                        CaptureRuleMatcher.resolveNoteCategory(this@PendingListActivity, note)
+                    }
+                    if (matched != null && matched != currentCategory) {
+                        AlertDialog.Builder(this@PendingListActivity)
+                            .setTitle("发现匹配分类规则")
+                            .setMessage("备注「$note」命中分类规则「$matched」，是否替换当前分类「$currentCategory」？")
+                            .setPositiveButton("替换为 $matched") { _, _ ->
+                                scope.launch {
+                                    val updated = withContext(Dispatchers.IO) {
+                                        CaptureApp.from(this@PendingListActivity).repository.updateDraft(
+                                            context = this@PendingListActivity,
+                                            id = item.id,
+                                            note = note,
+                                            assetName = item.assetName,
+                                            categoryName = matched,
+                                            categorySource = CategorySource.RULE,
+                                        )
+                                    }
+                                    if (updated != null) {
+                                        currentCategory = matched
+                                        styleCategoryChip(categoryChip, currentCategory)
+                                    }
+                                }
+                            }
+                            .setNegativeButton("保留原分类", null)
+                            .show()
+                    }
+                }
+                return
+            }
             if (aiRequestedFor == note) return
             aiRequestedFor = note
             scope.launch {
@@ -957,41 +1135,366 @@ class PendingListActivity : Activity() {
         }
         card.addView(noteInput)
 
-        // 备注框下的“拆分记账”：只有勾选时才走 previewSplit；不勾选永远一笔。
-        var splitRequested = item.splitRequested
+        // 备注框下的“拆分记账”工作区
+        val splitSubItems = splitDrafts.getOrPut(item.id) { mutableListOf() }
+        var splitRequested = item.splitRequested || splitSubItems.isNotEmpty()
         val splitBox = CheckBox(this).apply {
-            text = "拆分记账（按备注拆成多条明细）"
+            text = "拆分记账（按多条明细分别归类入账）"
             textSize = 12f
             setTextColor(CaptureUi.TEXT_SECONDARY)
-            isChecked = item.splitRequested
+            isChecked = splitRequested
             setPadding(dp(2), dp(6), 0, 0)
         }
         card.addView(splitBox)
 
-        // 图片记账入口：小票/截图交给 App 识别，确认后按同一支付组入账。
-        val imageRow = LinearLayout(this).apply {
+        val splitWorkArea = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            visibility = if (splitRequested) View.VISIBLE else View.GONE
+            setPadding(0, dp(6), 0, dp(4))
+        }
+
+        val splitActionsRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(0, dp(6), 0, 0)
+            setPadding(0, dp(2), 0, dp(6))
         }
-        imageRow.addView(
-            CaptureUi.chip(
-                activity = this,
-                text = "图片记账（小票/截图）",
-                textColor = CaptureUi.BRAND_DARK,
-                bgColor = CaptureUi.BRAND_SOFT,
-                strokeColor = CaptureUi.BRAND_BORDER,
-            ) {
-                val draftNote = noteInput.text?.toString()?.trim().orEmpty()
-                openImageAccounting(
-                    item.copy(
-                        note = draftNote.ifBlank { item.note },
-                        categoryName = currentCategory ?: item.categoryName,
+        splitWorkArea.addView(splitActionsRow)
+
+        val subItemsContainer = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+        }
+        splitWorkArea.addView(subItemsContainer)
+
+        val splitSummaryText = TextView(this).apply {
+            textSize = 12f
+            setTextColor(CaptureUi.TEXT_SECONDARY)
+            setPadding(0, dp(4), 0, dp(4))
+        }
+        splitWorkArea.addView(splitSummaryText)
+
+        var primaryButton: TextView? = null
+        var btnAddAdjustment: View? = null
+        var btnQuickRecord: View? = null
+
+        fun renderSubItems() {
+            subItemsContainer.removeAllViews()
+            val total = item.amountCents ?: 0L
+            val currentSum = splitSubItems.sumOf { it.amountCents }
+            val diff = total - currentSum
+
+            splitSubItems.forEachIndexed { index, subItem ->
+                val row = LinearLayout(this@PendingListActivity).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                    setPadding(0, dp(3), 0, dp(3))
+                }
+                val etName = EditText(this@PendingListActivity).apply {
+                    setText(subItem.name)
+                    hint = "明细名称"
+                    textSize = 12.5f
+                    setTextColor(CaptureUi.TEXT_PRIMARY)
+                    setHintTextColor(CaptureUi.TEXT_MUTED)
+                    isSingleLine = true
+                    setPadding(dp(8), dp(6), dp(8), dp(6))
+                    background = CaptureUi.roundedBg(CaptureUi.BG_SUBTLE, dp(6), dp(1), CaptureUi.BORDER)
+                    addTextChangedListener(object : TextWatcher {
+                        override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+                        override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = Unit
+                        override fun afterTextChanged(s: Editable?) {
+                            val newName = s?.toString()?.trim().orEmpty()
+                            if (index < splitSubItems.size) {
+                                splitSubItems[index] = splitSubItems[index].copy(name = newName)
+                            }
+                        }
+                    })
+                }
+                row.addView(etName, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1.3f).apply { marginEnd = dp(6) })
+
+                val etAmount = EditText(this@PendingListActivity).apply {
+                    setText(String.format(Locale.CHINA, "%.2f", subItem.amountCents / 100.0))
+                    hint = "金额"
+                    inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL
+                    textSize = 12.5f
+                    setTextColor(CaptureUi.TEXT_PRIMARY)
+                    setHintTextColor(CaptureUi.TEXT_MUTED)
+                    isSingleLine = true
+                    setPadding(dp(8), dp(6), dp(8), dp(6))
+                    background = CaptureUi.roundedBg(CaptureUi.BG_SUBTLE, dp(6), dp(1), CaptureUi.BORDER)
+                    addTextChangedListener(object : TextWatcher {
+                        override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+                        override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = Unit
+                        override fun afterTextChanged(s: Editable?) {
+                            val cents = (s?.toString()?.toDoubleOrNull()?.times(100.0))?.toLong() ?: 0L
+                            if (index < splitSubItems.size) {
+                                splitSubItems[index] = splitSubItems[index].copy(amountCents = cents)
+                                val nowSum = splitSubItems.sumOf { it.amountCents }
+                                val nowDiff = total - nowSum
+                                splitSummaryText.text = "已拆合计 ¥${String.format(Locale.CHINA, "%.2f", nowSum / 100.0)} / 应付 ¥${String.format(Locale.CHINA, "%.2f", total / 100.0)}${if (nowDiff != 0L) " (差额: ¥${String.format(Locale.CHINA, "%.2f", nowDiff / 100.0)})" else " (已配平)"}"
+                                btnAddAdjustment?.visibility = if (nowDiff > 0L) View.VISIBLE else View.GONE
+                            }
+                        }
+                    })
+                }
+                row.addView(etAmount, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginEnd = dp(6) })
+
+                val subCatChip = CaptureUi.chip(
+                    activity = this@PendingListActivity,
+                    text = subItem.categoryName?.takeIf { it.isNotBlank() } ?: "选分类 ▾",
+                    textColor = if (!subItem.categoryName.isNullOrBlank()) CaptureUi.SUCCESS else CaptureUi.WARNING,
+                    bgColor = if (!subItem.categoryName.isNullOrBlank()) CaptureUi.SUCCESS_SOFT else CaptureUi.WARNING_SOFT,
+                ) {
+                    showCategoryPickerDialog(
+                        item = item.copy(categoryName = subItem.categoryName),
+                        ctx = ctx,
+                        title = "选择「${subItem.name}」的分类",
+                    ) { chosenCat ->
+                        if (!chosenCat.isNullOrBlank() && index < splitSubItems.size) {
+                            splitSubItems[index] = splitSubItems[index].copy(categoryName = chosenCat)
+                            renderSubItems()
+                        }
+                    }
+                }
+                row.addView(subCatChip, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginEnd = dp(4) })
+
+                val btnDel = TextView(this@PendingListActivity).apply {
+                    text = " ✕ "
+                    textSize = 13f
+                    setTextColor(CaptureUi.TEXT_MUTED)
+                    setPadding(dp(4), dp(4), dp(4), dp(4))
+                    setOnClickListener {
+                        if (index < splitSubItems.size) {
+                            splitSubItems.removeAt(index)
+                            renderSubItems()
+                        }
+                    }
+                }
+                row.addView(btnDel)
+                subItemsContainer.addView(row)
+            }
+
+            splitSummaryText.text = if (splitSubItems.isEmpty()) {
+                "尚未拆分明细，点上方「📝 按备注 AI 拆单」或「+ 手动加一行」"
+            } else {
+                "已拆合计 ¥${String.format(Locale.CHINA, "%.2f", currentSum / 100.0)} / 应付 ¥${String.format(Locale.CHINA, "%.2f", total / 100.0)}${if (diff != 0L) " (差额: ¥${String.format(Locale.CHINA, "%.2f", diff / 100.0)})" else " (已配平)"}"
+            }
+            btnAddAdjustment?.visibility = if (diff > 0L && splitSubItems.isNotEmpty()) View.VISIBLE else View.GONE
+            primaryButton?.let { btn ->
+                if (splitRequested) {
+                    if (splitSubItems.isEmpty()) {
+                        btn.text = "请先添加明细"
+                        btn.setTextColor(CaptureUi.TEXT_MUTED)
+                        btn.background = CaptureUi.rippleBg(
+                            fillColor = CaptureUi.BG_SUBTLE,
+                            radiusPx = dp(10),
+                            strokeWidthPx = dp(1),
+                            strokeColor = CaptureUi.BORDER,
+                        )
+                    } else {
+                        btn.text = "确认拆分入账 (${splitSubItems.size}笔)"
+                        btn.setTextColor(Color.WHITE)
+                        btn.background = CaptureUi.rippleBg(
+                            fillColor = CaptureUi.BRAND,
+                            radiusPx = dp(10),
+                            strokeWidthPx = 0,
+                        )
+                    }
+                } else {
+                    btn.text = "直接入账"
+                    btn.setTextColor(Color.WHITE)
+                    btn.background = CaptureUi.rippleBg(
+                        fillColor = CaptureUi.BRAND,
+                        radiusPx = dp(10),
+                        strokeWidthPx = 0,
+                    )
+                }
+            }
+        }
+
+        btnAddAdjustment = CaptureUi.button(
+            activity = this,
+            text = "+ 补差额调整项",
+            textColor = CaptureUi.BRAND_DARK,
+            bgColor = CaptureUi.BRAND_SOFT,
+            strokeColor = CaptureUi.BRAND_BORDER,
+            paddingV = 6,
+            textSizeSp = 12f,
+        ) {
+            val total = item.amountCents ?: 0L
+            val currentSum = splitSubItems.sumOf { it.amountCents }
+            val diff = total - currentSum
+            if (diff > 0L) {
+                splitSubItems.add(
+                    CaptureBridgeClient.SplitItem(
+                        name = "差额调整",
+                        amountCents = diff,
+                        categoryName = "其他",
+                        inferred = true,
                     )
                 )
+                renderSubItems()
             }
+        }.apply { visibility = View.GONE }
+        splitWorkArea.addView(btnAddAdjustment)
+        card.addView(splitWorkArea)
+
+        lateinit var btnAiSplit: TextView
+        btnAiSplit = CaptureUi.chip(
+            activity = this,
+            text = "📝 按备注 AI 拆单",
+            textColor = CaptureUi.BRAND_DARK,
+            bgColor = CaptureUi.BRAND_SOFT,
+            strokeColor = CaptureUi.BRAND_BORDER,
+        ) {
+            val draftNote = noteInput.text?.toString()?.trim().orEmpty()
+            if (draftNote.isBlank()) {
+                toast("请先在备注框输入如「苹果30 雪梨40」")
+                noteInput.requestFocus()
+                return@chip
+            }
+            if (!splitBox.isChecked) {
+                splitBox.isChecked = true
+            }
+            splitRequested = true
+            categoryChip.visibility = View.GONE
+            btnQuickRecord?.visibility = View.GONE
+            splitWorkArea.visibility = View.VISIBLE
+
+            scope.launch {
+                btnAiSplit.isEnabled = false
+                btnAiSplit.text = "⏳ 拆分中…"
+                splitSummaryText.text = "AI 正在分析备注并拆分条目，请稍候…"
+                try {
+                    val preview = bridge.previewSplit(
+                        captureId = item.id,
+                        note = draftNote,
+                        totalCents = item.amountCents ?: 0L,
+                        billType = item.billType ?: LocalBillType.TYPE_EXPENSE,
+                    )
+                    if (preview.ok) {
+                        splitSubItems.clear()
+                        val newItems = preview.items
+                        if (newItems.isEmpty()) {
+                            toast("未能从备注中识别出明细条目")
+                            renderSubItems()
+                        } else {
+                            for (sub in newItems) {
+                                splitSubItems.add(sub)
+                                renderSubItems()
+                                delay(120L)
+                            }
+                            toast("已拆分为 ${newItems.size} 笔明细")
+                        }
+                    } else {
+                        showSplitError(preview.error, preview.message)
+                        renderSubItems()
+                    }
+                } finally {
+                    btnAiSplit.isEnabled = true
+                    btnAiSplit.text = "📝 按备注 AI 拆单"
+                }
+            }
+        }
+        splitActionsRow.addView(
+            btnAiSplit,
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginEnd = dp(6) },
         )
-        card.addView(imageRow)
+
+        lateinit var btnImageSplit: TextView
+        btnImageSplit = CaptureUi.chip(
+            activity = this,
+            text = "📷 识图拆单",
+            textColor = CaptureUi.BRAND_DARK,
+            bgColor = CaptureUi.BRAND_SOFT,
+            strokeColor = CaptureUi.BRAND_BORDER,
+        ) {
+            val amountCents = item.amountCents ?: 0L
+            val billType = item.billType ?: LocalBillType.TYPE_EXPENSE
+            if (amountCents <= 0L) {
+                toast("金额缺失，无法拆单")
+                return@chip
+            }
+            if (billType != LocalBillType.TYPE_EXPENSE && billType != LocalBillType.TYPE_INCOME) {
+                toast("图片拆单只支持普通支出/收入")
+                return@chip
+            }
+
+            if (!splitBox.isChecked) {
+                splitBox.isChecked = true
+            }
+            splitRequested = true
+            categoryChip.visibility = View.GONE
+            btnQuickRecord?.visibility = View.GONE
+            splitWorkArea.visibility = View.VISIBLE
+
+            skipNextResumeLoad = true
+            CaptureImagePickerActivity.pickImage(
+                context = this@PendingListActivity,
+                onPicked = { uri ->
+                    scope.launch {
+                        btnImageSplit.isEnabled = false
+                        btnImageSplit.text = "⏳ 识图中…"
+                        splitSummaryText.text = "AI 正在识别小票并拆分条目，请稍候…"
+                        try {
+                            val preview = bridge.previewImageSplit(
+                                captureId = item.id,
+                                totalCents = amountCents,
+                                billType = billType,
+                                imageUri = uri,
+                            )
+                            if (preview.ok) {
+                                splitSubItems.clear()
+                                val newItems = preview.items
+                                if (newItems.isEmpty()) {
+                                    toast("未能从图片识别出明细条目")
+                                    renderSubItems()
+                                } else {
+                                    for (sub in newItems) {
+                                        splitSubItems.add(sub)
+                                        renderSubItems()
+                                        delay(120L)
+                                    }
+                                    toast("已拆分为 ${newItems.size} 笔明细")
+                                }
+                            } else {
+                                showSplitError(preview.error, preview.message)
+                                renderSubItems()
+                            }
+                        } finally {
+                            btnImageSplit.isEnabled = true
+                            btnImageSplit.text = "📷 识图拆单"
+                        }
+                    }
+                },
+                onCancelled = {
+                    toast("已取消选图，待记仍保留")
+                },
+            )
+        }
+        splitActionsRow.addView(
+            btnImageSplit,
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginEnd = dp(6) },
+        )
+        splitActionsRow.addView(
+            CaptureUi.chip(
+                activity = this,
+                text = "+ 加一行",
+                textColor = CaptureUi.TEXT_SECONDARY,
+                bgColor = CaptureUi.BG_SUBTLE,
+                strokeColor = CaptureUi.BORDER,
+            ) {
+                val currentSum = splitSubItems.sumOf { it.amountCents }
+                val total = item.amountCents ?: 0L
+                val rem = (total - currentSum).coerceAtLeast(0L)
+                splitSubItems.add(
+                    CaptureBridgeClient.SplitItem(
+                        name = "明细 ${splitSubItems.size + 1}",
+                        amountCents = if (rem > 0L) rem else 100L,
+                        categoryName = item.categoryName,
+                    )
+                )
+                renderSubItems()
+            },
+        )
 
         // 第四行：操作栏（直接入账 / 拆分入账 / 悬浮窗改 / 不计）
         val actionRow = LinearLayout(this).apply {
@@ -999,11 +1502,17 @@ class PendingListActivity : Activity() {
             gravity = Gravity.CENTER_VERTICAL
             setPadding(0, dp(10), 0, 0)
         }
-        val primaryButton = CaptureUi.button(
+        val isInitialEmptySplit = splitRequested && splitSubItems.isEmpty()
+        val btnPrimary = CaptureUi.button(
             activity = this,
-            text = if (splitRequested) "拆分入账" else "直接入账",
-            textColor = Color.WHITE,
-            bgColor = CaptureUi.BRAND,
+            text = if (splitRequested) {
+                if (splitSubItems.isEmpty()) "请先添加明细" else "确认拆分入账 (${splitSubItems.size}笔)"
+            } else {
+                "直接入账"
+            },
+            textColor = if (isInitialEmptySplit) CaptureUi.TEXT_MUTED else Color.WHITE,
+            bgColor = if (isInitialEmptySplit) CaptureUi.BG_SUBTLE else CaptureUi.BRAND,
+            strokeColor = if (isInitialEmptySplit) CaptureUi.BORDER else Color.TRANSPARENT,
             radiusDp = 10,
             paddingV = 8,
             textSizeSp = 13f,
@@ -1015,14 +1524,78 @@ class PendingListActivity : Activity() {
                 splitRequested = splitRequested,
             )
             if (splitRequested) {
-                startSplitImport(draft, noteInput)
+                if (splitSubItems.isEmpty()) {
+                    toast("尚未拆分明细，请先点上方「📝 按备注 AI 拆单」或「+」添加明细")
+                    if (draftNote.isBlank()) {
+                        noteInput.requestFocus()
+                    }
+                    return@button
+                } else {
+                    val total = item.amountCents ?: 0L
+                    val currentSum = splitSubItems.sumOf { it.amountCents }
+                    val diff = total - currentSum
+                    if (diff < 0L) {
+                        toast("拆分明细合计超出付款金额 ¥${String.format(Locale.CHINA, "%.2f", -diff / 100.0)}，请检查")
+                        return@button
+                    }
+                    if (diff > 0L) {
+                        AlertDialog.Builder(this@PendingListActivity)
+                            .setTitle("拆分金额未配平")
+                            .setMessage("明细合计还差 ¥${String.format(Locale.CHINA, "%.2f", diff / 100.0)}，是否自动补齐一条差额调整项后入账？")
+                            .setPositiveButton("补齐并入账") { _, _ ->
+                                splitSubItems.add(
+                                    CaptureBridgeClient.SplitItem(
+                                        name = "差额调整",
+                                        amountCents = diff,
+                                        categoryName = "其他",
+                                        inferred = true,
+                                    )
+                                )
+                                scope.launch { performGroupImport(item, splitSubItems) }
+                            }
+                            .setNegativeButton("继续修改", null)
+                            .show()
+                        return@button
+                    }
+                    scope.launch { performGroupImport(item, splitSubItems) }
+                }
             } else {
                 directImport(draft)
             }
         }
+        primaryButton = btnPrimary
+
+        btnQuickRecord = CaptureUi.button(
+            activity = this,
+            text = "悬浮窗细改",
+            textColor = CaptureUi.TEXT_SECONDARY,
+            bgColor = CaptureUi.BG_SUBTLE,
+            strokeColor = CaptureUi.BORDER,
+            radiusDp = 10,
+            paddingV = 8,
+            textSizeSp = 13f,
+        ) {
+            val draftNote = noteInput.text?.toString()?.trim().orEmpty()
+            openQuickRecord(
+                item.copy(
+                    note = draftNote.ifBlank { item.note },
+                    categoryName = currentCategory ?: item.categoryName,
+                )
+            )
+        }.apply {
+            visibility = if (splitRequested) View.GONE else View.VISIBLE
+        }
+
         splitBox.setOnCheckedChangeListener { _, checked ->
             splitRequested = checked
-            primaryButton.text = if (checked) "拆分入账" else "直接入账"
+            if (!checked) {
+                splitDrafts.remove(item.id)
+                splitSubItems.clear()
+            }
+            categoryChip.visibility = if (checked) View.GONE else View.VISIBLE
+            btnQuickRecord?.visibility = if (checked) View.GONE else View.VISIBLE
+            splitWorkArea.visibility = if (checked) View.VISIBLE else View.GONE
+            renderSubItems()
             scope.launch {
                 withContext(Dispatchers.IO) {
                     runCatching {
@@ -1032,29 +1605,15 @@ class PendingListActivity : Activity() {
                 }
             }
         }
+        if (splitRequested) {
+            renderSubItems()
+        }
         actionRow.addView(
-            primaryButton,
+            btnPrimary,
             LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1.2f).apply { marginEnd = dp(8) },
         )
         actionRow.addView(
-            CaptureUi.button(
-                activity = this,
-                text = "悬浮窗细改",
-                textColor = CaptureUi.TEXT_SECONDARY,
-                bgColor = CaptureUi.BG_SUBTLE,
-                strokeColor = CaptureUi.BORDER,
-                radiusDp = 10,
-                paddingV = 8,
-                textSizeSp = 13f,
-            ) {
-                val draftNote = noteInput.text?.toString()?.trim().orEmpty()
-                openQuickRecord(
-                    item.copy(
-                        note = draftNote.ifBlank { item.note },
-                        categoryName = currentCategory ?: item.categoryName,
-                    )
-                )
-            },
+            btnQuickRecord,
             LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginEnd = dp(8) },
         )
         actionRow.addView(
@@ -1074,6 +1633,154 @@ class PendingListActivity : Activity() {
         card.addView(actionRow)
 
         return card
+    }
+
+    private fun showMergedDetailsDialog(item: PaymentCapture) {
+        val app = CaptureApp.from(this)
+        scope.launch {
+            val children = withContext(Dispatchers.IO) {
+                app.repository.listMergedChildren(item.id)
+            }
+            val container = LinearLayout(this@PendingListActivity).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(dp(20), dp(16), dp(20), dp(16))
+            }
+
+            val descTv = TextView(this@PendingListActivity).apply {
+                text = "此账单由多个渠道的记录自动合并而成：\n金额：¥${formatAmount(item.amountCents)}\n合并渠道：${item.channel ?: "多渠道"}"
+                textSize = 13.5f
+                setTextColor(CaptureUi.TEXT_SECONDARY)
+            }
+            container.addView(descTv)
+
+            val divider = View(this@PendingListActivity).apply {
+                setBackgroundColor(CaptureUi.BORDER)
+                layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(1)).apply {
+                    topMargin = dp(12)
+                    bottomMargin = dp(12)
+                }
+            }
+            container.addView(divider)
+
+            val mainHeader = TextView(this@PendingListActivity).apply {
+                text = "【主账单记录】"
+                textSize = 13f
+                setTypeface(typeface, Typeface.BOLD)
+                setTextColor(CaptureUi.TEXT_PRIMARY)
+            }
+            container.addView(mainHeader)
+
+            val mainDetail = TextView(this@PendingListActivity).apply {
+                text = "来源: ${sourceLabel(item.source)} · 商户: ${item.merchant ?: "未知"} · 资产: ${item.assetName ?: item.paymentMethodRaw ?: "未分配"}\n时间: ${rowTimeFormat.format(Date(item.paidAt))}"
+                textSize = 12.5f
+                setTextColor(CaptureUi.TEXT_MUTED)
+                setPadding(0, dp(4), 0, dp(12))
+            }
+            container.addView(mainDetail)
+
+            if (children.isEmpty()) {
+                val emptyTv = TextView(this@PendingListActivity).apply {
+                    text = "（未查到子记录明细，可能由同渠道并发重发合并）"
+                    textSize = 12.5f
+                    setTextColor(CaptureUi.TEXT_MUTED)
+                }
+                container.addView(emptyTv)
+            } else {
+                val subHeader = TextView(this@PendingListActivity).apply {
+                    text = "【已合并的子记录 (${children.size}笔)】"
+                    textSize = 13f
+                    setTypeface(typeface, Typeface.BOLD)
+                    setTextColor(CaptureUi.TEXT_PRIMARY)
+                }
+                container.addView(subHeader)
+
+                for (child in children) {
+                    val childRow = LinearLayout(this@PendingListActivity).apply {
+                        orientation = LinearLayout.HORIZONTAL
+                        gravity = Gravity.CENTER_VERTICAL
+                        background = CaptureUi.roundedBg(CaptureUi.BG_SUBTLE, dp(8))
+                        setPadding(dp(10), dp(8), dp(10), dp(8))
+                        layoutParams = LinearLayout.LayoutParams(
+                            ViewGroup.LayoutParams.MATCH_PARENT,
+                            ViewGroup.LayoutParams.WRAP_CONTENT,
+                        ).apply { topMargin = dp(6) }
+                    }
+
+                    val infoCol = LinearLayout(this@PendingListActivity).apply {
+                        orientation = LinearLayout.VERTICAL
+                        layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+                    }
+                    val childChan = child.channel ?: sourceLabel(child.source)
+                    infoCol.addView(TextView(this@PendingListActivity).apply {
+                        text = "渠道: $childChan · ${child.merchant ?: "无商户"}"
+                        textSize = 13f
+                        setTypeface(typeface, Typeface.BOLD)
+                        setTextColor(CaptureUi.TEXT_PRIMARY)
+                    })
+                    infoCol.addView(TextView(this@PendingListActivity).apply {
+                        text = "时间: ${rowTimeFormat.format(Date(child.paidAt))}"
+                        textSize = 11.5f
+                        setTextColor(CaptureUi.TEXT_MUTED)
+                    })
+                    childRow.addView(infoCol)
+
+                    val unmergeBtn = CaptureUi.chip(
+                        activity = this@PendingListActivity,
+                        text = "解除合并",
+                        textColor = Color.parseColor("#DC2626"),
+                        bgColor = Color.parseColor("#FEF2F2"),
+                        strokeColor = Color.parseColor("#FECACA"),
+                    ) {
+                        scope.launch {
+                            val ok = withContext(Dispatchers.IO) {
+                                app.repository.unmerge(child.id)
+                            }
+                            if (ok) {
+                                toast("已解除合并，该记录已恢复到待记")
+                                load()
+                            }
+                        }
+                    }
+                    childRow.addView(unmergeBtn)
+
+                    container.addView(childRow)
+                }
+            }
+
+            val scroll = ScrollView(this@PendingListActivity).apply {
+                addView(container)
+            }
+
+            AlertDialog.Builder(this@PendingListActivity)
+                .setTitle("多渠道合并详情")
+                .setView(scroll)
+                .setPositiveButton("知道了", null)
+                .show()
+        }
+    }
+
+    private fun showBookPickerDialog(
+        item: PaymentCapture,
+        ctx: AccountingContext?,
+        onResult: ((String) -> Unit)? = null,
+    ) {
+        val bookNames = ctx?.books?.map { it.name }?.filter { it.isNotBlank() }.orEmpty()
+        val availableBooks = if (bookNames.isNotEmpty()) bookNames else listOf("日常账本")
+
+        AlertDialog.Builder(this)
+            .setTitle("选择记账账本")
+            .setItems(availableBooks.toTypedArray()) { _, which ->
+                val chosenBook = availableBooks[which]
+                onResult?.invoke(chosenBook)
+                scope.launch {
+                    withContext(Dispatchers.IO) {
+                        CaptureApp.from(this@PendingListActivity).repository
+                            .updateBookName(item.id, chosenBook)
+                    }
+                }
+            }
+            .setNegativeButton("取消", null)
+            .show()
     }
 
     private fun showAssetPickerDialog(item: PaymentCapture, ctx: AccountingContext?) {
@@ -1194,6 +1901,22 @@ class PendingListActivity : Activity() {
                 }
             }
             .setNegativeButton("取消") { _, _ -> finish(null) }
+            .apply {
+                if (!item.categoryName.isNullOrBlank()) {
+                    setNeutralButton("清除分类（重置为待选）") { _, _ ->
+                        if (onResult == null) {
+                            mutate { repo -> repo.clearCategory(item.id) }
+                        } else {
+                            scope.launch {
+                                withContext(Dispatchers.IO) {
+                                    CaptureApp.from(this@PendingListActivity).repository.clearCategory(item.id)
+                                }
+                                finish("")
+                            }
+                        }
+                    }
+                }
+            }
             .setOnCancelListener { _ -> finish(null) }
             .show()
     }
@@ -1312,7 +2035,10 @@ class PendingListActivity : Activity() {
                         categoryName = item.categoryName,
                         remarks = item.note?.takeIf { it.isNotBlank() } ?: item.merchant.orEmpty(),
                         note = item.note,
-                        bookName = item.bookName,
+                        bookName = item.bookName?.takeIf { it.isNotBlank() }
+                            ?: latestSnapshot?.accountingContext?.currentBookName
+                            ?: latestSnapshot?.accountingContext?.defaultBookName,
+                        excludeFromStats = item.excludeFromStats,
                     )
                 }
                 val result = bridge.importBills(bills, UUID.randomUUID().toString())
@@ -1419,6 +2145,7 @@ class PendingListActivity : Activity() {
     // ════════════════════════════════════════════════════════
 
     private fun ignore(item: PaymentCapture) {
+        splitDrafts.remove(item.id)
         mutate { repository ->
             repository.updateStatus(item.id, CaptureStatus.IGNORED)
         }
@@ -1437,69 +2164,6 @@ class PendingListActivity : Activity() {
         }
     }
 
-    /**
-     * 勾选“拆分记账”后的入口：先持久化备注，再 previewSplit，最后弹确认页。
-     * 取消/关闭确认页不会把待记改成已记。
-     */
-    private fun startSplitImport(item: PaymentCapture, noteInput: EditText) {
-        val type = item.billType ?: LocalBillType.TYPE_EXPENSE
-        val amountCents = item.amountCents ?: 0L
-        if (amountCents <= 0L) {
-            toast("金额缺失，不能拆分入账")
-            return
-        }
-        if (type !in setOf(LocalBillType.TYPE_EXPENSE, LocalBillType.TYPE_INCOME) ||
-            item.subType == LocalBillType.SUBTYPE_REFUND ||
-            item.needsRefundLink
-        ) {
-            toast("转账/还款/退款不支持文字拆分")
-            return
-        }
-        if (item.note.isNullOrBlank()) {
-            toast("请先在备注里写「苹果30 雪梨40」再拆分")
-            noteInput.requestFocus()
-            return
-        }
-
-        scope.launch {
-            noteSaveJobs[item.id]?.join()
-            withContext(Dispatchers.IO) {
-                runCatching {
-                    CaptureApp.from(this@PendingListActivity).repository.updateDraft(
-                        context = this@PendingListActivity,
-                        id = item.id,
-                        note = item.note,
-                        assetName = item.assetName,
-                        categoryName = item.categoryName,
-                    )
-                }
-            }
-            toast("正在按备注拆分…")
-            val preview = bridge.previewSplit(
-                captureId = item.id,
-                note = item.note,
-                totalCents = amountCents,
-                billType = type,
-            )
-            if (!preview.ok) {
-                showSplitError(preview.error, preview.message)
-                return@launch
-            }
-            SplitConfirmSheet.show(
-                activity = this@PendingListActivity,
-                capture = item,
-                preview = preview,
-                onEdit = {
-                    noteInput.requestFocus()
-                    toast("已保留待记，改完备注后再点“拆分入账”")
-                },
-                onConfirm = { items ->
-                    scope.launch { performGroupImport(item, items) }
-                },
-            )
-        }
-    }
-
     private fun showSplitError(error: String?, message: String?) {
         AlertDialog.Builder(this)
             .setTitle("拆分未完成")
@@ -1512,12 +2176,17 @@ class PendingListActivity : Activity() {
         item: PaymentCapture,
         items: List<CaptureBridgeClient.SplitItem>,
     ) {
-        val result = bridge.importBillGroup(item, items, UUID.randomUUID().toString())
+        val effectiveBookName = item.bookName?.takeIf { it.isNotBlank() }
+            ?: latestSnapshot?.accountingContext?.currentBookName
+            ?: latestSnapshot?.accountingContext?.defaultBookName
+        val captureWithBook = item.copy(bookName = effectiveBookName)
+        val result = bridge.importBillGroup(captureWithBook, items, UUID.randomUUID().toString())
         if (result == null) {
             toast("拆分入账失败：敲敲记账桥接不可用，已保留待记")
             return
         }
         if (result.ok || result.duplicate) {
+            splitDrafts.remove(item.id)
             withContext(Dispatchers.IO) {
                 CaptureApp.from(this@PendingListActivity).repository
                     .updateStatus(item.id, CaptureStatus.RECORDED)
@@ -1615,7 +2284,10 @@ class PendingListActivity : Activity() {
                 categoryName = item.categoryName,
                 remarks = item.note?.takeIf { it.isNotBlank() } ?: item.merchant.orEmpty(),
                 note = item.note,
-                bookName = item.bookName,
+                bookName = item.bookName?.takeIf { it.isNotBlank() }
+                    ?: latestSnapshot?.accountingContext?.currentBookName
+                    ?: latestSnapshot?.accountingContext?.defaultBookName,
+                excludeFromStats = item.excludeFromStats,
             )
             performDirectImport(item, bill)
         }
@@ -1669,63 +2341,10 @@ class PendingListActivity : Activity() {
         }
     }
 
-    /**
-     * 图片记账入口：只把 capture 上下文交给 App，AI 识别与确认面板都在 App 内完成。
-     *
-     * 取消或识别失败不会改本地状态；App 写入成功后通过 BILL_CREATED 广播或 onResume
-     * 对账把待记标成 RECORDED。
-     */
-    private fun openImageAccounting(item: PaymentCapture) {
-        val type = item.billType ?: LocalBillType.TYPE_EXPENSE
-        if ((item.amountCents ?: 0L) <= 0L) {
-            toast("金额缺失，请先补金额再图片记账")
-            return
-        }
-        if (type !in setOf(LocalBillType.TYPE_EXPENSE, LocalBillType.TYPE_INCOME) ||
-            item.subType == LocalBillType.SUBTYPE_REFUND ||
-            item.needsRefundLink
-        ) {
-            toast("图片记账只支持普通支出/收入")
-            return
-        }
-        scope.launch {
-            withContext(Dispatchers.IO) {
-                runCatching {
-                    CaptureApp.from(this@PendingListActivity).repository.updateDraft(
-                        context = this@PendingListActivity,
-                        id = item.id,
-                        note = item.note,
-                        assetName = item.assetName,
-                        categoryName = item.categoryName,
-                    )
-                }
-            }
-            val result = bridge.openImageAccounting(item, UUID.randomUUID().toString())
-            when {
-                result.duplicate -> {
-                    withContext(Dispatchers.IO) {
-                        CaptureApp.from(this@PendingListActivity).repository
-                            .updateStatus(item.id, CaptureStatus.RECORDED)
-                    }
-                    toast("这笔已入账，未重复建单")
-                    load()
-                }
-
-                result.ok && result.accepted -> {
-                    toast("已打开图片记账：选小票/截图后点“确认入账并合并”")
-                }
-
-                else -> {
-                    toast(
-                        "图片记账未打开：" +
-                            (result.message ?: result.error ?: "敲敲记账桥接不可用")
-                    )
-                }
-            }
-        }
-    }
-
     private fun openQuickRecord(item: PaymentCapture) {
+        val effectiveBook = item.bookName?.takeIf { it.isNotBlank() }
+            ?: latestSnapshot?.accountingContext?.currentBookName
+            ?: latestSnapshot?.accountingContext?.defaultBookName
         val prefill = JSONObject().apply {
             put("type", item.billType ?: LocalBillType.TYPE_EXPENSE)
             put("subType", item.subType ?: LocalBillType.SUBTYPE_NORMAL)
@@ -1736,7 +2355,8 @@ class PendingListActivity : Activity() {
             item.categoryName?.let { put("category_name", it) }
             put("time", prefillTimeFormat.format(Date(item.paidAt)))
             put("remarks", item.note?.takeIf { it.isNotBlank() } ?: item.merchant.orEmpty())
-            item.bookName?.let { put("book_name", it) }
+            effectiveBook?.let { put("book_name", it) }
+            put("exclude_from_stats", item.excludeFromStats)
         }
         val requestId = UUID.randomUUID().toString()
         scope.launch {
@@ -1758,7 +2378,45 @@ class PendingListActivity : Activity() {
         }
     }
 
-    private fun simulateCapture() {
+    private fun showCustomSimulateDialog() {
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(20), dp(10), dp(20), dp(10))
+        }
+        val etAmount = EditText(this).apply {
+            hint = "金额（元），如 100.00"
+            setText("100.00")
+            inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL
+            isSingleLine = true
+            setPadding(dp(12), dp(10), dp(12), dp(10))
+            background = CaptureUi.roundedBg(CaptureUi.BG_SUBTLE, dp(8), dp(1), CaptureUi.BORDER)
+        }
+        val etMerchant = EditText(this).apply {
+            hint = "商户/说明，如 超市小票示例"
+            setText("超市小票示例")
+            isSingleLine = true
+            setPadding(dp(12), dp(10), dp(12), dp(10))
+            background = CaptureUi.roundedBg(CaptureUi.BG_SUBTLE, dp(8), dp(1), CaptureUi.BORDER)
+        }
+        container.addView(TextView(this).apply { text = "输入模拟金额（元）："; textSize = 12f; setTextColor(CaptureUi.TEXT_SECONDARY); setPadding(0, 0, 0, dp(4)) })
+        container.addView(etAmount, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(12) })
+        container.addView(TextView(this).apply { text = "输入模拟商户名："; textSize = 12f; setTextColor(CaptureUi.TEXT_SECONDARY); setPadding(0, 0, 0, dp(4)) })
+        container.addView(etMerchant, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+
+        AlertDialog.Builder(this)
+            .setTitle("自定义模拟待记（长按触发）")
+            .setView(container)
+            .setPositiveButton("生成待记") { _, _ ->
+                val amountDouble = etAmount.text?.toString()?.toDoubleOrNull() ?: 3.0
+                val amountCents = (amountDouble * 100.0).toLong().coerceAtLeast(1L)
+                val merchant = etMerchant.text?.toString()?.trim().takeIf { !it.isNullOrBlank() } ?: "示例支出"
+                simulateCapture(amountCents, merchant)
+            }
+            .setNegativeButton("取消", null)
+            .show()
+    }
+
+    private fun simulateCapture(amountCents: Long = 300L, merchant: String = "示例支出") {
         val now = System.currentTimeMillis()
         val scopeCtx = applicationContext
         scope.launch {
@@ -1768,9 +2426,9 @@ class PendingListActivity : Activity() {
                     val payload = CapturePayload(
                         captureId = UUID.randomUUID().toString(),
                         source = CaptureSource.WECHAT,
-                        amountCents = 300L,
+                        amountCents = amountCents,
                         currency = "CNY",
-                        merchant = "示例支出",
+                        merchant = merchant,
                         paymentMethodRaw = "零钱",
                         assetName = mappedAsset,
                         categoryName = null,
@@ -1779,7 +2437,7 @@ class PendingListActivity : Activity() {
                         note = null,
                         billType = LocalBillType.TYPE_EXPENSE,
                         subType = LocalBillType.SUBTYPE_NORMAL,
-                        rawJson = "{\"simulated\":true}",
+                        rawJson = "{\"simulated\":true,\"amountCents\":$amountCents}",
                         ruleVersion = "simulated",
                     )
                     val repo = CaptureApp.from(this@PendingListActivity).repository
@@ -1794,7 +2452,7 @@ class PendingListActivity : Activity() {
                 currentTab = 0
                 updateTabSelection()
                 load()
-                toast("已模拟：${CaptureSources.displayName(CaptureSource.WECHAT)} ¥3.00 示例支出（自动映射账户：${outcome.first.assetName ?: CaptureSources.displayName(CaptureSource.WECHAT)}）")
+                toast("已模拟：${CaptureSources.displayName(CaptureSource.WECHAT)} ¥${String.format(Locale.CHINA, "%.2f", amountCents / 100.0)} $merchant (长按按钮可修改金额)")
             } catch (t: Throwable) {
                 toast("模拟失败：${t.message ?: t.javaClass.simpleName}")
             }

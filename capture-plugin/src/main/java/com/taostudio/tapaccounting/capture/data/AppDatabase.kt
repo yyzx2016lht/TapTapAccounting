@@ -15,7 +15,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         CategoryRule::class,
         RuleLearningTask::class,
     ],
-    version = 9,
+    version = 11,
     exportSchema = false,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -175,6 +175,32 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * v9 -> v10：是否不计入收支统计。
+         */
+        val MIGRATION_9_10: Migration = object : Migration(9, 10) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "ALTER TABLE payment_captures ADD COLUMN excludeFromStats " +
+                        "INTEGER NOT NULL DEFAULT 0"
+                )
+            }
+        }
+
+        /**
+         * v10 -> v11：重复账单自动合并（父账单 ID 与渠道来源字段）。
+         */
+        val MIGRATION_10_11: Migration = object : Migration(10, 11) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE payment_captures ADD COLUMN groupId TEXT")
+                db.execSQL("ALTER TABLE payment_captures ADD COLUMN channel TEXT")
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_payment_captures_groupId` " +
+                        "ON `payment_captures` (`groupId`)"
+                )
+            }
+        }
+
         @Volatile
         private var instance: AppDatabase? = null
 
@@ -194,6 +220,8 @@ abstract class AppDatabase : RoomDatabase() {
                         MIGRATION_6_7,
                         MIGRATION_7_8,
                         MIGRATION_8_9,
+                        MIGRATION_9_10,
+                        MIGRATION_10_11,
                     )
                     .build()
                     .also { instance = it }

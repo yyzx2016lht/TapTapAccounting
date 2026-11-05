@@ -18,7 +18,7 @@ import java.util.Locale
  */
 object RuleBundleCodec {
 
-    const val VERSION = 1
+    const val VERSION = 2
 
     const val SOURCE_BUILTIN = "builtin"
     const val SOURCE_LOCAL = "local"

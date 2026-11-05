@@ -79,6 +79,10 @@ object RuleLearningManager {
             val billType = capture.billType ?: return@withContext null
             if (note.isEmpty() || categoryName.isEmpty()) return@withContext null
 
+            // 若已有规则能直接将该备注命中该分类，无需重复调用 AI 学习
+            val existingRuleCat = com.taostudio.tapaccounting.capture.parse.CaptureRuleMatcher.resolveNoteCategory(context, note)
+            if (existingRuleCat == categoryName) return@withContext null
+
             val dao = app.database.ruleLearningTaskDao()
             dao.findByCaptureId(captureId)?.let { return@withContext it }
 

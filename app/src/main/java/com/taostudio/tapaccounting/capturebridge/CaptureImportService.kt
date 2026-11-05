@@ -1,7 +1,10 @@
 package com.taostudio.tapaccounting.capturebridge
 
 import android.content.Context
+import android.os.ParcelFileDescriptor
+import android.util.Base64
 import androidx.room.withTransaction
+import com.taostudio.tapaccounting.AiImageCompressor
 import com.taostudio.tapaccounting.AIService
 import com.taostudio.tapaccounting.BookAccountManager
 import com.taostudio.tapaccounting.Prefs
@@ -20,6 +23,8 @@ import com.taostudio.tapaccounting.logic.SplitAmounts
 import com.taostudio.tapaccounting.logic.SplitPreviewException
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.File
+import java.io.FileInputStream
 
 /**
  * 待记 → 账单的唯一写入/分类实现。
@@ -300,6 +305,7 @@ internal object CaptureImportService {
             fee = import.feeCents / 100.0,
             bookName = import.bookName?.takeIf { it.isNotBlank() } ?: defaultBook,
             relatedBillId = import.relatedBillId,
+            excludeFromStats = import.excludeFromStats,
         )
 
         val saved = BillMutationService.insertBillAndApplyImpact(
@@ -356,6 +362,7 @@ internal object CaptureImportService {
             remark = import.remarks,
             bookName = original.bookName,
             relatedBillId = original.id,
+            excludeFromStats = import.excludeFromStats,
         )
         val saved = BillMutationService.saveRefundBill(db, original, refund)
 
@@ -426,6 +433,7 @@ internal object CaptureImportService {
             bookName = obj.optString("bookName", "").takeIf { it.isNotBlank() },
             feeCents = obj.optLong("feeCents", 0L),
             relatedBillId = obj.longOrNull("relatedBillId"),
+            excludeFromStats = obj.optBoolean("excludeFromStats", false),
         )
     }
 
@@ -479,6 +487,98 @@ internal object CaptureImportService {
                     )
                 }
                 val db = AppDatabase.getDatabase(ctx)
+                val fallbackCategory = resolveFallbackCategory(db, billType)
+                JSONObject()
+                    .put("ok", true)
+                    .put("items", items)
+                    .put("sumCents", outcome.sumCents)
+                    .put("diffCents", outcome.diffCents)
+                    .put("totalCents", totalCents)
+                    .put("fallbackCategoryName", fallbackCategory ?: JSONObject.NULL)
+            }
+
+            is SplitAmounts.Outcome.Error -> errorJson(outcome.code, outcome.message)
+        }
+    }
+
+    /**
+     * 图片拆分记账预览：从 PFD 读取图片，在后台调用多模态模型识图并分类。
+     */
+    suspend fun previewImageSplit(
+        ctx: Context,
+        pfd: ParcelFileDescriptor?,
+        mime: String,
+        payload: JSONObject,
+    ): JSONObject {
+        if (pfd == null) {
+            return errorJson("missing_image", "缺少图片数据，请重新选择图片")
+        }
+        val totalCents = payload.optLong("totalCents", -1L)
+        val billType = payload.optInt("billType", Bill.TYPE_EXPENSE)
+        if (totalCents <= 0L) {
+            return errorJson("invalid_total", "付款金额无效，无法拆分")
+        }
+        if (billType != Bill.TYPE_EXPENSE && billType != Bill.TYPE_INCOME) {
+            return errorJson("split_unsupported_type", "转账/还款/退款不支持图片拆分")
+        }
+
+        val db = AppDatabase.getDatabase(ctx)
+        val allCategories = db.categoryDao().getAllCategoriesList()
+
+        val tempFile = File.createTempFile("split_img_pfd_", ".tmp", ctx.cacheDir)
+        val imageBase64: String
+        val actualMime: String
+        try {
+            FileInputStream(pfd.fileDescriptor).use { input ->
+                tempFile.outputStream().use { output -> input.copyTo(output) }
+            }
+            val compressed = AiImageCompressor.compressInPlace(tempFile)
+            val bytes = tempFile.readBytes()
+            if (bytes.isEmpty()) {
+                return errorJson("image_read_failed", "图片读取失败，请重新选择")
+            }
+            imageBase64 = Base64.encodeToString(bytes, Base64.NO_WRAP)
+            actualMime = if (compressed) AiImageCompressor.JPEG_MIME else mime
+        } catch (t: Throwable) {
+            return errorJson("image_read_failed", "图片读取处理异常：${t.message}")
+        } finally {
+            tempFile.delete()
+            runCatching { pfd.close() }
+        }
+
+        val rawItems = try {
+            AIService.splitImageItems(
+                ctx = ctx,
+                imageBase64 = imageBase64,
+                mimeType = actualMime,
+                totalCents = totalCents,
+                billType = billType,
+                categories = allCategories,
+            )
+        } catch (t: SplitPreviewException) {
+            return errorJson(t.code, t.message.orEmpty())
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (t: Throwable) {
+            return errorJson("split_ai_failed", t.message ?: "AI 识图拆分失败，请改用清晰图片")
+        }
+
+        val splitAmountsItems = rawItems.map { SplitAmounts.RawItem(it.name, it.amountCents) }
+        return when (val outcome = SplitAmounts.validate(totalCents, splitAmountsItems)) {
+            is SplitAmounts.Outcome.Ok -> {
+                val items = JSONArray()
+                outcome.items.forEachIndexed { index, item ->
+                    val resolvedCat = rawItems.getOrNull(index)?.category?.let { catName ->
+                        CategoryNameResolver.resolve(allCategories, catName, billType)?.name ?: catName
+                    }
+                    items.put(
+                        JSONObject()
+                            .put("name", item.name)
+                            .put("amountCents", item.amountCents)
+                            .put("inferred", item.inferred)
+                            .putOpt("categoryName", resolvedCat)
+                    )
+                }
                 val fallbackCategory = resolveFallbackCategory(db, billType)
                 JSONObject()
                     .put("ok", true)
@@ -580,6 +680,7 @@ internal object CaptureImportService {
         val bookName = payload.optString("bookName", "")
             .takeUnless { it.isBlank() || it == "null" }
             ?: defaultBook
+        val excludeFromStats = payload.optBoolean("excludeFromStats", false)
 
         val outcome = try {
             db.withTransaction {
@@ -619,6 +720,7 @@ internal object CaptureImportService {
                         remark = item.name,
                         bookName = bookName,
                         paymentGroupId = groupId,
+                        excludeFromStats = excludeFromStats,
                     )
                     val saved = BillMutationService.insertBillWithinActiveTransaction(
                         db = db,

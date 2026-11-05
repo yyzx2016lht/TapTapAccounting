@@ -47,6 +47,7 @@ internal class RuleMappingViews(
     private val scope: CoroutineScope,
     private val onDataChanged: () -> Unit,
 ) {
+    var onSyncDataRules: (() -> Unit)? = null
     private val density = activity.resources.displayMetrics.density
     private fun dp(v: Int): Int = (v * density + 0.5f).toInt()
 
@@ -104,16 +105,6 @@ internal class RuleMappingViews(
                     textColor = Color.WHITE,
                     bgColor = CaptureUi.BRAND,
                 ) { showEditAssetMappingDialog(null, appAssets) },
-                LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1.1f).apply { marginEnd = dp(6) },
-            )
-            btnRow.addView(
-                CaptureUi.button(
-                    activity = activity,
-                    text = "从自动记账导入",
-                    textColor = CaptureUi.BRAND_DARK,
-                    bgColor = CaptureUi.BRAND_SOFT,
-                    strokeColor = CaptureUi.BRAND_BORDER,
-                ) { triggerAutoAccountingImport() },
                 LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1.4f).apply { marginEnd = dp(6) },
             )
             btnRow.addView(
@@ -123,10 +114,11 @@ internal class RuleMappingViews(
                     textColor = CaptureUi.TEXT_SECONDARY,
                     bgColor = Color.parseColor("#F1F5F9"),
                     strokeColor = Color.parseColor("#CBD5E1"),
+                    paddingH = 10,
                 ) {
                     AlertDialog.Builder(activity)
                         .setTitle("恢复通用通道预置")
-                        .setMessage("将补齐${CaptureSources.all.joinToString("、") { it.displayName }}、花呗等通用渠道基础映射（不含任何具体个人银行卡）。不会删除你已自定义的规则。")
+                        .setMessage("将补齐常用支付渠道与钱包基础映射（不含任何具体个人银行卡）。不会删除你已自定义的规则。")
                         .setPositiveButton("恢复") { _, _ ->
                             scope.launch {
                                 withContext(Dispatchers.IO) {
@@ -426,19 +418,39 @@ internal class RuleMappingViews(
                     textColor = Color.WHITE,
                     bgColor = CaptureUi.BRAND,
                 ) { showEditCategoryRuleDialog(null, categoryPaths) },
-                LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1.2f).apply { marginEnd = dp(8) },
-            )
-            catBtnRow.addView(
-                CaptureUi.button(
-                    activity = activity,
-                    text = "从自动记账导入",
-                    textColor = CaptureUi.BRAND_DARK,
-                    bgColor = CaptureUi.BRAND_SOFT,
-                    strokeColor = CaptureUi.BRAND_BORDER,
-                ) { triggerAutoAccountingImport() },
-                LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1.2f),
+                LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT),
             )
             addView(catBtnRow)
+
+            val merchantCount = rules.count { it.matchField == CategoryRule.MATCH_MERCHANT }
+            if (merchantCount > 0) {
+                val convertRow = LinearLayout(activity).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    setPadding(0, dp(8), 0, 0)
+                }
+                convertRow.addView(
+                    CaptureUi.button(
+                        activity = activity,
+                        text = "⚡ 一键将 $merchantCount 条商户规则转为自动匹配（支持备注）",
+                        textColor = CaptureUi.BRAND_DARK,
+                        bgColor = CaptureUi.BRAND_SOFT,
+                        strokeColor = CaptureUi.BRAND_BORDER,
+                        paddingV = 8,
+                        textSizeSp = 12f,
+                    ) {
+                        scope.launch {
+                            val count = withContext(Dispatchers.IO) {
+                                CaptureApp.from(activity).database.categoryRuleDao()
+                                    .convertAllMerchantRules(CategoryRule.MATCH_ANY)
+                            }
+                            toast("已将 $count 条规则转为自动匹配")
+                            onDataChanged()
+                        }
+                    },
+                    LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT),
+                )
+                addView(convertRow)
+            }
         }
         container.addView(infoCard)
 
@@ -639,7 +651,11 @@ internal class RuleMappingViews(
                             CategoryRule(
                                 id = existing?.id ?: 0L,
                                 keyword = kw,
-                                matchField = existing?.matchField ?: CategoryRule.MATCH_ANY,
+                                matchField = if (existing?.matchField == CategoryRule.MATCH_MERCHANT) {
+                                    CategoryRule.MATCH_ANY
+                                } else {
+                                    existing?.matchField ?: CategoryRule.MATCH_ANY
+                                },
                                 isRegex = existing?.isRegex ?: false,
                                 targetCategoryName = cat,
                                 sort = existing?.sort ?: 0,
@@ -676,6 +692,7 @@ internal class RuleMappingViews(
         onSimulateExpense: () -> Unit,
         onSimulateWcdb: () -> Unit,
         onTestRuleSamples: () -> Unit,
+        onCustomSimulateExpense: (() -> Unit)? = null,
     ): View {
         val scroll = ScrollView(activity).apply {
             layoutParams = LinearLayout.LayoutParams(
@@ -705,7 +722,7 @@ internal class RuleMappingViews(
                 setTextColor(CaptureUi.TEXT_PRIMARY)
             })
             addView(TextView(activity).apply {
-                text = "选择${CaptureSources.all.joinToString("/") { it.displayName }}付款成功那一刻插件如何提示你（无论选哪种，敲击手机背面都能在记账悬浮窗里看到待记）："
+                text = "选择付款成功那一刻插件如何提示你（无论选哪种，敲击手机背面都能在记账悬浮窗里看到待记）："
                 textSize = 12.5f
                 setTextColor(CaptureUi.TEXT_SECONDARY)
                 setLineSpacing(0f, 1.2f)
@@ -858,11 +875,18 @@ internal class RuleMappingViews(
             row1.addView(
                 CaptureUi.button(
                     activity = activity,
-                    text = "模拟示例支出 (¥3)",
+                    text = "模拟支出 (长按自定义)",
                     textColor = CaptureUi.SUCCESS,
                     bgColor = CaptureUi.SUCCESS_SOFT,
                     strokeColor = CaptureUi.SUCCESS_BORDER,
-                ) { onSimulateExpense() },
+                ) { onSimulateExpense() }.apply {
+                    if (onCustomSimulateExpense != null) {
+                        setOnLongClickListener {
+                            onCustomSimulateExpense()
+                            true
+                        }
+                    }
+                },
                 LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginEnd = dp(8) },
             )
             row1.addView(
@@ -906,6 +930,54 @@ internal class RuleMappingViews(
             addView(row2)
         }
         container.addView(debugCard)
+
+        val migrationCard = CaptureUi.card(activity).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+            ).apply { topMargin = dp(12) }
+
+            addView(TextView(activity).apply {
+                text = "第三方数据迁移（可选）"
+                textSize = 15f
+                setTypeface(typeface, Typeface.BOLD)
+                setTextColor(CaptureUi.TEXT_PRIMARY)
+                setPadding(0, 0, 0, dp(6))
+            })
+            addView(TextView(activity).apply {
+                text = "若曾使用过「自动记账 (52045)」，可在此按需导入历史分类/资产映射与数据规则。"
+                textSize = 12f
+                setTextColor(CaptureUi.TEXT_SECONDARY)
+                setLineSpacing(0f, 1.2f)
+                setPadding(0, 0, 0, dp(10))
+            })
+
+            val mRow = LinearLayout(activity).apply { orientation = LinearLayout.HORIZONTAL }
+            mRow.addView(
+                CaptureUi.button(
+                    activity = activity,
+                    text = "从自动记账导入分类/资产",
+                    textColor = CaptureUi.BRAND_DARK,
+                    bgColor = CaptureUi.BRAND_SOFT,
+                    strokeColor = CaptureUi.BRAND_BORDER,
+                    textSizeSp = 12f,
+                ) { triggerAutoAccountingImport() },
+                LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1.2f).apply { marginEnd = dp(8) },
+            )
+            mRow.addView(
+                CaptureUi.button(
+                    activity = activity,
+                    text = "同步本机数据规则",
+                    textColor = CaptureUi.TEXT_SECONDARY,
+                    bgColor = CaptureUi.BG_SUBTLE,
+                    strokeColor = CaptureUi.BORDER,
+                    textSizeSp = 12f,
+                ) { onSyncDataRules?.invoke() },
+                LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f),
+            )
+            addView(mRow)
+        }
+        container.addView(migrationCard)
 
         return scroll
     }

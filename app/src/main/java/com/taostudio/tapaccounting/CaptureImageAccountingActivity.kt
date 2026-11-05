@@ -2,6 +2,7 @@ package com.taostudio.tapaccounting
 
 import android.app.Activity
 import android.app.AlertDialog
+import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.widget.Toast
@@ -78,6 +79,22 @@ class CaptureImageAccountingActivity : Activity() {
         if (captureContext.subType != Bill.SUBTYPE_NORMAL || captureContext.needsRefundLink) {
             toast("退款/还款账单请用悬浮窗细改")
             finish()
+            return
+        }
+
+        val preset = AiProviderRegistry.resolvePreset(this)
+        val apiKey = Prefs.getAiProviderKey(this, preset.id).ifBlank { Prefs.getAiKey(this) }
+        if (apiKey.isBlank()) {
+            AlertDialog.Builder(this)
+                .setTitle("未配置 AI 密钥")
+                .setMessage("识图记账需要调用多模态 AI 模型。是否现在前往配置？（当前待记账单会保留）")
+                .setPositiveButton("去配置") { _, _ ->
+                    startActivity(Intent(this, AiConfigActivity::class.java))
+                    finish()
+                }
+                .setNegativeButton("取消") { _, _ -> finish() }
+                .setOnCancelListener { finish() }
+                .show()
             return
         }
 

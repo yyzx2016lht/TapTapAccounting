@@ -269,57 +269,23 @@ internal object RelayServer {
             return
         }
 
-        // 周期重试时先尝试 52047 直连（若插件已被解冻，2ms 内直接完成）
-        if (!immediateWake && tryDirectPlugin(payload, relayId)) {
+        // 1. 优先尝试 52047 直连（若插件已被解冻或在线，1~3ms 内直接完成）
+        if (tryDirectPlugin(payload, relayId)) {
             deleteQueued(relayId)
             log("delivered via direct tcp id=$relayId")
             return
         }
 
-        // 1. 核心通道（与 AutoAccounting FloatingWindowTriggerActivity 完全一致）：
-        //    由 com.android.phone (UID 1001，具备后台启动 Activity 特权) 拉起 1px 透明无动画 CaptureWakeActivity，
-        //    ColorOS 会在 3ms 内将插件从 Hans 冻结黑名单移除（Hans update: false），并在 onCreate 内完成入库与弹窗。
-        try {
-            val wakeIntent = Intent(CaptureContract.ACTION_WAKE_INGEST).apply {
-                component = ComponentName(
-                    CaptureContract.PLUGIN_PACKAGE,
-                    CaptureContract.WAKE_ACTIVITY_CLASS,
-                )
-                putExtra(CaptureContract.EXTRA_TOKEN, BuildConfig.CAPTURE_INGEST_TOKEN)
-                putExtra(CaptureContract.EXTRA_PAYLOAD, payload)
-                putExtra(CaptureContract.EXTRA_RELAY_ID, relayId)
-                addFlags(
-                    Intent.FLAG_ACTIVITY_NEW_TASK or
-                        Intent.FLAG_ACTIVITY_NO_HISTORY or
-                        Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS or
-                        Intent.FLAG_ACTIVITY_NO_ANIMATION,
-                )
-            }
-            ctx.startActivity(wakeIntent)
-            log("started wake activity id=$relayId host=${ctx.packageName}")
-        } catch (t: Throwable) {
-            log("wake activity failed id=$relayId: ${t.javaClass.simpleName}: ${t.message}")
-        }
-
-        // startActivity 发出后约 4ms ColorOS 就会执行 Hans update:[uid=false] 解冻插件进程；
-        // 等待 15ms 后立即通过 52047 直连投递，这样即使屏幕熄灭或窗口过渡尚未走完 onCreate，也能在 20ms 内完成入库弹窗。
-        try {
-            Thread.sleep(15)
-        } catch (_: InterruptedException) {
-        }
-        if (tryDirectPlugin(payload, relayId)) {
-            deleteQueued(relayId)
-            log("delivered via direct tcp after wake id=$relayId")
-            return
-        }
-
-        // 2. 次选通过 ContentProvider.call / 显式高优广播兜底
+        // 2. 优先通过 ContentProvider.call 投递：
+        //    com.android.phone (UID 1001) 调用 ContentResolver.call 会由系统在后台启动/解冻目标进程，
+        //    并且完全不会抢夺前台 Window 焦点，彻底解决微信聊天时输入法被顶退失去焦点的问题！
         if (tryProviderCall(ctx, payload)) {
             deleteQueued(relayId)
             log("delivered via provider id=$relayId")
             return
         }
 
+        // 3. 次选通过显式高优广播唤醒插件进程
         try {
             val broadcastIntent = Intent(CaptureContract.ACTION_INGEST).apply {
                 component = ComponentName(
@@ -333,6 +299,47 @@ internal object RelayServer {
             ctx.sendBroadcast(broadcastIntent)
         } catch (t: Throwable) {
             log("broadcast plugin failed id=$relayId: ${t.javaClass.simpleName}")
+        }
+
+        // 广播发出后稍作等待再次直连
+        try {
+            Thread.sleep(30)
+        } catch (_: InterruptedException) {
+        }
+        if (tryDirectPlugin(payload, relayId)) {
+            deleteQueued(relayId)
+            log("delivered via direct tcp after broadcast id=$relayId")
+            return
+        }
+
+        // 4. 只有在确认是明确账单（payload 自带金额），且后台 IPC 均失效的极端兜底情况下，才考虑透明 Activity
+        val hasExplicitAmount = runCatching {
+            val json = JSONObject(payload)
+            json.has("amountCents") && json.optLong("amountCents", 0L) > 0L
+        }.getOrDefault(false)
+
+        if (hasExplicitAmount) {
+            try {
+                val wakeIntent = Intent(CaptureContract.ACTION_WAKE_INGEST).apply {
+                    component = ComponentName(
+                        CaptureContract.PLUGIN_PACKAGE,
+                        CaptureContract.WAKE_ACTIVITY_CLASS,
+                    )
+                    putExtra(CaptureContract.EXTRA_TOKEN, BuildConfig.CAPTURE_INGEST_TOKEN)
+                    putExtra(CaptureContract.EXTRA_PAYLOAD, payload)
+                    putExtra(CaptureContract.EXTRA_RELAY_ID, relayId)
+                    addFlags(
+                        Intent.FLAG_ACTIVITY_NEW_TASK or
+                            Intent.FLAG_ACTIVITY_NO_HISTORY or
+                            Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS or
+                            Intent.FLAG_ACTIVITY_NO_ANIMATION,
+                    )
+                }
+                ctx.startActivity(wakeIntent)
+                log("started wake activity as fallback id=$relayId host=${ctx.packageName}")
+            } catch (t: Throwable) {
+                log("wake activity fallback failed id=$relayId: ${t.javaClass.simpleName}: ${t.message}")
+            }
         }
     }
 

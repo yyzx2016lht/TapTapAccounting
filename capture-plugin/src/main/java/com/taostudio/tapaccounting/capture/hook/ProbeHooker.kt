@@ -189,6 +189,16 @@ internal object ProbeHooker {
             return
         }
 
+        // 过滤服务号消息盒子(318767153)与公众号文章(5)：
+        // 必须命中 DataFilter 动账关键词白名单（与 AutoAccounting 保持一致），
+        // 彻底阻断普通公众号推文、系统通知与广告营销消息。
+        if (table == TABLE_MESSAGE && type == MSG_TYPE_BOX && !DataFilter.matches(xmlSource)) {
+            return
+        }
+        if (table == TABLE_APP_MESSAGE && type == APPMSG_TYPE_ARTICLE && !DataFilter.matches(xmlSource)) {
+            return
+        }
+
         val rawTalker = readString(values, "talker")
             ?: ProbeText.xmlTagText(xmlSource, "receiver_username")
             ?: ProbeText.xmlTagText(xmlSource, "payer_username")
@@ -733,10 +743,11 @@ internal object ProbeHooker {
         for (index in 0 until array.length()) {
             val item = array.optJSONObject(index) ?: continue
             val text = item.toString()
-            // 规则 406/59 等按“JSON 数组”解析；AutoAccounting 的 MessageBoxHooker
-            // 也是把单条包成单元素数组后上报，不能只发 item。
-            // 不做关键词预过滤：未命中的消息只进原始历史，不会建待记，
-            // 预过滤反而会漏掉银行/红包等规则需要的消息。
+            // 核心过滤：匹配 DataFilter 关键词白名单（与 AutoAccounting MessageBoxHooker + AnalysisUtils 完全一致）
+            // 排除支付宝内部的所有非账单同步消息（如社交状态、安全检测、生活号推送、广告等）
+            if (!DataFilter.matches(text)) {
+                continue
+            }
             val ruleInput = JSONArray().put(item).toString()
 
             forwarded++

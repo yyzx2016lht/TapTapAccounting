@@ -43,6 +43,12 @@ interface PaymentCaptureDao {
     @Query("UPDATE payment_captures SET splitRequested = :splitRequested, updatedAt = :updatedAt WHERE id = :id")
     suspend fun updateSplitRequested(id: String, splitRequested: Boolean, updatedAt: Long): Int
 
+    @Query("UPDATE payment_captures SET bookName = :bookName, updatedAt = :updatedAt WHERE id = :id")
+    suspend fun updateBookName(id: String, bookName: String?, updatedAt: Long): Int
+
+    @Query("UPDATE payment_captures SET excludeFromStats = :excludeFromStats, updatedAt = :updatedAt WHERE id = :id")
+    suspend fun updateExcludeFromStats(id: String, excludeFromStats: Boolean, updatedAt: Long): Int
+
     @Query("UPDATE payment_captures SET categoryName = :categoryName, updatedAt = :updatedAt WHERE id = :id")
     suspend fun updateCategoryName(id: String, categoryName: String?, updatedAt: Long): Int
 
@@ -57,6 +63,28 @@ interface PaymentCaptureDao {
         categoryName: String?,
         updatedAt: Long,
     ): Int
+
+    @Query(
+        """
+        SELECT * FROM payment_captures
+        WHERE amountCents = :amountCents
+          AND paidAt BETWEEN :startTime AND :endTime
+          AND status IN (:statuses)
+        ORDER BY paidAt ASC, createdAt ASC
+        """
+    )
+    suspend fun findPotentialDuplicates(
+        amountCents: Long,
+        startTime: Long,
+        endTime: Long,
+        statuses: List<String>,
+    ): List<PaymentCapture>
+
+    @Query("SELECT * FROM payment_captures WHERE groupId = :groupId ORDER BY createdAt ASC")
+    suspend fun listMergedChildren(groupId: String): List<PaymentCapture>
+
+    @Query("UPDATE payment_captures SET status = :status, groupId = NULL, updatedAt = :updatedAt WHERE id = :id")
+    suspend fun unmerge(id: String, status: String, updatedAt: Long): Int
 
     @Query("DELETE FROM payment_captures WHERE id = :id")
     suspend fun deleteById(id: String): Int

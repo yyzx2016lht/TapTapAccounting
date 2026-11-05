@@ -20,7 +20,7 @@ class CaptureEventRepository(private val dao: CaptureEventDao) {
         channel: String?,
     ): Long {
         val hash = md5(rawJson)
-        return dao.insertIgnore(
+        val insertedId = dao.insertIgnore(
             CaptureEvent(
                 source = source,
                 rawType = rawType,
@@ -38,9 +38,48 @@ class CaptureEventRepository(private val dao: CaptureEventDao) {
                 rawHash = hash,
             )
         )
+        // 若哈希已存在（例如之前未匹配落库），但本次重新计算/重投递成功匹配，则更新历史记录的状态
+        if (insertedId == -1L && matched) {
+            dao.updateMatchResultByHash(
+                rawHash = hash,
+                matched = true,
+                ruleName = ruleName,
+                autoType = autoType,
+                localType = localType,
+                localSubType = localSubType,
+                amountCents = amountCents,
+                merchant = merchant,
+                channel = channel,
+            )
+        }
+        return insertedId
     }
 
+    suspend fun updateMatchResult(
+        id: Long,
+        matched: Boolean,
+        ruleName: String?,
+        autoType: String?,
+        localType: Int?,
+        localSubType: Int?,
+        amountCents: Long?,
+        merchant: String?,
+        channel: String?,
+    ) = dao.updateMatchResult(
+        id = id,
+        matched = matched,
+        ruleName = ruleName,
+        autoType = autoType,
+        localType = localType,
+        localSubType = localSubType,
+        amountCents = amountCents,
+        merchant = merchant,
+        channel = channel,
+    )
+
     suspend fun listRecent(limit: Int = 500): List<CaptureEvent> = dao.listRecent(limit)
+
+    suspend fun listUnmatched(limit: Int = 200): List<CaptureEvent> = dao.listUnmatched(limit)
 
     suspend fun count(): Int = dao.count()
 

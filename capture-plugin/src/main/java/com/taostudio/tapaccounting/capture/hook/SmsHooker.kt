@@ -80,6 +80,11 @@ internal object SmsHooker {
     }
 
     private fun handle(sender: String, body: String) {
+        // 核心过滤：必须命中账单动账白名单（排除验证码、营销广告、个人短信）
+        if (!DataFilter.matches(body)) {
+            return
+        }
+
         val key = md5("$sender|$body")
         if (!markSeen(key)) {
             log("skip duplicate sender=$sender")

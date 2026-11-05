@@ -52,8 +52,9 @@ class RuleLearningPolicyTest {
     }
 
     @Test
-    fun `manual source is not eligible`() {
-        assertFalse(RuleLearningPolicy.isEligible(capture(source = CategorySource.MANUAL)))
+    fun `manual source is eligible when note and category present`() {
+        assertTrue(RuleLearningPolicy.isEligible(capture(source = CategorySource.MANUAL)))
+        assertFalse(RuleLearningPolicy.isEligible(capture(source = CategorySource.RULE)))
         assertFalse(RuleLearningPolicy.isEligible(capture(source = null)))
     }
 

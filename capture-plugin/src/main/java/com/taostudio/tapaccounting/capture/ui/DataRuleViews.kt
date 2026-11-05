@@ -13,11 +13,13 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.CheckBox
 import android.widget.EditText
+import android.widget.HorizontalScrollView
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.Switch
 import android.widget.TextView
 import android.widget.Toast
+import com.taostudio.tapaccounting.capture.bridge.CaptureBridgeClient
 import com.taostudio.tapaccounting.capture.data.RuleBundleCodec
 import com.taostudio.tapaccounting.capture.data.RuleBundleStore
 import com.taostudio.tapaccounting.capture.history.AutoAccountingRuleSync
@@ -42,14 +44,43 @@ internal class DataRuleViews(
     private val activity: Activity,
     private val scope: CoroutineScope,
     private val onDataChanged: () -> Unit,
-    private val onExport: () -> Unit,
-    private val onImport: () -> Unit,
+    private val onExport: () -> Unit = {},
+    private val onImport: () -> Unit = {},
 ) {
     private val density = activity.resources.displayMetrics.density
     private val dateFormat = SimpleDateFormat("MM-dd HH:mm", Locale.getDefault())
     private var visibleLimit = 50
 
     private fun dp(value: Int): Int = (value * density + 0.5f).toInt()
+
+    enum class RuleCategory(val id: String, val title: String, val emoji: String) {
+        ALL("all", "全部", "📋"),
+        USER("user", "我的规则", "⭐"),
+        WECHAT("wechat", "微信", "🟢"),
+        ALIPAY("alipay", "支付宝", "🔵"),
+        SMS("sms", "短信动账", "💬"),
+        BANK("bank", "手机银行", "🏦"),
+        COMMERCE("commerce", "电商生活", "🛍️"),
+        UNIONPAY("unionpay", "云闪付/数币", "💳"),
+        OTHER("other", "其他", "📦");
+
+        fun matches(rule: RuleBundleCodec.Rule): Boolean {
+            if (this == ALL) return true
+            if (this == USER) return rule.isUser
+            if (rule.isUser) return false
+            val app = rule.app.lowercase(Locale.US)
+            return when (this) {
+                WECHAT -> app == "com.tencent.mm"
+                ALIPAY -> app == "com.eg.android.alipaygphone"
+                SMS -> app == "com.android.phone"
+                UNIONPAY -> app == "com.unionpay" || app == "cn.gov.pbc.dcep" || app.contains("wallet") || app.contains("tsmclient")
+                BANK -> app.contains("bank") || app.contains("cmb") || app.contains("icbc") || app.contains("chinamworld") || app.contains("spdb") || app.contains("yitong") || app.contains("cib")
+                COMMERCE -> app.contains("meituan") || app.contains("jd") || app.contains("jingdong") || app.contains("pinduoduo") || app.contains("didi") || app.contains("aweme") || app.contains("lifeservices")
+                OTHER -> !WECHAT.matches(rule) && !ALIPAY.matches(rule) && !SMS.matches(rule) && !UNIONPAY.matches(rule) && !BANK.matches(rule) && !COMMERCE.matches(rule)
+                else -> false
+            }
+        }
+    }
 
     fun buildDataRuleTab(bundle: RuleBundleCodec.Bundle): View {
         val scroll = ScrollView(activity).apply {
@@ -77,24 +108,43 @@ internal class DataRuleViews(
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT,
-            ).apply { bottomMargin = dp(10) }
+            ).apply { bottomMargin = dp(8) }
         }
         container.addView(searchBox)
 
+        var selectedCategory = RuleCategory.ALL
+
+        val chipScroll = HorizontalScrollView(activity).apply {
+            isHorizontalScrollBarEnabled = false
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+            ).apply { bottomMargin = dp(10) }
+        }
+        val chipContainer = LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL
+        }
+        chipScroll.addView(chipContainer)
+        container.addView(chipScroll)
+
         val listHost = LinearLayout(activity).apply { orientation = LinearLayout.VERTICAL }
         container.addView(listHost)
+
+        lateinit var updateChips: () -> Unit
 
         fun renderList(query: String) {
             listHost.removeAllViews()
             val q = query.trim()
             val filtered = RuleBundleCodec.orderedForEngine(
                 bundle.rules.filter { rule ->
-                    q.isEmpty() ||
-                        rule.name.contains(q, ignoreCase = true) ||
-                        rule.app.contains(q, ignoreCase = true) ||
-                        rule.systemRuleName.contains(q, ignoreCase = true) ||
-                        rule.typeLabel.contains(q, ignoreCase = true) ||
-                        rule.sourceLabel.contains(q, ignoreCase = true)
+                    selectedCategory.matches(rule) && (
+                        q.isEmpty() ||
+                            rule.name.contains(q, ignoreCase = true) ||
+                            rule.app.contains(q, ignoreCase = true) ||
+                            rule.systemRuleName.contains(q, ignoreCase = true) ||
+                            rule.typeLabel.contains(q, ignoreCase = true) ||
+                            rule.sourceLabel.contains(q, ignoreCase = true)
+                    )
                 },
             )
             if (filtered.isEmpty()) {
@@ -105,11 +155,13 @@ internal class DataRuleViews(
             val userRules = shown.filter { it.isUser }
             val systemRules = shown.filterNot { it.isUser }
             if (userRules.isNotEmpty()) {
-                listHost.addView(sectionTitle("我的规则", "优先执行 · 可编辑/删除"))
+                val userCount = if (selectedCategory == RuleCategory.USER) filtered.size else userRules.size
+                listHost.addView(sectionTitle("我的规则 ($userCount)", "优先执行 · 可编辑/删除"))
                 userRules.forEach { listHost.addView(buildRuleCard(it, bundle)) }
             }
             if (systemRules.isNotEmpty()) {
-                listHost.addView(sectionTitle("系统规则", "只读 · 可测试/复制/启停"))
+                val catLabel = if (selectedCategory == RuleCategory.ALL) "系统规则" else "${selectedCategory.emoji} ${selectedCategory.title}规则"
+                listHost.addView(sectionTitle("$catLabel (${filtered.size - userRules.size})", "只读 · 可测试/复制/启停"))
                 systemRules.forEach { listHost.addView(buildRuleCard(it, bundle)) }
             }
             if (filtered.size > shown.size) {
@@ -133,6 +185,40 @@ internal class DataRuleViews(
                 )
             }
         }
+
+        updateChips = {
+            chipContainer.removeAllViews()
+            RuleCategory.values().forEach { cat ->
+                val count = when (cat) {
+                    RuleCategory.ALL -> bundle.rules.size
+                    RuleCategory.USER -> bundle.rules.count { it.isUser }
+                    else -> bundle.rules.count { cat.matches(it) }
+                }
+                if (count == 0 && cat != RuleCategory.ALL && cat != RuleCategory.USER) return@forEach
+
+                val isSelected = cat == selectedCategory
+                val chip = TextView(activity).apply {
+                    text = "${cat.emoji} ${cat.title} ($count)"
+                    textSize = 12f
+                    setTypeface(typeface, if (isSelected) Typeface.BOLD else Typeface.NORMAL)
+                    setTextColor(if (isSelected) Color.WHITE else CaptureUi.TEXT_PRIMARY)
+                    val bgColor = if (isSelected) CaptureUi.BRAND else Color.parseColor("#EFEFEF")
+                    background = CaptureUi.roundedBg(bgColor, dp(14), 0, 0)
+                    setPadding(dp(11), dp(5), dp(11), dp(5))
+                    setOnClickListener {
+                        selectedCategory = cat
+                        updateChips()
+                        visibleLimit = 50
+                        renderList(searchBox.text?.toString().orEmpty())
+                    }
+                }
+                chipContainer.addView(chip, LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                ).apply { marginEnd = dp(6) })
+            }
+        }
+        updateChips()
 
         searchBox.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
@@ -182,21 +268,11 @@ internal class DataRuleViews(
         row1.addView(
             CaptureUi.button(
                 activity = activity,
-                text = "同步本机自动记账",
-                textColor = CaptureUi.BRAND_DARK,
-                bgColor = CaptureUi.BRAND_SOFT,
-                strokeColor = CaptureUi.BRAND_BORDER,
-            ) { syncFromLocal() },
-            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1.35f).apply { marginEnd = dp(8) },
-        )
-        row1.addView(
-            CaptureUi.button(
-                activity = activity,
                 text = "+ 新建规则",
                 textColor = Color.WHITE,
                 bgColor = CaptureUi.BRAND,
             ) { showRuleForm(null, bundle) },
-            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f),
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT),
         )
         card.addView(row1)
 
@@ -430,7 +506,7 @@ internal class DataRuleViews(
         }
     }
 
-    private fun syncFromLocal() {
+    internal fun syncFromLocal() {
         val progress = AlertDialog.Builder(activity)
             .setTitle("正在同步本机规则")
             .setMessage("正在读取自动记账 127.0.0.1:52045 的数据规则与 common 脚本…")
@@ -514,8 +590,36 @@ internal class DataRuleViews(
     //  自定义规则表单
     // ════════════════════════════════════════════════════════
 
-    private fun showRuleForm(existing: RuleBundleCodec.Rule?, bundle: RuleBundleCodec.Bundle) {
-        val initial = existing?.let { rule ->
+    internal fun showRuleFormForSample(
+        sampleJson: String,
+        targetApp: String? = null,
+        targetType: String? = null,
+        targetName: String? = null,
+        presetForm: RuleJsBuilder.RuleForm? = null,
+        aiNotice: String? = null,
+        bundle: RuleBundleCodec.Bundle = RuleBundleStore.load(activity),
+    ) {
+        val initial = presetForm ?: RuleJsBuilder.RuleForm(
+            app = targetApp.orEmpty(),
+            type = if (targetType?.equals(RuleBundleCodec.TYPE_NOTICE, ignoreCase = true) == true) {
+                RuleBundleCodec.TYPE_NOTICE
+            } else {
+                RuleBundleCodec.TYPE_DATA
+            },
+            name = targetName.orEmpty(),
+            enabled = true,
+        )
+        showRuleForm(existing = null, bundle = bundle, presetForm = initial, sampleJson = sampleJson, aiNotice = aiNotice)
+    }
+
+    private fun showRuleForm(
+        existing: RuleBundleCodec.Rule?,
+        bundle: RuleBundleCodec.Bundle,
+        presetForm: RuleJsBuilder.RuleForm? = null,
+        sampleJson: String? = null,
+        aiNotice: String? = null,
+    ) {
+        val initial = presetForm ?: (existing?.let { rule ->
             RuleJsBuilder.RuleForm.fromMeta(rule.meta)?.copy(
                 app = rule.app,
                 type = rule.type,
@@ -527,7 +631,7 @@ internal class DataRuleViews(
             type = RuleBundleCodec.TYPE_DATA,
             name = "",
             enabled = true,
-        )
+        ))
 
         var selectedType = RuleJsBuilder.normalizeType(initial.type)
         var selectedBillType = RuleJsBuilder.normalizeBillType(initial.billType)
@@ -537,6 +641,26 @@ internal class DataRuleViews(
             setPadding(dp(20), dp(8), dp(20), dp(8))
         }
         val scroll = ScrollView(activity).apply { addView(layout) }
+
+        if (!aiNotice.isNullOrBlank()) {
+            val isSuccess = aiNotice.startsWith("✓")
+            layout.addView(TextView(activity).apply {
+                text = aiNotice
+                textSize = 12.5f
+                setTextColor(if (isSuccess) CaptureUi.SUCCESS else Color.parseColor("#E65100"))
+                background = CaptureUi.roundedBg(
+                    if (isSuccess) CaptureUi.SUCCESS_SOFT else Color.parseColor("#FFF3E0"),
+                    dp(8),
+                    dp(1),
+                    if (isSuccess) CaptureUi.SUCCESS_BORDER else Color.parseColor("#FFE0B2"),
+                )
+                setPadding(dp(12), dp(8), dp(12), dp(8))
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                ).apply { bottomMargin = dp(10) }
+            })
+        }
 
         val etApp = addField(layout, "应用包名", "com.tencent.mm / com.eg.android.AlipayGphone", initial.app)
         val etName = addField(layout, "规则名称", "例如：微信零钱付款", initial.name)
@@ -593,14 +717,37 @@ internal class DataRuleViews(
 
         var formDialog: AlertDialog? = null
         val testRow = LinearLayout(activity).apply { orientation = LinearLayout.HORIZONTAL }
+
+        if (!sampleJson.isNullOrBlank()) {
+            testRow.addView(
+                CaptureUi.button(
+                    activity = activity,
+                    text = "🤖 AI 解析",
+                    textColor = Color.parseColor("#1565C0"),
+                    bgColor = Color.parseColor("#E3F2FD"),
+                    strokeColor = Color.parseColor("#90CAF9"),
+                    textSizeSp = 12f,
+                ) {
+                    formDialog?.dismiss()
+                    generateRuleWithAi(
+                        sampleJson = sampleJson,
+                        targetApp = etApp.text?.toString(),
+                        targetType = selectedType,
+                        bundle = bundle,
+                    )
+                },
+                LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 0.9f).apply { marginEnd = dp(6) },
+            )
+        }
+
         testRow.addView(
             CaptureUi.button(
                 activity = activity,
-                text = "用样本测试这些字段",
+                text = "测试字段",
                 textColor = CaptureUi.SUCCESS,
                 bgColor = CaptureUi.SUCCESS_SOFT,
                 strokeColor = CaptureUi.SUCCESS_BORDER,
-                textSizeSp = 12.5f,
+                textSizeSp = 12f,
             ) {
                 val draft = buildRuleFromForm(
                     existing = existing,
@@ -611,9 +758,9 @@ internal class DataRuleViews(
                         enabledBox.isChecked, initial.ignoreCase,
                     ),
                 )
-                if (draft != null) showRuleTestDialog(draft, bundle.common)
+                if (draft != null) showRuleTestDialog(draft, bundle.common, sampleJson = sampleJson)
             },
-            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginEnd = dp(8) },
+            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginEnd = dp(6) },
         )
         testRow.addView(
             CaptureUi.button(
@@ -622,7 +769,7 @@ internal class DataRuleViews(
                 textColor = CaptureUi.TEXT_SECONDARY,
                 bgColor = CaptureUi.BG_SUBTLE,
                 strokeColor = CaptureUi.BORDER,
-                textSizeSp = 12.5f,
+                textSizeSp = 12f,
             ) {
                 val draft = buildRuleFromForm(
                     existing = existing,
@@ -702,6 +849,88 @@ internal class DataRuleViews(
             }
         }
         dialog.show()
+    }
+
+    internal fun generateRuleWithAi(
+        sampleJson: String,
+        targetApp: String? = null,
+        targetType: String? = null,
+        bundle: RuleBundleCodec.Bundle = RuleBundleStore.load(activity),
+    ) {
+        val progress = AlertDialog.Builder(activity)
+            .setTitle("🤖 AI 正在分析报文")
+            .setMessage("正在调用大模型分析原始报文，生成泛化正则与字段映射…")
+            .setCancelable(false)
+            .create()
+        progress.show()
+
+        scope.launch {
+            val bridge = CaptureBridgeClient(activity)
+            val appPkg = targetApp?.takeIf { it.isNotBlank() } ?: "com.tencent.mm"
+            val type = targetType?.takeIf { it.isNotBlank() } ?: RuleBundleCodec.TYPE_DATA
+            val result = withContext(Dispatchers.IO) {
+                bridge.generateRule(app = appPkg, type = type, rawJson = sampleJson)
+            }
+            progress.dismiss()
+
+            if (!result.ok || result.rule == null) {
+                AlertDialog.Builder(activity)
+                    .setTitle("AI 生成规则失败")
+                    .setMessage(result.error ?: "AI 未能生成有效规则，请检查网络或 AI 配置。\n\n是否改用手动编写规则？")
+                    .setPositiveButton("手动编写") { _, _ ->
+                        showRuleFormForSample(sampleJson, targetApp, targetType, null, bundle = bundle)
+                    }
+                    .setNegativeButton("取消", null)
+                    .show()
+                return@launch
+            }
+
+            val r = result.rule
+            val form = RuleJsBuilder.RuleForm(
+                app = appPkg,
+                type = type,
+                name = r.optString("name", "AI 生成规则"),
+                enabled = true,
+                pattern = r.optString("pattern"),
+                billType = RuleJsBuilder.normalizeBillType(r.optString("billType", RuleJsBuilder.BILL_EXPEND)),
+                amountField = r.optString("amountField", "$1"),
+                merchantField = r.optString("merchantField"),
+                itemField = r.optString("itemField"),
+                accountFromField = r.optString("accountFromField"),
+                accountToField = r.optString("accountToField"),
+                feeField = r.optString("feeField", "0"),
+                currencyField = r.optString("currencyField", "CNY"),
+                timeField = r.optString("timeField"),
+                ignoreCase = true,
+            )
+
+            // 本地 QuickJS 验证
+            val draftJs = RuleJsBuilder.buildJs(form, "rule_test_ai")
+            val testResult = AutoAccountingRuleEngine.testRule(
+                common = bundle.common,
+                js = draftJs,
+                systemRuleName = "rule_test_ai",
+                rawJson = sampleJson,
+            )
+
+            val notice = if (testResult.matched) {
+                val fieldSummary = testResult.fields.take(4).joinToString("，") { "${it.first}: ${it.second}" }
+                "✓ AI 规则已在当前样本上验证通过！${if (fieldSummary.isNotEmpty()) fieldSummary else "已成功提取字段"}\n请核对字段后保存。"
+            } else {
+                val err = testResult.error?.takeIf { it.isNotBlank() }?.let { " ($it)" }.orEmpty()
+                "⚠️ AI 生成了规则骨架，但在当前样本上尚未成功匹配$err，请检查并微调正则表达式。"
+            }
+
+            showRuleFormForSample(
+                sampleJson = sampleJson,
+                targetApp = appPkg,
+                targetType = type,
+                targetName = form.name,
+                presetForm = form,
+                aiNotice = notice,
+                bundle = bundle,
+            )
+        }
     }
 
     private fun readForm(
@@ -858,7 +1087,7 @@ internal class DataRuleViews(
         dialog.show()
     }
 
-    private fun showRuleTestDialog(rule: RuleBundleCodec.Rule, common: String) {
+    private fun showRuleTestDialog(rule: RuleBundleCodec.Rule, common: String, sampleJson: String? = null) {
         val layout = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(20), dp(8), dp(20), dp(8))
@@ -870,7 +1099,7 @@ internal class DataRuleViews(
             setPadding(0, 0, 0, dp(6))
         })
         val sampleInput = EditText(activity).apply {
-            setText(defaultSample(rule))
+            setText(sampleJson?.takeIf { it.isNotBlank() } ?: defaultSample(rule))
             textSize = 12f
             typeface = Typeface.MONOSPACE
             gravity = Gravity.TOP
@@ -944,19 +1173,67 @@ internal class DataRuleViews(
         }
     }
 
-    private fun defaultSample(rule: RuleBundleCodec.Rule): String = when {
-        rule.type == RuleBundleCodec.TYPE_NOTICE -> """
-            {"title":"支付成功","text":"向测试商户付款12.34元","tickerText":"","postTime":1720000000000}
-        """.trimIndent()
-        rule.app == "com.tencent.mm" -> """
-            {"mMap":{"description":"使用零钱支付¥12.34","source":"微信支付","title":"已支付¥12.34","display_name":"测试商户","t":1720000000000}}
-        """.trimIndent()
-        rule.app.contains("alipay", ignoreCase = true) -> """
-            {"mMap":{"description":"使用余额宝付款12.34元","source":"支付宝","title":"付款成功","display_name":"测试商户","t":1720000000000}}
-        """.trimIndent()
-        else -> """
-            {"mMap":{"description":"使用零钱支付¥12.34","source":"微信支付","title":"已支付¥12.34","display_name":"测试商户","cachedPayMoney":"12.34","t":1720000000000}}
-        """.trimIndent()
+    private fun defaultSample(rule: RuleBundleCodec.Rule): String {
+        val name = rule.name
+        val js = rule.js
+
+        // 1. 通知规则（NOTICE）：提取 expectedTitle 与 regex 动态生成精准匹配报文
+        if (rule.type == RuleBundleCodec.TYPE_NOTICE) {
+            val titleMatch = Regex("""expectedTitle:\s*(?:\["([^"]+)"|"([^"]+)")""").find(js)
+            val title = titleMatch?.let { it.groupValues[1].ifEmpty { it.groupValues[2] } }
+                ?: name.substringBefore(" ").substringBefore("消费").substringBefore("通知")
+            val sampleText = when {
+                name.contains("还款") -> "您尾号1234卡于本月还款成功人民币12.34元"
+                name.contains("退款") -> "您的退款人民币12.34元已到账"
+                name.contains("转账") -> "向张三转账人民币12.34元成功"
+                name.contains("红包") -> "收到红包12.34元"
+                name.contains("定存") || name.contains("理财") -> "买入理财产品12.34元成功"
+                name.contains("扣费") || js.contains("扣费") -> "已扣费¥12.34"
+                else -> "已支付¥12.34，向测试商户付款成功"
+            }
+            return """{"title":"$title","text":"$sampleText","tickerText":"$sampleText","postTime":${System.currentTimeMillis()}}"""
+        }
+
+        // 2. 微信数据规则
+        if (rule.app == "com.tencent.mm") {
+            return when {
+                name.contains("转账") ->
+                    """{"type":"transfer","isSend":1,"hookerUser":"好友","cachedPayTools":"零钱","content":"{\"msg\":{\"appmsg\":{\"wcpayinfo\":{\"feedesc\":\"￥12.34\",\"pay_memo\":\"测试转账\",\"paysubtype\":1}}}}","t":${System.currentTimeMillis()}}"""
+                name.contains("红包") ->
+                    """{"type":"red_package","isSend":1,"hookerUser":"群友","content":"{\"msg\":{\"appmsg\":{\"wcpayinfo\":{\"feedesc\":\"￥6.66\",\"paysubtype\":1}}}}","t":${System.currentTimeMillis()}}"""
+                name.contains("群收款") ->
+                    """{"type":"aa","isSend":1,"hookerUser":"组织者","content":"{\"msg\":{\"appmsg\":{\"wcpayinfo\":{\"feedesc\":\"￥25.00\",\"paysubtype\":1}}}}","t":${System.currentTimeMillis()}}"""
+                name.contains("公交") ->
+                    """{"type":"bus","fee":"12.34","channel":"微信公交","display_name":"乘车码扣费","t":${System.currentTimeMillis()}}"""
+                name.contains("退款") ->
+                    """{"type":"refund","source":"微信支付","description":"退款金额￥12.34\n商户名称：美团","title":"退款成功","t":${System.currentTimeMillis()}}"""
+                name.contains("公众号") ->
+                    """{"title":"${name.removePrefix("微信公众号")}","digest":"您于近期消费人民币12.34元","content":"您于近期消费人民币12.34元","t":${System.currentTimeMillis()}}"""
+                else ->
+                    """{"mMap":{"description":"使用零钱支付¥12.34","source":"微信支付","title":"已支付¥12.34","display_name":"测试商户","t":${System.currentTimeMillis()}}}"""
+            }
+        }
+
+        // 3. 支付宝数据规则
+        if (rule.app.contains("alipay", ignoreCase = true)) {
+            return when {
+                name.contains("账单列表") ->
+                    """[{"money":"-12.34","shopName":"测试商户","consumeTitle":"测试商品","time":"2026-04-12 12:00:00"}]"""
+                name.contains("付款码") ->
+                    """[{"pl":"{\"sdkBizData\":\"{\\\"fee\\\":\\\"12.34\\\",\\\"shopName\\\":\\\"便利店\\\",\\\"payTools\\\":\\\"花呗\\\"}\"}"}]"""
+                name.contains("退款") ->
+                    """{"content":"{\"content\":\"退款成功￥12.34\",\"title\":\"退款通知\",\"shopName\":\"淘宝商户\",\"payTools\":\"花呗\"}"}"""
+                name.contains("收款") || name.contains("收钱码") ->
+                    """{"content":"{\"content\":\"二维码收款到账12.34元\",\"title\":\"收钱码到账通知\",\"money\":\"12.34\",\"payTools\":\"余额\"}"}"""
+                name.contains("红包") ->
+                    """{"content":"{\"content\":\"收到现金红包6.66元\",\"title\":\"红包通知\",\"money\":\"6.66\",\"payTools\":\"余额\"}"}"""
+                else ->
+                    """{"content":"{\"content\":\"付款成功￥12.34\",\"money\":\"12.34\",\"shopName\":\"便利店\",\"payTools\":\"余额宝\",\"title\":\"付款成功\"}"}"""
+            }
+        }
+
+        // 4. 银行/短信/其他通知
+        return """{"title":"交易提醒","text":"您尾号1234卡于近期消费人民币12.34元【测试银行】","sender":"95555"}"""
     }
 
     // ════════════════════════════════════════════════════════

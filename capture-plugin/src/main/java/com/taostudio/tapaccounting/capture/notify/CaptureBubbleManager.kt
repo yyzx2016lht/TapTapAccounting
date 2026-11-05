@@ -35,6 +35,7 @@ import com.taostudio.tapaccounting.capture.contract.ImportItemStatus
 import com.taostudio.tapaccounting.capture.contract.LocalBillType
 import com.taostudio.tapaccounting.capture.data.CategorySource
 import com.taostudio.tapaccounting.capture.data.PaymentCapture
+import com.taostudio.tapaccounting.capture.ui.CaptureImagePickerActivity
 import com.taostudio.tapaccounting.capture.ui.SplitConfirmSheet
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -517,6 +518,55 @@ object CaptureBubbleManager {
             )
         }
 
+        suspend fun previewImageSplitThenConfirm(base: PaymentCapture, imageUri: android.net.Uri) {
+            val amountCents = base.amountCents ?: 0L
+            val billType = base.billType ?: LocalBillType.TYPE_EXPENSE
+            if (amountCents <= 0L) {
+                fineTune(base.note, BubbleRecordPolicy.Block.AMOUNT_MISSING.message)
+                return
+            }
+            if (isActive()) setStatus("正在识别图片并拆单分类…", "#94A3B8")
+            val preview = CaptureBridgeClient(app).previewImageSplit(
+                captureId = base.id,
+                totalCents = amountCents,
+                billType = billType,
+                imageUri = imageUri,
+            )
+            if (!preview.ok) {
+                if (isActive()) {
+                    setStatus(
+                        "图片拆单未完成：${humanizeSplitError(preview.error, preview.message)}",
+                        "#FCA5A5",
+                    )
+                    applyState(BubbleState.INPUT)
+                }
+                return
+            }
+            if (!isActive()) return
+            cancelAutoDismiss()
+            s.state = BubbleState.SPLIT
+            s.root.removeAllViews()
+            s.root.setPadding(0, 0, 0, 0)
+            s.root.background = null
+            s.root.addView(
+                SplitConfirmSheet.buildOverlayContent(
+                    context = app,
+                    capture = base,
+                    preview = preview,
+                    onCancel = { dismissImmediate(app) },
+                    onEdit = {
+                        dismissImmediate(app)
+                        toast("已保留待记，可在待记列表改备注后重试")
+                    },
+                    onConfirm = { items ->
+                        val total = base.amountCents ?: 0L
+                        dismissImmediate(app)
+                        scope.launch { importGroupAndToast(base, items, total) }
+                    },
+                )
+            )
+        }
+
         suspend fun classifyThenResult() {
             val noteText = etNote.text?.toString()?.trim().orEmpty()
             val repository = CaptureApp.from(app).repository
@@ -731,34 +781,28 @@ object CaptureBubbleManager {
             runBusy {
                 val latest = persistNote(etNote.text?.toString()) ?: s.capture
                 s.capture = latest
-                CaptureNotifier.refreshAll(app)
-                val result = CaptureBridgeClient(app).openImageAccounting(
-                    latest,
-                    UUID.randomUUID().toString(),
-                )
-                when {
-                    result.duplicate -> {
-                        withContext(Dispatchers.IO) {
-                            CaptureApp.from(app).repository
-                                .updateStatus(latest.id, CaptureStatus.RECORDED)
-                        }
-                        CaptureNotifier.refreshAll(app)
-                        toast("这笔已入账，未重复建单")
-                        dismissImmediate(app)
-                    }
-
-                    result.ok && result.accepted -> {
-                        toast("已打开图片记账：选小票/截图后点“确认入账并合并”")
-                        dismissImmediate(app)
-                    }
-
-                    else -> {
-                        toast(
-                            "图片记账未打开：" +
-                                (result.message ?: result.error ?: "敲敲记账桥接不可用")
-                        )
-                    }
+                val amountCents = latest.amountCents ?: 0L
+                val type = latest.billType ?: LocalBillType.TYPE_EXPENSE
+                if (amountCents <= 0L) {
+                    fineTune(latest.note, BubbleRecordPolicy.Block.AMOUNT_MISSING.message)
+                    return@runBusy
                 }
+                if (type !in setOf(LocalBillType.TYPE_EXPENSE, LocalBillType.TYPE_INCOME) ||
+                    latest.subType == LocalBillType.SUBTYPE_REFUND ||
+                    latest.needsRefundLink
+                ) {
+                    fineTune(latest.note, "图片记账只支持普通支出/收入")
+                    return@runBusy
+                }
+                CaptureImagePickerActivity.pickImage(
+                    context = app,
+                    onPicked = { uri ->
+                        runBusy { previewImageSplitThenConfirm(latest, uri) }
+                    },
+                    onCancelled = {
+                        toast("已取消选图，待记仍保留")
+                    },
+                )
             }
         }
         btnAdjust.setOnClickListener {
@@ -845,6 +889,7 @@ object CaptureBubbleManager {
             put("time", timeFormat.format(Date(item.paidAt)))
             put("remarks", item.note?.takeIf { it.isNotBlank() } ?: item.merchant.orEmpty())
             item.bookName?.let { put("book_name", it) }
+            put("exclude_from_stats", item.excludeFromStats)
         }
     }
 
@@ -862,6 +907,7 @@ object CaptureBubbleManager {
         remarks = note?.takeIf { it.isNotBlank() } ?: merchant.orEmpty(),
         note = note,
         bookName = bookName,
+        excludeFromStats = excludeFromStats,
     )
 
     private fun humanizeSplitError(rawError: String?, rawMessage: String?): String {

@@ -3,6 +3,7 @@ package com.taostudio.tapaccounting.capture.bridge
 import android.content.Context
 import android.net.Uri
 import android.os.Bundle
+import android.os.ParcelFileDescriptor
 import android.util.Log
 import com.taostudio.tapaccounting.capture.contract.AccountingContext
 import com.taostudio.tapaccounting.capture.contract.AssetInfo
@@ -16,6 +17,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.File
 import java.util.Locale
 
 /**
@@ -177,9 +179,15 @@ class CaptureBridgeClient(context: Context) {
         } else {
             null
         }
+        val currentBook = if (json.has("currentBookName") && !json.isNull("currentBookName")) {
+            json.optString("currentBookName", "").takeIf { it.isNotBlank() }
+        } else {
+            defaultBook
+        }
         AccountingContext(
             contractVersion = json.optInt("contractVersion", CaptureContract.VERSION),
             defaultBookName = defaultBook,
+            currentBookName = currentBook,
             assetFeatureEnabled = json.optBoolean("assetFeatureEnabled", true),
             books = books,
             assets = assets,
@@ -463,6 +471,151 @@ class CaptureBridgeClient(context: Context) {
         )
     }
 
+    /**
+     * 图片拆分记账预览：把图片与 capture 金额发给 App 后台，App 多模态识图并分类后返回条目。
+     * 本地规则仍享有最高优先级：若本地存在对应规则，覆盖 AI 返回的分类。
+     */
+    suspend fun previewImageSplit(
+        captureId: String,
+        totalCents: Long,
+        billType: Int,
+        imageUri: Uri,
+    ): SplitPreviewResult = withContext(Dispatchers.IO) {
+        if (totalCents <= 0L) {
+            return@withContext SplitPreviewResult(
+                ok = false,
+                error = "invalid_total",
+                message = "付款金额无效，无法拆分",
+            )
+        }
+        if (billType != 0 && billType != 1) {
+            return@withContext SplitPreviewResult(
+                ok = false,
+                error = "split_unsupported_type",
+                message = "转账/还款/退款不支持图片拆分",
+            )
+        }
+
+        val tempFile = try {
+            File.createTempFile("cap_split_", ".tmp", appContext.cacheDir).apply {
+                appContext.contentResolver.openInputStream(imageUri)?.use { input ->
+                    outputStream().use { output -> input.copyTo(output) }
+                } ?: error("无法读取所选图片")
+            }
+        } catch (t: Throwable) {
+            return@withContext SplitPreviewResult(
+                ok = false,
+                error = "image_read_failed",
+                message = "读取图片失败：${t.message}",
+            )
+        }
+
+        val pfd = try {
+            ParcelFileDescriptor.open(tempFile, ParcelFileDescriptor.MODE_READ_ONLY)
+        } catch (t: Throwable) {
+            tempFile.delete()
+            return@withContext SplitPreviewResult(
+                ok = false,
+                error = "image_read_failed",
+                message = "打开图片描述符失败：${t.message}",
+            )
+        }
+
+        val mime = appContext.contentResolver.getType(imageUri) ?: "image/jpeg"
+        val payload = JSONObject()
+            .put("captureId", captureId)
+            .put("totalCents", totalCents)
+            .put("billType", billType)
+
+        val extras = Bundle().apply {
+            putString(CaptureContract.EXTRA_SPLIT_PAYLOAD, payload.toString())
+            putString(CaptureContract.EXTRA_IMAGE_MIME, mime)
+            putParcelable(CaptureContract.EXTRA_IMAGE_PFD, pfd)
+        }
+
+        val res = try {
+            callForObject(CaptureContract.METHOD_PREVIEW_IMAGE_SPLIT, payload.toString(), extras)
+        } catch (t: kotlinx.coroutines.CancellationException) {
+            throw t
+        } catch (t: Throwable) {
+            Log.w(TAG, "previewImageSplit failed", t)
+            null
+        } finally {
+            runCatching { pfd.close() }
+            tempFile.delete()
+        } ?: return@withContext SplitPreviewResult(
+            ok = false,
+            error = "bridge_unavailable",
+            message = "无法连接敲敲记账",
+        )
+
+        if (!res.optBoolean("ok", false)) {
+            return@withContext SplitPreviewResult(
+                ok = false,
+                error = res.optString("error", "").trim()
+                    .takeUnless { it.isEmpty() || it == "null" }
+                    ?: "split_failed",
+                message = res.optString("message", "").trim()
+                    .takeUnless { it.isEmpty() || it == "null" },
+            )
+        }
+
+        val itemsArr = res.optJSONArray("items") ?: JSONArray()
+        data class RawItem(
+            val name: String,
+            val amountCents: Long,
+            val inferred: Boolean,
+            val aiCategory: String?,
+        )
+        val rawItems = buildList {
+            for (i in 0 until itemsArr.length()) {
+                val obj = itemsArr.optJSONObject(i) ?: continue
+                val name = obj.optString("name", "").trim()
+                if (name.isEmpty()) continue
+                val cat = obj.optString("categoryName", "").trim()
+                    .takeUnless { it.isEmpty() || it == "null" }
+                add(
+                    RawItem(
+                        name = name,
+                        amountCents = obj.optLong("amountCents", 0L),
+                        inferred = obj.optBoolean("inferred", false),
+                        aiCategory = cat,
+                    )
+                )
+            }
+        }
+        if (rawItems.isEmpty()) {
+            return@withContext SplitPreviewResult(
+                ok = false,
+                error = "split_empty",
+                message = "未能从图片识别出有效条目，请改用清晰小票",
+            )
+        }
+
+        val fallbackCategory = res.optString("fallbackCategoryName", "")
+            .trim()
+            .takeUnless { it.isEmpty() || it == "null" }
+
+        val items = rawItems.map { raw ->
+            val localRuleCat = CaptureRuleMatcher.resolveNoteCategory(appContext, raw.name)
+                ?.takeIf { it.isNotBlank() }
+            SplitItem(
+                name = raw.name,
+                amountCents = raw.amountCents,
+                categoryName = localRuleCat ?: raw.aiCategory ?: fallbackCategory,
+                inferred = raw.inferred,
+            )
+        }
+        SplitPreviewResult(
+            ok = true,
+            items = items,
+            totalCents = res.optLong("totalCents", totalCents),
+            sumCents = res.optLong("sumCents", items.sumOf { it.amountCents }),
+            diffCents = res.optLong("diffCents", 0L),
+            fallbackCategoryName = fallbackCategory,
+        )
+    }
+
     private data class ParsedSplitItem(
         val name: String,
         val amountCents: Long,
@@ -499,6 +652,7 @@ class CaptureBridgeClient(context: Context) {
         capture.assetId?.let { payload.put("assetId", it) }
         (capture.assetName ?: capture.paymentMethodRaw)?.let { payload.put("assetName", it) }
         capture.bookName?.let { payload.put("bookName", it) }
+        payload.put("excludeFromStats", capture.excludeFromStats)
         payload.put("items", itemArray)
         val extras = Bundle().apply {
             putString(CaptureContract.EXTRA_BILL_GROUP_PAYLOAD, payload.toString())
@@ -578,6 +732,48 @@ class CaptureBridgeClient(context: Context) {
         SuggestRuleResult(
             ok = true,
             keyword = res.optString("keyword", "").trim(),
+        )
+    }
+
+    data class GenerateRuleResult(
+        val ok: Boolean,
+        val rule: JSONObject? = null,
+        val error: String? = null,
+    )
+
+    /**
+     * AI 自动生成记账规则：基于样本报文分析正则与字段映射。
+     */
+    suspend fun generateRule(
+        app: String,
+        type: String,
+        rawJson: String,
+    ): GenerateRuleResult = withContext(Dispatchers.IO) {
+        val payload = JSONObject()
+            .put("app", app)
+            .put("type", type)
+            .put("rawJson", rawJson)
+        val extras = Bundle().apply {
+            putString(CaptureContract.EXTRA_GENERATE_RULE_PAYLOAD, payload.toString())
+        }
+        val res = try {
+            callForObject(CaptureContract.METHOD_GENERATE_RULE, payload.toString(), extras)
+        } catch (t: kotlinx.coroutines.CancellationException) {
+            throw t
+        } catch (t: Throwable) {
+            Log.w(TAG, "generateRule failed", t)
+            null
+        } ?: return@withContext GenerateRuleResult(ok = false, error = "无法连接主应用 AI 服务")
+
+        if (!res.optBoolean("ok", false)) {
+            val msg = res.optString("message", "").ifBlank {
+                res.optString("error", "AI 生成规则失败")
+            }
+            return@withContext GenerateRuleResult(ok = false, error = msg)
+        }
+        GenerateRuleResult(
+            ok = true,
+            rule = res.optJSONObject("rule"),
         )
     }
 
@@ -729,6 +925,7 @@ class CaptureBridgeClient(context: Context) {
                     put("remarks", bill.remarks)
                     putOpt("note", bill.note)
                     putOpt("bookName", bill.bookName)
+                    put("excludeFromStats", bill.excludeFromStats)
                     put("feeCents", bill.feeCents)
                     putOpt("relatedBillId", bill.relatedBillId)
                 }

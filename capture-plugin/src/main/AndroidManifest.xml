@@ -50,6 +50,11 @@
             android:label="历史数据"
             android:theme="@android:style/Theme.Material.Light.NoActionBar" />
 
+        <activity
+            android:name=".ui.CaptureImagePickerActivity"
+            android:exported="false"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+
         <!--
           1px 透明无动画唤醒 Activity（对齐 AutoAccounting 的 FloatingWindowTriggerActivity）。
           由 com.android.phone (UID 1001) 的 RelayServer 在后台拉起，3ms 内解除 ColorOS Hans 冻结并立即弹出悬浮胶囊。
@@ -89,6 +94,16 @@
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
                 <action android:name="android.intent.action.LOCKED_BOOT_COMPLETED" />
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
+
+        <!-- 显式唤醒广播接收器：被主应用或 Relay 用 FLAG_INCLUDE_STOPPED_PACKAGES 拉起 -->
+        <receiver
+            android:name=".service.CaptureWakeReceiver"
+            android:exported="true"
+            tools:ignore="ExportedReceiver">
+            <intent-filter>
+                <action android:name="com.taostudio.tapaccounting.capture.action.WAKE_INGEST" />
             </intent-filter>
         </receiver>
 

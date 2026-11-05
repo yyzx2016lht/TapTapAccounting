@@ -198,7 +198,6 @@ object AutoAccountingRuleImporter {
                             keyword = c
                             val type = obj.optString("type")
                             matchField = when (type) {
-                                "shopName" -> CategoryRule.MATCH_MERCHANT
                                 "remark" -> CategoryRule.MATCH_NOTE
                                 else -> CategoryRule.MATCH_ANY
                             }
@@ -215,7 +214,7 @@ object AutoAccountingRuleImporter {
             if (kwMatch != null && keyword.isEmpty()) {
                 keyword = kwMatch.groupValues[1].trim()
                 if (jsStr.contains("shopName.indexOf")) {
-                    matchField = CategoryRule.MATCH_MERCHANT
+                    matchField = CategoryRule.MATCH_ANY
                 }
             }
 

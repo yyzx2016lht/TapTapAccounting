@@ -5,7 +5,9 @@ import com.taostudio.tapaccounting.capture.CaptureApp
 import com.taostudio.tapaccounting.capture.contract.CapturePayload
 import com.taostudio.tapaccounting.capture.contract.CaptureStatus
 import com.taostudio.tapaccounting.capture.contract.LocalBillType
+import com.taostudio.tapaccounting.capture.dedup.DuplicateDetector
 import com.taostudio.tapaccounting.capture.parse.CaptureRuleMatcher
+import kotlin.math.abs
 
 /** 一次插入的结果；inserted=false 表示命中幂等去重（id 或 source+sourceTxnId）。 */
 data class InsertOutcome(
@@ -55,6 +57,39 @@ class CaptureRepository(private val dao: PaymentCaptureDao) {
         }
 
         val entity = payload.toEntity(now)
+
+        // 自动去重与跨渠道合并检测（5分钟时间窗口，金额完全一致）
+        val amount = entity.amountCents
+        if (amount != null && amount > 0L) {
+            val window = DuplicateDetector.DEFAULT_WINDOW_MILLIS
+            val startTime = entity.paidAt - window
+            val endTime = entity.paidAt + window
+            val candidateStatuses = listOf(
+                CaptureStatus.PENDING,
+                CaptureStatus.AI_DRAFT,
+                CaptureStatus.POSSIBLE_DUPLICATE,
+                CaptureStatus.RECORDED,
+                CaptureStatus.IGNORED,
+            )
+            val candidates = dao.findPotentialDuplicates(amount, startTime, endTime, candidateStatuses)
+            val duplicateParent = DuplicateDetector.findDuplicate(entity, candidates)
+            if (duplicateParent != null) {
+                // 1. 保存当前 capture 为 DUPLICATE 子账单，指向主账单 groupId
+                val child = entity.copy(
+                    status = CaptureStatus.DUPLICATE,
+                    groupId = duplicateParent.id,
+                    updatedAt = now,
+                )
+                dao.insert(child)
+
+                // 2. 将互补信息合并到主账单
+                val mergedParent = DuplicateDetector.merge(duplicateParent, entity)
+                dao.update(mergedParent)
+
+                return InsertOutcome(mergedParent, inserted = false)
+            }
+        }
+
         val rowId = dao.insert(entity)
         if (rowId == -1L) {
             val existing = dao.findById(entity.id) ?: entity
@@ -118,6 +153,24 @@ class CaptureRepository(private val dao: PaymentCaptureDao) {
     /** 只更新“拆分记账”勾选；不影响备注/分类，也不触发 AI。 */
     suspend fun updateSplitRequested(id: String, requested: Boolean): Boolean =
         dao.updateSplitRequested(id, requested, System.currentTimeMillis()) > 0
+
+    suspend fun updateBookName(id: String, bookName: String?): Boolean =
+        dao.updateBookName(id, bookName, System.currentTimeMillis()) > 0
+
+    suspend fun updateExcludeFromStats(id: String, excludeFromStats: Boolean): Boolean =
+        dao.updateExcludeFromStats(id, excludeFromStats, System.currentTimeMillis()) > 0
+
+    /** 清除分类，重置为待分类状态。 */
+    suspend fun clearCategory(id: String): PaymentCapture? {
+        val existing = dao.findById(id) ?: return null
+        val updated = existing.copy(
+            categoryName = null,
+            categorySource = null,
+            updatedAt = System.currentTimeMillis(),
+        )
+        dao.update(updated)
+        return updated
+    }
 
     /**
      * 更新备注并立即用“备注分类规则”重新推断分类（如手写“咖啡”立即命中“餐饮 - 咖啡”）。
@@ -263,6 +316,91 @@ class CaptureRepository(private val dao: PaymentCaptureDao) {
 
     suspend fun deleteById(id: String): Boolean = dao.deleteById(id) > 0
 
+    suspend fun listMergedChildren(groupId: String): List<PaymentCapture> =
+        dao.listMergedChildren(groupId).map { normalizeHistoricalRow(it) }
+
+    suspend fun unmerge(childId: String): Boolean {
+        val child = dao.findById(childId) ?: return false
+        val parentId = child.groupId ?: return false
+        val parent = dao.findById(parentId)
+
+        val updated = dao.unmerge(childId, CaptureStatus.PENDING, System.currentTimeMillis()) > 0
+        if (updated && parent != null) {
+            val remainingChildren = dao.listMergedChildren(parentId).filter { it.id != childId }
+            val remainingChannels = mutableListOf<String>()
+            fun addChan(ch: String?, src: String?) {
+                val raw = ch?.trim().orEmpty()
+                if (raw.isNotEmpty()) {
+                    raw.split("+").map { it.trim() }.filter { it.isNotEmpty() }.forEach {
+                        if (!remainingChannels.contains(it)) remainingChannels.add(it)
+                    }
+                } else {
+                    val fallback = when (src?.trim()) {
+                        "WECHAT" -> "微信支付"
+                        "ALIPAY" -> "支付宝"
+                        "SMS" -> "银行短信"
+                        else -> src?.trim().orEmpty()
+                    }
+                    if (fallback.isNotEmpty() && !remainingChannels.contains(fallback)) {
+                        remainingChannels.add(fallback)
+                    }
+                }
+            }
+            addChan(null, parent.source)
+            for (c in remainingChildren) {
+                addChan(c.channel, c.source)
+            }
+            val newChannel = remainingChannels.joinToString(" + ")
+            dao.update(parent.copy(channel = newChannel, updatedAt = System.currentTimeMillis()))
+        }
+        return updated
+    }
+
+    suspend fun deduplicatePendingItems(): Int {
+        val pendingList = dao.listByStatuses(CaptureStatus.PENDING_COUNT_STATUSES.toList(), limit = 500)
+        if (pendingList.size < 2) return 0
+
+        val byAmount = pendingList.groupBy { it.amountCents }.filter { (amount, list) ->
+            amount != null && amount > 0L && list.size > 1
+        }
+
+        var mergedCount = 0
+        val now = System.currentTimeMillis()
+
+        for ((_, items) in byAmount) {
+            val sorted = items.sortedWith(compareBy({ it.paidAt }, { it.createdAt })).toMutableList()
+            val processedIds = mutableSetOf<String>()
+
+            for (i in 0 until sorted.size) {
+                val parent = sorted[i]
+                if (parent.id in processedIds) continue
+
+                for (j in i + 1 until sorted.size) {
+                    val candidate = sorted[j]
+                    if (candidate.id in processedIds) continue
+
+                    if (abs(candidate.paidAt - parent.paidAt) <= DuplicateDetector.DEFAULT_WINDOW_MILLIS) {
+                        if (DuplicateDetector.isDuplicate(candidate, parent)) {
+                            val merged = DuplicateDetector.merge(parent, candidate)
+                            dao.update(merged)
+                            val child = candidate.copy(
+                                status = CaptureStatus.DUPLICATE,
+                                groupId = parent.id,
+                                updatedAt = now,
+                            )
+                            dao.update(child)
+
+                            processedIds.add(candidate.id)
+                            sorted[i] = merged
+                            mergedCount++
+                        }
+                    }
+                }
+            }
+        }
+        return mergedCount
+    }
+
     private fun CapturePayload.toEntity(now: Long): PaymentCapture = PaymentCapture(
         id = captureId,
         source = source,
@@ -287,6 +425,9 @@ class CaptureRepository(private val dao: PaymentCaptureDao) {
         rawJson = rawJson,
         ruleVersion = ruleVersion,
         sourceAppVersion = sourceAppVersion,
+        excludeFromStats = excludeFromStats,
+        groupId = groupId?.takeIf { it.isNotBlank() },
+        channel = channel?.takeIf { it.isNotBlank() } ?: (if (source == "WECHAT") "微信支付" else if (source == "ALIPAY") "支付宝" else source),
         createdAt = now,
         updatedAt = now,
     )

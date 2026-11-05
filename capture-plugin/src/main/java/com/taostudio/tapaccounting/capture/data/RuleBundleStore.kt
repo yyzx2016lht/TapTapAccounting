@@ -36,7 +36,19 @@ object RuleBundleStore {
 
         val bundle = if (file.isFile) {
             try {
-                RuleBundleCodec.decode(file.readText(Charsets.UTF_8))
+                val decoded = RuleBundleCodec.decode(file.readText(Charsets.UTF_8))
+                if (decoded.version < RuleBundleCodec.VERSION) {
+                    val assetBundle = loadAssets(app)
+                    val merged = RuleBundleCodec.mergeForSync(
+                        existing = decoded,
+                        syncedRules = assetBundle.rules,
+                        common = assetBundle.common,
+                        category = assetBundle.category,
+                    ).copy(version = RuleBundleCodec.VERSION)
+                    save(context, merged)
+                } else {
+                    decoded
+                }
             } catch (t: Throwable) {
                 Log.w(TAG, "rule bundle invalid, fallback to assets: ${t.message}")
                 loadAssets(app)

@@ -469,7 +469,7 @@ object AutoAccountingRuleEngine {
         return fields
     }
 
-    private fun packageForSource(source: String): String? {
+    internal fun packageForSource(source: String): String? {
         val raw = source.trim()
         return when (raw.uppercase(Locale.US)) {
             CaptureSource.WECHAT -> PACKAGE_WECHAT

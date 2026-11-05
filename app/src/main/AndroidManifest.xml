@@ -235,7 +235,7 @@
             android:theme="@android:style/Theme.Translucent.NoTitleBar"
             android:taskAffinity=""
             android:excludeFromRecents="true"
-            android:exported="false" />
+            android:exported="true" />
         <activity
             android:name=".CaptureImageAccountingActivity"
             android:label="待记图片记账"

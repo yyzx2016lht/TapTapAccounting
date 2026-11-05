@@ -10,6 +10,7 @@
         android:layout_height="26dp"
         android:layout_gravity="center"
         android:contentDescription="@null"
+        android:tint="#FFFFFF"
         android:src="@drawable/ic_ai_robot" />
 
     <View

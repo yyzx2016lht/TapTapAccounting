@@ -35,12 +35,12 @@ internal object RuleLearningPolicy {
     }
 
     /**
-     * 触发条件：AI 分类 + 备注非空 + 分类非“其他” + 普通收支 + 非退款。
+     * 触发条件：AI / MANUAL 分类 + 备注非空 + 分类非“其他” + 普通收支 + 非退款。
      *
      * 转账没有二级分类，退款/退款关联账单也不学习；重复入账由调用方过滤，不进入这里。
      */
     fun isEligible(capture: PaymentCapture): Boolean {
-        if (capture.categorySource != CategorySource.AI) return false
+        if (capture.categorySource != CategorySource.AI && capture.categorySource != CategorySource.MANUAL) return false
         if (capture.note.isNullOrBlank()) return false
         val category = capture.categoryName?.trim().orEmpty()
         if (category.isEmpty()) return false

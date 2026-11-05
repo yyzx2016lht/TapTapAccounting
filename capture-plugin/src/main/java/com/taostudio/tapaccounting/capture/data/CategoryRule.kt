@@ -80,6 +80,9 @@ interface CategoryRuleDao {
     @Query("DELETE FROM category_rules WHERE id = :id")
     suspend fun deleteById(id: Long): Int
 
+    @Query("UPDATE category_rules SET matchField = :targetField WHERE matchField = 'MERCHANT'")
+    suspend fun convertAllMerchantRules(targetField: String = CategoryRule.MATCH_ANY): Int
+
     @Query("SELECT COUNT(*) FROM category_rules")
     suspend fun count(): Int
 }

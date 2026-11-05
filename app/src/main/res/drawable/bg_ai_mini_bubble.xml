@@ -1,8 +1,32 @@
 <?xml version="1.0" encoding="utf-8"?>
-<shape xmlns:android="http://schemas.android.com/apk/res/android"
-    android:shape="oval">
-    <solid android:color="#FFFFFF" />
-    <stroke
-        android:width="1dp"
-        android:color="#E3EAF4" />
-</shape>
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- 外圈光晕边框 -->
+    <item>
+        <shape android:shape="oval">
+            <gradient
+                android:type="linear"
+                android:angle="135"
+                android:startColor="#4D6366F1"
+                android:endColor="#4DEC4899" />
+            <padding
+                android:left="2dp"
+                android:top="2dp"
+                android:right="2dp"
+                android:bottom="2dp" />
+        </shape>
+    </item>
+    <!-- 内核渐变球体 -->
+    <item>
+        <shape android:shape="oval">
+            <gradient
+                android:type="linear"
+                android:angle="135"
+                android:startColor="#6366F1"
+                android:centerColor="#8B5CF6"
+                android:endColor="#EC4899" />
+            <stroke
+                android:width="1.5dp"
+                android:color="#66FFFFFF" />
+        </shape>
+    </item>
+</layer-list>

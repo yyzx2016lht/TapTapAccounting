@@ -36,6 +36,8 @@ data class ImportBill(
     val feeCents: Long = 0,
     /** 退款关联的原支出账单；不能只靠名称猜。 */
     val relatedBillId: Long? = null,
+    /** 是否不计入收支统计。 */
+    val excludeFromStats: Boolean = false,
 )
 
 /** `importBills` 的批次结果；部分成功时逐条看 results。 */

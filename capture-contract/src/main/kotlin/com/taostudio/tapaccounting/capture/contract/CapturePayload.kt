@@ -51,4 +51,10 @@ data class CapturePayload(
     val status: String = CaptureStatus.PENDING,
     /** 金额缺失标记；默认由 amountCents 推导。 */
     val needsAmount: Boolean = amountCents == null,
+    /** 来源渠道（如 "微信支付" / "招商银行"）。 */
+    val channel: String? = null,
+    /** 关联父账单 ID。 */
+    val groupId: String? = null,
+    /** 是否不计入统计。 */
+    val excludeFromStats: Boolean = false,
 )

@@ -35,7 +35,6 @@ import com.taostudio.tapaccounting.capture.contract.ImportItemStatus
 import com.taostudio.tapaccounting.capture.contract.LocalBillType
 import com.taostudio.tapaccounting.capture.data.CategorySource
 import com.taostudio.tapaccounting.capture.data.PaymentCapture
-import com.taostudio.tapaccounting.capture.ui.CaptureImagePickerActivity
 import com.taostudio.tapaccounting.capture.ui.SplitConfirmSheet
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -98,16 +97,26 @@ object CaptureBubbleManager {
             val item = capture
             val refund = item.subType == LocalBillType.SUBTYPE_REFUND || item.needsRefundLink
             val income = item.billType == LocalBillType.TYPE_INCOME
+            val transfer = BubbleRecordPolicy.isTransfer(item)
             val amountPrefix = if (income || refund) "+¥" else "¥"
             val amountStr = item.amountCents?.let {
                 String.format(Locale.CHINA, "%s%.2f", amountPrefix, it / 100.0)
             } ?: "金额待补"
-            val assetStr = item.assetName ?: item.paymentMethodRaw
+            // 转账要让人一眼看出钱从哪走到哪，只显示转出账户等于没信息。
+            val assetStr = if (transfer) {
+                listOfNotNull(item.assetName ?: item.paymentMethodRaw, item.toAssetName)
+                    .filter { it.isNotBlank() }
+                    .joinToString(" → ")
+                    .takeIf { it.isNotEmpty() }
+            } else {
+                item.assetName ?: item.paymentMethodRaw
+            }
+            val assetLimit = if (transfer) 18 else 8
             summaryText.text = buildString {
                 append(amountStr)
                 item.merchant?.takeIf { it.isNotBlank() }?.let { append(" · ").append(it.take(10)) }
-                assetStr?.takeIf { it.isNotBlank() }?.let { append(" (").append(it.take(8)).append(")") }
-                if (splitCheck.isChecked) append(" · 拆分")
+                assetStr?.let { append(" (").append(it.take(assetLimit)).append(")") }
+                if (!transfer && splitCheck.isChecked) append(" · 拆分")
                 append(" · 待记 ").append(pendingCount).append(" 笔")
             }
         }
@@ -273,26 +282,35 @@ object CaptureBubbleManager {
         }
 
         val summaryActions = actionRow()
+        // 转账/还款不需要分类：气泡只给「直接计入 / 不计」，不引导补备注、智能归类或拆分。
+        val summaryTransfer = BubbleRecordPolicy.isTransfer(capture)
+        val btnDirect = actionButton("直接计入", "#FFFFFF", "#3B82F6")
         val btnSmart = actionButton("智能记账", "#FFFFFF", "#3B82F6")
-        val btnImage = actionButton("图片记账", "#BFDBFE", "#1E3A8A")
         val btnAdjust = actionButton("细改", "#93C5FD", "#1E3A8A")
         val btnIgnore = actionButton("不计", "#CBD5E1", "#334155")
-        summaryActions.addView(
-            btnSmart,
-            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1.25f).apply { marginEnd = dp(6) },
-        )
-        summaryActions.addView(
-            btnImage,
-            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginEnd = dp(6) },
-        )
-        summaryActions.addView(
-            btnAdjust,
-            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 0.8f).apply { marginEnd = dp(6) },
-        )
-        summaryActions.addView(
-            btnIgnore,
-            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 0.7f),
-        )
+        if (summaryTransfer) {
+            summaryActions.addView(
+                btnDirect,
+                LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1.25f).apply { marginEnd = dp(6) },
+            )
+            summaryActions.addView(
+                btnIgnore,
+                LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 0.7f),
+            )
+        } else {
+            summaryActions.addView(
+                btnSmart,
+                LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1.25f).apply { marginEnd = dp(6) },
+            )
+            summaryActions.addView(
+                btnAdjust,
+                LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 0.8f).apply { marginEnd = dp(6) },
+            )
+            summaryActions.addView(
+                btnIgnore,
+                LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 0.7f),
+            )
+        }
         root.addView(summaryActions)
 
         val inputActions = actionRow()
@@ -537,55 +555,6 @@ object CaptureBubbleManager {
             )
         }
 
-        suspend fun previewImageSplitThenConfirm(base: PaymentCapture, imageUri: android.net.Uri) {
-            val amountCents = base.amountCents ?: 0L
-            val billType = base.billType ?: LocalBillType.TYPE_EXPENSE
-            if (amountCents <= 0L) {
-                fineTune(base.note, BubbleRecordPolicy.Block.AMOUNT_MISSING.message)
-                return
-            }
-            if (isActive()) setStatus("正在识别图片并拆单分类…", "#94A3B8")
-            val preview = CaptureBridgeClient(app).previewImageSplit(
-                captureId = base.id,
-                totalCents = amountCents,
-                billType = billType,
-                imageUri = imageUri,
-            )
-            if (!preview.ok) {
-                if (isActive()) {
-                    setStatus(
-                        "图片拆单未完成：${humanizeSplitError(preview.error, preview.message)}",
-                        "#FCA5A5",
-                    )
-                    applyState(BubbleState.INPUT)
-                }
-                return
-            }
-            if (!isActive()) return
-            cancelAutoDismiss()
-            s.state = BubbleState.SPLIT
-            s.root.removeAllViews()
-            s.root.setPadding(0, 0, 0, 0)
-            s.root.background = null
-            s.root.addView(
-                SplitConfirmSheet.buildOverlayContent(
-                    context = app,
-                    capture = base,
-                    preview = preview,
-                    onCancel = { dismissImmediate(app) },
-                    onEdit = {
-                        dismissImmediate(app)
-                        toast("已保留待记，可在待记列表改备注后重试")
-                    },
-                    onConfirm = { items ->
-                        val total = base.amountCents ?: 0L
-                        dismissImmediate(app)
-                        scope.launch { importGroupAndToast(base, items, total) }
-                    },
-                )
-            )
-        }
-
         suspend fun classifyThenResult() {
             val noteText = etNote.text?.toString()?.trim().orEmpty()
             val repository = CaptureApp.from(app).repository
@@ -795,34 +764,9 @@ object CaptureBubbleManager {
             if (s.busy) return@setOnClickListener
             openInput()
         }
-        btnImage.setOnClickListener {
+        btnDirect.setOnClickListener {
             if (s.busy) return@setOnClickListener
-            runBusy {
-                val latest = persistNote(etNote.text?.toString()) ?: s.capture
-                s.capture = latest
-                val amountCents = latest.amountCents ?: 0L
-                val type = latest.billType ?: LocalBillType.TYPE_EXPENSE
-                if (amountCents <= 0L) {
-                    fineTune(latest.note, BubbleRecordPolicy.Block.AMOUNT_MISSING.message)
-                    return@runBusy
-                }
-                if (type !in setOf(LocalBillType.TYPE_EXPENSE, LocalBillType.TYPE_INCOME) ||
-                    latest.subType == LocalBillType.SUBTYPE_REFUND ||
-                    latest.needsRefundLink
-                ) {
-                    fineTune(latest.note, "图片记账只支持普通支出/收入")
-                    return@runBusy
-                }
-                CaptureImagePickerActivity.pickImage(
-                    context = app,
-                    onPicked = { uri ->
-                        runBusy { previewImageSplitThenConfirm(latest, uri) }
-                    },
-                    onCancelled = {
-                        toast("已取消选图，待记仍保留")
-                    },
-                )
-            }
+            runBusy { importFromResult() }
         }
         btnAdjust.setOnClickListener {
             if (s.busy) return@setOnClickListener

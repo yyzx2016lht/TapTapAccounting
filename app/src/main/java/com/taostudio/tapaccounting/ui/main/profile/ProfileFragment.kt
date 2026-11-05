@@ -225,6 +225,33 @@ class ProfileFragment : Fragment(R.layout.fragment_profile) {
         view.findViewById<View>(R.id.layout_ai_feature_entry)?.setOnClickListener {
             requireActivity().startActivity(Intent(requireContext(), AiFeatureSettingsActivity::class.java))
         }
+        view.findViewById<View>(R.id.layout_capture_center_entry)?.setOnClickListener {
+            requireActivity().startActivity(
+                Intent(
+                    requireContext(),
+                    com.taostudio.tapaccounting.capture.ui.PendingListActivity::class.java,
+                )
+            )
+        }
+        val captureCenterSubtitle = view.findViewById<TextView>(R.id.tv_capture_center_subtitle)
+        val appContext = requireContext().applicationContext
+        viewScope.launch {
+            val pendingCount = runCatching {
+                withContext(Dispatchers.IO) {
+                    com.taostudio.tapaccounting.capture.data.CaptureRepository(
+                        com.taostudio.tapaccounting.data.local.AppDatabase
+                            .getDatabase(appContext).paymentCaptureDao()
+                    ).countPending()
+                }
+            }.getOrDefault(0)
+            withContext(Dispatchers.Main) {
+                captureCenterSubtitle?.text = if (pendingCount > 0) {
+                    "待记 $pendingCount 笔 · 点此补备注/分类"
+                } else {
+                    "支付后自动留痕，有空再补备注/分类"
+                }
+            }
+        }
         val layoutStorageCleanupEntry = view.findViewById<View>(R.id.layout_storage_cleanup_entry)
         view.findViewById<View>(R.id.layout_storage_cleanup_entry)?.setOnClickListener {
             requireActivity().startActivity(Intent(requireContext(), StorageCleanupActivity::class.java))

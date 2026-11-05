@@ -64,6 +64,7 @@ internal object CaptureIngestCoordinator {
                 val now = System.currentTimeMillis()
                 recentIngestedIds[payload.captureId]?.let { previous ->
                     if (now - previous < DEDUP_TTL_MS) {
+                        CaptureRelayAck.ack(payload.captureId)
                         return@withLock ackOk(payload.captureId, inserted = false, count = 0)
                     }
                 }
@@ -128,11 +129,13 @@ internal object CaptureIngestCoordinator {
                     maybeCheckPossibleDuplicate(app, outcome.capture)
                 }
 
-                if (outcome == null) {
+                val ack = if (outcome == null) {
                     ackIgnored(payload.captureId, count)
                 } else {
                     ackOk(outcome.capture.id, outcome.inserted, count)
                 }
+                CaptureRelayAck.ack(payload.captureId)
+                ack
             }
         } catch (t: Throwable) {
             Log.w(TAG, "ingest failed", t)
@@ -141,9 +144,36 @@ internal object CaptureIngestCoordinator {
     }
 
     private fun maybeNotify(app: Context, pendingItems: List<PaymentCapture>) {
-        // P1 只做通知；P3 再把 BUBBLE 模式接到 OverlayService。
-        if (CapturePrefs.getPromptMode(app) == CapturePrefs.MODE_SILENT) return
-        CaptureNotifier.refreshWithItems(app, pendingItems)
+        when (CapturePrefs.getPromptMode(app)) {
+            CapturePrefs.MODE_SILENT -> Unit
+
+            CapturePrefs.MODE_BUBBLE -> {
+                val latest = pendingItems.firstOrNull()
+                if (latest == null ||
+                    !com.taostudio.tapaccounting.capture.notify.CaptureBubbleManager
+                        .canDrawOverlays(app)
+                ) {
+                    CaptureNotifier.refreshWithItems(app, pendingItems)
+                    return
+                }
+                val intent = android.content.Intent(app, com.taostudio.tapaccounting.OverlayService::class.java).apply {
+                    action = com.taostudio.tapaccounting.OverlayService.ACTION_SHOW_CAPTURE_BUBBLE
+                    putExtra(
+                        com.taostudio.tapaccounting.OverlayService.EXTRA_CAPTURE_ID,
+                        latest.id,
+                    )
+                }
+                // 后台起 FGS 可能被 ROM 拒绝；失败时至少保留通知，不静默丢提醒。
+                runCatching {
+                    com.taostudio.tapaccounting.OverlayService.startCompat(app, intent)
+                }.onFailure {
+                    Log.w(TAG, "start bubble service failed: ${it.message}")
+                    CaptureNotifier.refreshWithItems(app, pendingItems)
+                }
+            }
+
+            else -> CaptureNotifier.refreshWithItems(app, pendingItems)
+        }
     }
 
     private fun maybeCheckPossibleDuplicate(app: Context, capture: PaymentCapture) {

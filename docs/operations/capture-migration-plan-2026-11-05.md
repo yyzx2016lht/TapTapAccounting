@@ -515,7 +515,39 @@ P1 明确未做的部分（按计划留到后续）：
 - 旧插件数据分页迁移（P4，当前只做了规则包迁移）；
 - 插件瘦身/删除旧 UI（P5）。
 
-## 11. 已确认的决策
+## 11. P2–P5 落地记录（2026-11-05）
+
+P2–P5 已一并完成：
+
+- **主应用待记 UI**：插件 `PendingListActivity` / `RuleMappingViews` / `DataRuleViews` /
+  `CaptureHistoryActivity` / `SplitConfirmSheet` / `CaptureImagePickerActivity` 已平移到主应用
+  `com.taostudio.tapaccounting.capture.ui`；主应用可直接打开待记、规则、数据规则、设置、历史。
+- **入口**：首页账本头部右上角 `待记 N 笔 ›` 小胶囊（只在首页显示，Room `payment_captures`
+  失效自动刷新，不覆盖 FAB/列表）；设置中心「待记收件箱」入口；通知/气泡也可进入。
+- **悬浮窗**：`OverlayPendingCaptureController` / `CapturePluginClient` 改为直接读写主应用 Room，
+  不再跨进程访问插件 Provider。
+- **气泡**：`CaptureBubbleManager` 平移到主应用，由 `OverlayService` 托管；
+  `ACTION_SHOW_CAPTURE_BUBBLE` + `CaptureRelayAck` + 6 秒兜底停服务。
+- **迁移**：插件 Provider 导出旧 `capture.db`，主应用复制后 `ATTACH DATABASE`，
+  按显式列名并入 5 张表（旧库列顺序与主库不同，不能 `SELECT *`）。
+  已在真机验证：`payment_captures` / `capture_events` / `asset_mapping_rules` /
+  `category_rules` / `rule_learning_tasks` 全部导入成功。
+- **规则包**：主应用不内置 GPL 规则包；插件状态页打开时广播 `CAPTURE_PULL_RULES` /
+  `CAPTURE_PULL_LEGACY`，主应用在前台回拉。真机导入 `rules=268 enabled=266`。
+- **插件瘦身**：插件只保留 Hook + `CaptureForwarder` + `RelayServer` + 旧数据导出 Provider +
+  状态页；删除 Room/QuickJS/UI/通知/气泡/保活/1px Activity。debug APK 从约 7.4MB 降到约 1.5MB。
+- **relay**：改为优先调主应用 `CaptureIngestProvider`，失败发显式广播，主应用落库后回 ACK；
+  不再启动插件 FGS / 透明 Activity。
+- **编译**：`:app:assembleDebug`、`:app:assembleRelease`、`:capture-plugin:assembleDebug`、
+  `:app:testDebugUnitTest`、`:capture-plugin:testDebugUnitTest` 均通过。
+
+仍未做（明确留到下一轮）：
+
+- `.bak` 备份/恢复还没有纳入 5 张待记表（P4 计划项）；
+- 旧插件 `capture.db` 迁移只在当前 v11 schema 上验证，更老 schema 未做兼容；
+- 真机微信/支付宝真实支付回归、ColorOS 长时间冻结/重启回归还需要继续跑。
+
+## 12. 已确认的决策
 
 1. **入口位置**：主页顶部胶囊 + 设置页入口都做。
 2. **过渡策略**：插件 0.2 去掉待记 UI，但前提是 P2/P4 已把对应 UI 搬进主应用并通过回归；插件只保留状态页 + 转发 + 迁移接口。旧 UI 代码在 Git 历史/旧 APK 中保留，`capture.db` 不删除。

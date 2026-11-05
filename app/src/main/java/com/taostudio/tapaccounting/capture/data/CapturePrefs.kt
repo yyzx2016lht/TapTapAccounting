@@ -7,6 +7,7 @@ object CapturePrefs {
     private const val KEY_PROMPT_MODE = "prompt_mode"
     private const val KEY_ONLY_EXPENSE = "only_expense_v2"
     private const val KEY_SEEDED_DEFAULTS = "seeded_defaults_v1"
+    private const val KEY_LEGACY_IMPORTED = "legacy_imported_v1"
 
     /** 付款时弹出底部轻气泡 + 通知栏 */
     const val MODE_BUBBLE = "BUBBLE"
@@ -19,11 +20,10 @@ object CapturePrefs {
         context.applicationContext.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
 
     /**
-     * P1 过渡期默认静默：插件仍负责旧的本地入库/气泡/通知，主应用只做双写落库。
-     * P3 主应用接管气泡后再把默认值改成 [MODE_BUBBLE]。
+     * P3 起主应用接管气泡：默认付款瞬间弹底部胶囊；用户可在主应用设置页改成通知/静默。
      */
     fun getPromptMode(context: Context): String =
-        prefs(context).getString(KEY_PROMPT_MODE, MODE_SILENT) ?: MODE_SILENT
+        prefs(context).getString(KEY_PROMPT_MODE, MODE_BUBBLE) ?: MODE_BUBBLE
 
     fun setPromptMode(context: Context, mode: String) {
         prefs(context).edit().putString(KEY_PROMPT_MODE, mode).apply()
@@ -42,5 +42,13 @@ object CapturePrefs {
 
     fun setDefaultsSeeded(context: Context, seeded: Boolean) {
         prefs(context).edit().putBoolean(KEY_SEEDED_DEFAULTS, seeded).apply()
+    }
+
+    /** 旧插件 capture.db 是否已经并入主应用主库。 */
+    fun isLegacyImported(context: Context): Boolean =
+        prefs(context).getBoolean(KEY_LEGACY_IMPORTED, false)
+
+    fun setLegacyImported(context: Context, imported: Boolean) {
+        prefs(context).edit().putBoolean(KEY_LEGACY_IMPORTED, imported).apply()
     }
 }

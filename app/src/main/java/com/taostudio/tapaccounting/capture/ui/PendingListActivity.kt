@@ -45,14 +45,13 @@ import com.taostudio.tapaccounting.capture.data.CategoryRule
 import com.taostudio.tapaccounting.capture.data.CategorySource
 import com.taostudio.tapaccounting.capture.data.PaymentCapture
 import com.taostudio.tapaccounting.capture.data.RuleBundleCodec
+import com.taostudio.tapaccounting.BuildConfig
 import com.taostudio.tapaccounting.capture.data.RuleBundleStore
-import com.taostudio.tapaccounting.capture.hook.CaptureForwarder
-import com.taostudio.tapaccounting.capture.hook.WechatEnvelope
+import com.taostudio.tapaccounting.capture.ingest.CaptureIngestCoordinator
 import com.taostudio.tapaccounting.capture.notify.CaptureBubbleManager
 import com.taostudio.tapaccounting.capture.notify.CaptureNotifier
 import com.taostudio.tapaccounting.capture.parse.AutoAccountingRuleEngine
 import com.taostudio.tapaccounting.capture.parse.CaptureRuleMatcher
-import com.taostudio.tapaccounting.capture.service.CaptureKeepAliveService
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -116,7 +115,6 @@ class PendingListActivity : Activity() {
         setContentView(buildRoot())
         CaptureUi.applyLightStatusBar(this)
         requestNotificationPermissionIfNeeded()
-        CaptureKeepAliveService.start(this)
     }
 
     override fun onResume() {
@@ -153,18 +151,27 @@ class PendingListActivity : Activity() {
             gravity = Gravity.CENTER_VERTICAL
         }
 
+        titleRow.addView(TextView(this).apply {
+            text = "‹"
+            textSize = 28f
+            gravity = Gravity.CENTER
+            setTextColor(CaptureUi.TEXT_PRIMARY)
+            setPadding(0, 0, dp(10), 0)
+            setOnClickListener { finish() }
+        })
+
         val titleBlock = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
         }
         titleBlock.addView(TextView(this).apply {
-            text = "敲敲待记"
+            text = "待记收件箱"
             textSize = 20f
             setTypeface(typeface, Typeface.BOLD)
             setTextColor(CaptureUi.TEXT_PRIMARY)
         })
         titleBlock.addView(TextView(this).apply {
-            text = "待记账单收件箱与规则工作台"
+            text = "补备注、归类、拆分与入账"
             textSize = 11.5f
             setTextColor(CaptureUi.TEXT_MUTED)
             setPadding(0, dp(1), 0, 0)
@@ -2461,26 +2468,34 @@ class PendingListActivity : Activity() {
 
     private fun simulateWcdbSamples() {
         val now = System.currentTimeMillis()
-        val mmapXml = """
-            <msg>
-              <appmsg>
-                <title>已支付¥9.00</title>
-                <des>使用招商银行储蓄卡(4852)支付￥9.00</des>
-                <mmreader><template_header><display_name>同程旅行</display_name></template_header></mmreader>
-                <appinfo><appname>微信支付</appname></appinfo>
-              </appmsg>
-            </msg>
-        """.trimIndent()
-
-        CaptureForwarder.forward(
-            source = CaptureSource.WECHAT,
-            rawJson = WechatEnvelope.mmapFromXml(mmapXml, now, null),
-            dataType = "DATA",
-            contextOverride = applicationContext,
-        )
-        toast("已投递真实 WCDB XML 事件，稍后自动刷新")
+        val rawJson = JSONObject().put(
+            "mMap",
+            JSONObject()
+                .put("description", "使用招商银行储蓄卡(4852)支付￥9.00")
+                .put("title", "已支付¥9.00")
+                .put("display_name", "同程旅行")
+                .put("source", "微信支付")
+                .put("t", now),
+        ).toString()
+        val payload = JSONObject()
+            .put("captureId", UUID.randomUUID().toString())
+            .put("source", CaptureSource.WECHAT)
+            .put("rawType", "DATA")
+            .put("paidAt", now)
+            .put("capturedAt", now)
+            .put("rawJson", rawJson)
+            .put("ruleVersion", "simulate-wcdb")
+            .toString()
+        toast("已投递真实 WCDB 事件，稍后自动刷新")
         scope.launch {
-            delay(1_200)
+            withContext(Dispatchers.IO) {
+                CaptureIngestCoordinator.ingest(
+                    applicationContext,
+                    BuildConfig.CAPTURE_INGEST_TOKEN,
+                    payload,
+                )
+            }
+            delay(800)
             currentTab = 0
             updateTabSelection()
             load()

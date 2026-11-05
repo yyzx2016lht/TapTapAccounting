@@ -11,8 +11,8 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import androidx.core.content.ContextCompat
-import com.taostudio.tapaccounting.MainActivity
 import com.taostudio.tapaccounting.R
+import com.taostudio.tapaccounting.capture.ui.PendingListActivity
 import com.taostudio.tapaccounting.capture.contract.LocalBillType
 import com.taostudio.tapaccounting.capture.data.CapturePrefs
 import com.taostudio.tapaccounting.capture.data.CaptureRepository
@@ -102,7 +102,7 @@ object CaptureNotifier {
         }
 
         val manager = context.getSystemService(NotificationManager::class.java) ?: return
-        val contentIntent = Intent(context, MainActivity::class.java).apply {
+        val contentIntent = Intent(context, PendingListActivity::class.java).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
             putExtra(EXTRA_OPEN_CAPTURE_INBOX, true)
         }

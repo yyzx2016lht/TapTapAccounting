@@ -16,12 +16,12 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
-import com.taostudio.tapaccounting.capture.BuildConfig
+import com.taostudio.tapaccounting.BuildConfig
 import com.taostudio.tapaccounting.capture.CaptureApp
 import com.taostudio.tapaccounting.capture.contract.CaptureSources
 import com.taostudio.tapaccounting.capture.data.CaptureEvent
 import com.taostudio.tapaccounting.capture.history.AutoAccountingHistoryImporter
-import com.taostudio.tapaccounting.capture.ingest.CaptureIngestHandler
+import com.taostudio.tapaccounting.capture.ingest.CaptureIngestCoordinator
 import com.taostudio.tapaccounting.capture.parse.AutoAccountingRuleEngine
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -453,7 +453,7 @@ class CaptureHistoryActivity : Activity() {
                 put("paidAt", event.receivedAt)
             }
             val resultAck = withContext(Dispatchers.IO) {
-                CaptureIngestHandler.ingest(
+                CaptureIngestCoordinator.ingest(
                     this@CaptureHistoryActivity,
                     BuildConfig.CAPTURE_INGEST_TOKEN,
                     payload.toString(),
@@ -553,7 +553,7 @@ class CaptureHistoryActivity : Activity() {
                         put("capturedAt", event.receivedAt)
                         put("paidAt", event.receivedAt)
                     }
-                    val ack = CaptureIngestHandler.ingest(
+                    val ack = CaptureIngestCoordinator.ingest(
                         this@CaptureHistoryActivity,
                         BuildConfig.CAPTURE_INGEST_TOKEN,
                         payload.toString(),

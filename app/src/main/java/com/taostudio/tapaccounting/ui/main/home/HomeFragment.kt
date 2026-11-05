@@ -106,6 +106,7 @@ class HomeFragment : Fragment() {
     private lateinit var homeAdapter: HomeAdapter
     private lateinit var bookDrawerController: HomeBookDrawerController
     private lateinit var bannerController: HomeBannerController
+    private var capturePendingObserver: InvalidationTracker.Observer? = null
     private lateinit var multiSelectController: HomeMultiSelectController
     private lateinit var chartController: HomeChartController
     private lateinit var uiListController: HomeUiListController
@@ -298,6 +299,23 @@ class HomeFragment : Fragment() {
         cvChartContainer.findViewById<ImageView>(R.id.ivChartSettings)?.setOnClickListener {
             showChartSettingsDialog()
         }
+        view.findViewById<TextView>(R.id.tvHomePendingChip)?.setOnClickListener {
+            startActivity(
+                android.content.Intent(
+                    requireContext(),
+                    com.taostudio.tapaccounting.capture.ui.PendingListActivity::class.java,
+                )
+            )
+        }
+        val tracker = com.taostudio.tapaccounting.data.local.AppDatabase
+            .getDatabase(requireContext()).invalidationTracker
+        val observer = object : InvalidationTracker.Observer("payment_captures") {
+            override fun onInvalidated(tables: Set<String>) {
+                view?.post { refreshHomePendingChip() }
+            }
+        }
+        capturePendingObserver = observer
+        tracker.addObserver(observer)
         rvTransactions = view.findViewById(R.id.rvTransactions)
         layoutEmptyView = layoutInflater.inflate(R.layout.item_home_empty, null, false)
         btnEmptyAddBill = layoutEmptyView.findViewById(R.id.btnEmptyAddBill)
@@ -701,6 +719,7 @@ class HomeFragment : Fragment() {
         }
         updateChartTitleLabel()
         refreshTrendCardVisibility(forceResubmit = true)
+        refreshHomePendingChip()
         syncDateFromSessionIfNeeded()
         selectedBookName = BookAccountManager.normalizeBookName(
             BookAccountManager.getSelectedBook(requireContext())
@@ -1165,6 +1184,23 @@ class HomeFragment : Fragment() {
         ensureChartController().setupChart()
     }
 
+    private fun refreshHomePendingChip() {
+        val chip = view?.findViewById<TextView>(R.id.tvHomePendingChip) ?: return
+        val appContext = requireContext().applicationContext
+        viewLifecycleOwner.lifecycleScope.launch {
+            val count = runCatching {
+                withContext(Dispatchers.IO) {
+                    com.taostudio.tapaccounting.capture.data.CaptureRepository(
+                        com.taostudio.tapaccounting.data.local.AppDatabase
+                            .getDatabase(appContext).paymentCaptureDao()
+                    ).countPending()
+                }
+            }.getOrDefault(0)
+            chip.visibility = if (count > 0) View.VISIBLE else View.GONE
+            if (count > 0) chip.text = "待记 $count 笔 ›"
+        }
+    }
+
     private fun updateChartTitleLabel() {
         ensureChartController().updateChartTitleLabel()
     }
@@ -1339,6 +1375,13 @@ class HomeFragment : Fragment() {
     }
 
     override fun onDestroyView() {
+        capturePendingObserver?.let { observer ->
+            context?.let {
+                com.taostudio.tapaccounting.data.local.AppDatabase
+                    .getDatabase(it).invalidationTracker.removeObserver(observer)
+            }
+        }
+        capturePendingObserver = null
         refreshController.onDestroyView()
         super.onDestroyView()
     }

@@ -4,9 +4,6 @@ import android.app.AndroidAppHelper
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
-import android.net.Uri
-import android.os.Build
-import android.os.Bundle
 import android.util.Log
 import com.taostudio.tapaccounting.capture.BuildConfig
 import com.taostudio.tapaccounting.capture.contract.CaptureContract
@@ -26,23 +23,18 @@ import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 
 /**
- * 原始事件投递器：把 hook 抓到的 JSON 通过显式广播交给插件。
+ * P5 后的插件只做「Hook → 原始报文 → 投递」：
  *
- * 为什么不用 Provider：微信/支付宝的 manifest 没有声明本插件，Android 11+ 的
- * 包可见性会过滤掉 ContentResolver 对 [CaptureContract.INGEST_AUTHORITY] 的解析，
- * 而显式广播不受这个限制（真机验证：WeChat UID 发出的显式广播可送达插件）。
+ * 1. 显式广播直接投给主应用 `CaptureIngestReceiver`（主应用在后台也能被拉起）；
+ * 2. 同时把同一份 payload 丢给 `com.android.phone` 的 relay（52046）兜底排队；
+ *    relay 会优先用 ContentResolver.call 调主应用 ingest Provider，失败会 5 秒重试。
  *
- * 探针版只投递原始数据：
- * - amountCents / merchant / paymentMethodRaw 可为 null；
- * - rawJson 原样保留，方便真机确认字段；
- * - dataType 区分 DATA（DB/WebView）/ NOTICE（通知），规则引擎按它选规则集；
- * - 30 秒内相同 rawJson 只投一次，避免同一条消息被 WCDB/WebView 反复插入。
- *
- * 所有工作都扔到 IO；hook 回调（尤其是微信 DB 线程）只做一次 MD5 去重。
+ * 插件不再持有 Room/规则/气泡/UI，也不再启动 1px Activity 或前台服务。
+ * 主应用按 captureId 幂等，广播 + relay 双投递不会产生重复待记。
  */
 internal object CaptureForwarder {
 
-    private const val RULE_VERSION = "probe-1"
+    private const val RULE_VERSION = "probe-2"
     private const val DEDUP_WINDOW_MS = 30_000L
     private const val MAX_SEEN = 512
     private const val TAG = "TapCaptureForward"
@@ -95,100 +87,28 @@ internal object CaptureForwarder {
                 now = now,
             )
 
-            // P1 双写过渡：先把同一份 payload 投给主应用；插件原本的直连/relay/广播链路保持不动。
-            // 主应用暂时没有 UI，只负责落库；旧插件仍照常入库、弹气泡、发通知，联调不断档。
-            val appCtx = contextOverride ?: appContext()
-            forwardToApp(appCtx, payload, captureId)
-
-            // 1. 首选直连插件进程内 TCP 端口（127.0.0.1:52047）：
-            //    插件未冻结时 1~3ms 内立即返回 ACK 并完成入库与弹窗；
-            //    若插件在后台被 ColorOS Hans 冻结，100ms 快速超时后立即交由 com.android.phone (52046) 强制解冻。
-            if (trySocketDeliver(
-                    port = CaptureContract.PLUGIN_DIRECT_PORT,
-                    payload = payload,
-                    captureId = captureId,
-                    connectTimeoutMs = 80,
-                    soTimeoutMs = 100,
-                )
-            ) {
-                log("forward direct delivered source=$source captureId=$captureId")
-                return@launch
-            }
-
-            // 2. 插件被 Hans 冻结或未启动：立即投递给常驻 com.android.phone (UID 1001) 的 RelayServer (52046)，
-            //    由 UID 1001 拉起 1px 透明 CaptureWakeActivity，3ms 内解除 Hans 冻结并弹窗（与自动记账完全一致）。
-            val relayDelivered = trySocketDeliver(
-                port = CaptureContract.RELAY_PORT,
-                payload = payload,
-                captureId = captureId,
-                connectTimeoutMs = 250,
-                soTimeoutMs = 800,
-            )
-            if (relayDelivered) {
-                log("forward relay queued source=$source captureId=$captureId")
-            }
-
-            // 3. 若当前宿主（如微信/支付宝）本身在前台，也并行发送前台唤醒作为双保险（插件侧按 captureId 幂等去重）。
-            val context = appCtx
+            val context = contextOverride ?: appContext()
             if (context != null) {
-                wakePluginViaContext(context, payload, captureId)
-            } else if (!relayDelivered) {
-                log("forward failed source=$source: direct/relay down and no application context")
+                forwardToApp(context, payload, captureId)
+            }
+
+            val relayQueued = tryRelay(payload, captureId)
+            if (relayQueued) {
+                log("forward relay queued source=$source captureId=$captureId")
+            } else if (context == null) {
+                log("forward failed source=$source: no app context and relay down")
                 seen.remove(dedupKey)
             }
         }
     }
 
     /**
-     * 长度前缀 + UTF-8 JSON 的 localhost 协议；不需要 Android Context，
-     * 因此 system_server 与微信/支付宝都能直接用。
-     */
-    private fun trySocketDeliver(
-        port: Int,
-        payload: String,
-        captureId: String,
-        connectTimeoutMs: Int,
-        soTimeoutMs: Int,
-    ): Boolean {
-        return try {
-            Socket().use { socket ->
-                socket.connect(
-                    InetSocketAddress("127.0.0.1", port),
-                    connectTimeoutMs,
-                )
-                socket.soTimeout = soTimeoutMs
-                val out = DataOutputStream(socket.getOutputStream())
-                val envelope = JSONObject()
-                    .put("token", BuildConfig.CAPTURE_INGEST_TOKEN)
-                    .put("captureId", captureId)
-                    .put("payload", payload)
-                val bytes = envelope.toString().toByteArray(Charsets.UTF_8)
-                out.writeInt(bytes.size)
-                out.write(bytes)
-                out.flush()
-
-                val input = DataInputStream(socket.getInputStream())
-                val length = input.readInt()
-                if (length <= 0 || length > 64 * 1024) return false
-                val response = ByteArray(length)
-                input.readFully(response)
-                JSONObject(String(response, Charsets.UTF_8)).optBoolean("ok", false)
-            }
-        } catch (t: Throwable) {
-            log("socket($port) unavailable: ${t.javaClass.simpleName}: ${t.message}")
-            false
-        }
-    }
-
-    /**
-     * P1 双写：显式广播给主应用。
+     * 显式广播给主应用。
      *
-     * 目标组件是固定的 `com.taostudio.tapaccounting/.capture.ingest.CaptureIngestReceiver`，
-     * 显式 Intent 不受 Android 11+ 包可见性影响；主应用没装/版本旧时广播会被系统静默丢弃，
-     * 不影响下面继续走插件原有的直连/relay 链路。
+     * 显式组件不受 Android 11+ 包可见性影响；主应用没装/版本旧时广播会被系统静默丢弃，
+     * 不影响下面再走 relay 队列。
      */
-    private fun forwardToApp(context: Context?, payload: String, captureId: String) {
-        if (context == null) return
+    private fun forwardToApp(context: Context, payload: String, captureId: String) {
         try {
             val intent = Intent(CaptureContract.APP_INGEST_ACTION).apply {
                 component = ComponentName(
@@ -206,59 +126,38 @@ internal object CaptureForwarder {
         }
     }
 
-    private fun tryProviderDeliver(context: Context, payload: String): Boolean {
+    /**
+     * relay 队列投递：长度前缀 + UTF-8 JSON。
+     * relay 在 com.android.phone（UID 1001）常驻，负责把数据送到主应用并在成功后被 ACK 删除。
+     */
+    private fun tryRelay(payload: String, captureId: String): Boolean {
         return try {
-            val extras = Bundle().apply {
-                putString(CaptureContract.EXTRA_TOKEN, BuildConfig.CAPTURE_INGEST_TOKEN)
-                putString(CaptureContract.EXTRA_PAYLOAD, payload)
-            }
-            val res = context.contentResolver.call(
-                Uri.parse("content://${CaptureContract.INGEST_AUTHORITY}"),
-                CaptureContract.INGEST_METHOD,
-                BuildConfig.CAPTURE_INGEST_TOKEN,
-                extras,
-            )
-            val ack = res?.getString(CaptureContract.ACK_RESULT) ?: return false
-            JSONObject(ack).optBoolean("ok", false)
-        } catch (_: Throwable) {
-            false
-        }
-    }
-
-    private fun wakePluginViaContext(context: Context, payload: String, captureId: String) {
-        try {
-            // 宿主当前处于前台（PROC_STATE_TOP）时，直接拉起前台服务可满足 ColorOS mAllowStart_noBinding=PROC_STATE_TOP
-            val serviceIntent = Intent(CaptureContract.ACTION_SERVICE_INGEST).apply {
-                component = ComponentName(
-                    CaptureContract.PLUGIN_PACKAGE,
-                    CaptureContract.INGEST_SERVICE_CLASS,
+            Socket().use { socket ->
+                socket.connect(
+                    InetSocketAddress("127.0.0.1", CaptureContract.RELAY_PORT),
+                    250,
                 )
-                putExtra(CaptureContract.EXTRA_TOKEN, BuildConfig.CAPTURE_INGEST_TOKEN)
-                putExtra(CaptureContract.EXTRA_PAYLOAD, payload)
-                putExtra(CaptureContract.EXTRA_RELAY_ID, captureId)
+                socket.soTimeout = 800
+                val envelope = JSONObject()
+                    .put("token", BuildConfig.CAPTURE_INGEST_TOKEN)
+                    .put("captureId", captureId)
+                    .put("payload", payload)
+                val bytes = envelope.toString().toByteArray(Charsets.UTF_8)
+                DataOutputStream(socket.getOutputStream()).use { out ->
+                    out.writeInt(bytes.size)
+                    out.write(bytes)
+                    out.flush()
+                }
+                val input = DataInputStream(socket.getInputStream())
+                val length = input.readInt()
+                if (length <= 0 || length > 64 * 1024) return false
+                val response = ByteArray(length)
+                input.readFully(response)
+                JSONObject(String(response, Charsets.UTF_8)).optBoolean("ok", false)
             }
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                runCatching { context.startForegroundService(serviceIntent) }
-            } else {
-                runCatching { context.startService(serviceIntent) }
-            }
-        } catch (_: Throwable) {
-        }
-
-        try {
-            val broadcastIntent = Intent(CaptureContract.ACTION_INGEST).apply {
-                component = ComponentName(
-                    CaptureContract.PLUGIN_PACKAGE,
-                    CaptureContract.INGEST_RECEIVER_CLASS,
-                )
-                putExtra(CaptureContract.EXTRA_TOKEN, BuildConfig.CAPTURE_INGEST_TOKEN)
-                putExtra(CaptureContract.EXTRA_PAYLOAD, payload)
-                addFlags(Intent.FLAG_RECEIVER_FOREGROUND or Intent.FLAG_INCLUDE_STOPPED_PACKAGES)
-            }
-            context.sendBroadcast(broadcastIntent)
-            log("forward wake broadcast sent source captureId=$captureId")
         } catch (t: Throwable) {
-            log("forward wake broadcast failed: ${t.javaClass.simpleName}: ${t.message}")
+            log("relay unavailable: ${t.javaClass.simpleName}: ${t.message}")
+            false
         }
     }
 
@@ -275,8 +174,7 @@ internal object CaptureForwarder {
     ): String {
         val json = JSONObject()
             .put("captureId", captureId)
-            // 微信/支付宝用 WECHAT/ALIPAY；系统通知/短信直接使用真实包名，
-            // 不能统一大写，否则规则资产的 cmb.pb 等 key 匹配不到。
+            // 微信/支付宝用 WECHAT/ALIPAY；系统通知/短信直接使用真实包名。
             .put("source", source.trim())
             .put("rawType", dataType.trim().uppercase(Locale.US).ifEmpty { "DATA" })
             .put("currency", "CNY")
@@ -325,7 +223,6 @@ internal object CaptureForwarder {
             // 宿主进程里日志失败也不能影响业务。
         }
         try {
-            // 同时写入 LSPosed 模块日志，方便 adb 拉取完整的 cross-process 诊断。
             XposedBridge.log("[$TAG] $message")
         } catch (_: Throwable) {
             // XposedBridge 不可用时只保留 logcat。

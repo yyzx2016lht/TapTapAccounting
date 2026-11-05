@@ -11,6 +11,7 @@ import com.taostudio.tapaccounting.capture.data.CaptureRepository
 import com.taostudio.tapaccounting.capture.data.RuleBundleStore
 import com.taostudio.tapaccounting.capture.contract.CaptureContract
 import com.taostudio.tapaccounting.capture.parse.AutoAccountingRuleEngine
+import com.taostudio.tapaccounting.capture.rule.CaptureLegacyImporter
 import com.taostudio.tapaccounting.capture.rule.CaptureRuleBundleBootstrap
 import com.taostudio.tapaccounting.data.local.AppDatabase
 import kotlinx.coroutines.CoroutineScope
@@ -135,6 +136,23 @@ class CaptureDebugReceiver : BroadcastReceiver() {
                 }
             }
 
+            ACTION_IMPORT_LEGACY -> {
+                val force = intent.getBooleanExtra(EXTRA_FORCE, true)
+                val pending = goAsync()
+                CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
+                    try {
+                        val imported = CaptureLegacyImporter.importIfNeeded(app, force = force)
+                        pending.setResultData(
+                            JSONObject().put("ok", imported).toString()
+                        )
+                    } catch (t: Throwable) {
+                        Log.w(TAG, "import legacy failed", t)
+                    } finally {
+                        pending.finish()
+                    }
+                }
+            }
+
             ACTION_PING -> {
                 val pending = goAsync()
                 CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
@@ -172,6 +190,8 @@ class CaptureDebugReceiver : BroadcastReceiver() {
             "com.taostudio.tapaccounting.action.CAPTURE_RELOAD_RULES"
         const val ACTION_IMPORT_RULES =
             "com.taostudio.tapaccounting.action.CAPTURE_IMPORT_RULES"
+        const val ACTION_IMPORT_LEGACY =
+            "com.taostudio.tapaccounting.action.CAPTURE_IMPORT_LEGACY"
         const val ACTION_PING =
             "com.taostudio.tapaccounting.action.CAPTURE_PING"
         const val ACTION_SIMULATE =

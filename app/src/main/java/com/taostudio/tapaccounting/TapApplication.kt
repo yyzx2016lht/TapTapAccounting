@@ -19,6 +19,7 @@ import com.taostudio.tapaccounting.data.sync.SharedSyncScheduler
 import com.taostudio.tapaccounting.data.sync.SharedMutationHooks
 import com.taostudio.tapaccounting.capture.notify.CaptureNotifier
 import com.taostudio.tapaccounting.capture.parse.AutoAccountingRuleEngine
+import com.taostudio.tapaccounting.capture.rule.CaptureLegacyImporter
 import com.taostudio.tapaccounting.capture.rule.CaptureRuleBundleBootstrap
 
 class TapApplication : Application() {
@@ -65,6 +66,7 @@ class TapApplication : Application() {
         CaptureNotifier.ensureChannel(this)
         CoroutineScope(Dispatchers.IO).launch {
             CaptureRuleBundleBootstrap.ensureImported(this@TapApplication)
+            CaptureLegacyImporter.importIfNeeded(this@TapApplication)
             AutoAccountingRuleEngine.init(this@TapApplication)
         }
 

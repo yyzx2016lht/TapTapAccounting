@@ -82,7 +82,7 @@ android {
 
     packaging {
         jniLibs {
-            useLegacyPackaging = true
+            useLegacyPackaging = false
             // sherpa-onnx 自带的 C / C++ API 动态库只给“不走 JNI”的使用者准备
             // （见 app/src/main/jniLibs/arm64-v8a/README.md）。本项目通过
             // OfflineRecognizer 走 JNI，而 libsherpa-onnx-jni.so 的 DT_NEEDED 只依赖
@@ -113,6 +113,10 @@ dependencies {
     if (!sherpaAar.exists()) {
         throw GradleException("Missing required local dependency: ${sherpaAar.path}")
     }
+    val quickjsAar = file("libs/quickjs-android.aar")
+    if (!quickjsAar.exists()) {
+        throw GradleException("Missing required local dependency: ${quickjsAar.path}")
+    }
 
     implementation("androidx.core:core-ktx:1.12.0")
     implementation("androidx.work:work-runtime-ktx:2.9.0")
@@ -140,7 +144,8 @@ dependencies {
 
     // 待记规则执行：在应用进程内跑 AutoAccounting 云端规则（QuickJS，Apache-2.0）。
     // 规则包本身不内置 APK，运行时从插件/文件导入。
-    implementation("com.github.AutoAccountingOrg:quickjs-android:35726a9d28")
+    // 使用 16KB 对齐版本（NDK r29 + max-page-size=16384 构建，避免 Android 15+ 兼容性弹窗警告）。
+    implementation(files(quickjsAar))
 
     // 本地语音识别：显式引入 AAR，避免 fileTree 对 AAR 的处理不稳定
     // 必须是 16KB 对齐的版本（>= v1.12.x，见 k2-fsa/sherpa-onnx#2520）；

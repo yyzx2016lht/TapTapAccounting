@@ -48,6 +48,9 @@ object CaptureContract {
     const val LEGACY_RULE_BUNDLE_PATH: String = "rule_bundle"
     const val METHOD_EXPORT_LEGACY_RULE_BUNDLE: String = "exportLegacyRuleBundle"
 
+    /** 插件旧 capture.db 导出：主应用复制后 ATTACH 并入主库。 */
+    const val LEGACY_DB_PATH: String = "legacy_db"
+
     // ---- 常驻 relay & 插件直连：hook 进程 -> localhost TCP -> 插件 ----
     /** relay 监听端口（仅 127.0.0.1）。 */
     const val RELAY_PORT: Int = 52046

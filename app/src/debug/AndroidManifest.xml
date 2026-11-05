@@ -15,6 +15,7 @@
                 <action android:name="com.taostudio.tapaccounting.action.CAPTURE_SET_PROMPT_MODE" />
                 <action android:name="com.taostudio.tapaccounting.action.CAPTURE_RELOAD_RULES" />
                 <action android:name="com.taostudio.tapaccounting.action.CAPTURE_IMPORT_RULES" />
+                <action android:name="com.taostudio.tapaccounting.action.CAPTURE_IMPORT_LEGACY" />
                 <action android:name="com.taostudio.tapaccounting.action.CAPTURE_PING" />
                 <action android:name="com.taostudio.tapaccounting.action.CAPTURE_SIMULATE" />
             </intent-filter>

@@ -88,6 +88,54 @@ object RuleBundleStore {
         return save(context, decoded.copy(source = RuleBundleCodec.SOURCE_IMPORT))
     }
 
+    /** 兼容插件 UI 的命名。 */
+    @Synchronized
+    fun importJson(context: Context, json: String): RuleBundleCodec.Bundle =
+        installFromJson(context, json)
+
+    /** 新增或覆盖一条用户规则；用户规则写回时保持在文件前部。 */
+    @Synchronized
+    fun upsert(context: Context, rule: RuleBundleCodec.Rule): RuleBundleCodec.Bundle {
+        val bundle = load(context)
+        val rest = bundle.rules.filterNot { sameIdentity(it, rule) }
+        val rules = if (rule.isUser) listOf(rule) + rest else rest + rule
+        return save(
+            context,
+            bundle.copy(rules = rules, source = RuleBundleCodec.SOURCE_LOCAL),
+        )
+    }
+
+    @Synchronized
+    fun delete(context: Context, rule: RuleBundleCodec.Rule): RuleBundleCodec.Bundle {
+        val bundle = load(context)
+        return save(
+            context,
+            bundle.copy(
+                rules = bundle.rules.filterNot { sameIdentity(it, rule) },
+                source = RuleBundleCodec.SOURCE_LOCAL,
+            ),
+        )
+    }
+
+    @Synchronized
+    fun setEnabled(
+        context: Context,
+        rule: RuleBundleCodec.Rule,
+        enabled: Boolean,
+    ): RuleBundleCodec.Bundle {
+        val bundle = load(context)
+        val rules = bundle.rules.map {
+            if (sameIdentity(it, rule)) it.copy(enabled = enabled) else it
+        }
+        return save(
+            context,
+            bundle.copy(rules = rules, source = RuleBundleCodec.SOURCE_LOCAL),
+        )
+    }
+
+    private fun sameIdentity(a: RuleBundleCodec.Rule, b: RuleBundleCodec.Rule): Boolean =
+        a.systemRuleName == b.systemRuleName
+
     /** 规则页导出；空规则包也能导出结构，方便用户手工编辑。 */
     @Synchronized
     fun exportJson(context: Context, pretty: Boolean = true): String =

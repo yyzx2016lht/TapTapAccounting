@@ -69,6 +69,10 @@ object CaptureBubbleManager {
     private var dismissRunnable: Runnable? = null
     private var session: BubbleSession? = null
 
+    /** OverlayService 用来在气泡消失后判断自己是否该停掉。 */
+    @Volatile
+    var onDismissed: (() -> Unit)? = null
+
     private enum class BubbleState { SUMMARY, INPUT, CLASSIFYING, SPLIT, RESULT, RECORDED }
 
     private class BubbleSession(
@@ -94,6 +98,9 @@ object CaptureBubbleManager {
     fun canDrawOverlays(context: Context): Boolean =
         Build.VERSION.SDK_INT < Build.VERSION_CODES.M || Settings.canDrawOverlays(context)
 
+    /** OverlayService 判断自己是否还被气泡占用。 */
+    fun isShowing(): Boolean = currentView != null
+
     fun showBubble(context: Context, capture: PaymentCapture, pendingCount: Int) {
         val app = context.applicationContext
         if (!canDrawOverlays(app)) return
@@ -103,7 +110,7 @@ object CaptureBubbleManager {
     }
 
     private fun showBubbleOnMain(app: Context, capture: PaymentCapture, pendingCount: Int) {
-        dismissImmediate(app)
+        dismissImmediate(app, notifyDismissed = false)
         val wm = app.getSystemService(Context.WINDOW_SERVICE) as? WindowManager ?: return
 
         val density = app.resources.displayMetrics.density
@@ -1009,7 +1016,7 @@ object CaptureBubbleManager {
         dismissRunnable = null
     }
 
-    fun dismissImmediate(context: Context) {
+    fun dismissImmediate(context: Context, notifyDismissed: Boolean = true) {
         cancelAutoDismiss()
         val view = currentView ?: run {
             session = null
@@ -1020,5 +1027,8 @@ object CaptureBubbleManager {
         session = null
         val wm = context.applicationContext.getSystemService(Context.WINDOW_SERVICE) as? WindowManager
         runCatching { wm?.removeViewImmediate(view) }
+        if (notifyDismissed) {
+            onDismissed?.invoke()
+        }
     }
 }

@@ -105,6 +105,25 @@
                                     android:lineSpacingExtra="0dp" />
                             </LinearLayout>
 
+                            <!-- 待记入口：贴近首页头部右上角，不悬浮在列表/FAB 上。 -->
+                            <TextView
+                                android:id="@+id/tvHomePendingChip"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="12dp"
+                                android:background="@drawable/bg_home_pending_chip"
+                                android:clickable="true"
+                                android:focusable="true"
+                                android:paddingHorizontal="12dp"
+                                android:paddingVertical="7dp"
+                                android:text="待记 1 笔 ›"
+                                android:textColor="#FFFFFF"
+                                android:textSize="12sp"
+                                android:textStyle="bold"
+                                android:visibility="gone"
+                                app:layout_constraintEnd_toEndOf="parent"
+                                app:layout_constraintTop_toTopOf="parent" />
+
                             <!--
                                 预算进度条：仅在「启用预算」且该月确实有预算时显示。
                                 底色（track）与填充（indicator）不写死颜色，由 HomeBannerController

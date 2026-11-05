@@ -184,7 +184,7 @@ object CaptureBubbleManager {
             setPadding(0, dp(10), 0, 0)
         }
         val etNote = EditText(app).apply {
-            hint = "补一句备注，自动归类"
+            hint = "补一句备注，方便以后查找"
             setHintTextColor(Color.parseColor("#94A3B8"))
             setTextColor(Color.WHITE)
             textSize = 14f

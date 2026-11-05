@@ -136,6 +136,7 @@ class AiAssistant(private val ctx: Context) {
         onResult: (JSONObject) -> Unit
     ) {
         if (!ensureOverlayPermission()) return
+        captureMode = false
         val finalMode = mode
         currentHideStreamText = hideStreamText
 
@@ -146,6 +147,12 @@ class AiAssistant(private val ctx: Context) {
                 val hadPendingResult = pendingCollapsedResult != null
                 expandFromBubble()
                 if (hadPendingResult) return
+                // 如果正在后台识别或正处于多笔结果确认界面，外部若没有给具体文字，则保留当前状态不强切为 INPUT
+                val isBusyOrShowingMultiActions = analyzeJob?.isActive == true ||
+                    layoutMultiRecordActions?.visibility == View.VISIBLE
+                if (defaultText.isNullOrEmpty() && isBusyOrShowingMultiActions) {
+                    return
+                }
                 updatePanelState(finalMode, defaultText)
                 if (finalMode == MODE_LOADING && !defaultText.isNullOrEmpty() && defaultText != VOICE_PLACEHOLDER_TEXT) {
                     startAnalysis(defaultText, onResult)
@@ -541,11 +548,18 @@ class AiAssistant(private val ctx: Context) {
                 }
             }
         }
+        val isExceeded = (captureTotalDiffCents(bills) ?: 0L) < 0L
         layoutMultiRecordActions?.visibility = View.VISIBLE
         btnRecordOneByOne?.visibility = View.GONE
         btnRecordAllAtOnce?.apply {
             text = ctx.getString(R.string.confirm_and_merge)
+            isEnabled = !isExceeded
+            alpha = if (isExceeded) 0.45f else 1f
             setOnClickListener {
+                if (isExceeded) {
+                    Utils.toast(ctx, "识别合计超出待记付款金额，无法入账")
+                    return@setOnClickListener
+                }
                 onResult(result)
                 finishAfterResult(notifyBadge = false)
             }
@@ -553,9 +567,23 @@ class AiAssistant(private val ctx: Context) {
         if (miniBubble != null) showBubbleBadge()
     }
 
+    private fun captureTotalDiffCents(bills: JSONArray): Long? {
+        val totalCents = captureExpectedTotalCents?.takeIf { it > 0L } ?: return null
+        var recognizedCents = 0L
+        for (i in 0 until bills.length()) {
+            val bill = bills.optJSONObject(i) ?: continue
+            val amount = bill.optDouble("amount", Double.NaN)
+            if (!amount.isNaN() && amount > 0.0) {
+                recognizedCents += Math.round(amount * 100.0)
+            }
+        }
+        return totalCents - recognizedCents
+    }
+
     /** capture 模式的结果页顶部：付款 / 识别合计 / 差额（补“其他”或超出拒绝）。 */
     private fun captureTotalPreviewLine(bills: JSONArray): String? {
         val totalCents = captureExpectedTotalCents?.takeIf { it > 0L } ?: return null
+        val diff = captureTotalDiffCents(bills) ?: return null
         var recognizedCents = 0L
         for (i in 0 until bills.length()) {
             val bill = bills.optJSONObject(i) ?: continue
@@ -567,7 +595,6 @@ class AiAssistant(private val ctx: Context) {
         val currency = captureExpectedCurrency
         val totalText = formatMoneyWithSymbol(totalCents / 100.0, currency)
         val recognizedText = formatMoneyWithSymbol(recognizedCents / 100.0, currency)
-        val diff = totalCents - recognizedCents
         return when {
             diff == 0L -> "付款 $totalText · 识别合计 $recognizedText"
             diff > 0L -> "付款 $totalText · 识别合计 $recognizedText · 差额 ${formatMoneyWithSymbol(diff / 100.0, currency)} 将补入「其他」"
@@ -1085,6 +1112,7 @@ class AiAssistant(private val ctx: Context) {
             onAbandoned?.invoke()
             return
         }
+        captureMode = false
         lastReceiptImageUri = imageUri
         if (Prefs.isScreenAccountingUseImageFlow(ctx)) {
             analyzeImages(

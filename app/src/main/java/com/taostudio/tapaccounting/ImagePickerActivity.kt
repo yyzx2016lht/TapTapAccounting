@@ -49,7 +49,8 @@ class ImagePickerActivity : Activity() {
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode == REQUEST_PICK_IMAGE) {
-            Logger.d(this, "StreamPreview", "onActivityResult: resultCode=$resultCode, data=${data != null}, clipData=${data?.clipData?.itemCount}")
+            val isCaptureMode = !intent?.getStringExtra(CaptureContract.EXTRA_CAPTURE_ID).isNullOrBlank()
+            Logger.d(this, "StreamPreview", "onActivityResult: resultCode=$resultCode, data=${data != null}, clipData=${data?.clipData?.itemCount}, isCaptureMode=$isCaptureMode")
             if (resultCode == RESULT_OK && data != null) {
                 val uris = mutableListOf<Uri>()
                 val clipData = data.clipData
@@ -64,16 +65,25 @@ class ImagePickerActivity : Activity() {
                 }
                 Logger.d(this, "StreamPreview", "onActivityResult: uris=${uris.size}, onImagesPicked=${onImagesPicked != null}, onImagePicked=${onImagePicked != null}")
                 if (uris.isEmpty()) {
-                    onPickCancelled?.invoke()
+                    if (isCaptureMode) {
+                        Toast.makeText(this, "未选择图片，待记仍保留", Toast.LENGTH_SHORT).show()
+                    } else {
+                        onPickCancelled?.invoke()
+                    }
                 } else {
-                    val stableUris = uris.mapNotNull { uri ->
-                        runCatching { copyImageToCache(uri) }.getOrNull()
+                    val stableUris = uris.mapIndexedNotNull { index, uri ->
+                        runCatching { copyImageToCache(uri, index) }.getOrNull()
                     }
                     if (stableUris.isEmpty()) {
                         Toast.makeText(this, getString(R.string.image_read_failed), Toast.LENGTH_SHORT).show()
-                        onPickCancelled?.invoke()
-                    } else if (launchCaptureAccounting(stableUris)) {
+                        if (!isCaptureMode) {
+                            onPickCancelled?.invoke()
+                        }
+                    } else if (isCaptureMode) {
                         // 待记图片记账：选图完成后交给 capture 专用 Activity，不走 OverlayManager 回调
+                        if (!launchCaptureAccounting(stableUris)) {
+                            Toast.makeText(this, "启动图片记账失败，待记仍保留", Toast.LENGTH_SHORT).show()
+                        }
                         finish()
                         return
                     } else {
@@ -87,10 +97,11 @@ class ImagePickerActivity : Activity() {
                     }
                 }
             } else {
-                if (!intent.getStringExtra(CaptureContract.EXTRA_CAPTURE_ID).isNullOrBlank()) {
+                if (isCaptureMode) {
                     Toast.makeText(this, "已取消图片记账，待记仍保留", Toast.LENGTH_SHORT).show()
+                } else {
+                    onPickCancelled?.invoke()
                 }
-                onPickCancelled?.invoke()
             }
         }
         finish()
@@ -132,11 +143,11 @@ class ImagePickerActivity : Activity() {
         super.onDestroy()
     }
 
-    private fun copyImageToCache(sourceUri: Uri): Uri {
+    private fun copyImageToCache(sourceUri: Uri, index: Int = 0): Uri {
         val input = contentResolver.openInputStream(sourceUri)
             ?: throw IllegalArgumentException("无法打开图片流")
         val imageDir = File(cacheDir, "picked_images").apply { mkdirs() }
-        val outFile = File(imageDir, "receipt_${System.currentTimeMillis()}.jpg")
+        val outFile = File(imageDir, "receipt_${System.currentTimeMillis()}_${index}_${System.nanoTime() % 10000}.jpg")
 
         input.use { ins ->
             outFile.outputStream().use { outs ->

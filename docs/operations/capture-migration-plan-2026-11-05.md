@@ -103,6 +103,28 @@
 | 规则页 / 数据规则 / 历史 | | ✓ |
 | 透明 Activity 解冻 / 插件 FGS / 插件悬浮窗 | 删除 | |
 
+### 2.2 UI 迁移映射：是“搬家”，不是“删掉”
+
+插件 0.2 去掉待记 UI，指的是**代码搬到主应用之后，插件 APK 不再保留第二套入口**；功能本身一项都不会少。对应关系：
+
+| 插件现有 UI | 迁移到主应用哪里 | 迁移阶段 |
+|---|---|---|
+| `ui/PendingListActivity` 待记 tab | `capture/ui/CaptureCenterActivity` 待记 tab | P2 |
+| 待记卡片、备注、分类/资产/账本选择、不计/恢复 | 同上 | P2 |
+| 拆分工作区、合并明细、差额校验 | 同上 | P2/P3 |
+| 一键智能归类、批量入账 | 同上 | P2 |
+| `ui/RuleMappingViews`（资产映射/分类规则/设置） | `CaptureCenterActivity` 规则 tab + 设置 tab | P4 |
+| `ui/DataRuleViews`（AutoAccounting 数据规则） | `CaptureCenterActivity` 数据规则 tab | P4 |
+| `ui/CaptureHistoryActivity`（原始事件/重跑规则） | `CaptureCenterActivity` 历史 tab | P4 |
+| `notify/CaptureBubbleManager`（付款秒记气泡） | `OverlayService` 内的 `CaptureBubbleController` | P3 |
+| `notify/CaptureNotifier`（常驻通知/RemoteInput） | 主应用 `CaptureNotifier` | P1/P3 |
+| `ui/SplitConfirmSheet`（气泡内联拆分） | 优先复用 `CaptureCenterActivity` 拆分工作区；需要内联再平移 | P3 |
+| `ui/CaptureImagePickerActivity` | 主应用现有 `ImagePickerActivity` + `CaptureImageAccountingActivity` | P3 |
+| 插件设置（提示模式/只记支出/规则包） | 主应用设置页 + `CaptureCenterActivity` 设置 tab | P4 |
+| 插件启动页/收件箱入口 | 插件只保留 `ModuleStatusActivity`，按钮“打开敲敲记账” | P5 |
+
+**迁移顺序保证**：P2/P4 把对应 UI 搬完并通过真机回归后，P5 才删除插件里的旧文件。旧代码在 `db6f16f` 和 Git 历史里始终可恢复；旧 APK 的 `capture.db` 也不删除。不会出现“插件 UI 没了、主应用还没接上”的空窗。
+
 ---
 
 ## 3. 关键设计决策
@@ -466,10 +488,10 @@ exportPrefs() -> {ok, promptMode, onlyExpense}
 
 ---
 
-## 10. 需要确认的决策
+## 10. 已确认的决策
 
-1. **入口位置**：主页顶部胶囊 + 设置页入口都做，还是先只做设置页？
-2. **过渡策略**：插件 0.2 直接去掉待记 UI（推荐），还是保留一个版本做只读兜底？
-3. **规则包**：接受“主应用不内置 GPL 规则包，由插件/文件导入”（推荐），还是先直接复制进主应用 assets 求快？
-4. **更新顺序**：先插件 0.2、再主应用 1.3，是否可以写进发布说明？
-5. **QuickJS**：主应用直接引入 Apache-2.0 的 QuickJS wrapper，是否接受 APK 增大约几百 KB？
+1. **入口位置**：主页顶部胶囊 + 设置页入口都做。
+2. **过渡策略**：插件 0.2 去掉待记 UI，但前提是 P2/P4 已把对应 UI 搬进主应用并通过回归；插件只保留状态页 + 转发 + 迁移接口。旧 UI 代码在 Git 历史/旧 APK 中保留，`capture.db` 不删除。
+3. **规则包**：主应用不内置 GPL 规则包；由插件迁移或用户从文件导入。主应用只带 Apache-2.0 的 QuickJS 引擎。
+4. **更新顺序**：先插件 0.2、再主应用 1.3，写进发布说明。
+5. **QuickJS**：主应用引入 Apache-2.0 的 QuickJS wrapper，接受 APK 增大约几百 KB。

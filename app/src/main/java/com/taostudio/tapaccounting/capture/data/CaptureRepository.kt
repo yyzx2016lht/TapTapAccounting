@@ -16,6 +16,14 @@ data class InsertOutcome(
 
 class CaptureRepository(private val dao: PaymentCaptureDao) {
 
+    private companion object {
+        val HISTORY_STATUSES = listOf(
+            CaptureStatus.RECORDED,
+            CaptureStatus.IGNORED,
+            CaptureStatus.DUPLICATE,
+        )
+    }
+
     suspend fun insert(payload: CapturePayload): InsertOutcome {
         val now = System.currentTimeMillis()
 
@@ -135,6 +143,22 @@ class CaptureRepository(private val dao: PaymentCaptureDao) {
     /** “已不计”列表，支持在待记页底部恢复为待记。 */
     suspend fun listIgnored(limit: Int = 50): List<PaymentCapture> =
         dao.listByStatuses(listOf(CaptureStatus.IGNORED), limit).map { normalizeHistoricalRow(it) }
+
+    /**
+     * 历史记录：已记 / 已不计 / 重复。
+     *
+     * 待记、疑似重复、失败仍留在收件箱，不进入历史；历史只负责“已经处理完”的条目。
+     */
+    suspend fun listHistory(limit: Int = 200, offset: Int = 0): List<PaymentCapture> =
+        dao.listByStatusesPage(HISTORY_STATUSES, limit, offset).map { normalizeHistoricalRow(it) }
+
+    suspend fun countHistory(): Int = dao.countByStatus(HISTORY_STATUSES)
+
+    /** 清理 N 天前的已完成/已不计/重复记录；返回删除条数。 */
+    suspend fun deleteHistoryOlderThan(cutoff: Long): Int =
+        dao.deleteByStatusesOlderThan(HISTORY_STATUSES, cutoff)
+
+    suspend fun clearHistory(): Int = dao.deleteByStatuses(HISTORY_STATUSES)
 
     suspend fun countPending(onlyExpense: Boolean = false): Int {
         if (!onlyExpense) {

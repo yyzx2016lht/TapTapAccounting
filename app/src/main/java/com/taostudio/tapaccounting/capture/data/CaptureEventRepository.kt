@@ -85,6 +85,10 @@ class CaptureEventRepository(private val dao: CaptureEventDao) {
 
     suspend fun countMatched(): Int = dao.countMatched()
 
+    suspend fun trimToLatest(keep: Int = 2000): Int = dao.trimToLatest(keep)
+
+    suspend fun clearAll(): Int = dao.deleteAll()
+
     private fun md5(value: String): String =
         MessageDigest.getInstance("MD5")
             .digest(value.toByteArray(Charsets.UTF_8))

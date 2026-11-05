@@ -67,6 +67,9 @@ class TapApplication : Application() {
         CoroutineScope(Dispatchers.IO).launch {
             CaptureRuleBundleBootstrap.ensureImported(this@TapApplication)
             CaptureLegacyImporter.importIfNeeded(this@TapApplication)
+            com.taostudio.tapaccounting.capture.data.CaptureEventRepository(
+                database.captureEventDao()
+            ).trimToLatest(2000)
             AutoAccountingRuleEngine.init(this@TapApplication)
         }
 

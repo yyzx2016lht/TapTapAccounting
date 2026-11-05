@@ -93,13 +93,43 @@ object CaptureBubbleManager {
         var pendingCount: Int,
         var busy: Boolean = false,
         var state: BubbleState = BubbleState.SUMMARY,
-    )
+    ) {
+        fun renderSummary() {
+            val item = capture
+            val refund = item.subType == LocalBillType.SUBTYPE_REFUND || item.needsRefundLink
+            val income = item.billType == LocalBillType.TYPE_INCOME
+            val amountPrefix = if (income || refund) "+¥" else "¥"
+            val amountStr = item.amountCents?.let {
+                String.format(Locale.CHINA, "%s%.2f", amountPrefix, it / 100.0)
+            } ?: "金额待补"
+            val assetStr = item.assetName ?: item.paymentMethodRaw
+            summaryText.text = buildString {
+                append(amountStr)
+                item.merchant?.takeIf { it.isNotBlank() }?.let { append(" · ").append(it.take(10)) }
+                assetStr?.takeIf { it.isNotBlank() }?.let { append(" (").append(it.take(8)).append(")") }
+                if (splitCheck.isChecked) append(" · 拆分")
+                append(" · 待记 ").append(pendingCount).append(" 笔")
+            }
+        }
+    }
 
     fun canDrawOverlays(context: Context): Boolean =
         Build.VERSION.SDK_INT < Build.VERSION_CODES.M || Settings.canDrawOverlays(context)
 
     /** OverlayService 判断自己是否还被气泡占用。 */
     fun isShowing(): Boolean = currentView != null
+
+    /**
+     * 气泡已经在屏幕上时，后续同一笔支付的其它事件只更新“待记 N 笔”，
+     * 不再 dismiss 重建成第二个气泡。
+     */
+    fun updatePendingCount(count: Int) {
+        val current = session ?: return
+        current.pendingCount = count
+        mainHandler.post {
+            if (session === current) current.renderSummary()
+        }
+    }
 
     fun showBubble(context: Context, capture: PaymentCapture, pendingCount: Int) {
         val app = context.applicationContext
@@ -321,27 +351,9 @@ object CaptureBubbleManager {
             Toast.makeText(app, message, Toast.LENGTH_SHORT).show()
         }
 
-        fun updateSummary() {
-            val item = s.capture
-            val refund = item.subType == LocalBillType.SUBTYPE_REFUND || item.needsRefundLink
-            val income = item.billType == LocalBillType.TYPE_INCOME
-            val amountPrefix = if (income || refund) "+¥" else "¥"
-            val amountStr = item.amountCents?.let {
-                String.format(Locale.CHINA, "%s%.2f", amountPrefix, it / 100.0)
-            } ?: "金额待补"
-            val assetStr = item.assetName ?: item.paymentMethodRaw
-            tvSummary.text = buildString {
-                append(amountStr)
-                item.merchant?.takeIf { it.isNotBlank() }?.let { append(" · ").append(it.take(10)) }
-                assetStr?.takeIf { it.isNotBlank() }?.let { append(" (").append(it.take(8)).append(")") }
-                if (s.splitCheck.isChecked) append(" · 拆分")
-                append(" · 待记 ").append(s.pendingCount).append(" 笔")
-            }
-        }
-
         cbSplit.setOnCheckedChangeListener { _, checked ->
             s.capture = s.capture.copy(splitRequested = checked)
-            updateSummary()
+            s.renderSummary()
             scope.launch {
                 withContext(Dispatchers.IO) {
                     runCatching {
@@ -412,7 +424,7 @@ object CaptureBubbleManager {
         }
 
         fun showSummary() {
-            updateSummary()
+            s.renderSummary()
             applyState(BubbleState.SUMMARY)
         }
 
@@ -774,7 +786,7 @@ object CaptureBubbleManager {
         }
 
         fun openInput() {
-            updateSummary()
+            s.renderSummary()
             applyState(BubbleState.INPUT)
         }
 
@@ -845,7 +857,7 @@ object CaptureBubbleManager {
             }
         }
 
-        updateSummary()
+        s.renderSummary()
         applyState(BubbleState.SUMMARY)
 
         val params = WindowManager.LayoutParams().apply {

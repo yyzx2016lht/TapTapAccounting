@@ -22,6 +22,16 @@ interface PaymentCaptureDao {
     @Query("SELECT * FROM payment_captures WHERE status IN (:statuses) ORDER BY paidAt DESC, createdAt DESC LIMIT :limit")
     suspend fun listByStatuses(statuses: List<String>, limit: Int): List<PaymentCapture>
 
+    @Query(
+        "SELECT * FROM payment_captures WHERE status IN (:statuses) " +
+            "ORDER BY paidAt DESC, createdAt DESC LIMIT :limit OFFSET :offset"
+    )
+    suspend fun listByStatusesPage(
+        statuses: List<String>,
+        limit: Int,
+        offset: Int,
+    ): List<PaymentCapture>
+
     @Query("SELECT * FROM payment_captures WHERE id = :id LIMIT 1")
     suspend fun findById(id: String): PaymentCapture?
 
@@ -88,4 +98,10 @@ interface PaymentCaptureDao {
 
     @Query("DELETE FROM payment_captures WHERE id = :id")
     suspend fun deleteById(id: String): Int
+
+    @Query("DELETE FROM payment_captures WHERE status IN (:statuses) AND paidAt < :cutoff")
+    suspend fun deleteByStatusesOlderThan(statuses: List<String>, cutoff: Long): Int
+
+    @Query("DELETE FROM payment_captures WHERE status IN (:statuses)")
+    suspend fun deleteByStatuses(statuses: List<String>): Int
 }

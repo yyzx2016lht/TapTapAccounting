@@ -100,6 +100,8 @@ class PendingListActivity : Activity() {
     private var latestSnapshot: Snapshot? = null
     private var isAiBusy = false
     private var ignoredExpanded = false
+    /** null=全部；否则是 CaptureStatus.RECORDED / IGNORED / DUPLICATE。 */
+    private var historyFilter: String? = null
     private var pendingExportJson: String? = null
     private val noteSaveJobs = mutableMapOf<String, Job>()
     private val splitDrafts = mutableMapOf<String, MutableList<CaptureBridgeClient.SplitItem>>()
@@ -210,7 +212,7 @@ class PendingListActivity : Activity() {
                 ViewGroup.LayoutParams.WRAP_CONTENT,
             ).apply { topMargin = dp(12) }
         }
-        val tabLabels = listOf("待记", "规则", "设置")
+        val tabLabels = listOf("待记", "规则", "设置", "历史")
         tabViews = tabLabels.mapIndexed { index, label ->
             TextView(this).apply {
                 text = label
@@ -286,6 +288,9 @@ class PendingListActivity : Activity() {
                     Snapshot(
                         pendingItems = pendingItems,
                         ignoredItems = repository.listIgnored(50),
+                        historyItems = repository.listHistory(200),
+                        historyCount = repository.countHistory(),
+                        eventCount = app.eventRepository.count(),
                         assetRules = db.assetMappingDao().listAll(),
                         categoryRules = db.categoryRuleDao().listAll(),
                         ruleBundle = RuleBundleStore.load(this@PendingListActivity),
@@ -300,6 +305,11 @@ class PendingListActivity : Activity() {
                     "待记 ${snapshot.pendingItems.size}"
                 } else {
                     "待记"
+                }
+                tabViews.getOrNull(3)?.text = if (snapshot.historyCount > 0) {
+                    "历史 ${snapshot.historyCount}"
+                } else {
+                    "历史"
                 }
                 renderCurrentTab(snapshot)
                 CaptureNotifier.refreshAll(this@PendingListActivity)
@@ -330,12 +340,13 @@ class PendingListActivity : Activity() {
         val view = when (currentTab) {
             0 -> buildInboxTab(snapshot)
             1 -> buildRulesTab(snapshot)
-            else -> ruleViews.buildSettingsTab(
+            2 -> ruleViews.buildSettingsTab(
                 onSimulateExpense = { simulateCapture() },
                 onSimulateWcdb = { simulateWcdbSamples() },
                 onTestRuleSamples = { parseSamples() },
                 onCustomSimulateExpense = { showCustomSimulateDialog() },
             )
+            else -> buildHistoryTab(snapshot)
         }
         bodyFrame.addView(view)
     }
@@ -421,6 +432,399 @@ class PendingListActivity : Activity() {
     // ════════════════════════════════════════════════════════
     //  Tab 0: 待记收件箱
     // ════════════════════════════════════════════════════════
+
+    private fun buildHistoryTab(snapshot: Snapshot): View {
+        val scroll = ScrollView(this).apply {
+            layoutParams = FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT,
+            )
+            isFillViewport = true
+        }
+        val root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(16), dp(14), dp(16), dp(28))
+        }
+
+        val recorded = snapshot.historyItems.count { it.status == CaptureStatus.RECORDED }
+        val ignored = snapshot.historyItems.count { it.status == CaptureStatus.IGNORED }
+        val duplicate = snapshot.historyItems.count { it.status == CaptureStatus.DUPLICATE }
+
+        val header = CaptureUi.card(this)
+        header.addView(TextView(this).apply {
+            text = "历史记录"
+            textSize = 17f
+            setTypeface(typeface, Typeface.BOLD)
+            setTextColor(CaptureUi.TEXT_PRIMARY)
+        })
+        header.addView(TextView(this).apply {
+            text = "已记 $recorded · 已不计 $ignored · 重复 $duplicate"
+            textSize = 12.5f
+            setTextColor(CaptureUi.TEXT_SECONDARY)
+            setPadding(0, dp(6), 0, 0)
+        })
+        header.addView(TextView(this).apply {
+            text = "原始报文 ${snapshot.eventCount} 条。待记和失败不会自动进历史；" +
+                "历史默认保留最近一年，可在这里手动清理。"
+            textSize = 11.5f
+            setTextColor(CaptureUi.TEXT_MUTED)
+            setPadding(0, dp(6), 0, 0)
+            setLineSpacing(dp(2).toFloat(), 1f)
+        })
+
+        val bulkRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(0, dp(10), 0, 0)
+        }
+        bulkRow.addView(
+            historyAction("清理 1 年前", CaptureUi.WARNING, CaptureUi.WARNING_SOFT) {
+                confirmClearHistoryOlderThan()
+            },
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+            ).apply { marginEnd = dp(8) },
+        )
+        bulkRow.addView(
+            historyAction("清空历史", CaptureUi.DANGER, CaptureUi.DANGER_SOFT) {
+                confirmClearHistory()
+            },
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+            ).apply { marginEnd = dp(8) },
+        )
+        bulkRow.addView(
+            historyAction("原始报文", CaptureUi.BRAND_DARK, CaptureUi.BRAND_SOFT) {
+                startActivity(Intent(this@PendingListActivity, CaptureHistoryActivity::class.java))
+            },
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+            ).apply { marginEnd = dp(8) },
+        )
+        bulkRow.addView(
+            historyAction("清理旧报文", CaptureUi.TEXT_SECONDARY, CaptureUi.BG_SUBTLE) {
+                confirmTrimEvents()
+            },
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+            ),
+        )
+        header.addView(bulkRow)
+        root.addView(header)
+
+        val filterRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(0, dp(12), 0, dp(4))
+        }
+        listOf(
+            null to "全部",
+            CaptureStatus.RECORDED to "已记",
+            CaptureStatus.IGNORED to "已不计",
+            CaptureStatus.DUPLICATE to "重复",
+        ).forEach { (status, label) ->
+            val selected = historyFilter == status
+            filterRow.addView(
+                historyAction(
+                    text = label,
+                    textColor = if (selected) Color.WHITE else CaptureUi.TEXT_SECONDARY,
+                    bgColor = if (selected) CaptureUi.BRAND else CaptureUi.BG_SEGMENT,
+                ) {
+                    historyFilter = status
+                    latestSnapshot?.let { renderCurrentTab(it) }
+                },
+                LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                ).apply { marginEnd = dp(8) },
+            )
+        }
+        root.addView(filterRow)
+
+        val items = snapshot.historyItems.filter { item ->
+            historyFilter == null || item.status == historyFilter
+        }
+        if (items.isEmpty()) {
+            val empty = CaptureUi.card(this)
+            empty.addView(TextView(this).apply {
+                text = if (snapshot.historyCount == 0) {
+                    "还没有历史记录。\n入账、标记不计或去重后的待记会出现在这里。"
+                } else {
+                    "当前筛选没有记录。"
+                }
+                textSize = 13f
+                setTextColor(CaptureUi.TEXT_MUTED)
+                gravity = Gravity.CENTER
+                setPadding(0, dp(18), 0, dp(18))
+            })
+            root.addView(empty)
+        } else {
+            items.forEach { item ->
+                root.addView(buildHistoryCard(item))
+            }
+        }
+
+        scroll.addView(root)
+        return scroll
+    }
+
+    private fun buildHistoryCard(item: PaymentCapture): View {
+        val card = CaptureUi.card(this).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+            ).apply { bottomMargin = dp(10) }
+            isClickable = true
+            isFocusable = true
+            background = CaptureUi.rippleBg(
+                fillColor = CaptureUi.BG_SURFACE,
+                radiusPx = dp(16),
+                strokeWidthPx = dp(1),
+                strokeColor = CaptureUi.BORDER,
+            )
+            setOnClickListener { openHistoryItem(item) }
+        }
+
+        val top = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        val isAlipay = item.source == CaptureSource.ALIPAY
+        top.addView(TextView(this).apply {
+            text = sourceLabel(item.source)
+            textSize = 10.5f
+            setTypeface(typeface, Typeface.BOLD)
+            setTextColor(if (isAlipay) CaptureUi.ALIPAY else CaptureUi.WECHAT)
+            setPadding(dp(6), dp(2), dp(6), dp(2))
+            background = CaptureUi.roundedBg(
+                if (isAlipay) CaptureUi.ALIPAY_SOFT else CaptureUi.WECHAT_SOFT,
+                dp(6),
+            )
+        })
+        top.addView(TextView(this).apply {
+            text = item.merchant?.takeIf { it.isNotBlank() } ?: "未知商户"
+            textSize = 13f
+            maxLines = 1
+            ellipsize = TextUtils.TruncateAt.END
+            setTextColor(CaptureUi.TEXT_PRIMARY)
+            setTypeface(typeface, Typeface.BOLD)
+            setPadding(dp(8), 0, dp(6), 0)
+            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+        })
+        top.addView(TextView(this).apply {
+            text = formatAmount(item.amountCents)
+            textSize = 15f
+            setTypeface(typeface, Typeface.BOLD)
+            setTextColor(
+                if (item.billType == LocalBillType.TYPE_INCOME) CaptureUi.SUCCESS else CaptureUi.TEXT_PRIMARY
+            )
+        })
+        card.addView(top)
+
+        val detail = listOfNotNull(
+            rowTimeFormat.format(Date(item.paidAt)),
+            historyStatusLabel(item.status),
+            item.categoryName?.takeIf { it.isNotBlank() }?.let { "分类 $it" },
+            item.note?.takeIf { it.isNotBlank() }?.let { "备注 $it" },
+            when (item.status) {
+                CaptureStatus.RECORDED -> "点击查看账单"
+                CaptureStatus.IGNORED, CaptureStatus.DUPLICATE -> "点击操作"
+                else -> null
+            },
+        ).joinToString(" · ")
+        card.addView(TextView(this).apply {
+            text = detail
+            textSize = 11.5f
+            setTextColor(CaptureUi.TEXT_MUTED)
+            setPadding(0, dp(5), 0, 0)
+        })
+
+        val actions = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(0, dp(8), 0, 0)
+        }
+        if (item.status == CaptureStatus.IGNORED || item.status == CaptureStatus.DUPLICATE) {
+            actions.addView(
+                historyAction("恢复待记", CaptureUi.BRAND_DARK, CaptureUi.BRAND_SOFT) {
+                    mutate { repo -> repo.updateStatus(item.id, CaptureStatus.PENDING) }
+                },
+                LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                ).apply { marginEnd = dp(8) },
+            )
+        }
+        actions.addView(
+            historyAction("删除", CaptureUi.DANGER, CaptureUi.DANGER_SOFT) {
+                confirmDeleteHistory(item)
+            },
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+            ),
+        )
+        card.addView(actions)
+        return card
+    }
+
+    private fun historyAction(
+        text: String,
+        textColor: Int,
+        bgColor: Int,
+        onClick: () -> Unit,
+    ): TextView = TextView(this).apply {
+        this.text = text
+        textSize = 12f
+        setTypeface(typeface, Typeface.BOLD)
+        gravity = Gravity.CENTER
+        setTextColor(textColor)
+        setPadding(dp(10), dp(7), dp(10), dp(7))
+        background = CaptureUi.rippleBg(bgColor, dp(9))
+        setOnClickListener { onClick() }
+    }
+
+    /**
+     * 历史卡片点击的主操作：
+     * - 已记：直接打开关联账单详情（没有关联账单时才降级到操作菜单）；
+     * - 已不计/重复：弹出恢复/删除/原始报文操作。
+     */
+    private fun openHistoryItem(item: PaymentCapture) {
+        if (item.status != CaptureStatus.RECORDED) {
+            showHistoryActions(item)
+            return
+        }
+        scope.launch {
+            val app = CaptureApp.from(this@PendingListActivity)
+            val billId = withContext(Dispatchers.IO) {
+                val link = app.database.externalImportDao().getByCaptureId(item.id) ?: return@withContext null
+                if (app.database.billDao().getBillById(link.billId) != null) link.billId else null
+            }
+            if (billId != null) {
+                com.taostudio.tapaccounting.ui.activity.BillDetailActivity.start(
+                    this@PendingListActivity,
+                    billId,
+                )
+            } else {
+                showHistoryActions(item)
+            }
+        }
+    }
+
+    private fun showHistoryActions(item: PaymentCapture) {
+        val actions = mutableListOf<String>()
+        if (item.status == CaptureStatus.IGNORED || item.status == CaptureStatus.DUPLICATE) {
+            actions.add("恢复为待记")
+        }
+        if (!item.rawJson.isNullOrBlank()) {
+            actions.add("查看原始报文")
+        }
+        actions.add("删除这条历史")
+
+        AlertDialog.Builder(this)
+            .setTitle("${item.merchant?.takeIf { it.isNotBlank() } ?: "历史记录"} · ${formatAmount(item.amountCents)}")
+            .setItems(actions.toTypedArray()) { _, which ->
+                when (actions[which]) {
+                    "恢复为待记" -> mutate { repo ->
+                        repo.updateStatus(item.id, CaptureStatus.PENDING)
+                    }
+
+                    "查看原始报文" -> showRawPayload(item)
+
+                    "删除这条历史" -> confirmDeleteHistory(item)
+                }
+            }
+            .setNegativeButton("关闭", null)
+            .show()
+    }
+
+    private fun showRawPayload(item: PaymentCapture) {
+        val text = TextView(this).apply {
+            this.text = item.rawJson.orEmpty()
+            textSize = 11f
+            setTextColor(CaptureUi.TEXT_SECONDARY)
+            setTextIsSelectable(true)
+            setPadding(dp(16), dp(12), dp(16), dp(12))
+        }
+        val scroll = ScrollView(this).apply { addView(text) }
+        AlertDialog.Builder(this)
+            .setTitle("原始报文")
+            .setView(scroll)
+            .setPositiveButton("关闭", null)
+            .show()
+    }
+
+    private fun historyStatusLabel(status: String): String = when (status) {
+        CaptureStatus.RECORDED -> "已记"
+        CaptureStatus.IGNORED -> "已不计"
+        CaptureStatus.DUPLICATE -> "重复"
+        else -> status
+    }
+
+    private fun confirmDeleteHistory(item: PaymentCapture) {
+        AlertDialog.Builder(this)
+            .setTitle("删除历史记录")
+            .setMessage("只删除这条待记历史，不影响已经写入的账单。")
+            .setNegativeButton("取消", null)
+            .setPositiveButton("删除") { _, _ ->
+                mutate { repo -> repo.deleteById(item.id) }
+            }
+            .show()
+    }
+
+    private fun confirmClearHistoryOlderThan() {
+        val cutoff = System.currentTimeMillis() - 365L * 24 * 60 * 60 * 1000
+        AlertDialog.Builder(this)
+            .setTitle("清理历史")
+            .setMessage("删除 1 年前已记、已不计和重复的待记历史；账单本身不受影响。")
+            .setNegativeButton("取消", null)
+            .setPositiveButton("清理") { _, _ ->
+                scope.launch {
+                    val count = withContext(Dispatchers.IO) {
+                        CaptureApp.from(this@PendingListActivity).repository
+                            .deleteHistoryOlderThan(cutoff)
+                    }
+                    toast("已清理 $count 条历史")
+                    load()
+                }
+            }
+            .show()
+    }
+
+    private fun confirmClearHistory() {
+        AlertDialog.Builder(this)
+            .setTitle("清空历史")
+            .setMessage("删除全部已记、已不计和重复的待记历史；账单本身不受影响。")
+            .setNegativeButton("取消", null)
+            .setPositiveButton("清空") { _, _ ->
+                scope.launch {
+                    val count = withContext(Dispatchers.IO) {
+                        CaptureApp.from(this@PendingListActivity).repository.clearHistory()
+                    }
+                    toast("已清空 $count 条历史")
+                    load()
+                }
+            }
+            .show()
+    }
+
+    private fun confirmTrimEvents() {
+        AlertDialog.Builder(this)
+            .setTitle("清理旧报文")
+            .setMessage("原始报文只用于规则调试/历史排查，保留最近 2000 条，删除更早的记录。")
+            .setNegativeButton("取消", null)
+            .setPositiveButton("清理") { _, _ ->
+                scope.launch {
+                    val count = withContext(Dispatchers.IO) {
+                        CaptureApp.from(this@PendingListActivity).eventRepository.trimToLatest(2000)
+                    }
+                    toast("已清理 $count 条旧报文")
+                    load()
+                }
+            }
+            .show()
+    }
 
     private fun buildInboxTab(snapshot: Snapshot): View {
         val scroll = ScrollView(this).apply {
@@ -1529,6 +1933,8 @@ class PendingListActivity : Activity() {
                 note = draftNote.ifBlank { item.note },
                 categoryName = currentCategory ?: item.categoryName,
                 splitRequested = splitRequested,
+                // 账本 chip 是本地选择，可能还没等到 load() 刷新 Snapshot；入账必须用当前选择。
+                bookName = currentBook,
             )
             if (splitRequested) {
                 if (splitSubItems.isEmpty()) {
@@ -1558,13 +1964,13 @@ class PendingListActivity : Activity() {
                                         inferred = true,
                                     )
                                 )
-                                scope.launch { performGroupImport(item, splitSubItems) }
+                                scope.launch { performGroupImport(draft, splitSubItems) }
                             }
                             .setNegativeButton("继续修改", null)
                             .show()
                         return@button
                     }
-                    scope.launch { performGroupImport(item, splitSubItems) }
+                    scope.launch { performGroupImport(draft, splitSubItems) }
                 }
             } else {
                 directImport(draft)
@@ -1587,6 +1993,7 @@ class PendingListActivity : Activity() {
                 item.copy(
                     note = draftNote.ifBlank { item.note },
                     categoryName = currentCategory ?: item.categoryName,
+                    bookName = currentBook,
                 )
             )
         }.apply {
@@ -1784,6 +2191,8 @@ class PendingListActivity : Activity() {
                         CaptureApp.from(this@PendingListActivity).repository
                             .updateBookName(item.id, chosenBook)
                     }
+                    // 刷新 Snapshot，让卡片/批量入账都拿到新账本；直接入账本身已用 draft.bookName 兜底。
+                    load()
                 }
             }
             .setNegativeButton("取消", null)
@@ -2459,7 +2868,6 @@ class PendingListActivity : Activity() {
                 currentTab = 0
                 updateTabSelection()
                 load()
-                toast("已模拟：${CaptureSources.displayName(CaptureSource.WECHAT)} ¥${String.format(Locale.CHINA, "%.2f", amountCents / 100.0)} $merchant (长按按钮可修改金额)")
             } catch (t: Throwable) {
                 toast("模拟失败：${t.message ?: t.javaClass.simpleName}")
             }
@@ -2486,7 +2894,6 @@ class PendingListActivity : Activity() {
             .put("rawJson", rawJson)
             .put("ruleVersion", "simulate-wcdb")
             .toString()
-        toast("已投递真实 WCDB 事件，稍后自动刷新")
         scope.launch {
             withContext(Dispatchers.IO) {
                 CaptureIngestCoordinator.ingest(
@@ -2540,6 +2947,9 @@ class PendingListActivity : Activity() {
     private data class Snapshot(
         val pendingItems: List<PaymentCapture>,
         val ignoredItems: List<PaymentCapture> = emptyList(),
+        val historyItems: List<PaymentCapture> = emptyList(),
+        val historyCount: Int = 0,
+        val eventCount: Int = 0,
         val assetRules: List<AssetMappingRule>,
         val categoryRules: List<CategoryRule>,
         val ruleBundle: RuleBundleCodec.Bundle,

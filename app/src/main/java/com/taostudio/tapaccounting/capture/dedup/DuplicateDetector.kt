@@ -1,6 +1,7 @@
 package com.taostudio.tapaccounting.capture.dedup
 
 import com.taostudio.tapaccounting.capture.contract.CaptureStatus
+import com.taostudio.tapaccounting.capture.contract.LocalBillType
 import com.taostudio.tapaccounting.capture.data.PaymentCapture
 import kotlin.math.abs
 
@@ -48,9 +49,19 @@ object DuplicateDetector {
      *    - 时间差 <= 2秒 -> 系统并发重复广播，判定为重复。
      *    - 时间差 > 2秒 -> 真实连续付款，判定为【非重复】！
      * 6. 无重叠渠道（如 微信支付 vs 招商银行短信） -> 判定为【重复】！
+     * 7. 同来源的提现/转账阶段报文（发起/到账/确认收款，5分钟内、金额一致）-> 判定为【重复】，
+     *    即使流水号不同、billType 分别被识别成支出与转账。
      */
     fun isDuplicate(incoming: PaymentCapture, existing: PaymentCapture): Boolean {
         if (incoming.amountCents != existing.amountCents) return false
+
+        val timeDiff = abs(incoming.paidAt - existing.paidAt)
+        if (timeDiff > DEFAULT_WINDOW_MILLIS) return false
+
+        // 提现/转账会先后产生“发起”“到账”两三条不同报文，它们不是两笔付款。
+        // 这些报文常常流水号不同、billType 也会被规则识别成支出/收入/转账中的不同值，
+        // 所以必须在下面的类型与流水号校验之前裁决，否则永远合并不了（真机已验证）。
+        if (isTransferStatusPair(incoming, existing)) return true
 
         // 交易类型不同不属于普通重复（应由转账识别处理）
         if (incoming.billType != null && existing.billType != null && incoming.billType != existing.billType) {
@@ -63,9 +74,6 @@ object DuplicateDetector {
         if (txn1.isNotEmpty() && txn2.isNotEmpty() && incoming.source == existing.source && txn1 != txn2) {
             return false
         }
-
-        val timeDiff = abs(incoming.paidAt - existing.paidAt)
-        if (timeDiff > DEFAULT_WINDOW_MILLIS) return false
 
         // 1. 时间戳完全相同 -> 视为同一笔交易
         if (incoming.paidAt == existing.paidAt) return true
@@ -121,6 +129,36 @@ object DuplicateDetector {
     }
 
     /**
+     * 转账/提现的“发起/到账/确认收款”是同一笔资金动作的不同阶段，不是两笔付款。
+     * 要求来源相同、至少一侧是转账、文案明确包含阶段关键词；
+     * 普通两人转账、连续同金额付款不会被误合并。
+     */
+    private fun isTransferStatusPair(a: PaymentCapture, b: PaymentCapture): Boolean {
+        val aTransfer = a.billType == LocalBillType.TYPE_TRANSFER
+        val bTransfer = b.billType == LocalBillType.TYPE_TRANSFER
+        // 至少一侧是转账；另一侧可能是“到账”被规则识别成收入，仍属于同一笔提现。
+        if (!aTransfer && !bTransfer) return false
+        if (a.source != b.source) return false
+        val text = buildString {
+            append(a.merchant.orEmpty())
+            append(' ')
+            append(b.merchant.orEmpty())
+            append(' ')
+            append(a.channel.orEmpty())
+            append(' ')
+            append(b.channel.orEmpty())
+            append(' ')
+            append(a.note.orEmpty())
+            append(' ')
+            append(b.note.orEmpty())
+        }
+        return text.contains("提现") ||
+            text.contains("到账") ||
+            text.contains("发起") ||
+            text.contains("确认收款")
+    }
+
+    /**
      * 将两笔重复账单智能合并为一笔更完善的主账单：
      * - 资产：优先选择更具体的名称（长名称优先），若一方为空则补充另一方
      * - 商户：优先选择更具体非脏文本的商户名称
@@ -148,8 +186,23 @@ object DuplicateDetector {
         val betterBook = existing.bookName?.takeIf { it.isNotBlank() }
             ?: incoming.bookName?.takeIf { it.isNotBlank() }
         val excludeStats = existing.excludeFromStats || incoming.excludeFromStats
+        val betterBillType = when {
+            existing.billType == LocalBillType.TYPE_TRANSFER ||
+                incoming.billType == LocalBillType.TYPE_TRANSFER -> LocalBillType.TYPE_TRANSFER
+            else -> existing.billType ?: incoming.billType
+        }
+        val betterSubType = when {
+            existing.subType == LocalBillType.SUBTYPE_REFUND ||
+                incoming.subType == LocalBillType.SUBTYPE_REFUND -> LocalBillType.SUBTYPE_REFUND
+            existing.subType == LocalBillType.SUBTYPE_REPAYMENT ||
+                incoming.subType == LocalBillType.SUBTYPE_REPAYMENT -> LocalBillType.SUBTYPE_REPAYMENT
+            else -> existing.subType ?: incoming.subType ?: LocalBillType.SUBTYPE_NORMAL
+        }
 
         return existing.copy(
+            billType = betterBillType,
+            subType = betterSubType,
+            needsRefundLink = existing.needsRefundLink || incoming.needsRefundLink,
             assetName = betterAsset,
             paymentMethodRaw = betterRaw,
             merchant = betterMerchant,

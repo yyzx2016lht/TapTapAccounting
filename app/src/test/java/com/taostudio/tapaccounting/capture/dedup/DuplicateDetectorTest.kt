@@ -121,6 +121,71 @@ class DuplicateDetectorTest {
     }
 
     @Test
+    fun `withdrawal start and arrival with different ids and bill types are duplicate`() {
+        // 真机数据（2026-11-05）：微信零钱提现先后两条报文，流水号不同、类型分别被识别成支出与转账
+        val start = createCapture(
+            id = "1",
+            amountCents = 100L,
+            paidAt = 1793884293000L,
+            source = "WECHAT",
+            sourceTxnId = "2038841640456576481",
+            channel = "微信[微信支付-提现]",
+            merchant = "零钱提现发起",
+            billType = LocalBillType.TYPE_EXPENSE,
+        )
+        val arrived = createCapture(
+            id = "2",
+            amountCents = 100L,
+            paidAt = 1793884294000L,
+            source = "WECHAT",
+            sourceTxnId = "5963871767958470803",
+            channel = "微信[微信支付-零钱提现到账]",
+            merchant = "零钱提现已到账",
+            billType = LocalBillType.TYPE_TRANSFER,
+        )
+        assertTrue(DuplicateDetector.isDuplicate(arrived, start))
+        assertEquals(LocalBillType.TYPE_TRANSFER, DuplicateDetector.merge(start, arrived).billType)
+    }
+
+    @Test
+    fun `withdrawal start and arrival beyond 5 minutes are NOT duplicate`() {
+        val start = createCapture(
+            id = "1",
+            sourceTxnId = "a",
+            merchant = "零钱提现发起",
+            billType = LocalBillType.TYPE_EXPENSE,
+        )
+        val arrived = createCapture(
+            id = "2",
+            paidAt = 100000L + DuplicateDetector.DEFAULT_WINDOW_MILLIS + 1L,
+            sourceTxnId = "b",
+            merchant = "零钱提现已到账",
+            billType = LocalBillType.TYPE_TRANSFER,
+        )
+        assertFalse(DuplicateDetector.isDuplicate(arrived, start))
+    }
+
+    @Test
+    fun `two real transfers to same person without stage keywords are NOT duplicate`() {
+        val first = createCapture(
+            id = "1",
+            sourceTxnId = "t1",
+            merchant = "转账-张三",
+            channel = "微信[微信支付-转账]",
+            billType = LocalBillType.TYPE_TRANSFER,
+        )
+        val second = createCapture(
+            id = "2",
+            paidAt = 130000L,
+            sourceTxnId = "t2",
+            merchant = "转账-张三",
+            channel = "微信[微信支付-转账]",
+            billType = LocalBillType.TYPE_TRANSFER,
+        )
+        assertFalse(DuplicateDetector.isDuplicate(second, first))
+    }
+
+    @Test
     fun `findDuplicate correctly picks root candidate and ignores children`() {
         val parent = createCapture(id = "1", paidAt = 100000L, channel = "微信支付")
         val child = createCapture(id = "2", paidAt = 101000L, channel = "招商银行短信", groupId = "1", status = CaptureStatus.DUPLICATE)

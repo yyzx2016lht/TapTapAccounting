@@ -71,4 +71,14 @@ interface CaptureEventDao {
 
     @Query("SELECT COUNT(*) FROM capture_events WHERE matched = 1")
     suspend fun countMatched(): Int
+
+    /** 原始报文只用于诊断/规则调试，保留最近 N 条即可，避免 JSON 无限增长。 */
+    @Query(
+        "DELETE FROM capture_events WHERE id NOT IN (" +
+            "SELECT id FROM capture_events ORDER BY receivedAt DESC, id DESC LIMIT :keep)"
+    )
+    suspend fun trimToLatest(keep: Int): Int
+
+    @Query("DELETE FROM capture_events")
+    suspend fun deleteAll(): Int
 }

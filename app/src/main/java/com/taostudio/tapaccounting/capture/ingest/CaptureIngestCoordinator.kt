@@ -19,12 +19,15 @@ import com.taostudio.tapaccounting.data.local.AppDatabase
 import com.taostudio.tapaccounting.data.local.entity.Bill
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import org.json.JSONObject
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicInteger
 import kotlin.math.roundToLong
 
 /**
@@ -46,6 +49,8 @@ internal object CaptureIngestCoordinator {
 
     private val ingestMutex = Mutex()
     private val recentIngestedIds = ConcurrentHashMap<String, Long>()
+    private val eventInsertCounter = AtomicInteger(0)
+    private var bubbleJob: Job? = null
     private val bgScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     suspend fun ingest(context: Context, token: String?, payloadJson: String?): String {
@@ -117,6 +122,10 @@ internal object CaptureIngestCoordinator {
                         categoryName = null,
                         channel = analysis.channel,
                     )
+                    // 原始报文只做诊断，保留最近 2000 条，避免 JSON 无限占空间。
+                    if (eventInsertCounter.incrementAndGet() % 100 == 0) {
+                        runCatching { eventRepository.trimToLatest(2000) }
+                    }
                 }
 
                 val outcome = enriched?.let { repository.insert(it) }
@@ -156,19 +165,34 @@ internal object CaptureIngestCoordinator {
                     CaptureNotifier.refreshWithItems(app, pendingItems)
                     return
                 }
-                val intent = android.content.Intent(app, com.taostudio.tapaccounting.OverlayService::class.java).apply {
-                    action = com.taostudio.tapaccounting.OverlayService.ACTION_SHOW_CAPTURE_BUBBLE
-                    putExtra(
-                        com.taostudio.tapaccounting.OverlayService.EXTRA_CAPTURE_ID,
-                        latest.id,
-                    )
+                // 屏幕上已经有气泡：只更新笔数，不再弹第二个。
+                if (com.taostudio.tapaccounting.capture.notify.CaptureBubbleManager.isShowing()) {
+                    com.taostudio.tapaccounting.capture.notify.CaptureBubbleManager
+                        .updatePendingCount(pendingItems.size)
+                    return
                 }
-                // 后台起 FGS 可能被 ROM 拒绝；失败时至少保留通知，不静默丢提醒。
-                runCatching {
-                    com.taostudio.tapaccounting.OverlayService.startCompat(app, intent)
-                }.onFailure {
-                    Log.w(TAG, "start bubble service failed: ${it.message}")
-                    CaptureNotifier.refreshWithItems(app, pendingItems)
+                // 同一笔支付可能连续到达 WCDB/AppMessage/到账通知多条事件；
+                // 450ms 内只保留最后一次，避免一个动作连弹多个气泡。
+                bubbleJob?.cancel()
+                bubbleJob = bgScope.launch {
+                    delay(450L)
+                    val intent = android.content.Intent(
+                        app,
+                        com.taostudio.tapaccounting.OverlayService::class.java,
+                    ).apply {
+                        action = com.taostudio.tapaccounting.OverlayService.ACTION_SHOW_CAPTURE_BUBBLE
+                        putExtra(
+                            com.taostudio.tapaccounting.OverlayService.EXTRA_CAPTURE_ID,
+                            latest.id,
+                        )
+                    }
+                    // 后台起 FGS 可能被 ROM 拒绝；失败时至少保留通知，不静默丢提醒。
+                    runCatching {
+                        com.taostudio.tapaccounting.OverlayService.startCompat(app, intent)
+                    }.onFailure {
+                        Log.w(TAG, "start bubble service failed: ${it.message}")
+                        CaptureNotifier.refreshWithItems(app, pendingItems)
+                    }
                 }
             }
 

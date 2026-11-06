@@ -544,7 +544,9 @@ class CaptureBridgeProvider : ContentProvider() {
         if (rawJson.isEmpty()) {
             return errorJson("empty_raw_json", "缺少原始报文样本")
         }
-        val result = AIService.generateAutoRule(ctx, app, type, rawJson)
+        val userInstruction = payload.optString("userInstruction", "").trim().takeIf { it.isNotEmpty() }
+        val currentPattern = payload.optString("currentPattern", "").trim().takeIf { it.isNotEmpty() }
+        val result = AIService.generateAutoRule(ctx, app, type, rawJson, userInstruction, currentPattern)
             ?: return errorJson("ai_failed", "AI 生成规则失败或超时，请检查网络与 AI 配置")
         return JSONObject().put("ok", true).put("rule", result)
     }

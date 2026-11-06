@@ -1536,6 +1536,8 @@ object AIService {
         app: String,
         type: String,
         rawJson: String,
+        userInstruction: String? = null,
+        currentPattern: String? = null,
     ): JSONObject? {
         val cleanRaw = rawJson.trim()
         if (cleanRaw.isEmpty()) return null
@@ -1548,17 +1550,23 @@ object AIService {
         val userPrompt = buildString {
             append("应用包名：").append(app).append('\n')
             append("事件类型：").append(type).append('\n')
+            if (!currentPattern.isNullOrBlank()) {
+                append("当前正在微调的匹配表达式/现有规则：\n").append(currentPattern).append('\n')
+            }
+            if (!userInstruction.isNullOrBlank()) {
+                append("用户对话调整要求（请严格按此要求修改或补充匹配逻辑）：\n").append(userInstruction).append('\n')
+            }
             append("原始报文 JSON：\n").append(cleanRaw.take(4000))
         }
 
         val content = try {
-            withTimeoutOrNull(25_000L) {
+            withTimeoutOrNull(45_000L) {
                 val requestJson = buildTextChatRequest(
                     model = model,
                     temperature = 0.1,
                     systemPrompt = AIPrompts.AUTOACCOUNTING_RULE_GENERATE_PROMPT,
                     userText = userPrompt,
-                    jsonObjectResponse = true,
+                    jsonObjectResponse = false,
                     enableThinking = false,
                 )
                 val response = getApi(ctx).chatRaw(
@@ -1578,7 +1586,7 @@ object AIService {
             return null
         }
         if (content.isNullOrBlank()) {
-            Logger.d(ctx, "AIService", "generateAutoRule timeout after 25s")
+            Logger.d(ctx, "AIService", "generateAutoRule timeout after 45s")
             return null
         }
 

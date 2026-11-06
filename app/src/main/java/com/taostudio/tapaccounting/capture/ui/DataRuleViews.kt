@@ -151,6 +151,61 @@ internal class DataRuleViews(
                 listHost.addView(buildEmptyHint("没有匹配的数据规则"))
                 return
             }
+
+            val categoryTotal = filtered.size
+            val categoryEnabled = filtered.count { it.enabled }
+            val batchBar = LinearLayout(activity).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(dp(12), dp(10), dp(12), dp(10))
+                background = CaptureUi.roundedBg(CaptureUi.BG_SURFACE, dp(12), dp(1), CaptureUi.BORDER)
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                ).apply { bottomMargin = dp(10) }
+            }
+            val titleCol = LinearLayout(activity).apply {
+                orientation = LinearLayout.VERTICAL
+                layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+            }
+            titleCol.addView(TextView(activity).apply {
+                text = "${selectedCategory.emoji} ${selectedCategory.title}规则总控"
+                textSize = 13.5f
+                setTypeface(typeface, Typeface.BOLD)
+                setTextColor(CaptureUi.TEXT_PRIMARY)
+            })
+            titleCol.addView(TextView(activity).apply {
+                text = "共 $categoryTotal 条 · 已启用 $categoryEnabled 条"
+                textSize = 11.5f
+                setTextColor(CaptureUi.TEXT_MUTED)
+                setPadding(0, dp(2), 0, 0)
+            })
+            batchBar.addView(titleCol)
+
+            val isAllEnabled = categoryEnabled == categoryTotal && categoryTotal > 0
+            batchBar.addView(
+                CaptureUi.button(
+                    activity = activity,
+                    text = if (isAllEnabled) "全部停用" else "全部启用",
+                    textColor = if (isAllEnabled) CaptureUi.DANGER else CaptureUi.BRAND_DARK,
+                    bgColor = if (isAllEnabled) CaptureUi.DANGER_SOFT else CaptureUi.BRAND_SOFT,
+                    strokeColor = if (isAllEnabled) CaptureUi.DANGER_BORDER else CaptureUi.BRAND_BORDER,
+                    paddingH = 10,
+                    paddingV = 6,
+                    textSizeSp = 12f,
+                ) {
+                    val targetEnabled = !isAllEnabled
+                    scope.launch {
+                        val updated = filtered.map { it.copy(enabled = targetEnabled) }
+                        withContext(Dispatchers.IO) {
+                            updated.forEach { RuleBundleStore.setEnabled(activity, it, targetEnabled) }
+                        }
+                        toast("已${if (targetEnabled) "全部启用" else "全部停用"} ${selectedCategory.title}下的 $categoryTotal 条规则")
+                        onDataChanged()
+                    }
+                }
+            )
+            listHost.addView(batchBar)
             val shown = filtered.take(visibleLimit)
             val userRules = shown.filter { it.isUser }
             val systemRules = shown.filterNot { it.isUser }
@@ -346,6 +401,7 @@ internal class DataRuleViews(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT,
             ).apply { bottomMargin = dp(9) }
+            background = CaptureUi.rippleBg(Color.WHITE, dp(14), dp(1), CaptureUi.BORDER)
         }
 
         var currentRule = rule
@@ -385,6 +441,7 @@ internal class DataRuleViews(
         }
         topRow.addView(sw)
         topRow.setOnClickListener { sw.toggle() }
+        card.setOnClickListener { sw.toggle() }
         card.addView(topRow)
 
         val chipRow = LinearLayout(activity).apply {
@@ -814,6 +871,68 @@ internal class DataRuleViews(
         )
         layout.addView(testRow)
 
+        if (!sampleJson.isNullOrBlank()) {
+            val aiChatBox = LinearLayout(activity).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(dp(12), dp(10), dp(12), dp(10))
+                background = CaptureUi.roundedBg(Color.parseColor("#F5F3FF"), dp(12), dp(1), Color.parseColor("#DDD6FE"))
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                ).apply { topMargin = dp(12) }
+            }
+            aiChatBox.addView(TextView(activity).apply {
+                text = "💬 规则不对？跟 AI 对话微调（说人话告诉它哪里错了）："
+                textSize = 12f
+                setTextColor(Color.parseColor("#6D28D9"))
+                setTypeface(typeface, Typeface.BOLD)
+            })
+            val chatInputRow = LinearLayout(activity).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(0, dp(6), 0, 0)
+            }
+            val etChatFeedback = EditText(activity).apply {
+                hint = "如：金额抓错了，应抓第2个括号；商户是星巴克"
+                textSize = 12f
+                isSingleLine = true
+                setTextColor(CaptureUi.TEXT_PRIMARY)
+                setHintTextColor(CaptureUi.TEXT_MUTED)
+                background = CaptureUi.roundedBg(Color.WHITE, dp(8), dp(1), CaptureUi.BORDER)
+                setPadding(dp(8), dp(6), dp(8), dp(6))
+                layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginEnd = dp(6) }
+            }
+            chatInputRow.addView(etChatFeedback)
+            chatInputRow.addView(
+                CaptureUi.button(
+                    activity = activity,
+                    text = "发送纠错",
+                    textColor = Color.WHITE,
+                    bgColor = Color.parseColor("#7C3AED"),
+                    textSizeSp = 11.5f,
+                    paddingH = 10,
+                    paddingV = 6,
+                ) {
+                    val prompt = etChatFeedback.text?.toString()?.trim().orEmpty()
+                    if (prompt.isBlank()) {
+                        toast("请输入修改意见，例如：金额抓错了")
+                        return@button
+                    }
+                    formDialog?.dismiss()
+                    generateRuleWithAi(
+                        sampleJson = sampleJson,
+                        targetApp = etApp.text?.toString(),
+                        targetType = selectedType,
+                        userInstruction = prompt,
+                        currentPattern = etPattern.text?.toString(),
+                        bundle = bundle,
+                    )
+                }
+            )
+            aiChatBox.addView(chatInputRow)
+            layout.addView(aiChatBox)
+        }
+
         fun refreshChoices() {
             styleChoice(dataChip, selectedType == RuleBundleCodec.TYPE_DATA)
             styleChoice(noticeChip, selectedType == RuleBundleCodec.TYPE_NOTICE)
@@ -879,11 +998,19 @@ internal class DataRuleViews(
         sampleJson: String,
         targetApp: String? = null,
         targetType: String? = null,
+        userInstruction: String? = null,
+        currentPattern: String? = null,
         bundle: RuleBundleCodec.Bundle = RuleBundleStore.load(activity),
     ) {
+        val titleText = if (userInstruction.isNullOrBlank()) "🤖 AI 正在分析报文" else "🤖 AI 正在微调规则"
+        val msgText = if (userInstruction.isNullOrBlank()) {
+            "正在调用大模型分析原始报文，生成泛化正则与字段映射…"
+        } else {
+            "正在根据您的反馈意见微调正则表达式与捕获组…"
+        }
         val progress = AlertDialog.Builder(activity)
-            .setTitle("🤖 AI 正在分析报文")
-            .setMessage("正在调用大模型分析原始报文，生成泛化正则与字段映射…")
+            .setTitle(titleText)
+            .setMessage(msgText)
             .setCancelable(false)
             .create()
         progress.show()
@@ -893,7 +1020,13 @@ internal class DataRuleViews(
             val appPkg = targetApp?.takeIf { it.isNotBlank() } ?: "com.tencent.mm"
             val type = targetType?.takeIf { it.isNotBlank() } ?: RuleBundleCodec.TYPE_DATA
             val result = withContext(Dispatchers.IO) {
-                bridge.generateRule(app = appPkg, type = type, rawJson = sampleJson)
+                bridge.generateRule(
+                    app = appPkg,
+                    type = type,
+                    rawJson = sampleJson,
+                    userInstruction = userInstruction,
+                    currentPattern = currentPattern,
+                )
             }
             progress.dismiss()
 

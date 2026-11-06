@@ -748,11 +748,15 @@ class CaptureBridgeClient(context: Context) {
         app: String,
         type: String,
         rawJson: String,
+        userInstruction: String? = null,
+        currentPattern: String? = null,
     ): GenerateRuleResult = withContext(Dispatchers.IO) {
         val payload = JSONObject()
             .put("app", app)
             .put("type", type)
             .put("rawJson", rawJson)
+        if (!userInstruction.isNullOrBlank()) payload.put("userInstruction", userInstruction)
+        if (!currentPattern.isNullOrBlank()) payload.put("currentPattern", currentPattern)
         val extras = Bundle().apply {
             putString(CaptureContract.EXTRA_GENERATE_RULE_PAYLOAD, payload.toString())
         }

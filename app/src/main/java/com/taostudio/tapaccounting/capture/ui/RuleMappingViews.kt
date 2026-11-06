@@ -120,33 +120,7 @@ internal class RuleMappingViews(
                     textColor = Color.WHITE,
                     bgColor = CaptureUi.BRAND,
                 ) { showEditAssetMappingDialog(null, appAssets) },
-                LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1.4f).apply { marginEnd = dp(6) },
-            )
-            btnRow.addView(
-                CaptureUi.button(
-                    activity = activity,
-                    text = "恢复通用",
-                    textColor = CaptureUi.TEXT_SECONDARY,
-                    bgColor = CaptureUi.BG_SEGMENT,
-                    strokeColor = CaptureUi.BORDER,
-                    paddingH = 10,
-                ) {
-                    AlertDialog.Builder(activity)
-                        .setTitle("恢复通用通道预置")
-                        .setMessage("将补齐常用支付渠道与钱包基础映射（不含任何具体个人银行卡）。不会删除你已自定义的规则。")
-                        .setPositiveButton("恢复") { _, _ ->
-                            scope.launch {
-                                withContext(Dispatchers.IO) {
-                                    CaptureRuleMatcher.ensureSeeded(activity, force = true)
-                                }
-                                toast("已恢复通用基础映射")
-                                onDataChanged()
-                            }
-                        }
-                        .setNegativeButton("取消", null)
-                        .show()
-                },
-                LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f),
+                LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT),
             )
             addView(btnRow)
         }
@@ -674,13 +648,13 @@ internal class RuleMappingViews(
         }
 
         fun updateVisual(rule: AccountingRule) {
-            val prefix = when {
-                rule.source == AccountingRule.Source.AI -> "✨ "
-                rule.isRegex -> ".* "
-                rule.matchMode == AccountingRule.MatchMode.ALL_TOKENS -> "≈ "
+            val sourceLabel = when (rule.source) {
+                AccountingRule.Source.AI -> "AI · "
+                AccountingRule.Source.USER -> "手动 · "
+                AccountingRule.Source.SEED, AccountingRule.Source.IMPORT -> "预置 · "
                 else -> ""
             }
-            tv.text = "$prefix${rule.keyword}"
+            tv.text = "$sourceLabel${rule.keyword}"
 
             if (rule.enabled) {
                 tv.alpha = 1.0f

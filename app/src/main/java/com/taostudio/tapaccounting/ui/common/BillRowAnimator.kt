@@ -1,40 +1,39 @@
 package com.taostudio.tapaccounting.ui.common
 
-import android.animation.Animator
-import android.animation.AnimatorListenerAdapter
-import android.animation.ValueAnimator
 import android.view.View
-import android.view.animation.AccelerateInterpolator
+import android.view.ViewTreeObserver
 import android.view.animation.DecelerateInterpolator
 import androidx.recyclerview.widget.RecyclerView
 import com.taostudio.tapaccounting.R
 
 /**
- * 账单行的「删除折叠 / 撤销展开」动画。
+ * 账单列表的「删除封口 / 撤销让位」动画。
  *
  * 为什么不用 RecyclerView 自带的 ItemAnimator：项目里所有账单列表都显式
- * `itemAnimator = null`（首页 AppBar/CoordinatorLayout 下 DiffUtil 动画历史上闪过），
- * 刷新也统一走 `notifyDataSetChanged`，RecyclerView 根本不知道哪一行没了/哪一行回来了，
- * 所以删除和恢复都是硬切。这里退一步：只针对「被操作的那几行」做 View 级的
- * 高度 + 透明度动画，刷新链路一行不动——动画播不了（行不在屏幕内、视图还没布局）就
- * 静默跳过，绝不影响数据正确性。
+ * `itemAnimator = null`（首页 AppBar/CoordinatorLayout 下 DiffUtil 动画历史上闪退），
+ * 刷新也统一走 `notifyDataSetChanged`，RecyclerView 不知道哪一行没了、哪一行回来了。
+ *
+ * 做法是「刷新后 FLIP」：
+ *  1. 操作前记下每行位置（按账单 id），再删库/恢复；
+ *  2. 等列表真的刷新完（被删的行消失 / 恢复的行出现的那一次布局）；
+ *  3. 新布局已经是最终位置：把每行按「旧位置 - 新位置」先摆回原位，再统一滑到 0。
+ *
+ * 这样动画永远在所有重建结束之后才跑，主线程是空的；位移量逐行实测，
+ * 日期分组头被一起删掉也不会跳。不要在删库前先播动画——列表随时会被重建打断，
+ * 会出现「行先消失又回来」的闪，并且和整表重建抢主线程。
  *
  * 用法：
- *  - 删除：`collapseThen(findRows(rv, ids)) { 真正删库 + 刷新 }`
- *  - 撤销：`刷新(); expandAfterRefresh(rv, ids)`
+ *  - 删除：`deleteThen(rv, ids) { 删库 + 刷新 }`
+ *  - 撤销：`restoreThen(rv, ids) { 恢复 + 刷新 }`
  */
 object BillRowAnimator {
 
-    private const val COLLAPSE_MS = 200L
-    private const val EXPAND_MS = 240L
-    private const val FADE_MS = 130L
-    private const val STAGGER_MS = 20L
-    /** 超过这个行数就不做高度动画（整表 requestLayout 太重），退化成整体淡出/淡入。 */
-    private const val MAX_HEIGHT_ROWS = 3
-    /** 撤销后列表是异步建行再 notify 的，等一小会儿再去找恢复出来的行。 */
-    private const val REFRESH_SETTLE_MS = 90L
+    private const val FLIP_MS = 200L
+    private const val APPEAR_MS = 180L
+    /** 刷新迟迟不来时放弃动画，避免监听泄漏（删除失败 / 页面退出）。 */
+    private const val REFRESH_TIMEOUT_MS = 1500L
 
-    /** 底部弹层收起大致要这么久：行折叠动画等它一下，否则两个动画叠在一起反而更乱。 */
+    /** 底部弹层收起大致要这么久：删库等它一下，避免列表在弹层底下先动。 */
     const val SHEET_DISMISS_DELAY_MS = 140L
 
     /** 从 [rv] 当前可见的行里挑出绑定了 [billIds] 的行，按屏幕从上到下排序。 */
@@ -51,163 +50,175 @@ object BillRowAnimator {
     }
 
     /**
-     * 删除前播放折叠动画；播完（或压根没找到行）回调 [onEnd] 执行真正的删除。
-     * [startDelayMs] 用于等底部弹层收起，否则两个动画叠在一起反而更乱。
+     * 删除账单：记录旧位置 → 执行 [delete]（删库 + 刷新）→ 刷新落地后播「下方内容上滑封口」。
+     *
+     * [startDelayMs] 用于等底部弹层收起。
      */
-    fun collapseThen(rows: List<View>, startDelayMs: Long = 0L, onEnd: () -> Unit) {
-        val targets = rows.filter { it.isAttachedToWindow && it.height > 0 }
-        if (targets.isEmpty()) {
-            onEnd()
+    fun deleteThen(
+        recyclerView: RecyclerView?,
+        billIds: Collection<Long>,
+        startDelayMs: Long = 0L,
+        delete: () -> Unit
+    ) {
+        if (recyclerView == null || billIds.isEmpty()) {
+            delete()
             return
         }
-        if (targets.size > MAX_HEIGHT_ROWS) {
-            fade(targets, toAlpha = 0f, startDelayMs = startDelayMs, onEnd = onEnd)
+        val deletedIds = billIds.toSet()
+        val oldTops = snapshotTops(recyclerView)
+        awaitContentSettled(recyclerView, deletedIds, expectPresent = false) {
+            flipToOldPositions(recyclerView, oldTops, appearedIds = emptySet())
+        }
+        if (startDelayMs > 0L) {
+            recyclerView.postDelayed(delete, startDelayMs)
+        } else {
+            delete()
+        }
+    }
+
+    /**
+     * 撤销恢复：记录旧位置 → 执行 [restore]（恢复 + 刷新）→ 刷新落地后让下方内容
+     * 滑下去给恢复出来的行让位，恢复出来的行淡入。
+     */
+    fun restoreThen(
+        recyclerView: RecyclerView?,
+        billIds: Collection<Long>,
+        restore: () -> Unit
+    ) {
+        if (recyclerView == null || billIds.isEmpty()) {
+            restore()
             return
         }
-        var pending = targets.size
-        var fired = false
-        targets.forEachIndexed { index, view ->
-            animateRowHeight(
-                view = view,
-                fromHeight = view.height,
-                toHeight = 0,
-                fromAlpha = 1f,
-                toAlpha = 0f,
-                durationMs = COLLAPSE_MS,
-                startDelayMs = startDelayMs + index * STAGGER_MS
-            ) {
-                if (!fired) {
-                    pending--
-                    if (pending == 0) {
-                        fired = true
-                        onEnd()
-                    }
-                }
+        val restoredIds = billIds.toSet()
+        val oldTops = snapshotTops(recyclerView)
+        awaitContentSettled(recyclerView, restoredIds, expectPresent = true) {
+            flipToOldPositions(recyclerView, oldTops, appearedIds = restoredIds)
+        }
+        restore()
+    }
+
+    // ---------------------------------------------------------------- 内部实现
+
+    /** 刷新前的可见行位置：账单 id → top。没有 tag 的分组头不记录，后面按相邻账单推算。 */
+    private fun snapshotTops(rv: RecyclerView): Map<Long, Int> {
+        val tops = HashMap<Long, Int>(rv.childCount)
+        for (i in 0 until rv.childCount) {
+            val child = rv.getChildAt(i) ?: continue
+            val id = child.getTag(R.id.tag_bill_row_id) as? Long ?: continue
+            tops[id] = child.top
+        }
+        return tops
+    }
+
+    /**
+     * 等列表进入终态：删除时等被删的行消失，撤销时等恢复的行出现。
+     * 用全局布局监听而不是时间延迟：同步刷新、异步 Flow 刷新都能接上。
+     */
+    private fun awaitContentSettled(
+        rv: RecyclerView,
+        billIds: Set<Long>,
+        expectPresent: Boolean,
+        onReady: () -> Unit
+    ) {
+        if (containsAny(rv, billIds) == expectPresent) {
+            // 已经是终态（例如 Flow 比我们先刷新了）：不用等布局。
+            onReady()
+            return
+        }
+        var consumed = false
+        val listener = object : ViewTreeObserver.OnGlobalLayoutListener {
+            override fun onGlobalLayout() {
+                if (consumed) return
+                if (containsAny(rv, billIds) != expectPresent) return
+                consumed = true
+                rv.viewTreeObserver.removeOnGlobalLayoutListener(this)
+                onReady()
             }
         }
-    }
-
-    /** 撤销恢复：列表刷新完成后把恢复出来的那几行展开。 */
-    fun expandAfterRefresh(rv: RecyclerView?, billIds: Collection<Long>) {
-        if (rv == null || billIds.isEmpty()) return
-        rv.postDelayed({ expandNow(findRows(rv, billIds)) }, REFRESH_SETTLE_MS)
-    }
-
-    fun expandNow(rows: List<View>) {
-        val targets = rows.filter { it.isAttachedToWindow && it.height > 0 }
-        if (targets.isEmpty()) return
-        if (targets.size > MAX_HEIGHT_ROWS) {
-            fade(targets, toAlpha = 1f, fadeFrom = 0f, startDelayMs = 0L, onEnd = null)
-            return
-        }
-        targets.forEachIndexed { index, view ->
-            animateRowHeight(
-                view = view,
-                fromHeight = 0,
-                toHeight = view.height,
-                fromAlpha = 0f,
-                toAlpha = 1f,
-                durationMs = EXPAND_MS,
-                startDelayMs = index * STAGGER_MS,
-                onEnd = null
-            )
-        }
-    }
-
-    private fun animateRowHeight(
-        view: View,
-        fromHeight: Int,
-        toHeight: Int,
-        fromAlpha: Float,
-        toAlpha: Float,
-        durationMs: Long,
-        startDelayMs: Long,
-        onEnd: (() -> Unit)?
-    ) {
-        val lp = view.layoutParams
-        if (lp == null) {
-            onEnd?.invoke()
-            return
-        }
-        // 同一行重复触发（连点删除）时先收掉上一个动画，避免高度被两个动画同时写。
-        (view.getTag(R.id.tag_bill_row_anim) as? Animator)?.cancel()
-        val originalHeight = lp.height
-        if (view.height != fromHeight) {
-            lp.height = fromHeight
-            view.alpha = fromAlpha
-            view.requestLayout()
-        }
-
-        val animator = ValueAnimator.ofInt(fromHeight, toHeight).apply {
-            duration = durationMs
-            startDelay = startDelayMs
-            interpolator = if (toHeight == 0) AccelerateInterpolator() else DecelerateInterpolator()
-            addUpdateListener { anim ->
-                lp.height = anim.animatedValue as Int
-                view.alpha = fromAlpha + (toAlpha - fromAlpha) * anim.animatedFraction
-                view.requestLayout()
+        rv.viewTreeObserver.addOnGlobalLayoutListener(listener)
+        rv.postDelayed({
+            if (!consumed) {
+                consumed = true
+                rv.viewTreeObserver.removeOnGlobalLayoutListener(listener)
             }
-            addListener(object : AnimatorListenerAdapter() {
-                private var settled = false
-                override fun onAnimationEnd(animation: Animator) {
-                    if (settled) return
-                    settled = true
-                    view.setTag(R.id.tag_bill_row_anim, null)
-                    restore(view, originalHeight)
-                    onEnd?.invoke()
-                }
-
-                override fun onAnimationCancel(animation: Animator) {
-                    onAnimationEnd(animation)
-                }
-            })
-        }
-        view.setTag(R.id.tag_bill_row_anim, animator)
-        animator.start()
+        }, REFRESH_TIMEOUT_MS)
     }
 
-    private fun restore(view: View, originalHeight: Int) {
-        val lp = view.layoutParams ?: return
-        if (lp.height != originalHeight) {
-            lp.height = originalHeight
+    private fun containsAny(rv: RecyclerView, billIds: Set<Long>): Boolean {
+        for (i in 0 until rv.childCount) {
+            val id = rv.getChildAt(i)?.getTag(R.id.tag_bill_row_id) as? Long ?: continue
+            if (id in billIds) return true
         }
-        if (view.alpha != 1f) view.alpha = 1f
-        view.requestLayout()
+        return false
     }
 
-    /** 批量场景：不塌高度（整表 requestLayout 太重），只做整体淡出/淡入。 */
-    private fun fade(
-        views: List<View>,
-        toAlpha: Float,
-        startDelayMs: Long,
-        onEnd: (() -> Unit)?,
-        fadeFrom: Float = 1f
+    /**
+     * 刷新后的布局已经是最终位置。把每一行按「旧位置 - 新位置」摆回去，再统一滑到 0：
+     * 删除时是上方内容上滑封口，撤销时是下方内容下滑让位；位移量逐行实测。
+     */
+    private fun flipToOldPositions(
+        rv: RecyclerView,
+        oldTops: Map<Long, Int>,
+        appearedIds: Set<Long>
     ) {
-        var pending = views.size
-        var fired = false
-        views.forEach { view ->
-            if (fadeFrom != 1f) view.alpha = fadeFrom
-            view.animate()
-                .alpha(toAlpha)
-                .setDuration(FADE_MS)
-                .setStartDelay(startDelayMs)
-                .setListener(object : AnimatorListenerAdapter() {
-                    override fun onAnimationEnd(animation: Animator) {
-                        view.alpha = 1f
-                        if (!fired) {
-                            pending--
-                            if (pending == 0) {
-                                fired = true
-                                onEnd?.invoke()
-                            }
-                        }
-                    }
+        val children = ArrayList<View>(rv.childCount)
+        for (i in 0 until rv.childCount) {
+            rv.getChildAt(i)?.let { children.add(it) }
+        }
+        if (children.isEmpty()) return
 
-                    override fun onAnimationCancel(animation: Animator) {
-                        onAnimationEnd(animation)
-                    }
-                })
+        val deltas = HashMap<Long, Int>(children.size)
+        val appeared = ArrayList<View>()
+        children.forEach { child ->
+            val id = child.getTag(R.id.tag_bill_row_id) as? Long ?: return@forEach
+            val oldTop = oldTops[id]
+            if (oldTop == null) {
+                if (id in appearedIds) appeared.add(child)
+                return@forEach
+            }
+            val delta = oldTop - child.top
+            if (delta != 0) deltas[id] = delta
+        }
+
+        appeared.forEach { child ->
+            child.animate().cancel()
+            child.alpha = 0f
+            child.animate()
+                .alpha(1f)
+                .setDuration(APPEAR_MS)
+                .setInterpolator(DecelerateInterpolator())
+                .withEndAction { child.alpha = 1f }
+                .start()
+        }
+        if (deltas.isEmpty()) return
+
+        // 没有 id 的分组头/空态：跟随离它最近的账单行的位移。
+        val taggedDeltas = children.mapNotNull { child ->
+            val id = child.getTag(R.id.tag_bill_row_id) as? Long ?: return@mapNotNull null
+            deltas[id]?.let { child to it }
+        }
+        val firstMoverTop = taggedDeltas.minOfOrNull { (view, _) -> view.top } ?: return
+
+        children.forEach { child ->
+            val id = child.getTag(R.id.tag_bill_row_id) as? Long
+            val delta = if (id != null) {
+                deltas[id] ?: return@forEach
+            } else {
+                // 只有移动区域里的分组头才跟着动，上方的不能碰。
+                if (child.top < firstMoverTop) return@forEach
+                nearestDelta(taggedDeltas, child.top) ?: return@forEach
+            }
+            child.animate().cancel()
+            child.translationY = delta.toFloat()
+            child.animate()
+                .translationY(0f)
+                .setDuration(FLIP_MS)
+                .setInterpolator(DecelerateInterpolator())
+                .withEndAction { child.translationY = 0f }
                 .start()
         }
     }
+
+    private fun nearestDelta(tagged: List<Pair<View, Int>>, top: Int): Int? =
+        tagged.minByOrNull { (view, _) -> kotlin.math.abs(view.top - top) }?.second
 }

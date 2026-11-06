@@ -333,19 +333,24 @@ class AssetDetailActivity : AppCompatActivity() {
         btnMsDelete.setOnClickListener {
             val targets = adapter.getSelectedBills()
             if (targets.isEmpty()) return@setOnClickListener
-            BillRowAnimator.collapseThen(BillRowAnimator.findRows(rvTransactions, targets.map { it.id })) {
+            BillRowAnimator.deleteThen(rvTransactions, targets.map { it.id }) {
                 lifecycleScope.launch(Dispatchers.IO) {
                     val rows = BillDeleteUndo.delete(db, targets) ?: return@launch
                     withContext(Dispatchers.Main) {
+                        // 删除完成：退出多选（底栏滑出），撤销条等底栏走完再出来。
                         adapter.clearSelection()
-                        BillUndoController.showNow(
-                            findViewById(android.R.id.content),
-                            getString(R.string.deleted_bills_fmt, targets.size),
-                            rows
-                        ) {
-                            adapter.clearSelection()
-                            BillRowAnimator.expandAfterRefresh(rvTransactions, rows.map { it.originalBillId })
-                        }
+                        BillUndoController.showAfterSelectionExit(
+                            anchor = findViewById(android.R.id.content),
+                            message = getString(R.string.deleted_bills_fmt, targets.size),
+                            rows = rows,
+                            onRestored = {
+                                // 资产详情靠 Room Flow 自动刷新，这里只需要播让位动画。
+                                BillRowAnimator.restoreThen(
+                                    rvTransactions,
+                                    rows.map { it.originalBillId }
+                                ) { }
+                            }
+                        )
                     }
                 }
             }

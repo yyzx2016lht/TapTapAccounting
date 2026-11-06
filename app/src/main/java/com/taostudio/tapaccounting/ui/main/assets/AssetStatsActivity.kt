@@ -443,26 +443,30 @@ class AssetStatsActivity : AppCompatActivity() {
         btnMsDelete.setOnClickListener {
             val targets = billAdapter.getSelectedBills()
             if (targets.isEmpty()) return@setOnClickListener
-            BillRowAnimator.collapseThen(BillRowAnimator.findRows(rvBillList, targets.map { it.id })) {
+            BillRowAnimator.deleteThen(rvBillList, targets.map { it.id }) {
                 lifecycleScope.launch(Dispatchers.IO) {
                     val rows = BillDeleteUndo.delete(db, targets) ?: return@launch
                     withContext(Dispatchers.Main) {
+                        // 删除完成：退出多选（底栏滑出），撤销条等底栏走完再出来。
                         billAdapter.clearSelection()
                         filteredBillsCache.clear()
                         billRowsCache.clear()
                         categoryBreakdownCache.clear()
                         loadAssetAndBills()
-                        BillUndoController.showNow(
-                            findViewById(android.R.id.content),
-                            getString(R.string.deleted_bills_fmt, targets.size),
-                            rows
-                        ) {
-                            filteredBillsCache.clear()
-                            billRowsCache.clear()
-                            categoryBreakdownCache.clear()
-                            loadAssetAndBills()
-                            BillRowAnimator.expandAfterRefresh(rvBillList, rows.map { it.originalBillId })
-                        }
+                        BillUndoController.showAfterSelectionExit(
+                            anchor = findViewById(android.R.id.content),
+                            message = getString(R.string.deleted_bills_fmt, targets.size),
+                            rows = rows,
+                            onRestored = {
+                                filteredBillsCache.clear()
+                                billRowsCache.clear()
+                                categoryBreakdownCache.clear()
+                                BillRowAnimator.restoreThen(
+                                    rvBillList,
+                                    rows.map { it.originalBillId }
+                                ) { loadAssetAndBills() }
+                            }
+                        )
                     }
                 }
             }

@@ -8,6 +8,7 @@ import com.taostudio.tapaccounting.capture.contract.BillTypeLocalizer
 import com.taostudio.tapaccounting.capture.contract.CaptureSource
 import com.taostudio.tapaccounting.capture.contract.LocalBillType
 import com.taostudio.tapaccounting.capture.contract.LocalBillTypeMapping
+import com.taostudio.tapaccounting.capture.data.CapturePrefs
 import com.taostudio.tapaccounting.capture.data.RuleBundleCodec
 import com.taostudio.tapaccounting.capture.data.RuleBundleStore
 import org.json.JSONObject
@@ -217,6 +218,10 @@ object AutoAccountingRuleEngine {
     @Synchronized
     fun parse(source: String, dataType: String, rawJson: String): ParseOutcome {
         if (rawJson.isBlank()) return ParseOutcome.NoMatch
+        if (appContext?.let { !CapturePrefs.isDataRulesEnabled(it) } == true) {
+            log("data rules disabled by master switch")
+            return ParseOutcome.NoMatch
+        }
         // 包名统一小写：资产里的支付宝包名是 com.eg.android.AlipayGphone，而用户/同步规则
         // 可能大小写不统一；key 两侧必须同一口径，否则会漏掉全部支付宝规则。
         val pkg = packageForSource(source)?.lowercase(Locale.US) ?: run {

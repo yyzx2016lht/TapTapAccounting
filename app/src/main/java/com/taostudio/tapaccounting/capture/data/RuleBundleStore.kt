@@ -122,14 +122,34 @@ object RuleBundleStore {
         context: Context,
         rule: RuleBundleCodec.Rule,
         enabled: Boolean,
+    ): RuleBundleCodec.Bundle = setEnabledBatch(context, listOf(rule), enabled)
+
+    /**
+     * 批量启停：只 load/save 一次，避免逐条写整个 rule_bundle.json。
+     * UI 层应只更新受影响的卡片，不要整页 reload。
+     */
+    @Synchronized
+    fun setEnabledBatch(
+        context: Context,
+        rules: List<RuleBundleCodec.Rule>,
+        enabled: Boolean,
     ): RuleBundleCodec.Bundle {
+        if (rules.isEmpty()) return load(context)
+        val identities = rules.map { it.systemRuleName }.toSet()
         val bundle = load(context)
-        val rules = bundle.rules.map {
-            if (sameIdentity(it, rule)) it.copy(enabled = enabled) else it
+        var changed = false
+        val updated = bundle.rules.map { existing ->
+            if (existing.systemRuleName in identities) {
+                if (existing.enabled != enabled) changed = true
+                existing.copy(enabled = enabled)
+            } else {
+                existing
+            }
         }
+        if (!changed) return bundle
         return save(
             context,
-            bundle.copy(rules = rules, source = RuleBundleCodec.SOURCE_LOCAL),
+            bundle.copy(rules = updated, source = RuleBundleCodec.SOURCE_LOCAL),
         )
     }
 

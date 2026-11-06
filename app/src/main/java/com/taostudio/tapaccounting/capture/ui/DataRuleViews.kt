@@ -13,6 +13,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.CheckBox
 import android.widget.EditText
+import android.widget.FrameLayout
 import android.widget.HorizontalScrollView
 import android.widget.LinearLayout
 import android.widget.ScrollView
@@ -20,6 +21,7 @@ import android.widget.Switch
 import android.widget.TextView
 import android.widget.Toast
 import com.taostudio.tapaccounting.capture.bridge.CaptureBridgeClient
+import com.taostudio.tapaccounting.capture.data.CapturePrefs
 import com.taostudio.tapaccounting.capture.data.RuleBundleCodec
 import com.taostudio.tapaccounting.capture.data.RuleBundleStore
 import com.taostudio.tapaccounting.capture.history.AutoAccountingRuleSync
@@ -50,6 +52,10 @@ internal class DataRuleViews(
     private val density = activity.resources.displayMetrics.density
     private val dateFormat = SimpleDateFormat("MM-dd HH:mm", Locale.getDefault())
     private var visibleLimit = 50
+    /** 本页当前的规则包副本：启停只改这里，不整页 reload。 */
+    private var currentBundle: RuleBundleCodec.Bundle? = null
+    /** 局部更新回调：只刷新页头/分类计数，不重建整页。 */
+    private var onLocalBundleChanged: (() -> Unit)? = null
 
     private fun dp(value: Int): Int = (value * density + 0.5f).toInt()
 
@@ -94,8 +100,20 @@ internal class DataRuleViews(
             setPadding(dp(14), dp(14), dp(14), dp(28))
         }
         scroll.addView(container)
+        currentBundle = bundle
 
-        container.addView(buildHeaderCard(bundle))
+        val headerHost = FrameLayout(activity)
+        headerHost.addView(buildHeaderCard(bundle))
+        container.addView(headerHost)
+
+        fun refreshHeader() {
+            headerHost.removeAllViews()
+            headerHost.addView(buildHeaderCard(currentBundle ?: bundle))
+        }
+
+        container.addView(buildMasterSwitchCard { enabled ->
+            CapturePrefs.setDataRulesEnabled(activity, enabled)
+        })
 
         val searchBox = EditText(activity).apply {
             hint = "🔍 搜索规则名、应用包名、来源（内置/我的/导入）"
@@ -136,7 +154,7 @@ internal class DataRuleViews(
             listHost.removeAllViews()
             val q = query.trim()
             val filtered = RuleBundleCodec.orderedForEngine(
-                bundle.rules.filter { rule ->
+                (currentBundle ?: bundle).rules.filter { rule ->
                     selectedCategory.matches(rule) && (
                         q.isEmpty() ||
                             rule.name.contains(q, ignoreCase = true) ||
@@ -195,13 +213,25 @@ internal class DataRuleViews(
                     textSizeSp = 12f,
                 ) {
                     val targetEnabled = !isAllEnabled
+                    val targets = filtered
                     scope.launch {
-                        val updated = filtered.map { it.copy(enabled = targetEnabled) }
-                        withContext(Dispatchers.IO) {
-                            updated.forEach { RuleBundleStore.setEnabled(activity, it, targetEnabled) }
+                        try {
+                            withContext(Dispatchers.IO) {
+                                RuleBundleStore.setEnabledBatch(activity, targets, targetEnabled)
+                            }
+                            val identities = targets.map { it.systemRuleName }.toSet()
+                            currentBundle = (currentBundle ?: bundle).copy(
+                                rules = (currentBundle ?: bundle).rules.map { rule ->
+                                    if (rule.systemRuleName in identities) rule.copy(enabled = targetEnabled) else rule
+                                },
+                            )
+                            refreshHeader()
+                            updateChips()
+                            renderList(searchBox.text?.toString().orEmpty())
+                            toast("已${if (targetEnabled) "全部启用" else "全部停用"} ${selectedCategory.title}下的 $categoryTotal 条规则")
+                        } catch (t: Throwable) {
+                            toast("保存启停失败：${t.message ?: t.javaClass.simpleName}")
                         }
-                        toast("已${if (targetEnabled) "全部启用" else "全部停用"} ${selectedCategory.title}下的 $categoryTotal 条规则")
-                        onDataChanged()
                     }
                 }
             )
@@ -212,12 +242,12 @@ internal class DataRuleViews(
             if (userRules.isNotEmpty()) {
                 val userCount = if (selectedCategory == RuleCategory.USER) filtered.size else userRules.size
                 listHost.addView(sectionTitle("我的规则 ($userCount)", "优先执行 · 可编辑/删除"))
-                userRules.forEach { listHost.addView(buildRuleCard(it, bundle)) }
+                userRules.forEach { listHost.addView(buildRuleCard(it, currentBundle ?: bundle)) }
             }
             if (systemRules.isNotEmpty()) {
                 val catLabel = if (selectedCategory == RuleCategory.ALL) "系统规则" else "${selectedCategory.emoji} ${selectedCategory.title}规则"
                 listHost.addView(sectionTitle("$catLabel (${filtered.size - userRules.size})", "只读 · 可测试/复制/启停"))
-                systemRules.forEach { listHost.addView(buildRuleCard(it, bundle)) }
+                systemRules.forEach { listHost.addView(buildRuleCard(it, currentBundle ?: bundle)) }
             }
             if (filtered.size > shown.size) {
                 listHost.addView(
@@ -243,11 +273,12 @@ internal class DataRuleViews(
 
         updateChips = {
             chipContainer.removeAllViews()
+            val rules = (currentBundle ?: bundle).rules
             RuleCategory.values().forEach { cat ->
                 val count = when (cat) {
-                    RuleCategory.ALL -> bundle.rules.size
-                    RuleCategory.USER -> bundle.rules.count { it.isUser }
-                    else -> bundle.rules.count { cat.matches(it) }
+                    RuleCategory.ALL -> rules.size
+                    RuleCategory.USER -> rules.count { it.isUser }
+                    else -> rules.count { cat.matches(it) }
                 }
                 if (count == 0 && cat != RuleCategory.ALL && cat != RuleCategory.USER) return@forEach
 
@@ -274,6 +305,10 @@ internal class DataRuleViews(
             }
         }
         updateChips()
+        onLocalBundleChanged = {
+            refreshHeader()
+            updateChips()
+        }
 
         searchBox.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
@@ -357,6 +392,77 @@ internal class DataRuleViews(
         )
         card.addView(row2)
         return card
+    }
+
+    /**
+     * 数据规则总开关：只写一个 SharedPreferences 布尔值，不写规则文件、不重建页面。
+     */
+    private fun buildMasterSwitchCard(onToggle: (Boolean) -> Unit): View {
+        var enabled = CapturePrefs.isDataRulesEnabled(activity)
+        val card = CaptureUi.card(activity).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+            ).apply { bottomMargin = dp(12) }
+        }
+
+        val row = LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            isClickable = true
+            background = CaptureUi.rippleBg(activity, CaptureUi.BG_SURFACE)
+        }
+        val textCol = LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+        }
+        textCol.addView(TextView(activity).apply {
+            text = "数据规则总开关"
+            textSize = 15f
+            setTypeface(typeface, Typeface.BOLD)
+            setTextColor(CaptureUi.TEXT_PRIMARY)
+        })
+        val tvStatus = TextView(activity).apply {
+            textSize = 12f
+            setTextColor(CaptureUi.TEXT_SECONDARY)
+            setPadding(0, dp(2), dp(8), 0)
+        }
+        textCol.addView(tvStatus)
+        row.addView(textCol)
+
+        val sw = Switch(activity).apply { isChecked = enabled }
+        row.addView(sw)
+
+        fun renderStatus() {
+            tvStatus.text = if (enabled) {
+                "已开启 · 付款解析会执行数据规则；关闭后只保留本地备注/资产规则"
+            } else {
+                "已暂停 · 不再执行任何数据规则，本地备注/资产规则仍然生效"
+            }
+            tvStatus.setTextColor(if (enabled) CaptureUi.TEXT_SECONDARY else CaptureUi.WARNING)
+        }
+        renderStatus()
+
+        sw.setOnCheckedChangeListener { _, checked ->
+            if (enabled == checked) return@setOnCheckedChangeListener
+            enabled = checked
+            renderStatus()
+            onToggle(checked)
+        }
+        row.setOnClickListener { sw.toggle() }
+
+        card.addView(row)
+        return card
+    }
+
+    private fun updateLocalRuleEnabled(rule: RuleBundleCodec.Rule, enabled: Boolean) {
+        val bundle = currentBundle ?: return
+        currentBundle = bundle.copy(
+            rules = bundle.rules.map {
+                if (it.systemRuleName == rule.systemRuleName) it.copy(enabled = enabled) else it
+            },
+        )
+        onLocalBundleChanged?.invoke()
     }
 
     private fun bundleSourceLine(bundle: RuleBundleCodec.Bundle): String {
@@ -494,12 +600,14 @@ internal class DataRuleViews(
                         withContext(Dispatchers.IO) {
                             RuleBundleStore.setEnabled(activity, currentRule, checked)
                         }
+                        updateLocalRuleEnabled(currentRule, checked)
                         toast(if (checked) "已启用「${currentRule.name}」" else "已停用「${currentRule.name}」")
                     } catch (t: Throwable) {
                         currentRule = currentRule.copy(enabled = old)
                         sw.isChecked = old
                         titleTv.setTextColor(if (old) CaptureUi.TEXT_PRIMARY else CaptureUi.TEXT_MUTED)
                         styleStatusChip(statusChip, old)
+                        updateLocalRuleEnabled(currentRule, old)
                         toast("保存启停失败：${t.message ?: t.javaClass.simpleName}")
                     }
                 }

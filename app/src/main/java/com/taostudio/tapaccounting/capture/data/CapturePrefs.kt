@@ -14,6 +14,7 @@ object CapturePrefs {
     private const val KEY_TRANSFER_INCOME_DEDUP_WINDOW = "transfer_income_dedup_window_seconds"
     private const val KEY_AI_CATEGORY_MODE = "ai_category_mode"
     private const val KEY_RULE_LEARN_MODE = "rule_learn_mode"
+    private const val KEY_DATA_RULES_ENABLED = "data_rules_enabled"
 
     const val AI_CATEGORY_CONFIRM = "CONFIRM"
     const val AI_CATEGORY_DIRECT = "DIRECT"
@@ -181,5 +182,13 @@ object CapturePrefs {
 
     fun setRuleLearnMode(context: Context, mode: String) {
         prefs(context).edit().putString(KEY_RULE_LEARN_MODE, mode).apply()
+    }
+
+    /** 数据规则总开关：关闭后不再执行任何 AutoAccounting 数据规则，只保留本地备注/资产规则。 */
+    fun isDataRulesEnabled(context: Context): Boolean =
+        prefs(context).getBoolean(KEY_DATA_RULES_ENABLED, true)
+
+    fun setDataRulesEnabled(context: Context, enabled: Boolean) {
+        prefs(context).edit().putBoolean(KEY_DATA_RULES_ENABLED, enabled).apply()
     }
 }

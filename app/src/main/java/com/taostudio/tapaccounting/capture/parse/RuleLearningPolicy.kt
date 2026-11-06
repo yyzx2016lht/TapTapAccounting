@@ -4,6 +4,7 @@ import com.taostudio.tapaccounting.capture.contract.LocalBillType
 import com.taostudio.tapaccounting.capture.data.CategoryRule
 import com.taostudio.tapaccounting.capture.data.CategorySource
 import com.taostudio.tapaccounting.capture.data.PaymentCapture
+import com.taostudio.tapaccounting.data.local.entity.AccountingRule
 
 /**
  * AI 规则学习的纯逻辑：判断是否该学、写到哪条规则、toast 用哪个二级分类名。
@@ -65,6 +66,13 @@ internal object RuleLearningPolicy {
         data class Update(val rule: CategoryRule) : Decision
     }
 
+    sealed interface UnifiedDecision {
+        data object SkipProtected : UnifiedDecision
+        data object SkipSameCategory : UnifiedDecision
+        data object Insert : UnifiedDecision
+        data class Update(val rule: AccountingRule) : UnifiedDecision
+    }
+
     /**
      * 规则写入优先级：
      * 1. 同名 USER/SEED/IMPORT 规则存在 → 跳过；
@@ -90,6 +98,52 @@ internal object RuleLearningPolicy {
             Decision.Update(aiRule)
         }
     }
+
+    /**
+     * 针对统一表 [AccountingRule] 的判定逻辑。
+     * 同样保证 USER / SEED / IMPORT 绝不被覆盖；同名同分类 AI 规则跳过；不同分类更新。
+     */
+    fun decideUnified(
+        existingRules: List<AccountingRule>,
+        keyword: String,
+        targetCategoryName: String,
+    ): UnifiedDecision {
+        val sameKeyword = existingRules.filter { it.keyword.equals(keyword, ignoreCase = true) }
+        val noteRules = sameKeyword.filter {
+            it.matchField == AccountingRule.MatchField.NOTE ||
+                it.matchField == AccountingRule.MatchField.ANY ||
+                it.matchField == AccountingRule.MatchField.REMARK
+        }
+        if (noteRules.isEmpty()) return UnifiedDecision.Insert
+        if (noteRules.any { it.source != AccountingRule.Source.AI }) return UnifiedDecision.SkipProtected
+
+        val aiRule = noteRules.first()
+        return if (aiRule.targetCategory?.trim() == targetCategoryName.trim()) {
+            UnifiedDecision.SkipSameCategory
+        } else {
+            UnifiedDecision.Update(aiRule)
+        }
+    }
+
+    fun newAccountingRule(
+        keyword: String,
+        targetCategory: String,
+        targetType: Int,
+        learnedAt: Long,
+    ): AccountingRule = AccountingRule(
+        keyword = keyword,
+        matchField = AccountingRule.MatchField.NOTE,
+        matchMode = AccountingRule.MatchMode.SUBSTRING,
+        isRegex = false,
+        targetType = targetType,
+        targetCategory = targetCategory,
+        sort = AI_RULE_SORT,
+        enabled = true,
+        source = AccountingRule.Source.AI,
+        learnedAt = learnedAt,
+        createdAt = learnedAt,
+        updatedAt = learnedAt,
+    )
 
     fun newAiRule(
         keyword: String,

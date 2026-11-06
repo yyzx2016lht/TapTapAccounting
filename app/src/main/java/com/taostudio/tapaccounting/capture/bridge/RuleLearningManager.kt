@@ -5,11 +5,17 @@ import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import android.widget.Toast
+import com.taostudio.tapaccounting.AIService
+import com.taostudio.tapaccounting.RuleKeywordPolicy
 import com.taostudio.tapaccounting.capture.CaptureApp
+import com.taostudio.tapaccounting.capture.contract.LocalBillType
+import com.taostudio.tapaccounting.capture.data.CapturePrefs
 import com.taostudio.tapaccounting.capture.data.CategoryRule
 import com.taostudio.tapaccounting.capture.data.RuleLearningTask
 import com.taostudio.tapaccounting.capture.data.RuleLearningTaskDao
 import com.taostudio.tapaccounting.capture.parse.RuleLearningPolicy
+import com.taostudio.tapaccounting.data.local.AppDatabase
+import com.taostudio.tapaccounting.data.local.entity.AccountingRule
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -46,12 +52,165 @@ object RuleLearningManager {
         val toastText: String get() = RuleLearningPolicy.toastText(keyword, categoryName)
     }
 
-    suspend fun scheduleSplit(context: Context, captureId: String, entries: List<RuleLearnEntry>) {}
+    /** 拆分入账成功后批量学习 */
+    suspend fun scheduleSplit(context: Context, captureId: String, entries: List<RuleLearnEntry>) {
+        if (CapturePrefs.getRuleLearnMode(context) == CapturePrefs.RULE_LEARN_OFF) {
+            clearPendingTasks(context, captureId)
+            return
+        }
+        if (entries.isEmpty()) return
+        scope.launch {
+            runCatching {
+                val learnedList = learnEntries(context.applicationContext, entries)
+                learnedList.firstOrNull()?.let {
+                    RuleLearningToast.show(context, it)
+                }
+            }.onFailure { Log.w(TAG, "split rule learning failed: $captureId", it) }
+        }
+    }
 
-    suspend fun learnEntries(context: Context, entries: List<RuleLearnEntry>): List<LearnedRule> = emptyList()
+    /**
+     * 批量学习给定的条目列表：
+     * 1. 过滤不合格条目（空备注、空分类、分类叶子 == "其他" 或 "差额调整"、非普通收支）。
+     * 2. 本地短词（<=8 字符无空格/标点/动词且不等于叶子分类）直接作为关键词。
+     * 3. 较长或需要 AI 提炼的条目，合并一次调用 AIService.suggestRuleKeywords。
+     * 4. 保存学习到的规则至 accounting_rules 并同步至 category_rules。
+     */
+    suspend fun learnEntries(context: Context, entries: List<RuleLearnEntry>): List<LearnedRule> =
+        withContext(Dispatchers.IO) {
+            if (CapturePrefs.getRuleLearnMode(context) == CapturePrefs.RULE_LEARN_OFF) {
+                return@withContext emptyList()
+            }
+            if (entries.isEmpty()) return@withContext emptyList()
+
+            // 过滤有效收支与合法条目
+            val eligible = entries.mapNotNull { entry ->
+                val note = entry.note.trim()
+                val categoryName = entry.categoryName.trim()
+                val billType = entry.billType
+                if (note.isEmpty() || categoryName.isEmpty()) return@mapNotNull null
+                if (billType != LocalBillType.TYPE_EXPENSE && billType != LocalBillType.TYPE_INCOME) return@mapNotNull null
+                val leaf = RuleLearningPolicy.leafCategoryName(categoryName)
+                if (leaf.isEmpty() || leaf == "其他" || leaf == "差额调整") return@mapNotNull null
+                RuleLearnEntry(note, categoryName, billType)
+            }
+            if (eligible.isEmpty()) return@withContext emptyList()
+
+            val aiInputs = eligible.map {
+                AIService.RuleKeywordInput(
+                    note = it.note,
+                    categoryName = it.categoryName,
+                    billType = it.billType,
+                )
+            }
+
+            val keywords = try {
+                AIService.suggestRuleKeywords(context, aiInputs)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (t: Throwable) {
+                Log.w(TAG, "suggestRuleKeywords failed in learnEntries", t)
+                emptyList()
+            }
+
+            val app = CaptureApp.from(context)
+            val db = app.database
+            val accountingRuleDao = db.accountingRuleDao()
+            val categoryRuleDao = db.categoryRuleDao()
+
+            val learned = mutableListOf<LearnedRule>()
+            val processedKeywordsInBatch = mutableSetOf<String>()
+
+            for (i in eligible.indices) {
+                val entry = eligible[i]
+                val rawKeyword = keywords.getOrNull(i)?.trim().orEmpty()
+                if (rawKeyword.isEmpty()) continue
+
+                val lower = rawKeyword.lowercase()
+                if (processedKeywordsInBatch.contains(lower)) {
+                    continue
+                }
+                processedKeywordsInBatch.add(lower)
+
+                val targetCategory = entry.categoryName
+                val existingAcc = accountingRuleDao.findAllByKeyword(rawKeyword)
+                val decision = RuleLearningPolicy.decideUnified(existingAcc, rawKeyword, targetCategory)
+
+                var wasLearned = false
+                val now = System.currentTimeMillis()
+                when (decision) {
+                    RuleLearningPolicy.UnifiedDecision.Insert -> {
+                        accountingRuleDao.upsert(
+                            RuleLearningPolicy.newAccountingRule(
+                                keyword = rawKeyword,
+                                targetCategory = targetCategory,
+                                targetType = entry.billType,
+                                learnedAt = now,
+                            )
+                        )
+                        wasLearned = true
+                    }
+                    is RuleLearningPolicy.UnifiedDecision.Update -> {
+                        accountingRuleDao.update(
+                            decision.rule.copy(
+                                targetCategory = targetCategory,
+                                targetType = entry.billType,
+                                source = AccountingRule.Source.AI,
+                                learnedAt = now,
+                                updatedAt = now,
+                                enabled = true,
+                            )
+                        )
+                        wasLearned = true
+                    }
+                    RuleLearningPolicy.UnifiedDecision.SkipSameCategory,
+                    RuleLearningPolicy.UnifiedDecision.SkipProtected -> {
+                        // 跳过
+                    }
+                }
+
+                if (wasLearned) {
+                    // 同步到 legacy category_rules 表
+                    runCatching {
+                        val legacyRules = categoryRuleDao.findByKeyword(rawKeyword)
+                        when (val legDec = RuleLearningPolicy.decide(legacyRules, rawKeyword, targetCategory)) {
+                            RuleLearningPolicy.Decision.Insert -> {
+                                categoryRuleDao.upsert(
+                                    RuleLearningPolicy.newAiRule(
+                                        keyword = rawKeyword,
+                                        targetCategoryName = targetCategory,
+                                        learnedAt = now,
+                                    )
+                                )
+                            }
+                            is RuleLearningPolicy.Decision.Update -> {
+                                categoryRuleDao.update(
+                                    legDec.rule.copy(
+                                        targetCategoryName = targetCategory,
+                                        source = CategoryRule.SOURCE_AI,
+                                        learnedAt = now,
+                                        enabled = true,
+                                    )
+                                )
+                            }
+                            RuleLearningPolicy.Decision.SkipSameCategory,
+                            RuleLearningPolicy.Decision.SkipProtected -> {}
+                        }
+                    }
+                    learned += LearnedRule(rawKeyword, targetCategory, entry.billType)
+                }
+            }
+
+            learned
+        }
 
     /** 入账成功后调用：满足条件就入队，并立刻在后台尝试学习。 */
     suspend fun schedule(context: Context, captureId: String) {
+        if (CapturePrefs.getRuleLearnMode(context) == CapturePrefs.RULE_LEARN_OFF) {
+            clearPendingTasks(context, captureId)
+            return
+        }
+
         val task = try {
             enqueue(context, captureId)
         } catch (e: kotlinx.coroutines.CancellationException) {
@@ -64,6 +223,19 @@ object RuleLearningManager {
         scope.launch {
             runCatching { process(context.applicationContext, notify = true) }
                 .onFailure { Log.w(TAG, "rule learning failed: ${task.captureId}", it) }
+        }
+    }
+
+    private suspend fun clearPendingTasks(context: Context, captureId: String?) {
+        withContext(Dispatchers.IO) {
+            runCatching {
+                val dao = CaptureApp.from(context).database.ruleLearningTaskDao()
+                if (captureId != null) {
+                    dao.deleteByCaptureId(captureId)
+                } else {
+                    dao.deleteAll()
+                }
+            }
         }
     }
 
@@ -81,8 +253,15 @@ object RuleLearningManager {
 
     private suspend fun enqueue(context: Context, captureId: String): RuleLearningTask? =
         withContext(Dispatchers.IO) {
+            if (CapturePrefs.getRuleLearnMode(context) == CapturePrefs.RULE_LEARN_OFF) {
+                clearPendingTasks(context, captureId)
+                return@withContext null
+            }
+
             val app = CaptureApp.from(context)
             val capture = app.repository.findById(captureId) ?: return@withContext null
+            // 拆分 capture 排除单条规则学习
+            if (capture.splitRequested) return@withContext null
             if (!RuleLearningPolicy.isEligible(capture)) return@withContext null
 
             val note = capture.note?.trim().orEmpty()
@@ -90,7 +269,7 @@ object RuleLearningManager {
             val billType = capture.billType ?: return@withContext null
             if (note.isEmpty() || categoryName.isEmpty()) return@withContext null
 
-            // 若已有规则能直接将该备注命中该分类，无需重复调用 AI 学习
+            // 若已有启用的 NOTE/ANY 规则能把备注解析到同一分类，跳过
             val existingRuleCat = com.taostudio.tapaccounting.capture.parse.CaptureRuleMatcher.resolveNoteCategory(context, note)
             if (existingRuleCat == categoryName) return@withContext null
 
@@ -113,14 +292,18 @@ object RuleLearningManager {
     private suspend fun process(context: Context, notify: Boolean): List<LearnedRule> =
         mutex.withLock {
             withContext(Dispatchers.IO) {
+                if (CapturePrefs.getRuleLearnMode(context) == CapturePrefs.RULE_LEARN_OFF) {
+                    clearPendingTasks(context, null)
+                    return@withContext emptyList()
+                }
+
                 val app = CaptureApp.from(context)
                 val dao = app.database.ruleLearningTaskDao()
-                val client = CaptureBridgeClient(context)
                 val learned = mutableListOf<LearnedRule>()
 
                 for (task in dao.listPending(50)) {
                     val result = try {
-                        processTask(app, dao, client, task)
+                        processTask(context, app, dao, task)
                     } catch (e: kotlinx.coroutines.CancellationException) {
                         throw e
                     } catch (t: Throwable) {
@@ -138,11 +321,16 @@ object RuleLearningManager {
         }
 
     private suspend fun processTask(
+        context: Context,
         app: CaptureApp,
         taskDao: RuleLearningTaskDao,
-        client: CaptureBridgeClient,
         task: RuleLearningTask,
     ): LearnedRule? {
+        if (CapturePrefs.getRuleLearnMode(context) == CapturePrefs.RULE_LEARN_OFF) {
+            taskDao.deleteAll()
+            return null
+        }
+
         if (task.attempts >= RuleLearningPolicy.MAX_FAILED_ATTEMPTS) {
             taskDao.deleteById(task.id)
             return null
@@ -153,59 +341,106 @@ object RuleLearningManager {
         if (capture != null) {
             val sameNote = capture.note?.trim().orEmpty() == task.note.trim()
             val sameCategory = capture.categoryName?.trim().orEmpty() == task.categoryName.trim()
-            if (!sameNote || !sameCategory || !RuleLearningPolicy.isEligible(capture)) {
+            if (capture.splitRequested || !sameNote || !sameCategory || !RuleLearningPolicy.isEligible(capture)) {
                 taskDao.deleteById(task.id)
                 return null
             }
         }
 
-        val suggestion = client.suggestRuleKeyword(
-            note = task.note,
-            categoryName = task.categoryName,
-            billType = task.billType,
-        )
-        if (!suggestion.ok) {
+        val targetCategory = capture?.categoryName?.trim().orEmpty()
+            .ifEmpty { task.categoryName.trim() }
+
+        val keyword = try {
+            val res = AIService.suggestRuleKeywords(
+                ctx = context,
+                items = listOf(
+                    AIService.RuleKeywordInput(
+                        note = task.note,
+                        categoryName = targetCategory,
+                        billType = task.billType,
+                    )
+                )
+            )
+            res.firstOrNull()?.trim().orEmpty()
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (t: Throwable) {
+            Log.w(TAG, "suggestRuleKeyword error for task: ${task.captureId}", t)
             failTask(taskDao, task)
             return null
         }
 
-        val keyword = suggestion.keyword.trim()
         // 空关键词是 AI 明确判断“没有可复用词”，重试也不会变好，直接结束。
         if (keyword.isEmpty()) {
             taskDao.deleteById(task.id)
             return null
         }
 
-        val targetCategory = capture?.categoryName?.trim().orEmpty()
-            .ifEmpty { task.categoryName.trim() }
-        val ruleDao = app.database.categoryRuleDao()
-        val existing = ruleDao.findByKeyword(keyword)
-        val learned = when (val decision = RuleLearningPolicy.decide(existing, keyword, targetCategory)) {
-            RuleLearningPolicy.Decision.Insert -> {
-                ruleDao.upsert(
-                    RuleLearningPolicy.newAiRule(
+        val db = app.database
+        val accountingRuleDao = db.accountingRuleDao()
+        val categoryRuleDao = db.categoryRuleDao()
+
+        val existingAcc = accountingRuleDao.findAllByKeyword(keyword)
+        val now = System.currentTimeMillis()
+        val learned = when (val decision = RuleLearningPolicy.decideUnified(existingAcc, keyword, targetCategory)) {
+            RuleLearningPolicy.UnifiedDecision.Insert -> {
+                accountingRuleDao.upsert(
+                    RuleLearningPolicy.newAccountingRule(
                         keyword = keyword,
-                        targetCategoryName = targetCategory,
-                        learnedAt = System.currentTimeMillis(),
+                        targetCategory = targetCategory,
+                        targetType = task.billType,
+                        learnedAt = now,
                     )
                 )
-                LearnedRule(keyword, targetCategory)
+                LearnedRule(keyword, targetCategory, task.billType)
             }
 
-            is RuleLearningPolicy.Decision.Update -> {
-                ruleDao.update(
+            is RuleLearningPolicy.UnifiedDecision.Update -> {
+                accountingRuleDao.update(
                     decision.rule.copy(
-                        targetCategoryName = targetCategory,
-                        source = CategoryRule.SOURCE_AI,
-                        learnedAt = System.currentTimeMillis(),
+                        targetCategory = targetCategory,
+                        targetType = task.billType,
+                        source = AccountingRule.Source.AI,
+                        learnedAt = now,
+                        updatedAt = now,
                         enabled = true,
                     )
                 )
-                LearnedRule(keyword, targetCategory)
+                LearnedRule(keyword, targetCategory, task.billType)
             }
 
-            RuleLearningPolicy.Decision.SkipSameCategory,
-            RuleLearningPolicy.Decision.SkipProtected -> null
+            RuleLearningPolicy.UnifiedDecision.SkipSameCategory,
+            RuleLearningPolicy.UnifiedDecision.SkipProtected -> null
+        }
+
+        if (learned != null) {
+            // 同步 legacy category_rules 表
+            runCatching {
+                val existingLegacy = categoryRuleDao.findByKeyword(keyword)
+                when (val legDec = RuleLearningPolicy.decide(existingLegacy, keyword, targetCategory)) {
+                    RuleLearningPolicy.Decision.Insert -> {
+                        categoryRuleDao.upsert(
+                            RuleLearningPolicy.newAiRule(
+                                keyword = keyword,
+                                targetCategoryName = targetCategory,
+                                learnedAt = now,
+                            )
+                        )
+                    }
+                    is RuleLearningPolicy.Decision.Update -> {
+                        categoryRuleDao.update(
+                            legDec.rule.copy(
+                                targetCategoryName = targetCategory,
+                                source = CategoryRule.SOURCE_AI,
+                                learnedAt = now,
+                                enabled = true,
+                            )
+                        )
+                    }
+                    RuleLearningPolicy.Decision.SkipSameCategory,
+                    RuleLearningPolicy.Decision.SkipProtected -> {}
+                }
+            }
         }
 
         taskDao.deleteById(task.id)

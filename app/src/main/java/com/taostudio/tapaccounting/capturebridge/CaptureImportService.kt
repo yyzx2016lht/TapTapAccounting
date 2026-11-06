@@ -9,6 +9,7 @@ import com.taostudio.tapaccounting.AIService
 import com.taostudio.tapaccounting.BookAccountManager
 import com.taostudio.tapaccounting.Prefs
 import com.taostudio.tapaccounting.capture.CaptureInboxEvents
+import com.taostudio.tapaccounting.capture.bridge.RuleLearningManager
 import com.taostudio.tapaccounting.capture.contract.ImportBill
 import com.taostudio.tapaccounting.capture.contract.ImportItemStatus
 import com.taostudio.tapaccounting.data.local.AppDatabase
@@ -341,6 +342,9 @@ internal object CaptureImportService {
                 )
             )
         } catch (_: Exception) {}
+        runCatching {
+            RuleLearningManager.schedule(ctx, import.captureId)
+        }
         return Triple(import.captureId, saved.id, ImportItemStatus.CREATED)
     }
 

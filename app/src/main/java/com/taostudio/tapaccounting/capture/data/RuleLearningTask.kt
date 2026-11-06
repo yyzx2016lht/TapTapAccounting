@@ -48,6 +48,12 @@ interface RuleLearningTaskDao {
     @Query("DELETE FROM rule_learning_tasks WHERE id = :id")
     suspend fun deleteById(id: Long): Int
 
+    @Query("DELETE FROM rule_learning_tasks WHERE captureId = :captureId")
+    suspend fun deleteByCaptureId(captureId: String): Int
+
+    @Query("DELETE FROM rule_learning_tasks")
+    suspend fun deleteAll(): Int
+
     @Query("SELECT COUNT(*) FROM rule_learning_tasks")
     suspend fun count(): Int
 }

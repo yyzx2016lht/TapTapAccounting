@@ -6,7 +6,11 @@ import com.taostudio.tapaccounting.TapApplication
 import com.taostudio.tapaccounting.Logger
 import com.taostudio.tapaccounting.Prefs
 import com.taostudio.tapaccounting.capture.CaptureInboxEvents
+import com.taostudio.tapaccounting.capture.bridge.RuleLearningManager
 import com.taostudio.tapaccounting.capture.contract.CaptureContract
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import com.taostudio.tapaccounting.data.local.AppDatabase
 import com.taostudio.tapaccounting.data.local.entity.Asset
 import com.taostudio.tapaccounting.data.local.entity.Bill
@@ -227,6 +231,14 @@ object BillMutationService {
         // 重复入账（回执已存在）也直接推进，避免历史待记一直停在收件箱。
         if (captureId != null) {
             CaptureInboxEvents.markRecorded(db, captureId)
+            if (capturedBill != null) {
+                val appContext = runCatching { TapApplication.app() }.getOrNull()
+                if (appContext != null) {
+                    CoroutineScope(Dispatchers.IO).launch {
+                        RuleLearningManager.schedule(appContext, captureId)
+                    }
+                }
+            }
         }
         return result
     }

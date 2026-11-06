@@ -1367,6 +1367,126 @@ object AIService {
         }
     }
 
+    data class RuleKeywordInput(val note: String, val categoryName: String, val billType: Int)
+
+    /**
+     * AI 规则学习：批量从备注 + 已确认分类中提取可复用的备注关键词。
+     *
+     * 与输入 items 等长，无法提取或不符合规则返回空串。
+     * 本地短词直接出，长词合并为一次批量 AI 调用。
+     */
+    suspend fun suggestRuleKeywords(
+        ctx: Context,
+        items: List<RuleKeywordInput>,
+    ): List<String> {
+        if (items.isEmpty()) return emptyList()
+
+        // 预分配结果
+        val results = MutableList(items.size) { "" }
+        val pendingAiIndices = mutableListOf<Int>()
+        val pendingAiItems = mutableListOf<RuleKeywordInput>()
+
+        items.forEachIndexed { index, item ->
+            val cleanNote = item.note.trim()
+            val cleanCategory = item.categoryName.trim()
+            if (cleanNote.isEmpty() || cleanCategory.isEmpty()) return@forEachIndexed
+            if (item.billType != Bill.TYPE_EXPENSE && item.billType != Bill.TYPE_INCOME) return@forEachIndexed
+
+            val leafCategory = cleanCategory.split(Regex("""\s*(?:-|/|>|›|→)\s*"""))
+                .lastOrNull { it.isNotBlank() }
+                ?.trim()
+                .orEmpty()
+            if (leafCategory == "其他" || leafCategory == "差额调整") return@forEachIndexed
+
+            val direct = RuleKeywordPolicy.directKeywordFromNote(cleanNote)
+            if (direct != null && !direct.equals(leafCategory, ignoreCase = true)) {
+                results[index] = direct
+            } else if (direct == null) {
+                pendingAiIndices.add(index)
+                pendingAiItems.add(item)
+            }
+        }
+
+        if (pendingAiItems.isEmpty()) {
+            return results
+        }
+
+        val apiKey = Prefs.getAiKey(ctx)
+        val model = AiModelSlots.resolveTextModel(ctx)
+        if (apiKey.isBlank() || model.isBlank()) {
+            return results
+        }
+
+        val itemsArray = JSONArray()
+        pendingAiItems.forEachIndexed { i, input ->
+            itemsArray.put(
+                JSONObject().apply {
+                    put("index", i)
+                    put("note", input.note.trim().replace('\n', ' ').replace('\r', ' '))
+                    put("category", input.categoryName.trim())
+                    put("billType", if (input.billType == Bill.TYPE_EXPENSE) "支出" else "收入")
+                }
+            )
+        }
+
+        val userPrompt = itemsArray.toString()
+        val content = try {
+            withTimeoutOrNull(RULE_KEYWORD_TIMEOUT_MS) {
+                val requestJson = buildTextChatRequest(
+                    model = model,
+                    temperature = 0.1,
+                    systemPrompt = AIPrompts.BATCH_RULE_KEYWORD_PROMPT_DEFAULT,
+                    userText = userPrompt,
+                    jsonObjectResponse = true,
+                    enableThinking = false
+                )
+                val response = getApi(ctx).chatRaw(
+                    "Bearer $apiKey",
+                    adaptChatRequestForProvider(Prefs.getAiProvider(ctx), requestJson)
+                )
+                response.choices.firstOrNull()?.message?.content?.trim().orEmpty()
+            }
+        } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+            Logger.dPriv(
+                ctx,
+                "AIService",
+                "suggestRuleKeywords failed: errType=${e.javaClass.simpleName}",
+                "Batch rule keywords failure detail=${detailedHttpError(e)}"
+            )
+            null
+        }
+
+        if (!content.isNullOrBlank()) {
+            val jsonText = extractFirstJsonObjectText(cleanJsonString(content))
+            runCatching {
+                if (jsonText != null) {
+                    val root = JSONObject(jsonText)
+                    val resArr = root.optJSONArray("results")
+                    if (resArr != null) {
+                        for (i in 0 until resArr.length()) {
+                            val obj = resArr.optJSONObject(i) ?: continue
+                            val subIdx = obj.optInt("index", -1)
+                            val rawKw = obj.optNullableString("keyword")
+                            if (subIdx in pendingAiIndices.indices) {
+                                val origIdx = pendingAiIndices[subIdx]
+                                val item = items[origIdx]
+                                val leaf = item.categoryName.trim().split(Regex("""\s*(?:-|/|>|›|→)\s*"""))
+                                    .lastOrNull { it.isNotBlank() }?.trim().orEmpty()
+                                val kw = RuleKeywordPolicy.sanitize(rawKw)
+                                if (kw.isNotEmpty() && !kw.equals(leaf, ignoreCase = true)) {
+                                    results[origIdx] = kw
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        return results
+    }
+
     /**
      * AI 规则学习：从备注 + 已确认分类中提取一个 1-8 字的可复用备注关键词。
      *
@@ -1387,59 +1507,19 @@ object AIService {
             .lastOrNull { it.isNotBlank() }
             ?.trim()
             .orEmpty()
-        if (leafCategory == "其他") return ""
+        if (leafCategory == "其他" || leafCategory == "差额调整") return ""
 
-        RuleKeywordPolicy.directKeywordFromNote(cleanNote)?.let { return it }
-
-        val apiKey = Prefs.getAiKey(ctx)
-        if (apiKey.isBlank()) return ""
-        val model = AiModelSlots.resolveTextModel(ctx)
-        if (model.isBlank()) return ""
-
-        val typeLabel = if (billType == Bill.TYPE_EXPENSE) "支出" else "收入"
-        val userPrompt = buildString {
-            append("用户备注：").append(cleanNote.replace('\n', ' ').replace('\r', ' ')).append('\n')
-            append("已确认分类：").append(cleanCategory).append('\n')
-            append("账单类型：").append(typeLabel)
-        }
-
-        val content = try {
-            withTimeoutOrNull(RULE_KEYWORD_TIMEOUT_MS) {
-                val requestJson = buildTextChatRequest(
-                    model = model,
-                    temperature = 0.1,
-                    systemPrompt = AIPrompts.RULE_KEYWORD_PROMPT_DEFAULT,
-                    userText = userPrompt,
-                    jsonObjectResponse = true,
-                    enableThinking = false
-                )
-                val response = getApi(ctx).chatRaw(
-                    "Bearer $apiKey",
-                    adaptChatRequestForProvider(Prefs.getAiProvider(ctx), requestJson)
-                )
-                response.choices.firstOrNull()?.message?.content?.trim().orEmpty()
+        RuleKeywordPolicy.directKeywordFromNote(cleanNote)?.let { direct ->
+            if (!direct.equals(leafCategory, ignoreCase = true)) {
+                return direct
             }
-        } catch (e: Exception) {
-            if (e is kotlinx.coroutines.CancellationException) throw e
-            Logger.dPriv(
-                ctx,
-                "AIService",
-                "suggestRuleKeyword failed: errType=${e.javaClass.simpleName}",
-                "Rule keyword failure detail=${detailedHttpError(e)}"
-            )
-            return ""
-        }
-        if (content.isNullOrBlank()) {
-            Logger.d(ctx, "AIService", "suggestRuleKeyword timeout after ${RULE_KEYWORD_TIMEOUT_MS}ms")
-            return ""
         }
 
-        val jsonText = extractFirstJsonObjectText(cleanJsonString(content))
-        val rawKeyword = runCatching {
-            jsonText?.let { JSONObject(it).optNullableString("keyword") }
-        }.getOrNull()
-            ?: content.trim().takeIf { it.length in 1..8 && !it.contains('\n') }
-        val keyword = RuleKeywordPolicy.sanitize(rawKeyword)
+        val batchResult = suggestRuleKeywords(
+            ctx = ctx,
+            items = listOf(RuleKeywordInput(cleanNote, cleanCategory, billType))
+        )
+        val keyword = batchResult.firstOrNull().orEmpty()
         Logger.d(
             ctx,
             "AIService",

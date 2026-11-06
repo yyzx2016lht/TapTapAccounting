@@ -18,6 +18,9 @@ interface AccountingRuleDao {
     @Query("SELECT * FROM accounting_rules WHERE keyword = :keyword LIMIT 1")
     suspend fun findByKeyword(keyword: String): AccountingRule?
 
+    @Query("SELECT * FROM accounting_rules WHERE keyword = :keyword COLLATE NOCASE")
+    suspend fun findAllByKeyword(keyword: String): List<AccountingRule>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(rule: AccountingRule): Long
 

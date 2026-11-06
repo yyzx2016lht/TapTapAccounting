@@ -7,6 +7,7 @@ import com.taostudio.tapaccounting.capture.contract.CaptureStatus
 import com.taostudio.tapaccounting.capture.contract.LocalBillType
 import com.taostudio.tapaccounting.capture.dedup.DuplicateDetector
 import com.taostudio.tapaccounting.capture.parse.CaptureRuleMatcher
+import com.taostudio.tapaccounting.data.local.entity.AccountingRule
 import kotlin.math.abs
 
 /** 一次插入的结果；inserted=false 表示命中幂等去重（id 或 source+sourceTxnId）。 */
@@ -439,6 +440,25 @@ class CaptureRepository(private val dao: PaymentCaptureDao) {
                     enabled = true,
                     source = CategoryRule.SOURCE_USER,
                     learnedAt = null,
+                )
+            )
+            // 统一规则表：插件旧 API 的“记住分类”也要写 accounting_rules，否则新引擎读不到。
+            val existingAcc = db.accountingRuleDao()
+                .findAllByKeyword(ruleKeyword)
+                .firstOrNull { it.matchField == AccountingRule.MatchField.ANY }
+            db.accountingRuleDao().upsert(
+                AccountingRule(
+                    id = existingAcc?.id ?: 0L,
+                    keyword = ruleKeyword,
+                    matchField = AccountingRule.MatchField.ANY,
+                    matchMode = AccountingRule.MatchMode.SUBSTRING,
+                    targetCategory = resolvedCategory,
+                    sort = existingAcc?.sort ?: 0,
+                    enabled = true,
+                    source = AccountingRule.Source.USER,
+                    learnedAt = null,
+                    createdAt = existingAcc?.createdAt ?: now,
+                    updatedAt = now,
                 )
             )
         }

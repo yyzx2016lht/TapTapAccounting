@@ -15,6 +15,15 @@ interface AccountingRuleDao {
     @Query("SELECT * FROM accounting_rules WHERE enabled = 1 ORDER BY sort ASC, id ASC")
     suspend fun listEnabled(): List<AccountingRule>
 
+    /** 主记账提示词/覆盖专用：只取用户或 AI 学习的习惯规则，避免待记/导入/预置规则污染提示词。 */
+    @Query(
+        "SELECT * FROM accounting_rules WHERE enabled = 1 " +
+            "AND source IN ('USER','AI') " +
+            "AND matchField IN ('REMARK','USER_INPUT','ANY') " +
+            "ORDER BY sort ASC, id ASC"
+    )
+    suspend fun listEnabledForAiAccounting(): List<AccountingRule>
+
     @Query("SELECT * FROM accounting_rules WHERE source = :source ORDER BY sort ASC, id ASC")
     suspend fun listBySource(source: String): List<AccountingRule>
 

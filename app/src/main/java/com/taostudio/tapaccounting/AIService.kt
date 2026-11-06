@@ -2253,14 +2253,11 @@ object AIService {
     }
 
     private suspend fun loadActivePromptRules(ctx: Context): List<AccountingRule> = withContext(Dispatchers.IO) {
-        AppDatabase.getDatabase(ctx).accountingRuleDao().listEnabled()
+        AppDatabase.getDatabase(ctx).accountingRuleDao().listEnabledForAiAccounting()
     }
 
     private fun findMatchedPromptRules(text: String, allRules: List<AccountingRule>): List<AccountingRule> =
-        allRules.filter { rule ->
-            rule.enabled && rule.keyword.split("\\s+".toRegex()).filter { it.isNotEmpty() }
-                .all { text.contains(it, ignoreCase = true) }
-        }
+        com.taostudio.tapaccounting.capture.rules.AccountingRuleEngine.matchPromptRules(allRules, text)
 
     data class StreamResult(
         val content: String,

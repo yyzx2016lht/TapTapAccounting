@@ -10,7 +10,7 @@ import com.taostudio.tapaccounting.Prefs
 import com.taostudio.tapaccounting.data.local.entity.Asset
 import com.taostudio.tapaccounting.data.local.entity.Bill
 import com.taostudio.tapaccounting.data.local.entity.Category
-import com.taostudio.tapaccounting.data.local.entity.AiRule
+import com.taostudio.tapaccounting.data.local.entity.AccountingRule
 import com.taostudio.tapaccounting.logic.CategoryNameNormalizer
 import com.taostudio.tapaccounting.logic.DuplicateCategoryMerger
 import com.taostudio.tapaccounting.logic.UncategorizedBillRelinker
@@ -273,7 +273,7 @@ object MigrationManager {
                     return@withContext
                 }
 
-                val existingRules = database.aiRuleDao().getAllRulesList()
+                val existingRules = database.accountingRuleDao().listAll()
                 val existingKeys = existingRules.map { rule ->
                     keyOf(rule.keyword, rule.targetType, rule.targetCategory, rule.targetAccount1, rule.targetAccount2)
                 }.toSet()
@@ -283,14 +283,20 @@ object MigrationManager {
                     legacyRules.forEach { legacy ->
                         val key = keyOf(legacy.keyword, legacy.targetType, legacy.targetCategory, legacy.targetAccount1, legacy.targetAccount2)
                         if (key !in existingKeys) {
-                            database.aiRuleDao().insertRule(
-                                AiRule(
+                            val now = System.currentTimeMillis()
+                            database.accountingRuleDao().upsert(
+                                AccountingRule(
                                     keyword = legacy.keyword,
+                                    matchField = AccountingRule.MatchField.REMARK,
+                                    matchMode = AccountingRule.MatchMode.ALL_TOKENS,
                                     targetType = legacy.targetType,
                                     targetCategory = legacy.targetCategory,
                                     targetAccount1 = legacy.targetAccount1,
                                     targetAccount2 = legacy.targetAccount2,
-                                    isEnabled = legacy.isEnabled
+                                    source = AccountingRule.Source.USER,
+                                    enabled = legacy.isEnabled,
+                                    createdAt = now,
+                                    updatedAt = now,
                                 )
                             )
                             inserted++

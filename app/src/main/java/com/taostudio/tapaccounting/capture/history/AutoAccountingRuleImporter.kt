@@ -4,6 +4,7 @@ import android.content.Context
 import com.taostudio.tapaccounting.capture.CaptureApp
 import com.taostudio.tapaccounting.capture.data.AssetMappingRule
 import com.taostudio.tapaccounting.capture.data.CategoryRule
+import com.taostudio.tapaccounting.data.local.entity.AccountingRule
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
@@ -159,6 +160,27 @@ object AutoAccountingRuleImporter {
                     val rule = parseCategoryRule(elementStr, jsStr, sort, enabled)
                     if (rule != null) {
                         db.categoryRuleDao().upsert(rule)
+                        val now = System.currentTimeMillis()
+                        val existingAcc = db.accountingRuleDao()
+                            .findAllByKeyword(rule.keyword)
+                            .firstOrNull { it.matchField == rule.matchField }
+                        db.accountingRuleDao().upsert(
+                            AccountingRule(
+                                id = existingAcc?.id ?: 0L,
+                                keyword = rule.keyword,
+                                isRegex = rule.isRegex,
+                                matchField = rule.matchField,
+                                matchMode = AccountingRule.MatchMode.SUBSTRING,
+                                targetCategory = rule.targetCategoryName,
+                                targetBook = rule.targetBookName,
+                                sort = rule.sort,
+                                enabled = rule.enabled,
+                                source = rule.source,
+                                learnedAt = rule.learnedAt,
+                                createdAt = rule.createdAt,
+                                updatedAt = now,
+                            )
+                        )
                         categoryImported++
                     }
                 }

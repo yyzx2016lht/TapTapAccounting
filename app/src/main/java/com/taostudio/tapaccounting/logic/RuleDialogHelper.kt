@@ -1,9 +1,13 @@
 package com.taostudio.tapaccounting.logic
 
 import android.content.Context
+import android.graphics.Color
+import android.util.TypedValue
+import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
 import android.widget.AdapterView
+import android.widget.LinearLayout
 import android.widget.ArrayAdapter
 import android.widget.Spinner
 import android.widget.Switch
@@ -370,22 +374,71 @@ object RuleDialogHelper {
             add("撤销这次自动分类")
         }
         val themeCtx = ContextThemeWrapper(ctx, R.style.Theme_TapAccounting)
-        val dialog = AlertDialog.Builder(themeCtx)
-            .setTitle("处理这笔分类")
-            .setMessage(message)
-            .setItems(items.toTypedArray()) { d, which ->
-                d.dismiss()
-                when (items[which]) {
-                    "更新规则", "记住这次" -> onUpdate()
-                    "删除旧规则" -> onDeleteRule()
-                    "只改这次" -> onOnlyThisTime()
-                    "撤销这次自动分类" -> onUndo()
+        val density = themeCtx.resources.displayMetrics.density
+        fun dp(value: Int): Int = (value * density + 0.5f).toInt()
+        val selectable = TypedValue().also {
+            themeCtx.theme.resolveAttribute(android.R.attr.selectableItemBackground, it, true)
+        }.resourceId
+
+        val container = LinearLayout(themeCtx).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(20), dp(16), dp(20), dp(8))
+        }
+        container.addView(TextView(themeCtx).apply {
+            text = "处理这笔分类"
+            textSize = 17f
+            setTypeface(typeface, android.graphics.Typeface.BOLD)
+            setTextColor(Color.parseColor("#24344A"))
+        })
+        container.addView(TextView(themeCtx).apply {
+            text = message
+            textSize = 13f
+            setTextColor(Color.parseColor("#6B7684"))
+            setLineSpacing(0f, 1.25f)
+            setPadding(0, dp(8), 0, dp(10))
+        })
+
+        lateinit var dialog: AlertDialog
+        items.forEach { label ->
+            container.addView(TextView(themeCtx).apply {
+                text = label
+                textSize = 15f
+                gravity = Gravity.CENTER_VERTICAL
+                setTextColor(
+                    if (label == "删除旧规则" || label == "撤销这次自动分类")
+                        Color.parseColor("#D14343")
+                    else Color.parseColor("#24344A")
+                )
+                setPadding(dp(4), dp(14), dp(4), dp(14))
+                setBackgroundResource(selectable)
+                isClickable = true
+                setOnClickListener {
+                    dialog.dismiss()
+                    when (label) {
+                        "更新规则", "记住这次" -> onUpdate()
+                        "删除旧规则" -> onDeleteRule()
+                        "只改这次" -> onOnlyThisTime()
+                        "撤销这次自动分类" -> onUndo()
+                    }
                 }
-            }
-            .setNegativeButton("取消") { d, _ ->
-                d.dismiss()
+            })
+        }
+        container.addView(TextView(themeCtx).apply {
+            text = "取消"
+            textSize = 14f
+            gravity = Gravity.CENTER
+            setTextColor(Color.parseColor("#8A94A6"))
+            setPadding(dp(4), dp(12), dp(4), dp(12))
+            setBackgroundResource(selectable)
+            isClickable = true
+            setOnClickListener {
+                dialog.dismiss()
                 onCancel()
             }
+        })
+
+        dialog = AlertDialog.Builder(themeCtx)
+            .setView(container)
             .setOnCancelListener { onCancel() }
             .create()
 

@@ -120,6 +120,28 @@ object CaptureLegacyImporter {
                             Log.w(TAG, "legacy table skipped: $table (${t.message})")
                         }
                     }
+                    // 统一规则表：旧 category_rules 导入后映射到 accounting_rules，否则新引擎读不到。
+                    runCatching {
+                        support.execSQL(
+                            """
+                            INSERT INTO main.accounting_rules (
+                                keyword, isRegex, matchField, matchMode, targetType, targetCategory,
+                                targetBook, targetAccount1, targetAccount2, sort, enabled, source,
+                                learnedAt, createdAt, updatedAt
+                            )
+                            SELECT c.keyword, c.isRegex, c.matchField, 'SUBSTRING', NULL,
+                                   c.targetCategoryName, c.targetBookName, NULL, NULL,
+                                   c.sort, c.enabled, c.source, c.learnedAt, c.createdAt, c.createdAt
+                            FROM main.category_rules c
+                            WHERE NOT EXISTS (
+                                SELECT 1 FROM main.accounting_rules a
+                                WHERE a.keyword = c.keyword AND a.matchField = c.matchField
+                            )
+                            """.trimIndent()
+                        )
+                    }.onFailure {
+                        Log.w(TAG, "legacy category_rules -> accounting_rules failed: ${it.message}")
+                    }
                     support.setTransactionSuccessful()
                 } finally {
                     support.endTransaction()

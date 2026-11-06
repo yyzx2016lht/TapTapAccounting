@@ -15,6 +15,7 @@ interface AccountingRuleEngine {
     suspend fun matchNote(context: Context, note: String?, merchant: String? = null): RuleMatch?
     suspend fun matchAiBill(context: Context, userInput: String?, remarks: String?): RuleMatch?
     suspend fun matchAllNote(context: Context, note: String?, merchant: String? = null): List<RuleMatch>
+    fun matchPromptRules(rules: List<AccountingRule>, text: String?): List<AccountingRule>
     fun invalidateCache() {}
 
     companion object : AccountingRuleEngine by DefaultAccountingRuleEngine {
@@ -124,8 +125,7 @@ object DefaultAccountingRuleEngine : AccountingRuleEngine {
         if (cleanNote != null) {
             for (rule in sortedRules) {
                 if (rule.matchField == AccountingRule.MatchField.NOTE ||
-                    rule.matchField == AccountingRule.MatchField.ANY ||
-                    rule.matchField == AccountingRule.MatchField.REMARK
+                    rule.matchField == AccountingRule.MatchField.ANY
                 ) {
                     if (matchesText(rule, cleanNote)) {
                         result.add(
@@ -181,19 +181,38 @@ object DefaultAccountingRuleEngine : AccountingRuleEngine {
      * 匹配字段在 REMARK、USER_INPUT、ANY、NOTE。
      * remarks 优先匹配；若未命中再匹配 userInput。
      */
+    /**
+     * 主记账提示词专用：只返回用户/AI 学习、且适合主记账的规则。
+     * 和 [matchAiBillWithRules] 使用同一套 matchField/matchMode/isRegex，避免提示词与覆盖不一致。
+     */
+    override fun matchPromptRules(rules: List<AccountingRule>, text: String?): List<AccountingRule> {
+        val clean = text?.trim().orEmpty()
+        if (clean.isEmpty()) return emptyList()
+        return rules.filter { rule ->
+            rule.enabled &&
+                (rule.source == AccountingRule.Source.USER || rule.source == AccountingRule.Source.AI) &&
+                (rule.matchField == AccountingRule.MatchField.REMARK ||
+                    rule.matchField == AccountingRule.MatchField.USER_INPUT ||
+                    rule.matchField == AccountingRule.MatchField.ANY) &&
+                matchesText(rule, clean)
+        }
+    }
+
     fun matchAiBillWithRules(rules: List<AccountingRule>, userInput: String?, remarks: String?): RuleMatch? {
         val cleanRemarks = remarks?.trim()?.takeIf { it.isNotEmpty() }
         val cleanUserInput = userInput?.trim()?.takeIf { it.isNotEmpty() }
         if (cleanRemarks == null && cleanUserInput == null) return null
 
-        val sortedRules = rules.filter { it.enabled }.sortedWith(ruleComparator)
+        // 主记账只吃用户/AI 学习的习惯规则；待记 NOTE、导入/预置规则不参与，避免改变原记账行为。
+        val sortedRules = rules.filter {
+            it.enabled && (it.source == AccountingRule.Source.USER || it.source == AccountingRule.Source.AI)
+        }.sortedWith(ruleComparator)
 
-        // 1. remarks 优先：匹配 REMARK, ANY, NOTE
+        // 1. remarks 优先：匹配 REMARK, ANY
         if (cleanRemarks != null) {
             for (rule in sortedRules) {
                 if (rule.matchField == AccountingRule.MatchField.REMARK ||
-                    rule.matchField == AccountingRule.MatchField.ANY ||
-                    rule.matchField == AccountingRule.MatchField.NOTE
+                    rule.matchField == AccountingRule.MatchField.ANY
                 ) {
                     if (matchesText(rule, cleanRemarks)) {
                         return RuleMatch(
@@ -211,13 +230,12 @@ object DefaultAccountingRuleEngine : AccountingRuleEngine {
             }
         }
 
-        // 2. userInput 兜底：匹配 USER_INPUT, ANY, REMARK, NOTE
+        // 2. userInput 兜底：匹配 USER_INPUT, ANY, REMARK
         if (cleanUserInput != null) {
             for (rule in sortedRules) {
                 if (rule.matchField == AccountingRule.MatchField.USER_INPUT ||
                     rule.matchField == AccountingRule.MatchField.ANY ||
-                    rule.matchField == AccountingRule.MatchField.REMARK ||
-                    rule.matchField == AccountingRule.MatchField.NOTE
+                    rule.matchField == AccountingRule.MatchField.REMARK
                 ) {
                     if (matchesText(rule, cleanUserInput)) {
                         return RuleMatch(

@@ -120,6 +120,7 @@ class OverlayPendingCaptureController(
         btnModePending?.setOnClickListener { switchToPendingMode() }
         btnModeNew?.setOnClickListener { switchToNewBillMode() }
         formController.setOnRemarkChangedListener { note -> onSingleRemarkChanged(note) }
+        formController.onImeClosed = { onRemarkImeClosed() }
         formController.setOnCategoryChangedListener { categoryName -> onSingleCategoryChanged(categoryName) }
 
         switchSplitBill?.setOnCheckedChangeListener { _, isChecked ->
@@ -200,6 +201,7 @@ class OverlayPendingCaptureController(
 
     fun destroy() {
         formController.setOnRemarkChangedListener(null)
+        formController.onImeClosed = null
         formController.setOnCategoryChangedListener(null)
         layoutCategory?.setOnTouchListener(null)
         btnSave?.setOnTouchListener(null)
@@ -510,6 +512,12 @@ class OverlayPendingCaptureController(
             updateSplitSaveGuard()
         }
         scheduleSingleNoteSync(item, note)
+    }
+
+    /** 关闭输入法即触发一次自动分类，不用按回车。 */
+    private fun onRemarkImeClosed() {
+        if (mode != FormMode.PENDING || isBatchDrawerOpen || isBusy) return
+        autoClassifySinglePending()
     }
 
     private fun onSingleCategoryChanged(categoryName: String) {

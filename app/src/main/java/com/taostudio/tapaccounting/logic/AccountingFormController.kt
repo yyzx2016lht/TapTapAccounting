@@ -8,6 +8,7 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.graphics.Color
+import android.graphics.Rect
 import android.graphics.Typeface
 import android.os.Build
 import android.text.Editable
@@ -110,6 +111,9 @@ class AccountingFormController(
     private var suppressRemarkCallback = false
     private var onCategoryChanged: ((String) -> Unit)? = null
     private var suppressCategoryCallback = false
+
+    /** 输入法收起（用户点返回/收起键盘）时回调；待记悬浮窗用它触发自动分类。 */
+    var onImeClosed: (() -> Unit)? = null
 
     /** 备注变化回调；程序化回填（待记预填/草稿恢复）不会触发。 */
     fun setOnRemarkChangedListener(listener: ((String) -> Unit)?) {
@@ -1260,6 +1264,7 @@ class AccountingFormController(
 
         // 备注输入框：回车键收起输入法，不换行
         etRemark.dismissKeyboardOnEnter()
+        installImeCloseWatcher()
         etRemark.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = Unit
@@ -1273,6 +1278,22 @@ class AccountingFormController(
         })
         updateCategoryBadge()
         updateSaveButtonState()
+    }
+
+    /** 输入法从可见变为收起时回调一次（用户按返回键/手势收起键盘）。 */
+    private fun installImeCloseWatcher() {
+        var wasVisible = false
+        rootView.viewTreeObserver.addOnGlobalLayoutListener {
+            val rect = Rect()
+            rootView.getWindowVisibleDisplayFrame(rect)
+            val height = rootView.rootView.height
+            val visible = height > 0 &&
+                height - rect.bottom > (120 * ctx.resources.displayMetrics.density).toInt()
+            if (wasVisible && !visible) {
+                onImeClosed?.invoke()
+            }
+            wasVisible = visible
+        }
     }
 
     private fun setupAmountKeypad() {

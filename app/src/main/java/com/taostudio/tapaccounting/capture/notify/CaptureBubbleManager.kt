@@ -227,6 +227,15 @@ object CaptureBubbleManager {
         }
         topRow.addView(tvSummary)
 
+        val btnMinimize = TextView(app).apply {
+            text = "⌄"
+            textSize = 16f
+            setTypeface(typeface, Typeface.BOLD)
+            setTextColor(Color.parseColor("#93C5FD"))
+            setPadding(dp(8), dp(2), dp(8), dp(4))
+        }
+        topRow.addView(btnMinimize)
+
         val btnClose = TextView(app).apply {
             text = " ✕ "
             textSize = 13f
@@ -479,8 +488,8 @@ object CaptureBubbleManager {
             }
             when (state) {
                 BubbleState.SUMMARY -> {
-                    // 不再强制 2 秒收起：主要靠“点外面”触发；这里只是兜底，避免卡片一直占着底部。
-                    scheduleAutoPeek(app, 5_000L)
+                    // 不自动收起：用户点右上角「⌄」或点窗口外才缩成小圈。
+                    cancelAutoDismiss()
                 }
 
                 BubbleState.INPUT -> {
@@ -507,6 +516,13 @@ object CaptureBubbleManager {
                     scheduleAutoDismiss(app, 2_500L)
                 }
             }
+        }
+
+        btnMinimize.setOnClickListener {
+            if (s.state != BubbleState.SUMMARY) {
+                applyState(BubbleState.SUMMARY)
+            }
+            enterPeek(app)
         }
 
         suspend fun persistNote(noteText: String?): PaymentCapture? {
@@ -1161,8 +1177,8 @@ object CaptureBubbleManager {
         fun dp(v: Int): Int = (v * density + 0.5f).toInt()
         val screenW = app.resources.displayMetrics.widthPixels
         val screenH = app.resources.displayMetrics.heightPixels
-        val circleSize = dp(52)
-        val windowSize = dp(64)
+        val circleSize = dp(46)
+        val windowSize = dp(58)
         val edgeMargin = dp(6)
 
         val bubble = FrameLayout(app).apply {
@@ -1172,16 +1188,14 @@ object CaptureBubbleManager {
         val circle = TextView(app).apply {
             val label = peekAmountText(s.capture)
             text = label
-            textSize = if (label.length > 7) 8.5f else 9.5f
+            textSize = if (label.length > 7) 8f else 9f
             gravity = Gravity.CENTER
             setTypeface(typeface, Typeface.BOLD)
             setTextColor(Color.WHITE)
-            background = GradientDrawable(
-                GradientDrawable.Orientation.TL_BR,
-                intArrayOf(Color.parseColor("#3B4C63"), Color.parseColor("#0B1220")),
-            ).apply {
+            background = GradientDrawable().apply {
                 shape = GradientDrawable.OVAL
-                setStroke(dp(1), Color.parseColor("#4DFFFFFF"))
+                setColor(Color.parseColor("#E60F172A"))
+                setStroke(dp(1), Color.parseColor("#59FFFFFF"))
             }
             elevation = dp(8).toFloat()
         }
@@ -1290,9 +1304,10 @@ object CaptureBubbleManager {
                             .setDuration(120L).start()
                         val cx = params.x + windowSize / 2f
                         val cy = params.y + windowSize / 2f
-                        val nearCenter = Math.abs(cx - screenW / 2f) < screenW * 0.22f &&
-                            Math.abs(cy - screenH / 2f) < screenH * 0.22f
-                        if (nearCenter) {
+                        // 和 Android 气泡一致：拖到底部中央的关闭区松手 = 关闭。
+                        val nearClose = Math.abs(cx - screenW / 2f) < screenW * 0.30f &&
+                            cy > screenH - dp(170)
+                        if (nearClose) {
                             fadePeekOut(app, notifyDismissed = true)
                         } else {
                             snapPeekToEdge(app, wm, bubble, params, screenW, edgeMargin, windowSize)
@@ -1359,7 +1374,7 @@ object CaptureBubbleManager {
         val density = app.resources.displayMetrics.density
         fun dp(v: Int): Int = (v * density + 0.5f).toInt()
         val hint = TextView(app).apply {
-            text = "拖到这里关闭"
+            text = "✕  拖到这里关闭"
             textSize = 13f
             setTypeface(typeface, Typeface.BOLD)
             setTextColor(Color.WHITE)
@@ -1368,7 +1383,7 @@ object CaptureBubbleManager {
             background = GradientDrawable().apply {
                 setColor(Color.parseColor("#D90F172A"))
                 cornerRadius = dp(24).toFloat()
-                setStroke(dp(1), Color.parseColor("#66FFFFFF"))
+                setStroke(dp(1), Color.parseColor("#66EF4444"))
             }
         }
         val params = WindowManager.LayoutParams(
@@ -1385,7 +1400,8 @@ object CaptureBubbleManager {
                 WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
             PixelFormat.TRANSLUCENT,
         ).apply {
-            gravity = Gravity.CENTER
+            gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
+            y = dp(64)
         }
         try {
             hint.alpha = 0f
@@ -1464,12 +1480,10 @@ object CaptureBubbleManager {
                     .setInterpolator(DecelerateInterpolator())
                     .start()
             }
-            scheduleAutoPeek(app, 6_000L)
         } catch (_: Throwable) {
             currentView = null
         }
     }
-
     /** 敲击唤出记账悬浮窗时：小圈淡出，只留悬浮窗。 */
     fun fadePeekOut(context: Context, notifyDismissed: Boolean = false) {
         val bubble = peekView ?: return

@@ -166,3 +166,10 @@ internal val CAPTURE_MIGRATION_42_43_SQL: List<String> = listOf(
         "ON `bill_rule_provenance` (`captureId`)",
     "ALTER TABLE `payment_captures` ADD COLUMN `categoryRuleId` INTEGER",
 )
+
+/**
+ * v43 -> v44：待记卡片展示命中规则名。
+ */
+internal val CAPTURE_MIGRATION_43_44_SQL: List<String> = listOf(
+    "ALTER TABLE `payment_captures` ADD COLUMN `ruleName` TEXT",
+)

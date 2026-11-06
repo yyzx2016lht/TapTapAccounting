@@ -68,6 +68,9 @@ class TapApplication : Application() {
         CoroutineScope(Dispatchers.IO).launch {
             CaptureRuleBundleBootstrap.ensureImported(this@TapApplication)
             CaptureLegacyImporter.importIfNeeded(this@TapApplication)
+            // 老用户已有的待记也算 hook 过；否则全部记完后入口会突然消失。
+            com.taostudio.tapaccounting.capture.CaptureEntryGate
+                .backfillHookDelivered(this@TapApplication)
             com.taostudio.tapaccounting.capture.data.CaptureEventRepository(
                 database.captureEventDao()
             ).trimToLatest(2000)

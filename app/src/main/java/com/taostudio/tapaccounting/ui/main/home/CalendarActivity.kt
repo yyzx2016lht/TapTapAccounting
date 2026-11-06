@@ -313,7 +313,7 @@ class CalendarActivity : AppCompatActivity() {
                 lifecycleScope.launch {
                     val rows = BillDeleteUndo.delete(db, billsToDelete) ?: return@launch
 
-                    dailyAdapter.clearSelection()
+                    dailyAdapter.deselectAll()
                     loadDataForMonth()
                     BillUndoController.showAfterSelectionExit(
                         anchor = findViewById(android.R.id.content),

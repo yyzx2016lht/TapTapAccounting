@@ -1888,6 +1888,15 @@ class PendingListActivity : Activity() {
         )
         card.addView(chipRow2)
 
+        if (!item.ruleName.isNullOrBlank()) {
+            card.addView(TextView(this).apply {
+                text = "命中规则：${item.ruleName}"
+                textSize = 10.5f
+                setTextColor(CaptureUi.TEXT_MUTED)
+                setPadding(0, dp(2), 0, dp(6))
+            })
+        }
+
         // 第三行：无感自动保存备注框（打字 280ms 只落库并匹配本地规则；AI 只在失焦/完成时调一次）
         var aiRequestedFor: String? = null
         val noteInput = EditText(this).apply {

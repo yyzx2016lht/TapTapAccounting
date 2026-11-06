@@ -10,6 +10,7 @@ import android.os.Build
 import android.provider.Settings
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.fragment.app.Fragment
+import androidx.lifecycle.lifecycleScope
 import androidx.room.InvalidationTracker
 import android.content.Intent
 import android.graphics.Bitmap
@@ -49,6 +50,7 @@ class ProfileFragment : Fragment(R.layout.fragment_profile) {
     private val viewScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var suppressHomeTrendCardSwitchCallback = false
     private var trashEntrySubtitle: TextView? = null
+    private var captureCenterCard: View? = null
     private var captureCenterSubtitle: TextView? = null
     private var capturePendingObserver: InvalidationTracker.Observer? = null
     private data class ToggleTracker(var count: Int = 0, var firstToggleAtMs: Long = 0L)
@@ -126,21 +128,27 @@ class ProfileFragment : Fragment(R.layout.fragment_profile) {
 
     /** 待记收件箱入口副标题：有新待记 / 处理完待记时同步刷新。 */
     private fun refreshCaptureCenterEntryCount() {
+        val card = captureCenterCard ?: return
         val tv = captureCenterSubtitle ?: return
         val ctx = context ?: return
-        viewScope.launch {
+        viewLifecycleOwner.lifecycleScope.launch {
             val pendingCount = runCatching {
-                com.taostudio.tapaccounting.capture.data.CaptureRepository(
-                    AppDatabase.getDatabase(ctx).paymentCaptureDao()
-                ).countPending()
-            }.getOrDefault(0)
-            withContext(Dispatchers.Main) {
-                if (!isAdded) return@withContext
-                tv.text = if (pendingCount > 0) {
-                    "待记 $pendingCount 笔 · 点此补备注/分类"
-                } else {
-                    "支付后自动留痕，有空再补备注/分类"
+                withContext(Dispatchers.IO) {
+                    com.taostudio.tapaccounting.capture.data.CaptureRepository(
+                        AppDatabase.getDatabase(ctx).paymentCaptureDao()
+                    ).countPending()
                 }
+            }.getOrDefault(0)
+            if (!isAdded) return@launch
+            // 默认隐藏：没装插件或插件从未真正 hook 投递过时，不展示空收件箱入口。
+            // 已有待记仍强制展示，避免插件卸载/失效后把数据藏起来。
+            val show = com.taostudio.tapaccounting.capture.CaptureEntryGate.shouldShow(ctx, pendingCount)
+            card.visibility = if (show) View.VISIBLE else View.GONE
+            if (!show) return@launch
+            tv.text = if (pendingCount > 0) {
+                "待记 $pendingCount 笔 · 点此补备注/分类"
+            } else {
+                "支付后自动留痕，有空再补备注/分类"
             }
         }
     }
@@ -180,6 +188,7 @@ class ProfileFragment : Fragment(R.layout.fragment_profile) {
             }
         }
         capturePendingObserver = null
+        captureCenterCard = null
         captureCenterSubtitle = null
         // P1-29: 取消本视图协程
         viewScope.cancel()
@@ -260,7 +269,8 @@ class ProfileFragment : Fragment(R.layout.fragment_profile) {
         view.findViewById<View>(R.id.layout_ai_feature_entry)?.setOnClickListener {
             requireActivity().startActivity(Intent(requireContext(), AiFeatureSettingsActivity::class.java))
         }
-        view.findViewById<View>(R.id.layout_capture_center_entry)?.setOnClickListener {
+        captureCenterCard = view.findViewById(R.id.layout_capture_center_entry)
+        captureCenterCard?.setOnClickListener {
             requireActivity().startActivity(
                 Intent(
                     requireContext(),

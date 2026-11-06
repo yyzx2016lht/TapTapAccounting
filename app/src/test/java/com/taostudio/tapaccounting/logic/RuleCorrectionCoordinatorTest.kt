@@ -16,7 +16,7 @@ class RuleCorrectionCoordinatorTest {
     fun testResolveProvenanceBadgeText_manual() {
         val prov = BillRuleProvenance(billId = 1L, source = BillRuleProvenance.Source.MANUAL)
         val badge = RuleCorrectionCoordinator.resolveProvenanceBadgeText(prov)
-        assertEquals("手动分类", badge)
+        assertEquals("用户自选", badge)
     }
 
     @Test

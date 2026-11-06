@@ -28,7 +28,6 @@ import kotlinx.coroutines.sync.withLock
 import org.json.JSONObject
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
-import kotlin.math.roundToLong
 
 /**
  * 主应用侧的唯一待记入库入口。
@@ -103,6 +102,22 @@ internal object CaptureIngestCoordinator {
                 val repository = CaptureRepository(db.paymentCaptureDao())
                 val eventRepository = CaptureEventRepository(db.captureEventDao())
 
+                // 退款状态消息本身没有资产；如果原转账是银行卡，不能默认成零钱。
+                val resolvedEnriched = enriched?.let { item ->
+                    val txn = item.sourceTxnId
+                    if (item.subType == LocalBillType.SUBTYPE_REFUND &&
+                        txn != null &&
+                        txn.endsWith(":4")
+                    ) {
+                        val base = txn.removeSuffix(":4")
+                        val original = db.paymentCaptureDao()
+                            .findBySourceTxn(item.source, "$base:1")
+                        RefundAssetInheritance.inherit(item, original)
+                    } else {
+                        item
+                    }
+                }
+
                 val rawJson = payload.rawJson
                 if (!rawJson.isNullOrBlank() &&
                     (analysis.matched || enriched != null || (payload.amountCents ?: 0L) > 0L)
@@ -115,10 +130,10 @@ internal object CaptureIngestCoordinator {
                         matched = analysis.matched,
                         ruleName = analysis.ruleName,
                         autoType = analysis.autoType,
-                        localType = enriched?.billType ?: payload.billType,
-                        localSubType = enriched?.subType ?: payload.subType,
-                        amountCents = enriched?.amountCents ?: payload.amountCents,
-                        merchant = enriched?.merchant ?: payload.merchant,
+                        localType = resolvedEnriched?.billType ?: payload.billType,
+                        localSubType = resolvedEnriched?.subType ?: payload.subType,
+                        amountCents = resolvedEnriched?.amountCents ?: payload.amountCents,
+                        merchant = resolvedEnriched?.merchant ?: payload.merchant,
                         categoryName = null,
                         channel = analysis.channel,
                     )
@@ -128,11 +143,12 @@ internal object CaptureIngestCoordinator {
                     }
                 }
 
-                val outcome = enriched?.let {
+                val outcome = resolvedEnriched?.let {
                     repository.insert(
                         it,
                         transferIncomeDedupEnabled = CapturePrefs.isTransferIncomeDedupEnabled(app),
                         transferIncomeDedupWindowMillis = CapturePrefs.getTransferIncomeDedupWindowMillis(app),
+                        ruleName = analysis.ruleName,
                     )
                 }
                 val onlyExpense = CapturePrefs.isOnlyExpense(app)
@@ -244,11 +260,7 @@ internal object CaptureIngestCoordinator {
                 paidAt - POSSIBLE_DUPLICATE_WINDOW_MS,
                 paidAt + POSSIBLE_DUPLICATE_WINDOW_MS,
             )
-        return bills.any { bill ->
-            bill.type == Bill.TYPE_EXPENSE &&
-                bill.subType != Bill.SUBTYPE_REFUND &&
-                (bill.amount * 100.0).roundToLong() == amountCents
-        }
+        return CaptureBillMatch.matches(bills, amountCents)
     }
 
     private data class Enriched(

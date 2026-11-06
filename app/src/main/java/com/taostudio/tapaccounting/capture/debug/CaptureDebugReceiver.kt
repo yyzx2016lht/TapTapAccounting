@@ -165,6 +165,7 @@ class CaptureDebugReceiver : BroadcastReceiver() {
                             .put("onlyExpense", CapturePrefs.isOnlyExpense(app))
                             .put("pendingCount", repository.countPending())
                             .put("pluginInstalled", isPluginInstalled(app))
+                            .put("hookDelivered", CapturePrefs.hasHookDelivered(app))
                         Log.i(TAG, "ping=$payload")
                         pending.setResultData(payload.toString())
                     } catch (t: Throwable) {

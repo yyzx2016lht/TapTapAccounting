@@ -3,6 +3,7 @@ package com.taostudio.tapaccounting.capture.dedup
 import com.taostudio.tapaccounting.capture.contract.CaptureStatus
 import com.taostudio.tapaccounting.capture.contract.LocalBillType
 import com.taostudio.tapaccounting.capture.data.PaymentCapture
+import org.json.JSONObject
 import kotlin.math.abs
 
 /**
@@ -121,6 +122,18 @@ object DuplicateDetector {
         if (incoming.billType != null && existing.billType != null && incoming.billType != existing.billType) {
             return false
         }
+
+        // 同一笔退款的不同阶段：转账退款状态 + 退款到账通知 + 银行到账。
+        // 它们通常流水号不同、结构不同，但金额、对方、到账时间一致。
+        if (isSameRefundEvent(incoming, existing)) return true
+
+        // 通知类消息：同一条通知可能从两个入口各来一次，消息 ID 不同，但内容完全一样。
+        // 必须先于“同来源不同流水号 = 不同交易”的硬否决，否则会像 37.77 / 退款通知一样漏判。
+        if (isSameNotificationContent(incoming, existing)) return true
+
+        // 中等把握：同一来源、通知类、金额相同、时间很近、商户/渠道一致。
+        // 允许自动合并，用户可在历史记录里恢复为待记。
+        if (isLikelyNotificationDuplicate(incoming, existing)) return true
 
         // 同一来源下如果都有明确的流水号/订单号且不相等，必定为两笔不同交易，绝不误杀
         val txn1 = incoming.sourceTxnId?.trim().orEmpty()
@@ -266,6 +279,7 @@ object DuplicateDetector {
             categorySource = betterCategorySource,
             bookName = betterBook,
             excludeFromStats = excludeStats,
+            ruleName = existing.ruleName ?: incoming.ruleName,
             updatedAt = System.currentTimeMillis(),
         )
     }
@@ -310,10 +324,16 @@ object DuplicateDetector {
      * 判断账单是否为银行通知（公众号/短信/动账提醒）。
      */
     fun isBankNotification(c: PaymentCapture): Boolean {
-        if (c.channel?.contains("+") == true) return false
         val m = c.merchant?.trim().orEmpty()
         val ch = c.channel?.trim().orEmpty()
         val n = c.note?.trim().orEmpty()
+
+        // 已经合并过多条银行通知的父账单：只有全部渠道都是银行渠道，才算银行通知。
+        // 例：微信[中国建设银行-支出] + 建设银行动账提醒。
+        if (ch.contains("+")) {
+            val channels = extractChannels(ch, c.source)
+            return channels.isNotEmpty() && channels.all { isBankChannelLabel(it) }
+        }
 
         // 商户直接为银行机构（如 "招商银行"、"招商银行信用卡"、"中国工商银行" 等）
         if (BANK_KEYWORDS.any { m.contains(it) }) return true
@@ -337,8 +357,10 @@ object DuplicateDetector {
      * 两者同源但属于跨机构通知，在 300s 窗口与金额一致时应合并判重，不按同渠道流水号不相等误杀。
      */
     fun isBankPaymentPair(a: PaymentCapture, b: PaymentCapture): Boolean {
-        // 已合并过多渠道的父账单不参与此判断（避免误将后续真实的同渠道消费合并进来）
-        if (a.channel?.contains("+") == true || b.channel?.contains("+") == true) return false
+        // 已经同时包含银行渠道和微信/支付宝渠道的父账单，不再继续做银行配对，
+        // 避免把后续真实的同渠道消费吞进来。
+        // 只合并了多条银行通知的父账单仍然可以继续和微信支付主单配对。
+        if (hasMixedBankAndPaymentChannels(a) || hasMixedBankAndPaymentChannels(b)) return false
 
         val aBank = isBankNotification(a)
         val bBank = isBankNotification(b)
@@ -355,6 +377,129 @@ object DuplicateDetector {
 
     private fun isBankMerchant(name: String): Boolean =
         BANK_KEYWORDS.any { name.contains(it) }
+
+    private fun isBankChannelLabel(label: String): Boolean {
+        val text = label.trim()
+        if (text.isEmpty()) return false
+        if (text.contains("微信支付") || text.contains("支付宝")) return false
+        return BANK_KEYWORDS.any { text.contains(it) }
+    }
+
+    private fun hasMixedBankAndPaymentChannels(capture: PaymentCapture): Boolean {
+        val channels = extractChannels(capture.channel, capture.source)
+        val bankCount = channels.count { isBankChannelLabel(it) }
+        return bankCount > 0 && bankCount < channels.size
+    }
+
+    /**
+     * 同一笔退款的不同消息。
+     *
+     * 真机例子：
+     * - 微信转账退款状态：merchant=吴希城6.4；
+     * - 退款到账通知：merchant=微信退款，description 里有“退款原因吴希城6.4退还了你的转账”；
+     * - 两条金额相同、到账时间相同、对方相同。
+     *
+     * 退款不是普通支付，不能因为流水号/消息 ID 不同就判成两笔。
+     */
+    private fun isSameRefundEvent(a: PaymentCapture, b: PaymentCapture): Boolean {
+        if (!isRefundLike(a) || !isRefundLike(b)) return false
+        if (abs(a.paidAt - b.paidAt) > REFUND_EVENT_WINDOW_MS) return false
+        val nameA = refundCounterparty(a)
+        val nameB = refundCounterparty(b)
+        if (nameA.isEmpty() || nameB.isEmpty()) return false
+        return nameA == nameB
+    }
+
+    private fun isRefundLike(capture: PaymentCapture): Boolean =
+        capture.subType == LocalBillType.SUBTYPE_REFUND || capture.needsRefundLink
+
+    private fun refundCounterparty(capture: PaymentCapture): String {
+        val merchant = capture.merchant?.trim().orEmpty()
+        val looksGeneric = merchant.isEmpty() ||
+            merchant == "微信退款" ||
+            merchant == "退款" ||
+            merchant.contains("退款")
+        if (!looksGeneric) return normalizeCounterparty(merchant)
+
+        val description = runCatching {
+            JSONObject(capture.rawJson.orEmpty())
+                .optJSONObject("mMap")
+                ?.optString("description")
+                .orEmpty()
+        }.getOrDefault("")
+        val matched = Regex("""退款原因(.+?)退还了你的转账""")
+            .find(description)
+            ?.groupValues
+            ?.getOrNull(1)
+            .orEmpty()
+        return normalizeCounterparty(matched)
+    }
+
+    private fun normalizeCounterparty(value: String): String = value
+        .trim()
+        .replace(Regex("""[\s·•,，。:：()（）]"""), "")
+        .lowercase()
+
+    /**
+     * 通知类消息的内容去重：同来源、2 秒内、去掉易变字段后的内容完全一致。
+     *
+     * 典型：37.77 亲属卡通知两条只差 t；退款到账通知两条只差 t。
+     * 真实转账/支付报文里有 wcpayinfo/transcationid，不会被当成通知类。
+     */
+    private fun isSameNotificationContent(a: PaymentCapture, b: PaymentCapture): Boolean {
+        if (a.source != b.source) return false
+        if (abs(a.paidAt - b.paidAt) > NOTIFICATION_CONTENT_WINDOW_MS) return false
+        if (!isNotificationLike(a) || !isNotificationLike(b)) return false
+        val keyA = CaptureContentFingerprint.of(a.source, a.rawJson) ?: return false
+        val keyB = CaptureContentFingerprint.of(b.source, b.rawJson) ?: return false
+        return keyA == keyB
+    }
+
+    /**
+     * 中等把握的通知重复：金额已在最前面校验过，这里要求来源相同、通知类、
+     * 时间很近，并且商户或渠道至少有一项明确一致。
+     *
+     * 允许自动合并；用户可以在历史记录里恢复为待记。
+     */
+    private fun isLikelyNotificationDuplicate(a: PaymentCapture, b: PaymentCapture): Boolean {
+        if (a.source != b.source) return false
+        if (abs(a.paidAt - b.paidAt) > NOTIFICATION_LIKELY_WINDOW_MS) return false
+        if (!isNotificationLike(a) || !isNotificationLike(b)) return false
+
+        val merchantA = normalizeText(a.merchant)
+        val merchantB = normalizeText(b.merchant)
+        val channelA = normalizeText(a.channel)
+        val channelB = normalizeText(b.channel)
+        val sameMerchant = merchantA.isNotEmpty() && merchantA == merchantB
+        val sameChannel = channelA.isNotEmpty() && channelA == channelB
+        if (!sameMerchant && !sameChannel) return false
+
+        val methodA = normalizeText(a.paymentMethodRaw)
+        val methodB = normalizeText(b.paymentMethodRaw)
+        if (methodA.isNotEmpty() && methodB.isNotEmpty() && methodA != methodB) return false
+
+        return true
+    }
+
+    private fun isNotificationLike(capture: PaymentCapture): Boolean {
+        val raw = capture.rawJson.orEmpty()
+        if (raw.contains("\"wcpayinfo\"") || raw.contains("transcationid") || raw.contains("transferid")) {
+            return false
+        }
+        return raw.contains("\"mMap\"") ||
+            raw.contains("\"title\"") ||
+            raw.contains("\"text\"") ||
+            raw.contains("\"description\"")
+    }
+
+    private fun normalizeText(value: String?): String = value.orEmpty()
+        .trim()
+        .replace(Regex("\\s+"), " ")
+        .lowercase()
+
+    private const val NOTIFICATION_CONTENT_WINDOW_MS = 2_000L
+    private const val NOTIFICATION_LIKELY_WINDOW_MS = 5_000L
+    private const val REFUND_EVENT_WINDOW_MS = 5_000L
 
     private fun selectBetterMerchant(m1: String?, m2: String?): String? {
         val t1 = m1?.trim().orEmpty()

@@ -348,24 +348,29 @@ internal class DataRuleViews(
             ).apply { bottomMargin = dp(9) }
         }
 
+        var currentRule = rule
         val topRow = LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
+            isClickable = true
+            isFocusable = true
+            background = CaptureUi.rippleBg(Color.TRANSPARENT, dp(8))
         }
         val titleCol = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
             layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
         }
-        titleCol.addView(TextView(activity).apply {
-            text = rule.name
+        val titleTv = TextView(activity).apply {
+            text = currentRule.name
             textSize = 14f
             maxLines = 1
             ellipsize = TextUtils.TruncateAt.END
             setTypeface(typeface, Typeface.BOLD)
-            setTextColor(if (rule.enabled) CaptureUi.TEXT_PRIMARY else CaptureUi.TEXT_MUTED)
-        })
+            setTextColor(if (currentRule.enabled) CaptureUi.TEXT_PRIMARY else CaptureUi.TEXT_MUTED)
+        }
+        titleCol.addView(titleTv)
         titleCol.addView(TextView(activity).apply {
-            text = "${rule.app} · ${rule.typeLabel} · ${rule.systemRuleName}"
+            text = "${currentRule.app} · ${currentRule.typeLabel} · ${currentRule.systemRuleName}"
             textSize = 11f
             maxLines = 1
             ellipsize = TextUtils.TruncateAt.END
@@ -373,12 +378,13 @@ internal class DataRuleViews(
             setPadding(0, dp(2), 0, 0)
         })
         topRow.addView(titleCol)
-        topRow.addView(Switch(activity).apply {
-            isChecked = rule.enabled
-            setOnCheckedChangeListener { _, checked ->
-                if (checked != rule.enabled) updateEnabled(rule, checked)
-            }
-        })
+
+        lateinit var statusChip: TextView
+        val sw = Switch(activity).apply {
+            isChecked = currentRule.enabled
+        }
+        topRow.addView(sw)
+        topRow.setOnClickListener { sw.toggle() }
         card.addView(topRow)
 
         val chipRow = LinearLayout(activity).apply {
@@ -389,10 +395,10 @@ internal class DataRuleViews(
         chipRow.addView(
             CaptureUi.chip(
                 activity = activity,
-                text = rule.sourceLabel,
-                textColor = sourceTextColor(rule.source),
-                bgColor = sourceBgColor(rule.source),
-                strokeColor = sourceBorderColor(rule.source),
+                text = currentRule.sourceLabel,
+                textColor = sourceTextColor(currentRule.source),
+                bgColor = sourceBgColor(currentRule.source),
+                strokeColor = sourceBorderColor(currentRule.source),
             ).apply {
                 layoutParams = LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.WRAP_CONTENT,
@@ -400,16 +406,48 @@ internal class DataRuleViews(
                 ).apply { marginEnd = dp(6) }
             },
         )
-        chipRow.addView(
-            CaptureUi.chip(
-                activity = activity,
-                text = if (rule.enabled) "已启用" else "已停用",
-                textColor = if (rule.enabled) CaptureUi.SUCCESS else CaptureUi.TEXT_MUTED,
-                bgColor = if (rule.enabled) CaptureUi.SUCCESS_SOFT else CaptureUi.BG_SUBTLE,
-                strokeColor = if (rule.enabled) CaptureUi.SUCCESS_BORDER else CaptureUi.BORDER,
-            ),
+        fun styleStatusChip(tv: TextView, enabled: Boolean) {
+            tv.text = if (enabled) "已启用" else "已停用"
+            tv.setTextColor(if (enabled) CaptureUi.SUCCESS else CaptureUi.TEXT_MUTED)
+            tv.background = CaptureUi.roundedBg(
+                fillColor = if (enabled) CaptureUi.SUCCESS_SOFT else CaptureUi.BG_SUBTLE,
+                radiusPx = dp(8),
+                strokeWidthPx = dp(1),
+                strokeColor = if (enabled) CaptureUi.SUCCESS_BORDER else CaptureUi.BORDER,
+            )
+        }
+        statusChip = CaptureUi.chip(
+            activity = activity,
+            text = if (currentRule.enabled) "已启用" else "已停用",
+            textColor = if (currentRule.enabled) CaptureUi.SUCCESS else CaptureUi.TEXT_MUTED,
+            bgColor = if (currentRule.enabled) CaptureUi.SUCCESS_SOFT else CaptureUi.BG_SUBTLE,
+            strokeColor = if (currentRule.enabled) CaptureUi.SUCCESS_BORDER else CaptureUi.BORDER,
         )
+        chipRow.addView(statusChip)
         card.addView(chipRow)
+
+        sw.setOnCheckedChangeListener { _, checked ->
+            if (checked != currentRule.enabled) {
+                val old = currentRule.enabled
+                currentRule = currentRule.copy(enabled = checked)
+                titleTv.setTextColor(if (checked) CaptureUi.TEXT_PRIMARY else CaptureUi.TEXT_MUTED)
+                styleStatusChip(statusChip, checked)
+                scope.launch {
+                    try {
+                        withContext(Dispatchers.IO) {
+                            RuleBundleStore.setEnabled(activity, currentRule, checked)
+                        }
+                        toast(if (checked) "已启用「${currentRule.name}」" else "已停用「${currentRule.name}」")
+                    } catch (t: Throwable) {
+                        currentRule = currentRule.copy(enabled = old)
+                        sw.isChecked = old
+                        titleTv.setTextColor(if (old) CaptureUi.TEXT_PRIMARY else CaptureUi.TEXT_MUTED)
+                        styleStatusChip(statusChip, old)
+                        toast("保存启停失败：${t.message ?: t.javaClass.simpleName}")
+                    }
+                }
+            }
+        }
 
         val actionRow = LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -489,22 +527,8 @@ internal class DataRuleViews(
     }
 
     // ════════════════════════════════════════════════════════
-    //  启停 / 同步 / 复制 / 删除
+    //  同步 / 复制 / 删除
     // ════════════════════════════════════════════════════════
-
-    private fun updateEnabled(rule: RuleBundleCodec.Rule, enabled: Boolean) {
-        scope.launch {
-            try {
-                withContext(Dispatchers.IO) {
-                    RuleBundleStore.setEnabled(activity, rule, enabled)
-                }
-                toast(if (enabled) "已启用「${rule.name}」" else "已停用「${rule.name}」")
-                onDataChanged()
-            } catch (t: Throwable) {
-                toast("保存启停失败：${t.message ?: t.javaClass.simpleName}")
-            }
-        }
-    }
 
     internal fun syncFromLocal() {
         val progress = AlertDialog.Builder(activity)

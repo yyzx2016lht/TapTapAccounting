@@ -9,12 +9,14 @@ import android.net.Uri
 import android.os.Build
 import android.provider.Settings
 import android.text.Editable
+import android.text.InputType
 import android.text.TextWatcher
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.widget.CheckBox
 import android.widget.EditText
+import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
@@ -22,6 +24,7 @@ import android.widget.Switch
 import android.widget.TextView
 import android.widget.Toast
 import com.taostudio.tapaccounting.R
+import com.taostudio.tapaccounting.ui.dialog.OverlayDialogs
 import com.taostudio.tapaccounting.capture.CaptureApp
 import com.taostudio.tapaccounting.capture.contract.AccountingContext
 import com.taostudio.tapaccounting.capture.contract.CaptureSource
@@ -324,36 +327,36 @@ internal class RuleMappingViews(
         layout.addView(etPattern)
         layout.addView(etTarget)
 
-        if (appAssets.isNotEmpty()) {
-            val pickBtn = CaptureUi.button(
-                activity = activity,
-                text = "从敲敲记账账户列表中点选",
-                textColor = CaptureUi.BRAND_DARK,
-                bgColor = CaptureUi.BRAND_SOFT,
-                strokeColor = CaptureUi.BRAND_BORDER,
-                paddingV = 9,
-            ) {
-                AlertDialog.Builder(activity)
-                    .setTitle("选择敲敲记账账户")
-                    .setItems(appAssets.toTypedArray()) { _, which ->
-                        etTarget.setText(appAssets[which])
-                    }
-                    .show()
-            }.apply {
-                layoutParams = LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                    ViewGroup.LayoutParams.WRAP_CONTENT,
-                ).apply { topMargin = dp(10) }
-                CaptureUi.applyTrailingIcon(
-                    this,
-                    activity,
-                    R.drawable.ic_chevron_down,
-                    CaptureUi.BRAND_DARK,
-                    11,
-                )
+        val pickBtn = CaptureUi.button(
+            activity = activity,
+            text = "从敲敲记账账户列表中点选",
+            textColor = CaptureUi.BRAND_DARK,
+            bgColor = CaptureUi.BRAND_SOFT,
+            strokeColor = CaptureUi.BRAND_BORDER,
+            paddingV = 9,
+        ) {
+            OverlayDialogs.showGridAssetPicker(
+                ctx = activity,
+                currentSelectionText = etTarget.text?.toString().orEmpty(),
+                title = "选择敲敲记账账户",
+                allowClear = false,
+            ) { selected ->
+                etTarget.setText(selected)
             }
-            layout.addView(pickBtn)
+        }.apply {
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+            ).apply { topMargin = dp(10) }
+            CaptureUi.applyTrailingIcon(
+                this,
+                activity,
+                R.drawable.ic_chevron_down,
+                CaptureUi.BRAND_DARK,
+                11,
+            )
         }
+        layout.addView(pickBtn)
 
         val cbRegex = CheckBox(activity).apply {
             text = "使用正则表达式匹配"
@@ -373,18 +376,19 @@ internal class RuleMappingViews(
                     return@setPositiveButton
                 }
                 scope.launch {
-                    withContext(Dispatchers.IO) {
-                        CaptureApp.from(activity).database.assetMappingDao().upsert(
-                            AssetMappingRule(
-                                id = existing?.id ?: 0L,
-                                pattern = p,
-                                targetAssetName = t,
-                                isRegex = cbRegex.isChecked,
-                                sort = existing?.sort ?: 0,
-                                enabled = existing?.enabled ?: true,
-                            )
+                    val updatedCount = withContext(Dispatchers.IO) {
+                        val rule = AssetMappingRule(
+                            id = existing?.id ?: 0L,
+                            pattern = p,
+                            targetAssetName = t,
+                            isRegex = cbRegex.isChecked,
+                            sort = existing?.sort ?: 0,
+                            enabled = existing?.enabled ?: true,
                         )
+                        CaptureApp.from(activity).database.assetMappingDao().upsert(rule)
+                        CaptureApp.from(activity).repository.reapplyAssetMappingForRule(rule)
                     }
+                    toast("已更新 ${updatedCount} 笔待记资产")
                     onDataChanged()
                 }
             }
@@ -962,43 +966,47 @@ internal class RuleMappingViews(
                 setPadding(0, dp(8), 0, 0)
             }
             val currentWindow = CapturePrefs.getTransferIncomeDedupWindowSeconds(activity)
-            val windowOptions = listOf(
+            val presetOptions = listOf(
                 60 to "1分钟",
                 180 to "3分钟",
                 300 to "5分钟",
                 600 to "10分钟",
             )
+            val presetSeconds = presetOptions.map { it.first }.toSet()
             val optionViews = mutableListOf<TextView>()
+            lateinit var customTv: TextView
+
+            fun styleCapsule(tv: TextView, isSel: Boolean) {
+                tv.setTypeface(tv.typeface, if (isSel) Typeface.BOLD else Typeface.NORMAL)
+                tv.setTextColor(if (isSel) CaptureUi.BRAND_DARK else CaptureUi.TEXT_SECONDARY)
+                tv.background = CaptureUi.rippleBg(
+                    fillColor = if (isSel) CaptureUi.BRAND_SOFT else CaptureUi.BG_SUBTLE,
+                    radiusPx = dp(999),
+                    strokeWidthPx = dp(1),
+                    strokeColor = if (isSel) CaptureUi.BRAND else CaptureUi.BORDER,
+                )
+            }
+
             fun updateWindowSelection(chosenSeconds: Int) {
                 CapturePrefs.setTransferIncomeDedupWindowSeconds(activity, chosenSeconds)
-                windowOptions.forEachIndexed { idx, (sec, _) ->
+                presetOptions.forEachIndexed { idx, (sec, _) ->
                     val isSel = sec == chosenSeconds
                     val tv = optionViews.getOrNull(idx) ?: return@forEachIndexed
-                    tv.setTypeface(tv.typeface, if (isSel) Typeface.BOLD else Typeface.NORMAL)
-                    tv.setTextColor(if (isSel) CaptureUi.BRAND_DARK else CaptureUi.TEXT_SECONDARY)
-                    tv.background = CaptureUi.rippleBg(
-                        fillColor = if (isSel) CaptureUi.BRAND_SOFT else CaptureUi.BG_SUBTLE,
-                        radiusPx = dp(999),
-                        strokeWidthPx = dp(1),
-                        strokeColor = if (isSel) CaptureUi.BRAND else CaptureUi.BORDER,
-                    )
+                    styleCapsule(tv, isSel)
                 }
+                val isCustom = chosenSeconds !in presetSeconds
+                customTv.text = if (isCustom) "${chosenSeconds}秒" else "自定义"
+                styleCapsule(customTv, isCustom)
             }
-            windowOptions.forEachIndexed { index, (seconds, label) ->
+
+            presetOptions.forEachIndexed { index, (seconds, label) ->
                 val selected = currentWindow == seconds
                 val tv = TextView(activity).apply {
                     text = label
                     textSize = 12.5f
                     gravity = Gravity.CENTER
-                    setTypeface(typeface, if (selected) Typeface.BOLD else Typeface.NORMAL)
-                    setTextColor(if (selected) CaptureUi.BRAND_DARK else CaptureUi.TEXT_SECONDARY)
+                    styleCapsule(this, selected)
                     setPadding(dp(8), dp(7), dp(8), dp(7))
-                    background = CaptureUi.rippleBg(
-                        fillColor = if (selected) CaptureUi.BRAND_SOFT else CaptureUi.BG_SUBTLE,
-                        radiusPx = dp(999),
-                        strokeWidthPx = dp(1),
-                        strokeColor = if (selected) CaptureUi.BRAND else CaptureUi.BORDER,
-                    )
                     layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
                         if (index > 0) marginStart = dp(6)
                     }
@@ -1007,6 +1015,45 @@ internal class RuleMappingViews(
                 optionViews.add(tv)
                 windowRow.addView(tv)
             }
+
+            val isCustomInitial = currentWindow !in presetSeconds
+            customTv = TextView(activity).apply {
+                text = if (isCustomInitial) "${currentWindow}秒" else "自定义"
+                textSize = 12.5f
+                gravity = Gravity.CENTER
+                styleCapsule(this, isCustomInitial)
+                setPadding(dp(8), dp(7), dp(8), dp(7))
+                layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
+                    marginStart = dp(6)
+                }
+                setOnClickListener {
+                    val input = EditText(activity).apply {
+                        inputType = InputType.TYPE_CLASS_NUMBER
+                        hint = "输入秒数 (10~3600)"
+                        val cur = CapturePrefs.getTransferIncomeDedupWindowSeconds(activity)
+                        if (cur !in presetSeconds) setText(cur.toString())
+                    }
+                    val container = FrameLayout(activity).apply {
+                        setPadding(dp(20), dp(10), dp(20), dp(4))
+                        addView(input)
+                    }
+                    AlertDialog.Builder(activity)
+                        .setTitle("自定义判重时间窗")
+                        .setMessage("请输入转账与到账通知的最大时间间隔（秒）：")
+                        .setView(container)
+                        .setPositiveButton("确定") { _, _ ->
+                            val sec = input.text?.toString()?.toIntOrNull()
+                            if (sec == null || sec < 10 || sec > 3600) {
+                                toast("请输入 10~3600 之间的秒数")
+                                return@setPositiveButton
+                            }
+                            updateWindowSelection(sec)
+                        }
+                        .setNegativeButton("取消", null)
+                        .show()
+                }
+            }
+            windowRow.addView(customTv)
             addView(windowRow)
         }
         container.addView(transferDedupCard)

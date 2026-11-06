@@ -325,7 +325,7 @@ class CaptureRepository(private val dao: PaymentCaptureDao) {
         val now = System.currentTimeMillis()
         val noteProvided = note != null
         val cleanNote = if (noteProvided) note?.trim()?.takeIf { it.isNotEmpty() } else existing.note
-        val cleanAsset = assetName?.trim()?.takeIf { it.isNotEmpty() } ?: existing.assetName
+        val cleanAsset = if (assetName != null) assetName.trim().takeIf { it.isNotEmpty() } else existing.assetName
         val noteChanged = noteProvided && cleanNote != existing.note
 
         val resolvedCategory: String?
@@ -412,7 +412,7 @@ class CaptureRepository(private val dao: PaymentCaptureDao) {
             )
             // 顺手把其它同支付方式的待记条目也填上该资产
             listPending(200, onlyExpense = false)
-                .filter { it.id != id && it.paymentMethodRaw?.trim() == rawChannel }
+                .filter { it.id != id && it.paymentMethodRaw?.trim().equals(rawChannel, ignoreCase = true) }
                 .forEach { other ->
                     dao.updateAssetName(other.id, cleanAsset, now)
                 }
@@ -438,6 +438,38 @@ class CaptureRepository(private val dao: PaymentCaptureDao) {
         }
 
         return updated
+    }
+
+    /**
+     * 根据指定资产映射规则，重跑所有状态为 PENDING 的待记条目中匹配该渠道的记录，自动填入新映射的资产。
+     * 返回更新的记录数。
+     */
+    suspend fun reapplyAssetMappingForRule(rule: AssetMappingRule): Int {
+        if (rule.pattern.isBlank() || rule.targetAssetName.isBlank()) return 0
+        val now = System.currentTimeMillis()
+        val pendingItems = listPending(200, onlyExpense = false)
+            .filter { it.status == CaptureStatus.PENDING }
+        var count = 0
+        val regex = if (rule.isRegex) {
+            runCatching { Regex(rule.pattern, RegexOption.IGNORE_CASE) }.getOrNull()
+        } else null
+
+        for (item in pendingItems) {
+            val raw = item.paymentMethodRaw?.trim().orEmpty()
+            if (raw.isEmpty()) continue
+            val matches = if (regex != null) {
+                regex.containsMatchIn(raw)
+            } else {
+                raw.contains(rule.pattern, ignoreCase = true)
+            }
+            if (matches) {
+                if (item.assetName != rule.targetAssetName) {
+                    dao.updateAssetName(item.id, rule.targetAssetName, now)
+                    count++
+                }
+            }
+        }
+        return count
     }
 
     suspend fun deleteById(id: String): Boolean = dao.deleteById(id) > 0

@@ -47,7 +47,9 @@ import com.taostudio.tapaccounting.capture.data.CategorySource
 import com.taostudio.tapaccounting.capture.data.PaymentCapture
 import com.taostudio.tapaccounting.capture.data.RuleBundleCodec
 import com.taostudio.tapaccounting.BuildConfig
+import com.taostudio.tapaccounting.Prefs
 import com.taostudio.tapaccounting.R
+import com.taostudio.tapaccounting.ui.dialog.OverlayDialogs
 import com.taostudio.tapaccounting.capture.data.RuleBundleStore
 import com.taostudio.tapaccounting.capture.ingest.CaptureIngestCoordinator
 import com.taostudio.tapaccounting.capture.notify.CaptureBubbleManager
@@ -110,6 +112,8 @@ class PendingListActivity : Activity() {
     private var skipNextResumeLoad = false
     private var loadJob: Job? = null
     private var inboxEventsJob: Job? = null
+    private var savedInboxScrollY: Int = 0
+    private val pendingCardViews = mutableMapOf<String, View>()
 
     private lateinit var bridgeDot: View
     private lateinit var bridgeBadge: TextView
@@ -244,6 +248,7 @@ class PendingListActivity : Activity() {
                 layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
                 setOnClickListener {
                     if (currentTab != index) {
+                        savedInboxScrollY = 0
                         currentTab = index
                         updateTabSelection()
                         latestSnapshot?.let { renderCurrentTab(it) }
@@ -283,6 +288,8 @@ class PendingListActivity : Activity() {
     }
 
     private fun load() {
+        val curScroll = (bodyFrame.getChildAt(0) as? ScrollView)?.scrollY ?: 0
+        if (curScroll > 0) savedInboxScrollY = curScroll
         loadJob?.cancel()
         loadJob = scope.launch {
             try {
@@ -359,6 +366,8 @@ class PendingListActivity : Activity() {
     }
 
     private fun renderCurrentTab(snapshot: Snapshot) {
+        val currentScroll = (bodyFrame.getChildAt(0) as? ScrollView)?.scrollY ?: 0
+        val targetScroll = if (currentScroll > 0) currentScroll else savedInboxScrollY
         bodyFrame.removeAllViews()
         val view = when (currentTab) {
             0 -> buildInboxTab(snapshot)
@@ -372,6 +381,11 @@ class PendingListActivity : Activity() {
             else -> buildHistoryTab(snapshot)
         }
         bodyFrame.addView(view)
+        if (targetScroll > 0 && currentTab == 0) {
+            (view as? ScrollView)?.post {
+                (view as? ScrollView)?.scrollTo(0, targetScroll)
+            }
+        }
     }
 
     /** 规则页：顶部固定「数据规则 / 分类规则 / 资产映射」分段，复用现有分类/资产页面。 */
@@ -850,6 +864,7 @@ class PendingListActivity : Activity() {
     }
 
     private fun buildInboxTab(snapshot: Snapshot): View {
+        pendingCardViews.clear()
         val scroll = ScrollView(this).apply {
             layoutParams = FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
@@ -868,7 +883,9 @@ class PendingListActivity : Activity() {
         } else {
             container.addView(buildSummaryHeroCard(items))
             items.forEach { item ->
-                container.addView(buildCaptureCard(item, snapshot.accountingContext))
+                val card = buildCaptureCard(item, snapshot.accountingContext)
+                pendingCardViews[item.id] = card
+                container.addView(card)
             }
         }
         if (snapshot.ignoredItems.isNotEmpty()) {
@@ -969,6 +986,8 @@ class PendingListActivity : Activity() {
     }
 
     private fun restoreIgnored(item: PaymentCapture) {
+        val curScroll = (bodyFrame.getChildAt(0) as? ScrollView)?.scrollY ?: 0
+        if (curScroll > 0) savedInboxScrollY = curScroll
         scope.launch {
             try {
                 withContext(Dispatchers.IO) {
@@ -1088,7 +1107,7 @@ class PendingListActivity : Activity() {
             bgColor = if (canImportAll) CaptureUi.BRAND else CaptureUi.BG_SEGMENT,
             onClick = {
                 when {
-                    canImportAll -> batchImportWithMissing(readyItems, missingCategoryItems)
+                    canImportAll -> confirmAndBatchImport(readyItems, missingCategoryItems)
                     items.any { it.splitRequested } ->
                         toast("勾选拆分的账单请逐笔点“拆分入账”")
                     else -> toast("请先点左侧“智能归类”或为账单选择分类")
@@ -1353,7 +1372,7 @@ class PendingListActivity : Activity() {
             trailingIconRes = R.drawable.ic_chevron_down,
             trailingIconTint = if (hasAsset) CaptureUi.TEXT_SECONDARY else CaptureUi.WARNING,
         ) {
-            showAssetPickerDialog(item, ctx)
+            showAssetPicker(item, ctx)
         }
         chipRow1.addView(
             assetChip,
@@ -1389,7 +1408,7 @@ class PendingListActivity : Activity() {
             trailingIconRes = R.drawable.ic_chevron_down,
             trailingIconTint = CaptureUi.SUCCESS,
         ) {
-            showCategoryPickerDialog(item, ctx)
+            showCategoryPicker(item, ctx)
         }
         styleCategoryChip(categoryChip, currentCategory)
         categoryChip.visibility = if (item.splitRequested) View.GONE else View.VISIBLE
@@ -1431,7 +1450,7 @@ class PendingListActivity : Activity() {
             textColor = CaptureUi.TEXT_SECONDARY,
             bgColor = CaptureUi.BG_SUBTLE,
         ) {
-            showBookPickerDialog(item, ctx) { selectedBook ->
+            showBookPicker(item, ctx) { selectedBook ->
                 currentBook = selectedBook
                 styleBookChip(bookChip, selectedBook)
             }
@@ -1715,7 +1734,7 @@ class PendingListActivity : Activity() {
                     trailingIconRes = R.drawable.ic_chevron_down,
                     trailingIconTint = if (subCatOk) CaptureUi.SUCCESS else CaptureUi.WARNING,
                 ) {
-                    showCategoryPickerDialog(
+                    showCategoryPicker(
                         item = item.copy(categoryName = subItem.categoryName),
                         ctx = ctx,
                         title = "选择「${subItem.name}」的分类",
@@ -2235,168 +2254,104 @@ class PendingListActivity : Activity() {
         }
     }
 
-    private fun showBookPickerDialog(
+    private fun showBookPicker(
         item: PaymentCapture,
         ctx: AccountingContext?,
         onResult: ((String) -> Unit)? = null,
     ) {
         val bookNames = ctx?.books?.map { it.name }?.filter { it.isNotBlank() }.orEmpty()
         val availableBooks = if (bookNames.isNotEmpty()) bookNames else listOf("日常账本")
+        val currentBook = item.bookName?.takeIf { it.isNotBlank() }
+            ?: ctx?.currentBookName?.takeIf { it.isNotBlank() }
+            ?: ctx?.defaultBookName?.takeIf { it.isNotBlank() }
+            ?: "日常账本"
 
-        AlertDialog.Builder(this)
-            .setTitle("选择记账账本")
-            .setItems(availableBooks.toTypedArray()) { _, which ->
-                val chosenBook = availableBooks[which]
-                onResult?.invoke(chosenBook)
-                scope.launch {
-                    withContext(Dispatchers.IO) {
-                        CaptureApp.from(this@PendingListActivity).repository
-                            .updateBookName(item.id, chosenBook)
-                    }
-                    // 刷新 Snapshot，让卡片/批量入账都拿到新账本；直接入账本身已用 draft.bookName 兜底。
-                    load()
+        OverlayDialogs.showBookPickerDialog(
+            ctx = this,
+            books = availableBooks,
+            currentBook = currentBook,
+        ) { chosenBook ->
+            onResult?.invoke(chosenBook)
+            scope.launch {
+                withContext(Dispatchers.IO) {
+                    CaptureApp.from(this@PendingListActivity).repository
+                        .updateBookName(item.id, chosenBook)
                 }
+                load()
             }
-            .setNegativeButton("取消", null)
-            .show()
+        }
     }
 
-    private fun showAssetPickerDialog(item: PaymentCapture, ctx: AccountingContext?) {
-        val assetNames = ctx?.assets?.map { it.name }.orEmpty()
-        if (assetNames.isEmpty()) {
-            toast("尚未从敲敲记账读取到资产列表，请确认敲敲记账已安装")
-            return
-        }
+    private fun showAssetPicker(item: PaymentCapture, ctx: AccountingContext? = null) {
         val rawChannel = item.paymentMethodRaw?.trim().orEmpty()
-        val layout = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(20), dp(12), dp(20), dp(4))
-        }
-        val rememberBox = CheckBox(this).apply {
-            text = if (rawChannel.isNotEmpty()) {
-                "记住「$rawChannel = 所选资产」，以后自动填入"
-            } else {
-                "记住该渠道资产映射"
+        OverlayDialogs.showGridAssetPicker(
+            ctx = this,
+            currentSelectionText = item.assetName.orEmpty(),
+            title = "选择对应账户资产",
+            allowClear = true,
+        ) { chosenAsset ->
+            mutate { repo ->
+                repo.updateDraft(
+                    context = this@PendingListActivity,
+                    id = item.id,
+                    note = item.note,
+                    assetName = chosenAsset,
+                    categoryName = item.categoryName,
+                    rememberAssetMapping = rawChannel.isNotEmpty() && chosenAsset.isNotBlank(),
+                )
             }
-            isChecked = rawChannel.isNotEmpty()
-            visibility = if (rawChannel.isNotEmpty()) View.VISIBLE else View.GONE
         }
-        layout.addView(rememberBox)
+    }
 
-        AlertDialog.Builder(this)
-            .setTitle("选择对应账户资产")
-            .setView(layout)
-            .setItems(assetNames.toTypedArray()) { _, which ->
-                val chosenAsset = assetNames[which]
+    private fun showCategoryPicker(
+        item: PaymentCapture,
+        ctx: AccountingContext? = null,
+        title: String = "选择账单分类",
+        onResult: ((String?) -> Unit)? = null,
+    ) {
+        val isIncome = item.billType == LocalBillType.TYPE_INCOME
+        val isRefund = item.subType == LocalBillType.SUBTYPE_REFUND || item.needsRefundLink
+        val pickerType = if (isIncome || isRefund) Prefs.TYPE_INCOME else Prefs.TYPE_EXPENSE
+        val allowClear = item.status != CaptureStatus.RECORDED && onResult == null
+
+        OverlayDialogs.showGridCategoryPicker(
+            ctx = this,
+            currentSelectionText = item.categoryName.orEmpty(),
+            type = pickerType,
+            allowClear = allowClear,
+            title = title,
+            onCancel = { onResult?.invoke(null) },
+        ) { chosenCat ->
+            if (onResult == null) {
                 mutate { repo ->
                     repo.updateDraft(
                         context = this@PendingListActivity,
                         id = item.id,
                         note = item.note,
-                        assetName = chosenAsset,
-                        categoryName = item.categoryName,
-                        rememberAssetMapping = rememberBox.isChecked && rawChannel.isNotEmpty(),
+                        assetName = item.assetName,
+                        categoryName = chosenCat,
+                        categorySource = CategorySource.MANUAL,
                     )
                 }
-            }
-            .setNegativeButton("取消", null)
-            .show()
-    }
-
-    private fun showCategoryPickerDialog(
-        item: PaymentCapture,
-        ctx: AccountingContext?,
-        title: String = "选择账单分类",
-        onResult: ((String?) -> Unit)? = null,
-    ) {
-        val isRefund = item.subType == LocalBillType.SUBTYPE_REFUND || item.needsRefundLink
-        val targetType = if (isRefund) null else item.billType?.takeIf { it in 0..1 }
-        val categories = ruleViews.buildCategoryDisplayList(ctx, targetType)
-        if (categories.isEmpty()) {
-            toast("尚未从敲敲记账读取到分类列表，请确认敲敲记账已安装")
-            onResult?.invoke(null)
-            return
-        }
-        val candidateKeyword = item.note?.trim()?.takeIf { it.isNotEmpty() }
-            ?: item.merchant?.trim()?.takeIf { it.isNotEmpty() }
-        val layout = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(20), dp(12), dp(20), dp(4))
-        }
-        val rememberBox = CheckBox(this).apply {
-            text = if (!candidateKeyword.isNullOrBlank()) {
-                "记住包含「$candidateKeyword」自动归入所选分类"
             } else {
-                "记住分类规则"
-            }
-            isChecked = false
-            visibility = if (!candidateKeyword.isNullOrBlank()) View.VISIBLE else View.GONE
-        }
-        layout.addView(rememberBox)
-
-        var finished = false
-        fun finish(result: String?) {
-            if (finished) return
-            finished = true
-            onResult?.invoke(result)
-        }
-
-        AlertDialog.Builder(this)
-            .setTitle(title)
-            .setView(layout)
-            .setItems(categories.toTypedArray()) { _, which ->
-                val chosenCat = categories[which]
-                if (onResult == null) {
-                    mutate { repo ->
-                        repo.updateDraft(
-                            context = this@PendingListActivity,
-                            id = item.id,
-                            note = item.note,
-                            assetName = item.assetName,
-                            categoryName = chosenCat,
-                            categorySource = CategorySource.MANUAL,
-                            rememberCategoryKeyword = if (rememberBox.isChecked) candidateKeyword else null,
-                        )
-                    }
-                } else {
-                    scope.launch {
-                        val updated = runCatching {
-                            withContext(Dispatchers.IO) {
-                                CaptureApp.from(this@PendingListActivity).repository.updateDraft(
-                                    context = this@PendingListActivity,
-                                    id = item.id,
-                                    note = item.note,
-                                    assetName = item.assetName,
-                                    categoryName = chosenCat,
-                                    categorySource = CategorySource.MANUAL,
-                                    rememberCategoryKeyword = if (rememberBox.isChecked) candidateKeyword else null,
-                                )
-                            }
-                        }.getOrNull()
-                        if (updated == null) toast("保存分类失败")
-                        finish(if (updated != null) chosenCat else null)
-                    }
-                }
-            }
-            .setNegativeButton("取消") { _, _ -> finish(null) }
-            .apply {
-                if (!item.categoryName.isNullOrBlank()) {
-                    setNeutralButton("清除分类（重置为待选）") { _, _ ->
-                        if (onResult == null) {
-                            mutate { repo -> repo.clearCategory(item.id) }
-                        } else {
-                            scope.launch {
-                                withContext(Dispatchers.IO) {
-                                    CaptureApp.from(this@PendingListActivity).repository.clearCategory(item.id)
-                                }
-                                finish("")
-                            }
+                scope.launch {
+                    val updated = runCatching {
+                        withContext(Dispatchers.IO) {
+                            CaptureApp.from(this@PendingListActivity).repository.updateDraft(
+                                context = this@PendingListActivity,
+                                id = item.id,
+                                note = item.note,
+                                assetName = item.assetName,
+                                categoryName = chosenCat,
+                                categorySource = CategorySource.MANUAL,
+                            )
                         }
-                    }
+                    }.getOrNull()
+                    if (updated == null) toast("保存分类失败")
+                    onResult.invoke(if (updated != null) chosenCat else null)
                 }
             }
-            .setOnCancelListener { _ -> finish(null) }
-            .show()
+        }
     }
 
     // ════════════════════════════════════════════════════════
@@ -2472,6 +2427,39 @@ class PendingListActivity : Activity() {
                 isAiBusy = false
                 load()
             }
+        }
+    }
+
+    /**
+     * 批量入账前防护：扫描待入账列表，若存在未指定资产的条目，弹出友好的确认对话框。
+     */
+    private fun confirmAndBatchImport(
+        readyItems: List<PaymentCapture>,
+        missingItems: List<PaymentCapture>,
+    ) {
+        val unmappedAssetItems = readyItems.filter { it.assetName.isNullOrBlank() }
+        if (unmappedAssetItems.isNotEmpty()) {
+            AlertDialog.Builder(this)
+                .setTitle("部分待记未绑定账户")
+                .setMessage("待入账记录中有 ${unmappedAssetItems.size} 笔尚未指定账户资产。\n建议绑定对应账户后再入账，也可直接入账。")
+                .setPositiveButton("去绑定") { _, _ ->
+                    val first = unmappedAssetItems.first()
+                    val targetCard = pendingCardViews[first.id]
+                    val scroll = bodyFrame.getChildAt(0) as? ScrollView
+                    if (targetCard != null && scroll != null) {
+                        scroll.post {
+                            scroll.smoothScrollTo(0, targetCard.top)
+                        }
+                    }
+                    showAssetPicker(first)
+                }
+                .setNegativeButton("仍然入账") { _, _ ->
+                    batchImportWithMissing(readyItems, missingItems)
+                }
+                .setNeutralButton("取消", null)
+                .show()
+        } else {
+            batchImportWithMissing(readyItems, missingItems)
         }
     }
 
@@ -2604,7 +2592,7 @@ class PendingListActivity : Activity() {
             return
         }
         val item = items[index]
-        showCategoryPickerDialog(
+        showCategoryPicker(
             item = item,
             ctx = latestSnapshot?.accountingContext,
             title = "补分类 ${index + 1}/${items.size}",
@@ -2630,6 +2618,8 @@ class PendingListActivity : Activity() {
     }
 
     private fun mutate(block: suspend (CaptureRepository) -> Unit) {
+        val curScroll = (bodyFrame.getChildAt(0) as? ScrollView)?.scrollY ?: 0
+        if (curScroll > 0) savedInboxScrollY = curScroll
         scope.launch {
             try {
                 withContext(Dispatchers.IO) {
@@ -2735,7 +2725,7 @@ class PendingListActivity : Activity() {
             item.categoryName.isNullOrBlank()
         ) {
             toast("请先为该笔账单选择分类，或点顶部“智能归类”")
-            showCategoryPickerDialog(item, latestSnapshot?.accountingContext)
+            showCategoryPicker(item, latestSnapshot?.accountingContext)
             return
         }
         scope.launch {

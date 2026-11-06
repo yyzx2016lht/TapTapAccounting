@@ -1952,7 +1952,7 @@ class BackupActivity : AppCompatActivity() {
                         investmentLots = if (options.restoreBills && options.restoreAssets) dataMap["investment_lots"]
                             ?.let { DataExportManager.deserializeInvestmentLots(it) } ?: emptyList() else null,
                         categories = if (options.restoreCategories) dataMap["categories"]?.let { DataExportManager.deserializeCategories(it) } else null,
-                        rules = if (options.restoreRules) dataMap["rules"]?.let { DataExportManager.deserializeAiRules(it) } else null,
+                        rules = if (options.restoreRules) dataMap["rules"]?.let { DataExportManager.deserializeRules(it) } else null,
                         chatMessages = if (options.restoreChatMessages) dataMap["chat_messages"]
                             ?.let { DataExportManager.deserializeChatMessages(it) } ?: emptyList() else null,
                         budgets = if (options.restoreBudgets) dataMap["budgets"]
@@ -2078,7 +2078,7 @@ class BackupActivity : AppCompatActivity() {
                         deletedBills = if (options.restoreBills) dataMap["deleted_bills"]?.let { DataExportManager.deserializeDeletedBills(it) } else null,
                         investmentLots = if (options.restoreBills && options.restoreAssets) dataMap["investment_lots"]?.let { DataExportManager.deserializeInvestmentLots(it) } else null,
                         categories = if (options.restoreCategories) dataMap["categories"]?.let { DataExportManager.deserializeCategories(it) } else null,
-                        rules = if (options.restoreRules) dataMap["rules"]?.let { DataExportManager.deserializeAiRules(it) } else null,
+                        rules = if (options.restoreRules) dataMap["rules"]?.let { DataExportManager.deserializeRules(it) } else null,
                         chatMessages = if (options.restoreChatMessages) dataMap["chat_messages"]?.let { DataExportManager.deserializeChatMessages(it) } else null,
                         budgets = if (options.restoreBudgets) dataMap["budgets"]?.let { DataExportManager.deserializeBudgets(it) } else null,
                         recurringPatterns = if (options.restoreRecurringPatterns) dataMap["recurring_patterns"]?.let { DataExportManager.deserializeRecurringPatterns(it) } else null,

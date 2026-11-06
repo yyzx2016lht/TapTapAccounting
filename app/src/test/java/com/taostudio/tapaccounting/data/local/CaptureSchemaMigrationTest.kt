@@ -12,12 +12,13 @@ import java.sql.Connection
 import java.sql.DriverManager
 
 /**
- * 用 JVM SQLite 执行 [CAPTURE_MIGRATION_41_42_SQL]，再和 Room 导出的 42.json 逐列/逐索引比对。
+ * 用 JVM SQLite 执行 [CAPTURE_MIGRATION_41_42_SQL] 与 [CAPTURE_MIGRATION_42_43_SQL]，
+ * 再和 Room 导出的 43.json 逐列/逐索引比对。
  *
  * 之所以不用 `MigrationTestHelper`：设备不一定常连；这个测试不需要 Android，
  * 能直接在 `:app:testDebugUnitTest` 里拦住“SQL 少列/类型错/索引名错/唯一性错”的问题。
  *
- * 真正的 v41 -> v42 整库迁移仍建议在真机上用旧 APK 造数据覆盖安装验证一次。
+ * 真正的 v42 -> v43 整库迁移仍建议在真机上用旧 APK 造数据覆盖安装验证一次。
  */
 class CaptureSchemaMigrationTest {
 
@@ -27,14 +28,16 @@ class CaptureSchemaMigrationTest {
         "asset_mapping_rules",
         "category_rules",
         "rule_learning_tasks",
+        "accounting_rules",
+        "bill_rule_provenance",
     )
 
     @Test
     fun migrationSqlMatchesRoomSchema() {
         val schemaFile = File(
-            "schemas/com.taostudio.tapaccounting.data.local.AppDatabase/42.json",
+            "schemas/com.taostudio.tapaccounting.data.local.AppDatabase/43.json",
         )
-        assertTrue("找不到 Room 导出的 42.json：${schemaFile.absolutePath}", schemaFile.isFile)
+        assertTrue("找不到 Room 导出的 43.json：${schemaFile.absolutePath}", schemaFile.isFile)
 
         val database = JSONObject(schemaFile.readText()).getJSONObject("database")
         val entities = database.getJSONArray("entities")
@@ -49,11 +52,23 @@ class CaptureSchemaMigrationTest {
         DriverManager.getConnection("jdbc:sqlite::memory:").use { connection ->
             connection.createStatement().use { statement ->
                 CAPTURE_MIGRATION_41_42_SQL.forEach { statement.execute(it) }
+                // 补齐旧库 ai_rule 表，确保 42->43 从 ai_rule 复制的 SQL 顺利执行
+                statement.execute(
+                    "CREATE TABLE IF NOT EXISTS `ai_rule` (" +
+                        "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`keyword` TEXT NOT NULL, " +
+                        "`targetType` INTEGER, " +
+                        "`targetCategory` TEXT, " +
+                        "`targetAccount1` TEXT, " +
+                        "`targetAccount2` TEXT, " +
+                        "`isEnabled` INTEGER NOT NULL)"
+                )
+                CAPTURE_MIGRATION_42_43_SQL.forEach { statement.execute(it) }
             }
 
             captureTables.forEach { table ->
                 val entity = entitiesByTable[table]
-                assertNotNull("42.json 里没有 $table 的 Entity", entity)
+                assertNotNull("43.json 里没有 $table 的 Entity", entity)
                 assertColumns(connection, table, entity!!)
                 assertPrimaryKey(connection, table, entity)
                 assertIndices(connection, table, entity)

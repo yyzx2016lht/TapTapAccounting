@@ -33,6 +33,9 @@ interface AccountingRuleDao {
     @Update
     suspend fun update(rule: AccountingRule)
 
+    @Query("UPDATE accounting_rules SET enabled = :enabled, updatedAt = :updatedAt WHERE id = :id")
+    suspend fun updateEnabled(id: Long, enabled: Boolean, updatedAt: Long = System.currentTimeMillis())
+
     @Query("DELETE FROM accounting_rules WHERE id = :id")
     suspend fun deleteById(id: Long)
 

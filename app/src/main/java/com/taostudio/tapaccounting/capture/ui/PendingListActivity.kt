@@ -114,6 +114,7 @@ class PendingListActivity : Activity() {
     private var loadJob: Job? = null
     private var inboxEventsJob: Job? = null
     private var savedInboxScrollY: Int = 0
+    private var savedRulesScrollY: Int = 0
     private val pendingCardViews = mutableMapOf<String, View>()
     private var inboxContainer: LinearLayout? = null
     private var summaryHeroCardView: View? = null
@@ -256,6 +257,7 @@ class PendingListActivity : Activity() {
                 setOnClickListener {
                     if (currentTab != index) {
                         savedInboxScrollY = 0
+                        savedRulesScrollY = 0
                         currentTab = index
                         updateTabSelection()
                         latestSnapshot?.let { renderCurrentTab(it) }
@@ -294,9 +296,23 @@ class PendingListActivity : Activity() {
         }
     }
 
+    private fun findInnerScrollView(v: View?): ScrollView? {
+        if (v == null) return null
+        if (v is ScrollView) return v
+        if (v is ViewGroup) {
+            for (i in 0 until v.childCount) {
+                val found = findInnerScrollView(v.getChildAt(i))
+                if (found != null) return found
+            }
+        }
+        return null
+    }
+
     private fun load() {
         val curScroll = (bodyFrame.getChildAt(0) as? ScrollView)?.scrollY ?: 0
         if (curScroll > 0) savedInboxScrollY = curScroll
+        val innerRulesScroll = findInnerScrollView(bodyFrame)?.scrollY ?: 0
+        if (innerRulesScroll > 0) savedRulesScrollY = innerRulesScroll
         loadJob?.cancel()
         loadJob = scope.launch {
             try {
@@ -376,6 +392,8 @@ class PendingListActivity : Activity() {
     private fun renderCurrentTab(snapshot: Snapshot) {
         val currentScroll = (bodyFrame.getChildAt(0) as? ScrollView)?.scrollY ?: 0
         val targetScroll = if (currentScroll > 0) currentScroll else savedInboxScrollY
+        val innerRulesScroll = findInnerScrollView(bodyFrame)?.scrollY ?: 0
+        val targetRulesScroll = if (innerRulesScroll > 0) innerRulesScroll else savedRulesScrollY
         bodyFrame.removeAllViews()
         val view = when (currentTab) {
             0 -> buildInboxTab(snapshot)
@@ -392,6 +410,10 @@ class PendingListActivity : Activity() {
         if (targetScroll > 0 && currentTab == 0) {
             (view as? ScrollView)?.post {
                 (view as? ScrollView)?.scrollTo(0, targetScroll)
+            }
+        } else if (targetRulesScroll > 0 && currentTab == 1) {
+            view.post {
+                findInnerScrollView(view)?.scrollTo(0, targetRulesScroll)
             }
         }
     }

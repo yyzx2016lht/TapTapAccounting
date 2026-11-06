@@ -2,6 +2,7 @@ package com.taostudio.tapaccounting.capture.ui
 
 import android.app.Activity
 import android.app.AlertDialog
+import android.content.Context
 import android.content.Intent
 import android.graphics.Color
 import android.graphics.Typeface
@@ -406,15 +407,8 @@ internal class RuleMappingViews(
     }
 
     // ════════════════════════════════════════════════════════
-    //  Tab 2: 分类规则页（统一规则引擎 + 来源分段筛选 + 就地启停）
+    //  Tab 2: 分类规则页（按目标分类聚合胶囊矩阵 + 就地即时启停 + 零跳顶）
     // ════════════════════════════════════════════════════════
-
-    private data class RuleBadgeStyle(
-        val text: String,
-        val textColor: Int,
-        val bgColor: Int,
-        val strokeColor: Int,
-    )
 
     fun buildCategoryRuleTab(
         rules: List<AccountingRule>,
@@ -433,16 +427,16 @@ internal class RuleMappingViews(
         scroll.addView(container)
 
         val categoryPaths = buildCategoryDisplayList(accountingContext)
+        val activeRules = rules.toMutableList()
 
         // 来源筛选："ALL"、"USER"、"SEED"、"AI"
         var currentSourceFilter = "ALL"
         var currentQuery = ""
 
-        val totalCount = rules.size
-        val enabledCount = rules.count { it.enabled }
-        val userCount = rules.count { it.source == AccountingRule.Source.USER }
-        val seedCount = rules.count { it.source == AccountingRule.Source.SEED || it.source == AccountingRule.Source.IMPORT }
-        val aiCount = rules.count { it.source == AccountingRule.Source.AI }
+        val totalCount = activeRules.size
+        val userCount = activeRules.count { it.source == AccountingRule.Source.USER }
+        val seedCount = activeRules.count { it.source == AccountingRule.Source.SEED || it.source == AccountingRule.Source.IMPORT }
+        val aiCount = activeRules.count { it.source == AccountingRule.Source.AI }
 
         val infoCard = CaptureUi.card(activity).apply {
             layoutParams = LinearLayout.LayoutParams(
@@ -464,7 +458,7 @@ internal class RuleMappingViews(
             addView(titleRow)
 
             addView(TextView(activity).apply {
-                text = "统一秒级规则自动命中。优先级：手动 (P1) > 预置 (P2) > AI 学习 (P3)。点击卡片直接启停，长按或点编辑图标可微调关键词与目标分类。"
+                text = "按目标分类聚合展示。短按关键词胶囊就地启用/停用（停用后变暗置灰）；长按关键词胶囊可编辑关键词与分类。"
                 textSize = 12f
                 setTextColor(CaptureUi.TEXT_SECONDARY)
                 setLineSpacing(0f, 1.2f)
@@ -478,22 +472,13 @@ internal class RuleMappingViews(
             actionRow.addView(
                 CaptureUi.button(
                     activity = activity,
-                    text = "+ 添加规则",
+                    text = "+ 新增分类规则",
                     textColor = Color.WHITE,
                     bgColor = CaptureUi.BRAND,
                 ) {
                     showEditCategoryRuleDialog(null, categoryPaths)
                 },
-                LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1.3f).apply { marginEnd = dp(8) },
-            )
-            actionRow.addView(
-                TextView(activity).apply {
-                    text = "已启用 $enabledCount / $totalCount"
-                    textSize = 12f
-                    gravity = Gravity.CENTER
-                    setTextColor(CaptureUi.TEXT_MUTED)
-                },
-                LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f),
+                LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT),
             )
             addView(actionRow)
         }
@@ -533,10 +518,10 @@ internal class RuleMappingViews(
 
             // 1. 过滤来源
             val sourceFiltered = when (currentSourceFilter) {
-                "USER" -> rules.filter { it.source == AccountingRule.Source.USER }
-                "SEED" -> rules.filter { it.source == AccountingRule.Source.SEED || it.source == AccountingRule.Source.IMPORT }
-                "AI" -> rules.filter { it.source == AccountingRule.Source.AI }
-                else -> rules
+                "USER" -> activeRules.filter { it.source == AccountingRule.Source.USER }
+                "SEED" -> activeRules.filter { it.source == AccountingRule.Source.SEED || it.source == AccountingRule.Source.IMPORT }
+                "AI" -> activeRules.filter { it.source == AccountingRule.Source.AI }
+                else -> activeRules
             }
 
             // 2. 过滤关键词 / 分类
@@ -555,11 +540,63 @@ internal class RuleMappingViews(
                 return
             }
 
-            // 3. 按统一引擎优先级排序：sort ASC -> source (USER > IMPORT/SEED > AI) -> id ASC
-            val sorted = queryFiltered.sortedWith(DefaultAccountingRuleEngine.ruleComparator)
+            // 3. 按目标分类聚合
+            val grouped = queryFiltered.groupBy { it.targetCategory?.ifBlank { "未分类" } ?: "未分类" }
 
-            sorted.forEach { rule ->
-                listHost.addView(buildRuleCard(rule, categoryPaths))
+            grouped.forEach { (targetCat, catRules) ->
+                val groupCard = CaptureUi.card(activity, paddingH = 14, paddingV = 12, radiusDp = 14).apply {
+                    layoutParams = LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.WRAP_CONTENT,
+                    ).apply { bottomMargin = dp(10) }
+                }
+
+                val header = LinearLayout(activity).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                    setPadding(0, 0, 0, dp(10))
+                }
+                header.addView(TextView(activity).apply {
+                    text = "🏷️ $targetCat"
+                    textSize = 14.5f
+                    setTypeface(typeface, Typeface.BOLD)
+                    setTextColor(CaptureUi.TEXT_PRIMARY)
+                    layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+                })
+                header.addView(
+                    CaptureUi.chip(
+                        activity = activity,
+                        text = "+ 加词",
+                        textColor = CaptureUi.BRAND_DARK,
+                        bgColor = CaptureUi.BRAND_SOFT,
+                    ) {
+                        showEditCategoryRuleDialog(
+                            existing = AccountingRule(
+                                keyword = "",
+                                targetCategory = targetCat,
+                            ),
+                            categoryPaths = categoryPaths,
+                        )
+                    }
+                )
+                groupCard.addView(header)
+
+                val flow = ChipsFlowLayout(activity, horizontalSpacing = dp(8), verticalSpacing = dp(8)).apply {
+                    layoutParams = LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.WRAP_CONTENT,
+                    )
+                }
+
+                // 规则排序：优先级 USER > SEED/IMPORT > AI，同级按 id
+                val sortedCatRules = catRules.sortedWith(DefaultAccountingRuleEngine.ruleComparator)
+
+                sortedCatRules.forEach { rule ->
+                    flow.addView(buildRuleCapsule(rule, categoryPaths, activeRules))
+                }
+
+                groupCard.addView(flow)
+                listHost.addView(groupCard)
             }
         }
 
@@ -617,198 +654,110 @@ internal class RuleMappingViews(
         return scroll
     }
 
-    private fun buildRuleCard(rule: AccountingRule, categoryPaths: List<String>): View {
-        var currentRule = rule
-
-        val card = LinearLayout(activity).apply {
-            orientation = LinearLayout.VERTICAL
-            layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-            ).apply { bottomMargin = dp(8) }
-            setPadding(dp(14), dp(11), dp(14), dp(11))
+    private fun buildRuleCapsule(
+        initialRule: AccountingRule,
+        categoryPaths: List<String>,
+        activeRules: MutableList<AccountingRule>,
+    ): View {
+        var currentRule = initialRule
+        val tv = TextView(activity).apply {
+            textSize = 12.5f
+            setTypeface(typeface, Typeface.BOLD)
+            gravity = Gravity.CENTER
+            setPadding(dp(11), dp(6), dp(11), dp(6))
             isClickable = true
             isFocusable = true
+            layoutParams = ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+            )
         }
 
-        // 顶部小徽标行与开关
-        val topRow = LinearLayout(activity).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-        }
-
-        // 来源徽标
-        val badgeStyle = when (currentRule.source) {
-            AccountingRule.Source.USER -> RuleBadgeStyle("⭐ 手动 · P1", CaptureUi.BRAND_DARK, CaptureUi.BRAND_SOFT, CaptureUi.BRAND_BORDER)
-            AccountingRule.Source.AI -> RuleBadgeStyle("✨ AI · P3", Color.parseColor("#7C3AED"), Color.parseColor("#F5F3FF"), Color.parseColor("#DDD6FE"))
-            else -> RuleBadgeStyle("⚙️ 预置 · P2", CaptureUi.TEXT_SECONDARY, CaptureUi.BG_SEGMENT, CaptureUi.BORDER)
-        }
-
-        val badgeSource = TextView(activity).apply {
-            text = badgeStyle.text
-            textSize = 10.5f
-            setTypeface(typeface, Typeface.BOLD)
-            setTextColor(badgeStyle.textColor)
-            setPadding(dp(6), dp(2), dp(6), dp(2))
-            background = CaptureUi.roundedBg(badgeStyle.bgColor, dp(6), dp(1), badgeStyle.strokeColor)
-        }
-        topRow.addView(badgeSource)
-
-        // 模式徽标
-        val modeText = when {
-            currentRule.isRegex -> "正则"
-            currentRule.matchMode == AccountingRule.MatchMode.ALL_TOKENS -> "全词"
-            else -> "包含"
-        }
-        val badgeMode = TextView(activity).apply {
-            text = modeText
-            textSize = 10.5f
-            setTextColor(CaptureUi.TEXT_MUTED)
-            setPadding(dp(5), dp(2), dp(5), dp(2))
-            background = CaptureUi.roundedBg(CaptureUi.BG_SUBTLE, dp(6), dp(1), CaptureUi.BORDER)
-            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-                marginStart = dp(5)
+        fun updateVisual(rule: AccountingRule) {
+            val prefix = when {
+                rule.source == AccountingRule.Source.AI -> "✨ "
+                rule.isRegex -> ".* "
+                rule.matchMode == AccountingRule.MatchMode.ALL_TOKENS -> "≈ "
+                else -> ""
             }
-        }
-        topRow.addView(badgeMode)
+            tv.text = "$prefix${rule.keyword}"
 
-        // 匹配字段徽标（若仅限商户或仅限备注）
-        if (currentRule.matchField == AccountingRule.MatchField.MERCHANT) {
-            topRow.addView(TextView(activity).apply {
-                text = "仅商户"
-                textSize = 10.5f
-                setTextColor(CaptureUi.WARNING)
-                setPadding(dp(5), dp(2), dp(5), dp(2))
-                background = CaptureUi.roundedBg(CaptureUi.WARNING_SOFT, dp(6), dp(1), CaptureUi.WARNING_BORDER)
-                layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-                    marginStart = dp(5)
+            if (rule.enabled) {
+                tv.alpha = 1.0f
+                when (rule.source) {
+                    AccountingRule.Source.AI -> {
+                        tv.setTextColor(Color.parseColor("#7C3AED"))
+                        tv.background = CaptureUi.rippleBg(
+                            fillColor = Color.parseColor("#F5F3FF"),
+                            radiusPx = dp(8),
+                            strokeWidthPx = dp(1),
+                            strokeColor = Color.parseColor("#DDD6FE"),
+                        )
+                    }
+                    AccountingRule.Source.USER -> {
+                        tv.setTextColor(CaptureUi.BRAND_DARK)
+                        tv.background = CaptureUi.rippleBg(
+                            fillColor = CaptureUi.BRAND_SOFT,
+                            radiusPx = dp(8),
+                            strokeWidthPx = dp(1),
+                            strokeColor = CaptureUi.BRAND_BORDER,
+                        )
+                    }
+                    else -> {
+                        tv.setTextColor(CaptureUi.TEXT_PRIMARY)
+                        tv.background = CaptureUi.rippleBg(
+                            fillColor = CaptureUi.BG_SUBTLE,
+                            radiusPx = dp(8),
+                            strokeWidthPx = dp(1),
+                            strokeColor = CaptureUi.BORDER,
+                        )
+                    }
                 }
-            })
-        }
-
-        val spacer = View(activity).apply {
-            layoutParams = LinearLayout.LayoutParams(0, dp(1), 1f)
-        }
-        topRow.addView(spacer)
-
-        // 编辑文字按钮
-        val btnEdit = TextView(activity).apply {
-            text = "编辑"
-            textSize = 12f
-            setTypeface(typeface, Typeface.BOLD)
-            setTextColor(CaptureUi.BRAND_DARK)
-            setPadding(dp(8), dp(4), dp(8), dp(4))
-            background = CaptureUi.rippleBg(activity, CaptureUi.BRAND_SOFT, radiusDp = 6)
-            setOnClickListener { showEditCategoryRuleDialog(currentRule, categoryPaths) }
-        }
-        topRow.addView(btnEdit)
-
-        // Switch 开关（isClickable = false，由外层卡片点击代理处理，确保手感平滑无冲突）
-        val sw = Switch(activity).apply {
-            isChecked = currentRule.enabled
-            isClickable = false
-            isFocusable = false
-            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-                marginStart = dp(6)
-            }
-        }
-        topRow.addView(sw)
-        card.addView(topRow)
-
-        // 中间主内容行：关键词 → 目标分类
-        val bodyRow = LinearLayout(activity).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(0, dp(8), 0, dp(2))
-        }
-
-        val tvKeyword = TextView(activity).apply {
-            text = currentRule.keyword
-            textSize = 15.5f
-            setTypeface(typeface, Typeface.BOLD)
-        }
-        bodyRow.addView(tvKeyword)
-
-        bodyRow.addView(TextView(activity).apply {
-            text = "  →  "
-            textSize = 13.5f
-            setTextColor(CaptureUi.TEXT_MUTED)
-        })
-
-        val tvCategory = TextView(activity).apply {
-            text = "🏷️ " + (currentRule.targetCategory ?: "未设置分类")
-            textSize = 14f
-            setTypeface(typeface, Typeface.BOLD)
-        }
-        bodyRow.addView(tvCategory)
-        card.addView(bodyRow)
-
-        // 底部提示（如学习时间）
-        val learnedAt = currentRule.learnedAt
-        if (currentRule.source == AccountingRule.Source.AI && learnedAt != null && learnedAt > 0L) {
-            val dateStr = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date(learnedAt))
-            card.addView(TextView(activity).apply {
-                text = "学习于 $dateStr"
-                textSize = 10.5f
-                setTextColor(CaptureUi.TEXT_MUTED)
-                setPadding(0, dp(2), 0, 0)
-            })
-        }
-
-        // 视觉就地渲染
-        fun applyVisualState(enabled: Boolean) {
-            sw.isChecked = enabled
-            if (enabled) {
-                card.background = CaptureUi.rippleBg(
-                    fillColor = CaptureUi.BG_SURFACE,
-                    radiusPx = dp(12),
-                    strokeWidthPx = dp(1),
-                    strokeColor = CaptureUi.BORDER,
-                )
-                card.alpha = 1.0f
-                tvKeyword.setTextColor(CaptureUi.TEXT_PRIMARY)
-                tvCategory.setTextColor(CaptureUi.BRAND_DARK)
             } else {
-                card.background = CaptureUi.rippleBg(
+                tv.alpha = 0.45f
+                tv.setTextColor(CaptureUi.TEXT_MUTED)
+                tv.background = CaptureUi.rippleBg(
                     fillColor = CaptureUi.BG_PAGE,
-                    radiusPx = dp(12),
+                    radiusPx = dp(8),
                     strokeWidthPx = dp(1),
                     strokeColor = CaptureUi.BORDER,
                 )
-                card.alpha = 0.55f
-                tvKeyword.setTextColor(CaptureUi.TEXT_MUTED)
-                tvCategory.setTextColor(CaptureUi.TEXT_MUTED)
             }
         }
 
-        applyVisualState(currentRule.enabled)
+        updateVisual(currentRule)
 
-        // 点击卡片主体：就地切换启用/停用，不重刷整页，坚决不跳顶、不闪烁
-        card.setOnClickListener {
+        // 短按关键词胶囊：直接就地切换「启用 / 停用」，立刻变暗置灰，零跳顶保证
+        tv.setOnClickListener {
             val nextEnabled = !currentRule.enabled
             currentRule = currentRule.copy(
                 enabled = nextEnabled,
                 updatedAt = System.currentTimeMillis(),
             )
-            applyVisualState(nextEnabled)
+            val index = activeRules.indexOfFirst { it.id == currentRule.id }
+            if (index >= 0) {
+                activeRules[index] = currentRule
+            }
+            updateVisual(currentRule)
+
             val actionText = if (nextEnabled) "已启用「${currentRule.keyword}」规则" else "已停用「${currentRule.keyword}」规则"
             toast(actionText)
+
             scope.launch {
                 withContext(Dispatchers.IO) {
-                    AppDatabase.getDatabase(activity).accountingRuleDao().update(currentRule)
+                    AppDatabase.getDatabase(activity).accountingRuleDao().updateEnabled(currentRule.id, nextEnabled)
                     AccountingRuleEngine.invalidateCache()
                 }
-                CaptureInboxEvents.notifyChanged()
             }
         }
 
-        // 长按卡片主体：呼出编辑弹窗
-        card.setOnLongClickListener {
+        // 长按关键词胶囊：唤起规则编辑对话框
+        tv.setOnLongClickListener {
             showEditCategoryRuleDialog(currentRule, categoryPaths)
             true
         }
 
-        return card
+        return tv
     }
 
     private fun showEditCategoryRuleDialog(existing: AccountingRule?, categoryPaths: List<String>) {
@@ -961,8 +910,13 @@ internal class RuleMappingViews(
             }
         }
 
+        val dialogTitle = when {
+            isNew && !existing?.targetCategory.isNullOrBlank() -> "为「${existing?.targetCategory}」加词"
+            isNew -> "新增分类规则"
+            else -> "编辑分类规则"
+        }
         val builder = AlertDialog.Builder(activity)
-            .setTitle(if (isNew) "新增分类规则" else "编辑分类规则")
+            .setTitle(dialogTitle)
             .setView(layout)
             .setPositiveButton("保存") { _, _ ->
                 val kw = etKeyword.text?.toString()?.trim().orEmpty()
@@ -1781,3 +1735,76 @@ internal class RuleMappingViews(
         Toast.makeText(activity, msg, Toast.LENGTH_SHORT).show()
     }
 }
+
+/**
+ * 矩阵流式胶囊布局容器：自动折行，保证多关键词胶囊整齐自然排列
+ */
+private class ChipsFlowLayout(
+    context: Context,
+    private val horizontalSpacing: Int = 0,
+    private val verticalSpacing: Int = 0,
+) : ViewGroup(context) {
+
+    override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+        val widthSize = MeasureSpec.getSize(widthMeasureSpec)
+        val maxWidth = widthSize - paddingLeft - paddingRight
+
+        var currentLineWidth = 0
+        var currentLineHeight = 0
+        var totalHeight = 0
+        var maxLineWidth = 0
+
+        for (i in 0 until childCount) {
+            val child = getChildAt(i)
+            if (child.visibility == GONE) continue
+
+            measureChild(child, widthMeasureSpec, heightMeasureSpec)
+            val childW = child.measuredWidth
+            val childH = child.measuredHeight
+
+            if (currentLineWidth + childW > maxWidth && currentLineWidth > 0) {
+                maxLineWidth = maxOf(maxLineWidth, currentLineWidth - horizontalSpacing)
+                totalHeight += currentLineHeight + verticalSpacing
+                currentLineWidth = childW + horizontalSpacing
+                currentLineHeight = childH
+            } else {
+                currentLineWidth += childW + horizontalSpacing
+                currentLineHeight = maxOf(currentLineHeight, childH)
+            }
+        }
+
+        maxLineWidth = maxOf(maxLineWidth, if (currentLineWidth > 0) currentLineWidth - horizontalSpacing else 0)
+        totalHeight += currentLineHeight
+
+        val finalWidth = resolveSize(maxLineWidth + paddingLeft + paddingRight, widthMeasureSpec)
+        val finalHeight = resolveSize(totalHeight + paddingTop + paddingBottom, heightMeasureSpec)
+        setMeasuredDimension(finalWidth, finalHeight)
+    }
+
+    override fun onLayout(changed: Boolean, l: Int, t: Int, r: Int, b: Int) {
+        val maxRight = (r - l) - paddingRight
+        var curX = paddingLeft
+        var curY = paddingTop
+        var currentLineHeight = 0
+
+        for (i in 0 until childCount) {
+            val child = getChildAt(i)
+            if (child.visibility == GONE) continue
+
+            val childW = child.measuredWidth
+            val childH = child.measuredHeight
+
+            if (curX + childW > maxRight && curX > paddingLeft) {
+                curX = paddingLeft
+                curY += currentLineHeight + verticalSpacing
+                currentLineHeight = childH
+            } else {
+                currentLineHeight = maxOf(currentLineHeight, childH)
+            }
+
+            child.layout(curX, curY, curX + childW, curY + childH)
+            curX += childW + horizontalSpacing
+        }
+    }
+}
+

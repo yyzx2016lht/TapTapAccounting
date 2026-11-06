@@ -41,6 +41,10 @@ interface BillDao {
     )
     suspend fun backfillEmptyCategory(type: Int, name: String, categoryId: Long): Int
 
+    /** 规则修正“撤销这次自动分类”：把单笔账单落回「其他」。 */
+    @Query("UPDATE bills SET categoryName=:name, categoryId=:categoryId WHERE id=:billId")
+    suspend fun updateBillCategory(billId: Long, name: String, categoryId: Long): Int
+
     @Delete
     suspend fun delete(bill: Bill)
 

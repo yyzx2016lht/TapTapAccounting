@@ -350,6 +350,65 @@ object RuleDialogHelper {
     }
 
     /**
+     * 规则修正操作单：更新/记住、删除旧规则、只改这次、撤销这次自动分类。
+     */
+    fun showCorrectionActionSheet(
+        ctx: Context,
+        message: String,
+        hasExistingRule: Boolean,
+        isOverlay: Boolean = false,
+        onUpdate: () -> Unit,
+        onDeleteRule: () -> Unit,
+        onOnlyThisTime: () -> Unit,
+        onUndo: () -> Unit,
+        onCancel: () -> Unit = {},
+    ) {
+        val items = buildList {
+            add(if (hasExistingRule) "更新规则" else "记住这次")
+            if (hasExistingRule) add("删除旧规则")
+            add("只改这次")
+            add("撤销这次自动分类")
+        }
+        val themeCtx = ContextThemeWrapper(ctx, R.style.Theme_TapAccounting)
+        val dialog = AlertDialog.Builder(themeCtx)
+            .setTitle("处理这笔分类")
+            .setMessage(message)
+            .setItems(items.toTypedArray()) { d, which ->
+                d.dismiss()
+                when (items[which]) {
+                    "更新规则", "记住这次" -> onUpdate()
+                    "删除旧规则" -> onDeleteRule()
+                    "只改这次" -> onOnlyThisTime()
+                    "撤销这次自动分类" -> onUndo()
+                }
+            }
+            .setNegativeButton("取消") { d, _ ->
+                d.dismiss()
+                onCancel()
+            }
+            .setOnCancelListener { onCancel() }
+            .create()
+
+        if (isOverlay) {
+            OverlayDialogs.showOverlayCenterDialog(
+                dialog = dialog,
+                ctx = ctx,
+                widthRatio = 0.88f,
+                cancelOnTouchOutside = true,
+                useSolidPanelBackground = true,
+            )
+        } else {
+            OverlayDialogs.showPageCenterDialog(
+                dialog = dialog,
+                ctx = ctx,
+                widthRatio = 0.88f,
+                cancelOnTouchOutside = true,
+                useSolidPanelBackground = true,
+            )
+        }
+    }
+
+    /**
      * 规则修正冲突裁决确认弹窗。
      * 支持一键确定覆盖/新建，亦支持点击调整规则深入定制。
      */

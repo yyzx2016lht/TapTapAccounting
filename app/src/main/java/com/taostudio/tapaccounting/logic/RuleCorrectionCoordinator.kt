@@ -8,6 +8,7 @@ import com.taostudio.tapaccounting.data.local.AppDatabase
 import com.taostudio.tapaccounting.data.local.entity.AccountingRule
 import com.taostudio.tapaccounting.data.local.entity.Bill
 import com.taostudio.tapaccounting.data.local.entity.BillRuleProvenance
+import com.taostudio.tapaccounting.data.local.entity.Category
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -192,51 +193,12 @@ object RuleCorrectionCoordinator {
                     return@withContext
                 }
 
-                RuleDialogHelper.showCorrectionConfirmDialog(
+                RuleDialogHelper.showCorrectionActionSheet(
                     ctx = ctx,
                     message = decision.promptMessage,
-                    keyword = decision.keyword,
-                    targetCategory = decision.targetCategory,
-                    existingRule = decision.existingRule,
+                    hasExistingRule = decision.existingRule != null,
                     isOverlay = ctx !is Activity,
-                    onConfirmSave = {
-                        CoroutineScope(Dispatchers.IO).launch {
-                            val now = System.currentTimeMillis()
-                            val ruleToSave = if (decision.existingRule != null) {
-                                decision.existingRule.copy(
-                                    keyword = decision.keyword,
-                                    targetCategory = decision.targetCategory,
-                                    source = AccountingRule.Source.USER,
-                                    enabled = true,
-                                    updatedAt = now
-                                )
-                            } else {
-                                AccountingRule(
-                                    id = 0L,
-                                    keyword = decision.keyword,
-                                    targetCategory = decision.targetCategory,
-                                    matchField = AccountingRule.MatchField.REMARK,
-                                    matchMode = AccountingRule.MatchMode.SUBSTRING,
-                                    source = AccountingRule.Source.USER,
-                                    enabled = true,
-                                    createdAt = now,
-                                    updatedAt = now
-                                )
-                            }
-                            db.accountingRuleDao().upsert(ruleToSave)
-
-                            withContext(Dispatchers.Main) {
-                                val toastMsg = if (decision.action == CorrectionAction.OVERWRITE_USER_RULE) {
-                                    "规则已更新"
-                                } else {
-                                    "规则已记住"
-                                }
-                                Toast.makeText(ctx, toastMsg, Toast.LENGTH_SHORT).show()
-                                onFinished()
-                            }
-                        }
-                    },
-                    onCustomize = {
+                    onUpdate = {
                         RuleDialogHelper.showRuleDialog(
                             ctx = ctx,
                             rule = decision.existingRule,
@@ -263,10 +225,64 @@ object RuleCorrectionCoordinator {
                             onCancel = onFinished
                         )
                     },
+                    onDeleteRule = {
+                        CoroutineScope(Dispatchers.IO).launch {
+                            decision.existingRule?.let { deleteOrDisableRule(db, it) }
+                            provenance?.let {
+                                db.billRuleProvenanceDao().upsert(
+                                    it.copy(
+                                        source = BillRuleProvenance.Source.MANUAL,
+                                        ruleId = null,
+                                        keyword = null,
+                                    )
+                                )
+                            }
+                            withContext(Dispatchers.Main) {
+                                Toast.makeText(ctx, "已删除/停用旧规则，这笔账单不变", Toast.LENGTH_SHORT).show()
+                                onFinished()
+                            }
+                        }
+                    },
+                    onOnlyThisTime = onFinished,
+                    onUndo = {
+                        CoroutineScope(Dispatchers.IO).launch {
+                            undoAutoCategory(db, billId)
+                            withContext(Dispatchers.Main) {
+                                Toast.makeText(ctx, "已撤销这次自动分类，落回「其他」", Toast.LENGTH_SHORT).show()
+                                onFinished()
+                            }
+                        }
+                    },
                     onCancel = onFinished
                 )
             }
         }
+    }
+
+    /** 用户手动规则/AI 规则直接删；内置/导入规则只停用，不破坏规则包。 */
+    private suspend fun deleteOrDisableRule(db: AppDatabase, rule: AccountingRule) {
+        val now = System.currentTimeMillis()
+        if (rule.source == AccountingRule.Source.USER || rule.source == AccountingRule.Source.AI) {
+            db.accountingRuleDao().deleteById(rule.id)
+        } else {
+            db.accountingRuleDao().update(rule.copy(enabled = false, updatedAt = now))
+        }
+    }
+
+    /** 撤销这次自动分类：账单分类落回「其他」，并清掉来源记录，避免再次提示。 */
+    private suspend fun undoAutoCategory(db: AppDatabase, billId: Long) {
+        val bill = db.billDao().getBillById(billId) ?: return
+        val type = if (bill.type == Bill.TYPE_INCOME) 1 else 0
+        val categories = db.categoryDao().getAllCategoriesList().toMutableList()
+        var other = categories.firstOrNull { it.type == type && it.name == "其他" }
+        if (other == null) {
+            val id = db.categoryDao().insertCategory(
+                Category(name = "其他", type = type, sortOrder = Int.MAX_VALUE)
+            )
+            other = Category(id = id, name = "其他", type = type, sortOrder = Int.MAX_VALUE)
+        }
+        db.billDao().updateBillCategory(billId, other.name, other.id)
+        db.billRuleProvenanceDao().deleteByBillId(billId)
     }
 
     fun maybePrompt(

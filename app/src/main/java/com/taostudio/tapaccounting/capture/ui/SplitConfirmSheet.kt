@@ -17,6 +17,7 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
+import com.taostudio.tapaccounting.R
 import com.taostudio.tapaccounting.capture.bridge.CaptureBridgeClient
 import com.taostudio.tapaccounting.capture.data.PaymentCapture
 import java.text.SimpleDateFormat
@@ -118,8 +119,8 @@ internal object SplitConfirmSheet {
         }
         private val summaryText = TextView(context)
         private val hintText = TextView(context)
-        private val adjustButton = sheetButton("补差额调整", CaptureUi.BRAND_DARK, CaptureUi.BRAND_SOFT)
-        private val confirmButton = sheetButton("确认入账", Color.WHITE, CaptureUi.BRAND)
+        private val adjustButton = sheetButton("补差额调整", CaptureUi.BRAND_DARK, CaptureUi.BRAND_SOFT, CaptureUi.BRAND_BORDER)
+        private val confirmButton = sheetButton("确认入账", Color.WHITE, CaptureUi.BRAND, Color.TRANSPARENT)
 
         val view: LinearLayout = build()
 
@@ -149,13 +150,14 @@ internal object SplitConfirmSheet {
                 setTextColor(CaptureUi.TEXT_PRIMARY)
                 layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
             })
-            header.addView(TextView(context).apply {
-                text = " ✕ "
-                textSize = 14f
-                setTextColor(CaptureUi.TEXT_MUTED)
-                setPadding(dp(8), dp(4), 0, dp(4))
-                setOnClickListener { onCancel() }
-            })
+            header.addView(CaptureUi.iconButton(
+                context = context,
+                res = R.drawable.ic_close,
+                tint = CaptureUi.TEXT_MUTED,
+                sizeDp = 36,
+                iconDp = 18,
+                contentDescription = "关闭",
+            ) { onCancel() })
             root.addView(header)
 
             root.addView(TextView(context).apply {
@@ -197,8 +199,8 @@ internal object SplitConfirmSheet {
                 },
             )
             adjustRow.addView(
-                sheetButton("改", CaptureUi.TEXT_SECONDARY, CaptureUi.BG_SUBTLE) { onEdit() },
-                LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 0.55f),
+                sheetButton("改备注", CaptureUi.TEXT_SECONDARY, CaptureUi.BG_SUBTLE) { onEdit() },
+                LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 0.7f),
             )
             root.addView(adjustRow)
 
@@ -366,6 +368,7 @@ internal object SplitConfirmSheet {
             text: String,
             textColor: Int,
             bgColor: Int,
+            strokeColor: Int = CaptureUi.BORDER,
             onClick: (() -> Unit)? = null,
         ): TextView = TextView(context).apply {
             this.text = text
@@ -374,7 +377,7 @@ internal object SplitConfirmSheet {
             gravity = Gravity.CENTER
             setTextColor(textColor)
             setPadding(dp(12), dp(10), dp(12), dp(10))
-            background = CaptureUi.rippleBg(bgColor, dp(11), dp(1), CaptureUi.BORDER)
+            background = CaptureUi.rippleBg(bgColor, dp(11), dp(1), strokeColor)
             setOnClickListener { onClick?.invoke() }
         }
 

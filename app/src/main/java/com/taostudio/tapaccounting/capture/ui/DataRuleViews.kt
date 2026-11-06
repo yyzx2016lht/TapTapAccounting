@@ -434,7 +434,7 @@ internal class DataRuleViews(
                 copyAsMine(rule, bundle)
             }
         } else {
-            addAction(actionRow, "删除", CaptureUi.DANGER, CaptureUi.DANGER_SOFT, CaptureUi.DANGER_SOFT) {
+            addAction(actionRow, "删除", CaptureUi.DANGER, CaptureUi.DANGER_SOFT, CaptureUi.DANGER_BORDER) {
                 confirmDelete(rule)
             }
         }

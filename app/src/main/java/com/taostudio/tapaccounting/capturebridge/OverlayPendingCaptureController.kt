@@ -543,13 +543,13 @@ class OverlayPendingCaptureController(
             textSize = 13.5f
             setTypeface(typeface, Typeface.BOLD)
             gravity = Gravity.CENTER
-            setTextColor(Color.parseColor("#1D4ED8"))
+            setTextColor(ctx.getColor(R.color.brand_primary_dark))
             setPadding(dp(12), dp(11), dp(12), dp(11))
             background = rippleBg(
-                fillColor = Color.parseColor("#EFF6FF"),
+                fillColor = ctx.getColor(R.color.brand_primary_soft),
                 radiusPx = dp(11),
                 strokeWidthPx = dp(1),
-                strokeColor = Color.parseColor("#BFDBFE"),
+                strokeColor = ctx.getColor(R.color.brand_primary_border),
             )
             isEnabled = !isBusy
             setOnClickListener {
@@ -567,7 +567,7 @@ class OverlayPendingCaptureController(
             gravity = Gravity.CENTER
             setTextColor(Color.WHITE)
             setPadding(dp(14), dp(11), dp(14), dp(11))
-            background = rippleBg(Color.parseColor("#2563EB"), dp(11))
+            background = rippleBg(ctx.getColor(R.color.brand_primary), dp(11))
             isEnabled = !isBusy
             setOnClickListener {
                 commitAllPendingBills()
@@ -698,8 +698,8 @@ class OverlayPendingCaptureController(
         midLine.addView(
             smallChipButton(
                 text = "细改",
-                textColor = Color.parseColor("#1D4ED8"),
-                bgColor = Color.parseColor("#EFF6FF"),
+                textColor = ctx.getColor(R.color.brand_primary_dark),
+                bgColor = ctx.getColor(R.color.brand_primary_soft),
             ) {
                 editItemFromBatch(index)
             },

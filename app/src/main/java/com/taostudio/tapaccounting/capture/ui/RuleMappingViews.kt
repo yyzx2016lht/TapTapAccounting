@@ -20,6 +20,7 @@ import android.widget.ScrollView
 import android.widget.Switch
 import android.widget.TextView
 import android.widget.Toast
+import com.taostudio.tapaccounting.R
 import com.taostudio.tapaccounting.capture.CaptureApp
 import com.taostudio.tapaccounting.capture.contract.AccountingContext
 import com.taostudio.tapaccounting.capture.contract.CaptureSource
@@ -112,8 +113,8 @@ internal class RuleMappingViews(
                     activity = activity,
                     text = "恢复通用",
                     textColor = CaptureUi.TEXT_SECONDARY,
-                    bgColor = Color.parseColor("#F1F5F9"),
-                    strokeColor = Color.parseColor("#CBD5E1"),
+                    bgColor = CaptureUi.BG_SEGMENT,
+                    strokeColor = CaptureUi.BORDER,
                     paddingH = 10,
                 ) {
                     AlertDialog.Builder(activity)
@@ -312,7 +313,7 @@ internal class RuleMappingViews(
         if (appAssets.isNotEmpty()) {
             val pickBtn = CaptureUi.button(
                 activity = activity,
-                text = "从敲敲记账账户列表中点选 ▾",
+                text = "从敲敲记账账户列表中点选",
                 textColor = CaptureUi.BRAND_DARK,
                 bgColor = CaptureUi.BRAND_SOFT,
                 strokeColor = CaptureUi.BRAND_BORDER,
@@ -329,6 +330,13 @@ internal class RuleMappingViews(
                     ViewGroup.LayoutParams.MATCH_PARENT,
                     ViewGroup.LayoutParams.WRAP_CONTENT,
                 ).apply { topMargin = dp(10) }
+                CaptureUi.applyTrailingIcon(
+                    this,
+                    activity,
+                    R.drawable.ic_chevron_down,
+                    CaptureUi.BRAND_DARK,
+                    11,
+                )
             }
             layout.addView(pickBtn)
         }
@@ -614,7 +622,7 @@ internal class RuleMappingViews(
         if (categoryPaths.isNotEmpty()) {
             val pickBtn = CaptureUi.button(
                 activity = activity,
-                text = "从敲敲记账分类树中点选 ▾",
+                text = "从敲敲记账分类树中点选",
                 textColor = CaptureUi.SUCCESS,
                 bgColor = CaptureUi.SUCCESS_SOFT,
                 strokeColor = CaptureUi.SUCCESS_BORDER,
@@ -631,6 +639,13 @@ internal class RuleMappingViews(
                     ViewGroup.LayoutParams.MATCH_PARENT,
                     ViewGroup.LayoutParams.WRAP_CONTENT,
                 ).apply { topMargin = dp(10) }
+                CaptureUi.applyTrailingIcon(
+                    this,
+                    activity,
+                    R.drawable.ic_chevron_down,
+                    CaptureUi.SUCCESS,
+                    11,
+                )
             }
             layout.addView(pickBtn)
         }
@@ -768,11 +783,15 @@ internal class RuleMappingViews(
                         onDataChanged()
                     }
                 }
-                val radioDot = TextView(activity).apply {
-                    text = if (selected) "●" else "○"
-                    textSize = 15f
-                    setTextColor(if (selected) CaptureUi.BRAND else CaptureUi.TEXT_MUTED)
-                    setPadding(0, 0, dp(10), 0)
+                val radioDot = CaptureUi.icon(
+                    activity,
+                    if (selected) R.drawable.ic_radio_on else R.drawable.ic_radio_off,
+                    18,
+                    if (selected) CaptureUi.BRAND else CaptureUi.TEXT_MUTED,
+                ).apply {
+                    layoutParams = LinearLayout.LayoutParams(dp(18), dp(18)).apply {
+                        marginEnd = dp(10)
+                    }
                 }
                 optionCard.addView(radioDot)
 

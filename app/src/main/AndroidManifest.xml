@@ -251,12 +251,12 @@
             android:name=".capture.ui.PendingListActivity"
             android:exported="false"
             android:label="待记收件箱"
-            android:theme="@android:style/Theme.Material.Light.NoActionBar" />
+            android:theme="@style/CaptureTheme" />
         <activity
             android:name=".capture.ui.CaptureHistoryActivity"
             android:exported="false"
             android:label="捕获历史"
-            android:theme="@android:style/Theme.Material.Light.NoActionBar" />
+            android:theme="@style/CaptureTheme" />
         <activity
             android:name=".capture.ui.CaptureImagePickerActivity"
             android:exported="false"

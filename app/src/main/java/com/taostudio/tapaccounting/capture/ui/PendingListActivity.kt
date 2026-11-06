@@ -47,6 +47,7 @@ import com.taostudio.tapaccounting.capture.data.CategorySource
 import com.taostudio.tapaccounting.capture.data.PaymentCapture
 import com.taostudio.tapaccounting.capture.data.RuleBundleCodec
 import com.taostudio.tapaccounting.BuildConfig
+import com.taostudio.tapaccounting.R
 import com.taostudio.tapaccounting.capture.data.RuleBundleStore
 import com.taostudio.tapaccounting.capture.ingest.CaptureIngestCoordinator
 import com.taostudio.tapaccounting.capture.notify.CaptureBubbleManager
@@ -194,6 +195,8 @@ class PendingListActivity : Activity() {
         titleBlock.addView(TextView(this).apply {
             text = "补备注、归类、拆分与入账"
             textSize = 11.5f
+            maxLines = 1
+            ellipsize = TextUtils.TruncateAt.END
             setTextColor(CaptureUi.TEXT_MUTED)
             setPadding(0, dp(1), 0, 0)
         })
@@ -904,10 +907,17 @@ class PendingListActivity : Activity() {
             layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
         })
         header.addView(TextView(this).apply {
-            text = if (ignoredExpanded) "收起 ▴" else "展开 ▾"
+            text = if (ignoredExpanded) "收起" else "展开"
             textSize = 12f
             setTextColor(CaptureUi.BRAND_DARK)
             setPadding(dp(8), dp(4), 0, dp(4))
+            CaptureUi.applyTrailingIcon(
+                this,
+                this@PendingListActivity,
+                if (ignoredExpanded) R.drawable.ic_chevron_up else R.drawable.ic_chevron_down,
+                CaptureUi.BRAND_DARK,
+                10,
+            )
         })
         card.addView(header)
         if (!ignoredExpanded) return card
@@ -1103,15 +1113,25 @@ class PendingListActivity : Activity() {
         ).apply {
             gravity = Gravity.CENTER
         }
-        emptyCard.addView(TextView(this).apply {
-            text = "✓"
-            textSize = 24f
-            gravity = Gravity.CENTER
-            setTypeface(typeface, Typeface.BOLD)
-            setTextColor(CaptureUi.SUCCESS)
-            layoutParams = LinearLayout.LayoutParams(dp(52), dp(52)).apply { bottomMargin = dp(12) }
-            background = CaptureUi.roundedBg(CaptureUi.SUCCESS_SOFT, dp(999), dp(1), CaptureUi.SUCCESS_BORDER)
-        })
+        val badge = FrameLayout(this).apply {
+            background = CaptureUi.roundedBg(
+                CaptureUi.SUCCESS_SOFT,
+                dp(999),
+                dp(1),
+                CaptureUi.SUCCESS_BORDER,
+            )
+        }
+        emptyCard.addView(
+            badge,
+            LinearLayout.LayoutParams(dp(52), dp(52)).apply {
+                gravity = Gravity.CENTER_HORIZONTAL
+                bottomMargin = dp(12)
+            },
+        )
+        badge.addView(
+            CaptureUi.icon(this, R.drawable.ic_check, 24, CaptureUi.SUCCESS),
+            FrameLayout.LayoutParams(dp(24), dp(24), Gravity.CENTER),
+        )
         emptyCard.addView(TextView(this).apply {
             text = "待记账单已全部清空"
             textSize = 16.5f
@@ -1283,9 +1303,9 @@ class PendingListActivity : Activity() {
                 text = "多渠道合并"
                 textSize = 10.5f
                 setTypeface(typeface, Typeface.BOLD)
-                setTextColor(Color.parseColor("#2563EB"))
+                setTextColor(CaptureUi.BRAND)
                 setPadding(dp(6), dp(2), dp(6), dp(2))
-                background = CaptureUi.roundedBg(Color.parseColor("#EFF6FF"), dp(6), dp(1), Color.parseColor("#BFDBFE"))
+                background = CaptureUi.roundedBg(CaptureUi.BRAND_SOFT, dp(6), dp(1), CaptureUi.BRAND_BORDER)
                 layoutParams = LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.WRAP_CONTENT,
                     ViewGroup.LayoutParams.WRAP_CONTENT,
@@ -1320,9 +1340,9 @@ class PendingListActivity : Activity() {
         val rawChannel = item.paymentMethodRaw
         val hasAsset = !mappedAsset.isNullOrBlank()
         val assetText = when {
-            hasAsset -> "账户 · $mappedAsset ▾"
-            !rawChannel.isNullOrBlank() -> "绑定账户 · $rawChannel ▾"
-            else -> "选择账户 ▾"
+            hasAsset -> "账户 · $mappedAsset"
+            !rawChannel.isNullOrBlank() -> "绑定账户 · $rawChannel"
+            else -> "选择账户"
         }
         val assetChip = CaptureUi.chip(
             activity = this,
@@ -1330,6 +1350,8 @@ class PendingListActivity : Activity() {
             textColor = if (hasAsset) CaptureUi.TEXT_SECONDARY else CaptureUi.WARNING,
             bgColor = if (hasAsset) CaptureUi.BG_SUBTLE else CaptureUi.WARNING_SOFT,
             strokeColor = if (hasAsset) CaptureUi.BORDER else CaptureUi.WARNING_BORDER,
+            trailingIconRes = R.drawable.ic_chevron_down,
+            trailingIconTint = if (hasAsset) CaptureUi.TEXT_SECONDARY else CaptureUi.WARNING,
         ) {
             showAssetPickerDialog(item, ctx)
         }
@@ -1343,7 +1365,7 @@ class PendingListActivity : Activity() {
         var currentCategory = item.categoryName
         fun styleCategoryChip(tv: TextView, cat: String?) {
             val ok = !cat.isNullOrBlank()
-            tv.text = if (ok) "分类 · $cat ▾" else "待选分类 ▾"
+            tv.text = if (ok) "分类 · $cat" else "待选分类"
             tv.setTextColor(if (ok) CaptureUi.SUCCESS else CaptureUi.BRAND_DARK)
             tv.background = CaptureUi.rippleBg(
                 fillColor = if (ok) CaptureUi.SUCCESS_SOFT else CaptureUi.BRAND_SOFT,
@@ -1351,12 +1373,21 @@ class PendingListActivity : Activity() {
                 strokeWidthPx = dp(1),
                 strokeColor = if (ok) CaptureUi.SUCCESS_BORDER else CaptureUi.BRAND_BORDER,
             )
+            CaptureUi.applyTrailingIcon(
+                tv,
+                this@PendingListActivity,
+                R.drawable.ic_chevron_down,
+                if (ok) CaptureUi.SUCCESS else CaptureUi.BRAND_DARK,
+                10,
+            )
         }
         val categoryChip = CaptureUi.chip(
             activity = this,
             text = "",
             textColor = CaptureUi.SUCCESS,
             bgColor = CaptureUi.SUCCESS_SOFT,
+            trailingIconRes = R.drawable.ic_chevron_down,
+            trailingIconTint = CaptureUi.SUCCESS,
         ) {
             showCategoryPickerDialog(item, ctx)
         }
@@ -1377,13 +1408,20 @@ class PendingListActivity : Activity() {
             ?: ctx?.defaultBookName?.takeIf { it.isNotBlank() }
             ?: "日常账本"
         fun styleBookChip(tv: TextView, book: String) {
-            tv.text = "账本 · $book ▾"
+            tv.text = "账本 · $book"
             tv.setTextColor(CaptureUi.TEXT_SECONDARY)
             tv.background = CaptureUi.rippleBg(
                 fillColor = CaptureUi.BG_SUBTLE,
                 radiusPx = dp(8),
                 strokeWidthPx = dp(1),
                 strokeColor = CaptureUi.BORDER,
+            )
+            CaptureUi.applyTrailingIcon(
+                tv,
+                this@PendingListActivity,
+                R.drawable.ic_chevron_down,
+                CaptureUi.TEXT_SECONDARY,
+                10,
             )
         }
         lateinit var bookChip: TextView
@@ -1668,11 +1706,14 @@ class PendingListActivity : Activity() {
                 }
                 row.addView(etAmount, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginEnd = dp(6) })
 
+                val subCatOk = !subItem.categoryName.isNullOrBlank()
                 val subCatChip = CaptureUi.chip(
                     activity = this@PendingListActivity,
-                    text = subItem.categoryName?.takeIf { it.isNotBlank() } ?: "选分类 ▾",
+                    text = subItem.categoryName?.takeIf { it.isNotBlank() } ?: "选分类",
                     textColor = if (!subItem.categoryName.isNullOrBlank()) CaptureUi.SUCCESS else CaptureUi.WARNING,
                     bgColor = if (!subItem.categoryName.isNullOrBlank()) CaptureUi.SUCCESS_SOFT else CaptureUi.WARNING_SOFT,
+                    trailingIconRes = R.drawable.ic_chevron_down,
+                    trailingIconTint = if (subCatOk) CaptureUi.SUCCESS else CaptureUi.WARNING,
                 ) {
                     showCategoryPickerDialog(
                         item = item.copy(categoryName = subItem.categoryName),
@@ -1687,16 +1728,17 @@ class PendingListActivity : Activity() {
                 }
                 row.addView(subCatChip, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginEnd = dp(4) })
 
-                val btnDel = TextView(this@PendingListActivity).apply {
-                    text = " ✕ "
-                    textSize = 13f
-                    setTextColor(CaptureUi.TEXT_MUTED)
-                    setPadding(dp(4), dp(4), dp(4), dp(4))
-                    setOnClickListener {
-                        if (index < splitSubItems.size) {
-                            splitSubItems.removeAt(index)
-                            renderSubItems()
-                        }
+                val btnDel = CaptureUi.iconButton(
+                    context = this@PendingListActivity,
+                    res = R.drawable.ic_close,
+                    tint = CaptureUi.TEXT_MUTED,
+                    sizeDp = 30,
+                    iconDp = 14,
+                    contentDescription = "删除这条明细",
+                ) {
+                    if (index < splitSubItems.size) {
+                        splitSubItems.removeAt(index)
+                        renderSubItems()
                     }
                 }
                 row.addView(btnDel)

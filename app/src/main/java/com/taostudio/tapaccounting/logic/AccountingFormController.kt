@@ -2527,15 +2527,17 @@ class AccountingFormController(
                 }
                 lastAiSuggestOriginalText = null
 
-                // 账单编辑态分类变更协调触发
-                if (didReplaceExisting && oldBill != null && oldBill.categoryName != rBill.categoryName && rBill.categoryName.isNotBlank()) {
-                    RuleCorrectionCoordinator.onUserCorrectCategory(
+                // 账单编辑态：分类或备注变更都走统一修正入口
+                if (didReplaceExisting && oldBill != null &&
+                    (oldBill.categoryName != rBill.categoryName || oldBill.remark != rBill.remark)
+                ) {
+                    RuleCorrectionCoordinator.onUserEditedBill(
                         ctx = ctx,
                         billId = oldBill.id,
                         oldCategory = oldBill.categoryName,
                         newCategory = rBill.categoryName,
-                        note = rBill.remark,
-                        merchant = null,
+                        oldRemark = oldBill.remark,
+                        newRemark = rBill.remark,
                         onFinished = {
                             if (pendingBills.isNotEmpty()) {
                                 processNextPendingBill()

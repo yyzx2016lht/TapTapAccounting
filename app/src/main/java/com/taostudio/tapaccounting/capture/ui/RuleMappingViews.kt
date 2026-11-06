@@ -1004,9 +1004,10 @@ internal class RuleMappingViews(
                 setTextColor(CaptureUi.TEXT_PRIMARY)
             })
             addView(TextView(activity).apply {
-                text = "控制 AI 分类后是否先确认，以及保存后是否自动学习分类规则。"
+                text = "下面两个开关互相独立：上面只管“分类要不要先确认”，下面只管“保存后要不要写规则”。"
                 textSize = 12.5f
                 setTextColor(CaptureUi.TEXT_SECONDARY)
+                setLineSpacing(0f, 1.2f)
                 setPadding(0, dp(4), 0, dp(10))
             })
         }
@@ -1078,8 +1079,8 @@ internal class RuleMappingViews(
             aiChoices += choice
             aiSection.addView(choice.row)
         }
-        addAi(CapturePrefs.AI_CATEGORY_CONFIRM, "先确认", "AI 分类后先显示建议，点确认才入账")
-        addAi(CapturePrefs.AI_CATEGORY_DIRECT, "直接入账再提示", "AI 分类后直接记账，结果卡可改")
+        addAi(CapturePrefs.AI_CATEGORY_CONFIRM, "先确认", "只控制分类：AI 分类后先显示建议，点确认才入账")
+        addAi(CapturePrefs.AI_CATEGORY_DIRECT, "直接入账再提示", "只控制分类：AI 分类后直接记账，结果卡可改")
         card.addView(aiSection)
         paint(aiChoices, aiMode)
 
@@ -1096,8 +1097,8 @@ internal class RuleMappingViews(
             learnChoices += choice
             learnSection.addView(choice.row)
         }
-        addLearn(CapturePrefs.RULE_LEARN_AUTO, "直接学", "保存成功后静默写入规则，并提示已记住")
-        addLearn(CapturePrefs.RULE_LEARN_ASK, "问一次", "写规则前问一下，同意才学习")
+        addLearn(CapturePrefs.RULE_LEARN_AUTO, "直接学", "保存成功后静默写入规则，并提示已记住（受上面“先确认”影响：确认分类后仍会直接学）")
+        addLearn(CapturePrefs.RULE_LEARN_ASK, "问一次", "入账后出结果卡问一次，同意才学习；和上面的分类确认独立")
         addLearn(CapturePrefs.RULE_LEARN_OFF, "不学", "不自动新建规则；已有规则修正提示仍然保留")
         card.addView(learnSection)
         paint(learnChoices, learnMode)

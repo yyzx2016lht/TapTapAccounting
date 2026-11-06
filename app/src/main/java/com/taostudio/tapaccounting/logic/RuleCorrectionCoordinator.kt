@@ -285,23 +285,175 @@ object RuleCorrectionCoordinator {
         db.billRuleProvenanceDao().deleteByBillId(billId)
     }
 
+    /**
+     * 统一编辑入口：分类变了走分类修正；只改备注走关键词修正。
+     */
+    fun onUserEditedBill(
+        ctx: Context,
+        billId: Long,
+        oldCategory: String?,
+        newCategory: String?,
+        oldRemark: String?,
+        newRemark: String?,
+        onFinished: () -> Unit = {},
+    ) {
+        when {
+            oldCategory?.trim().orEmpty() != newCategory?.trim().orEmpty() -> {
+                onUserCorrectCategory(
+                    ctx = ctx,
+                    billId = billId,
+                    oldCategory = oldCategory,
+                    newCategory = newCategory,
+                    note = newRemark,
+                    merchant = null,
+                    onFinished = onFinished,
+                )
+            }
+            oldRemark?.trim().orEmpty() != newRemark?.trim().orEmpty() -> {
+                onUserCorrectRemark(
+                    ctx = ctx,
+                    billId = billId,
+                    category = newCategory,
+                    oldRemark = oldRemark,
+                    newRemark = newRemark,
+                    onFinished = onFinished,
+                )
+            }
+            else -> onFinished()
+        }
+    }
+
+    /**
+     * 只改备注：不强制改分类，只问要不要把规则关键词改成新备注里的词。
+     */
+    private fun onUserCorrectRemark(
+        ctx: Context,
+        billId: Long,
+        category: String?,
+        oldRemark: String?,
+        newRemark: String?,
+        onFinished: () -> Unit,
+    ) {
+        val oldNote = oldRemark?.trim().orEmpty()
+        val newNote = newRemark?.trim().orEmpty()
+        if (oldNote == newNote || newNote.isEmpty()) {
+            onFinished()
+            return
+        }
+        CoroutineScope(Dispatchers.IO).launch {
+            val db = AppDatabase.getDatabase(ctx)
+            val provenance = db.billRuleProvenanceDao().getByBillId(billId)
+            if (provenance == null ||
+                (provenance.source != BillRuleProvenance.Source.RULE &&
+                    provenance.source != BillRuleProvenance.Source.AI)
+            ) {
+                withContext(Dispatchers.Main) { onFinished() }
+                return@launch
+            }
+            val oldKeyword = provenance.keyword?.trim()?.takeIf { it.isNotEmpty() }
+                ?: RuleKeywordPolicy.directKeywordFromNote(oldNote)
+                ?: oldNote.take(8)
+            val newKeyword = RuleKeywordPolicy.directKeywordFromNote(newNote)
+                ?: newNote.take(8)
+            if (newKeyword.isBlank() || oldKeyword == newKeyword) {
+                withContext(Dispatchers.Main) { onFinished() }
+                return@launch
+            }
+            val existingRules = db.accountingRuleDao().findAllByKeyword(oldKeyword)
+            val existing = provenance.ruleId?.let { id -> existingRules.firstOrNull { it.id == id } }
+                ?: existingRules.firstOrNull()
+            if (existing == null) {
+                withContext(Dispatchers.Main) { onFinished() }
+                return@launch
+            }
+
+            withContext(Dispatchers.Main) {
+                RuleDialogHelper.showCorrectionActionSheet(
+                    ctx = ctx,
+                    message = "备注从「${oldNote.take(20)}」改成「${newNote.take(20)}」，要把规则关键词更新为「$newKeyword」吗？",
+                    hasExistingRule = true,
+                    isOverlay = ctx !is Activity,
+                    onUpdate = {
+                        RuleDialogHelper.showRuleDialog(
+                            ctx = ctx,
+                            rule = existing,
+                            referenceText = newNote,
+                            defaultKeyword = newKeyword,
+                            defaultCat = category,
+                            isOverlay = ctx !is Activity,
+                            categoryOnlyLearnMode = true,
+                            onSave = { customizedRule ->
+                                CoroutineScope(Dispatchers.IO).launch {
+                                    val now = System.currentTimeMillis()
+                                    db.accountingRuleDao().upsert(
+                                        customizedRule.copy(
+                                            source = AccountingRule.Source.USER,
+                                            enabled = true,
+                                            updatedAt = now,
+                                        )
+                                    )
+                                    db.billRuleProvenanceDao().upsert(
+                                        provenance.copy(
+                                            source = BillRuleProvenance.Source.MANUAL,
+                                            ruleId = customizedRule.id.takeIf { it > 0 }
+                                                ?: existing.id,
+                                            keyword = customizedRule.keyword,
+                                        )
+                                    )
+                                    withContext(Dispatchers.Main) {
+                                        Toast.makeText(ctx, "规则关键词已更新", Toast.LENGTH_SHORT).show()
+                                        onFinished()
+                                    }
+                                }
+                            },
+                            onCancel = onFinished,
+                        )
+                    },
+                    onDeleteRule = {
+                        CoroutineScope(Dispatchers.IO).launch {
+                            deleteOrDisableRule(db, existing)
+                            db.billRuleProvenanceDao().upsert(
+                                provenance.copy(
+                                    source = BillRuleProvenance.Source.MANUAL,
+                                    ruleId = null,
+                                    keyword = null,
+                                )
+                            )
+                            withContext(Dispatchers.Main) {
+                                Toast.makeText(ctx, "已删除/停用旧规则，这笔账单不变", Toast.LENGTH_SHORT).show()
+                                onFinished()
+                            }
+                        }
+                    },
+                    onOnlyThisTime = onFinished,
+                    onUndo = {
+                        CoroutineScope(Dispatchers.IO).launch {
+                            undoAutoCategory(db, billId)
+                            withContext(Dispatchers.Main) {
+                                Toast.makeText(ctx, "已撤销这次自动分类，落回「其他」", Toast.LENGTH_SHORT).show()
+                                onFinished()
+                            }
+                        }
+                    },
+                    onCancel = onFinished,
+                )
+            }
+        }
+    }
+
     fun maybePrompt(
         ctx: Context,
         context: EditContext,
         onFinished: () -> Unit = {},
     ) {
-        if (context.oldBill.categoryName != context.newBill.categoryName) {
-            onUserCorrectCategory(
-                ctx = ctx,
-                billId = context.newBill.id,
-                oldCategory = context.oldBill.categoryName,
-                newCategory = context.newBill.categoryName,
-                note = context.newBill.remark,
-                merchant = null,
-                onFinished = onFinished
-            )
-        } else {
-            onFinished()
-        }
+        onUserEditedBill(
+            ctx = ctx,
+            billId = context.newBill.id,
+            oldCategory = context.oldBill.categoryName,
+            newCategory = context.newBill.categoryName,
+            oldRemark = context.oldBill.remark,
+            newRemark = context.newBill.remark,
+            onFinished = onFinished,
+        )
     }
 }

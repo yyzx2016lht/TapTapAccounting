@@ -2644,6 +2644,7 @@ class PendingListActivity : Activity() {
                     val resultsArr = result.optJSONArray("results")
                     var successCount = 0
                     var firstError: String? = null
+                    val successfulIds = mutableSetOf<String>()
                     if (resultsArr != null) {
                         withContext(Dispatchers.IO) {
                             for (i in 0 until resultsArr.length()) {
@@ -2652,6 +2653,7 @@ class PendingListActivity : Activity() {
                                 val st = r.optString("status")
                                 if (st == ImportItemStatus.CREATED || st == ImportItemStatus.DUPLICATE) {
                                     repo.updateStatus(cid, CaptureStatus.RECORDED)
+                                    successfulIds.add(cid)
                                     // 首次成功才学习；duplicate 不重复学习。
                                     if (st == ImportItemStatus.CREATED) {
                                         RuleLearningManager.schedule(this@PendingListActivity, cid)
@@ -2663,6 +2665,17 @@ class PendingListActivity : Activity() {
                             }
                         }
                     }
+                    val askEntries = freshReady
+                        .filter { it.id in successfulIds }
+                        .map {
+                            RuleLearningManager.RuleLearnEntry(
+                                note = it.note.orEmpty(),
+                                categoryName = it.categoryName.orEmpty(),
+                                billType = it.billType ?: 0,
+                            )
+                        }
+                    com.taostudio.tapaccounting.logic.RuleAskCoordinator
+                        .showIfNeeded(this@PendingListActivity, askEntries)
                     val failCount = bills.size - successCount
                     if (failCount == 0) {
                         toast("✓ 已成功入账 $successCount 笔")
@@ -2907,6 +2920,16 @@ class PendingListActivity : Activity() {
                         .updateStatus(item.id, CaptureStatus.RECORDED)
                     RuleLearningManager.schedule(this@PendingListActivity, item.id)
                 }
+                com.taostudio.tapaccounting.logic.RuleAskCoordinator.showIfNeeded(
+                    this@PendingListActivity,
+                    listOf(
+                        RuleLearningManager.RuleLearnEntry(
+                            note = item.note.orEmpty(),
+                            categoryName = item.categoryName.orEmpty(),
+                            billType = item.billType ?: 0,
+                        )
+                    ),
+                )
                 toast("✓ 已入账")
                 load()
             }

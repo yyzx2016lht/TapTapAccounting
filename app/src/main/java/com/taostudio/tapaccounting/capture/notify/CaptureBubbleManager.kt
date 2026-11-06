@@ -634,6 +634,16 @@ object CaptureBubbleManager {
                         repository.updateStatus(latest.id, CaptureStatus.RECORDED)
                         RuleLearningManager.schedule(app, latest.id)
                     }
+                    com.taostudio.tapaccounting.logic.RuleAskCoordinator.showIfNeeded(
+                        app,
+                        listOf(
+                            RuleLearningManager.RuleLearnEntry(
+                                note = latest.note.orEmpty(),
+                                categoryName = latest.categoryName.orEmpty(),
+                                billType = latest.billType ?: 0,
+                            )
+                        ),
+                    )
                     CaptureNotifier.refreshAll(app)
                     if (isActive()) {
                         val cat = latest.categoryName?.takeIf { it.isNotBlank() }

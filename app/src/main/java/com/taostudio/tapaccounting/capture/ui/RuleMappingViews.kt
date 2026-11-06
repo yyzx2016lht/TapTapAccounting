@@ -984,6 +984,127 @@ internal class RuleMappingViews(
     //  Tab 3: 设置与调试页
     // ════════════════════════════════════════════════════════
 
+    private data class ModeChoice(
+        val key: String,
+        val row: LinearLayout,
+        val title: TextView,
+        val desc: TextView,
+    )
+
+    private fun buildRuleModeCard(): View {
+        val card = CaptureUi.card(activity).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+            ).apply { bottomMargin = dp(12) }
+            addView(TextView(activity).apply {
+                text = "分类与规则"
+                textSize = 16f
+                setTypeface(typeface, Typeface.BOLD)
+                setTextColor(CaptureUi.TEXT_PRIMARY)
+            })
+            addView(TextView(activity).apply {
+                text = "控制 AI 分类后是否先确认，以及保存后是否自动学习分类规则。"
+                textSize = 12.5f
+                setTextColor(CaptureUi.TEXT_SECONDARY)
+                setPadding(0, dp(4), 0, dp(10))
+            })
+        }
+
+        fun paint(choices: List<ModeChoice>, selectedKey: String) {
+            choices.forEach { choice ->
+                val selected = choice.key == selectedKey
+                choice.row.background = CaptureUi.rippleBg(
+                    fillColor = if (selected) CaptureUi.BRAND_SOFT else CaptureUi.BG_SUBTLE,
+                    radiusPx = dp(12),
+                    strokeWidthPx = dp(1),
+                    strokeColor = if (selected) CaptureUi.BRAND else CaptureUi.BORDER,
+                )
+                choice.title.setTextColor(if (selected) CaptureUi.BRAND_DARK else CaptureUi.TEXT_PRIMARY)
+            }
+        }
+
+        fun makeChoice(
+            key: String,
+            title: String,
+            desc: String,
+            onClick: () -> Unit,
+        ): ModeChoice {
+            val row = LinearLayout(activity).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(dp(13), dp(10), dp(13), dp(10))
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                ).apply { bottomMargin = dp(8) }
+                isClickable = true
+                setOnClickListener { onClick() }
+            }
+            val titleView = TextView(activity).apply {
+                text = title
+                textSize = 13.5f
+                setTypeface(typeface, Typeface.BOLD)
+                setTextColor(CaptureUi.TEXT_PRIMARY)
+            }
+            val descView = TextView(activity).apply {
+                text = desc
+                textSize = 11.5f
+                setTextColor(CaptureUi.TEXT_SECONDARY)
+                setPadding(0, dp(2), 0, 0)
+            }
+            row.addView(titleView)
+            row.addView(descView)
+            return ModeChoice(key, row, titleView, descView)
+        }
+
+        fun sectionLabel(text: String): TextView = TextView(activity).apply {
+            this.text = text
+            textSize = 12.5f
+            setTypeface(typeface, Typeface.BOLD)
+            setTextColor(CaptureUi.TEXT_MUTED)
+            setPadding(0, dp(6), 0, dp(6))
+        }
+
+        var aiMode = CapturePrefs.getAiCategoryMode(activity)
+        val aiSection = LinearLayout(activity).apply { orientation = LinearLayout.VERTICAL }
+        aiSection.addView(sectionLabel("AI 分类后"))
+        val aiChoices = mutableListOf<ModeChoice>()
+        fun addAi(key: String, title: String, desc: String) {
+            val choice = makeChoice(key, title, desc) {
+                aiMode = key
+                CapturePrefs.setAiCategoryMode(activity, key)
+                paint(aiChoices, aiMode)
+            }
+            aiChoices += choice
+            aiSection.addView(choice.row)
+        }
+        addAi(CapturePrefs.AI_CATEGORY_CONFIRM, "先确认", "AI 分类后先显示建议，点确认才入账")
+        addAi(CapturePrefs.AI_CATEGORY_DIRECT, "直接入账再提示", "AI 分类后直接记账，结果卡可改")
+        card.addView(aiSection)
+        paint(aiChoices, aiMode)
+
+        var learnMode = CapturePrefs.getRuleLearnMode(activity)
+        val learnSection = LinearLayout(activity).apply { orientation = LinearLayout.VERTICAL }
+        learnSection.addView(sectionLabel("规则学习方式"))
+        val learnChoices = mutableListOf<ModeChoice>()
+        fun addLearn(key: String, title: String, desc: String) {
+            val choice = makeChoice(key, title, desc) {
+                learnMode = key
+                CapturePrefs.setRuleLearnMode(activity, key)
+                paint(learnChoices, learnMode)
+            }
+            learnChoices += choice
+            learnSection.addView(choice.row)
+        }
+        addLearn(CapturePrefs.RULE_LEARN_AUTO, "直接学", "保存成功后静默写入规则，并提示已记住")
+        addLearn(CapturePrefs.RULE_LEARN_ASK, "问一次", "写规则前问一下，同意才学习")
+        addLearn(CapturePrefs.RULE_LEARN_OFF, "不学", "不自动新建规则；已有规则修正提示仍然保留")
+        card.addView(learnSection)
+        paint(learnChoices, learnMode)
+
+        return card
+    }
+
     fun buildSettingsTab(
         onSimulateExpense: () -> Unit,
         onSimulateWcdb: () -> Unit,
@@ -1176,6 +1297,7 @@ internal class RuleMappingViews(
             }
         }
         container.addView(promptCard)
+        container.addView(buildRuleModeCard())
 
         val transferDedupCard = CaptureUi.card(activity).apply {
             layoutParams = LinearLayout.LayoutParams(

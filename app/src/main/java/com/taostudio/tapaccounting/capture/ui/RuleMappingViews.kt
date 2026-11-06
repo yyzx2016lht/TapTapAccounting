@@ -23,12 +23,15 @@ import android.widget.ScrollView
 import android.widget.Switch
 import android.widget.TextView
 import android.widget.Toast
+import com.taostudio.tapaccounting.Prefs
 import com.taostudio.tapaccounting.R
 import com.taostudio.tapaccounting.ui.dialog.OverlayDialogs
 import com.taostudio.tapaccounting.capture.CaptureApp
 import com.taostudio.tapaccounting.capture.contract.AccountingContext
+import com.taostudio.tapaccounting.capture.contract.CapturePayload
 import com.taostudio.tapaccounting.capture.contract.CaptureSource
 import com.taostudio.tapaccounting.capture.contract.CaptureSources
+import com.taostudio.tapaccounting.capture.contract.LocalBillType
 import com.taostudio.tapaccounting.capture.data.AssetMappingRule
 import com.taostudio.tapaccounting.capture.data.CapturePrefs
 import com.taostudio.tapaccounting.capture.data.CategoryRule
@@ -40,9 +43,11 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.json.JSONObject
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.UUID
 
 /**
  * 插件工作台 Tab 1（资产映射）、Tab 2（分类规则）、Tab 3（设置与调试）视图构建器。
@@ -637,36 +642,37 @@ internal class RuleMappingViews(
             })
         }
 
-        if (categoryPaths.isNotEmpty()) {
-            val pickBtn = CaptureUi.button(
-                activity = activity,
-                text = "从敲敲记账分类树中点选",
-                textColor = CaptureUi.SUCCESS,
-                bgColor = CaptureUi.SUCCESS_SOFT,
-                strokeColor = CaptureUi.SUCCESS_BORDER,
-                paddingV = 9,
-            ) {
-                AlertDialog.Builder(activity)
-                    .setTitle("选择敲敲记账分类")
-                    .setItems(categoryPaths.toTypedArray()) { _, which ->
-                        etCategory.setText(categoryPaths[which])
-                    }
-                    .show()
-            }.apply {
-                layoutParams = LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                    ViewGroup.LayoutParams.WRAP_CONTENT,
-                ).apply { topMargin = dp(10) }
-                CaptureUi.applyTrailingIcon(
-                    this,
-                    activity,
-                    R.drawable.ic_chevron_down,
-                    CaptureUi.SUCCESS,
-                    11,
-                )
+        val pickBtn = CaptureUi.button(
+            activity = activity,
+            text = "点选敲敲记账分类",
+            textColor = CaptureUi.SUCCESS,
+            bgColor = CaptureUi.SUCCESS_SOFT,
+            strokeColor = CaptureUi.SUCCESS_BORDER,
+            paddingV = 9,
+        ) {
+            OverlayDialogs.showGridCategoryPicker(
+                ctx = activity,
+                currentSelectionText = etCategory.text?.toString()?.trim().orEmpty(),
+                type = Prefs.TYPE_EXPENSE,
+                allowClear = false,
+                title = "选择目标分类",
+            ) { selectedCategory ->
+                etCategory.setText(selectedCategory)
             }
-            layout.addView(pickBtn)
+        }.apply {
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+            ).apply { topMargin = dp(10) }
+            CaptureUi.applyTrailingIcon(
+                this,
+                activity,
+                R.drawable.ic_chevron_down,
+                CaptureUi.SUCCESS,
+                11,
+            )
         }
+        layout.addView(pickBtn)
 
         val builder = AlertDialog.Builder(activity)
             .setTitle(if (isNew) "新增分类规则" else "编辑分类规则")
@@ -724,7 +730,7 @@ internal class RuleMappingViews(
     fun buildSettingsTab(
         onSimulateExpense: () -> Unit,
         onSimulateWcdb: () -> Unit,
-        onTestRuleSamples: () -> Unit,
+        onTestRuleSamples: (() -> Unit)? = null,
         onCustomSimulateExpense: (() -> Unit)? = null,
     ): View {
         val scroll = ScrollView(activity).apply {
@@ -1067,63 +1073,71 @@ internal class RuleMappingViews(
                 setPadding(0, 0, 0, dp(10))
             })
 
-            val row1 = LinearLayout(activity).apply { orientation = LinearLayout.HORIZONTAL }
-            row1.addView(
+            val btnRow = LinearLayout(activity).apply { orientation = LinearLayout.HORIZONTAL }
+            btnRow.addView(
                 CaptureUi.button(
                     activity = activity,
-                    text = "模拟支出 (长按自定义)",
+                    text = "⚡ 模拟支出",
                     textColor = CaptureUi.SUCCESS,
                     bgColor = CaptureUi.SUCCESS_SOFT,
                     strokeColor = CaptureUi.SUCCESS_BORDER,
                 ) { onSimulateExpense() }.apply {
-                    if (onCustomSimulateExpense != null) {
-                        setOnLongClickListener {
+                    setOnLongClickListener {
+                        if (onCustomSimulateExpense != null) {
                             onCustomSimulateExpense()
-                            true
+                        } else {
+                            showCustomSimulateDialog()
                         }
+                        true
                     }
                 },
                 LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginEnd = dp(8) },
             )
-            row1.addView(
+            btnRow.addView(
                 CaptureUi.button(
                     activity = activity,
-                    text = "模拟 WCDB 真实包",
+                    text = "📦 真实报文",
                     textColor = CaptureUi.BRAND_DARK,
                     bgColor = CaptureUi.BRAND_SOFT,
                     strokeColor = CaptureUi.BRAND_BORDER,
-                ) { onSimulateWcdb() },
-                LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f),
-            )
-            addView(row1)
-
-            val row2 = LinearLayout(activity).apply {
-                orientation = LinearLayout.HORIZONTAL
-                setPadding(0, dp(8), 0, 0)
-            }
-            row2.addView(
-                CaptureUi.button(
-                    activity = activity,
-                    text = "原始捕获历史",
-                    textColor = CaptureUi.TEXT_SECONDARY,
-                    bgColor = CaptureUi.BG_SUBTLE,
-                    strokeColor = CaptureUi.BORDER,
-                ) {
-                    activity.startActivity(Intent(activity, CaptureHistoryActivity::class.java))
+                ) { onSimulateWcdb() }.apply {
+                    setOnLongClickListener {
+                        if (onCustomSimulateExpense != null) {
+                            onCustomSimulateExpense()
+                        } else {
+                            showCustomSimulateDialog()
+                        }
+                        true
+                    }
                 },
-                LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginEnd = dp(8) },
-            )
-            row2.addView(
-                CaptureUi.button(
-                    activity = activity,
-                    text = "规则引擎自检",
-                    textColor = CaptureUi.TEXT_SECONDARY,
-                    bgColor = CaptureUi.BG_SUBTLE,
-                    strokeColor = CaptureUi.BORDER,
-                ) { onTestRuleSamples() },
                 LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f),
             )
-            addView(row2)
+            addView(btnRow)
+
+            val clearLink = TextView(activity).apply {
+                text = "清空待记历史"
+                textSize = 12f
+                setTextColor(CaptureUi.TEXT_MUTED)
+                gravity = Gravity.CENTER
+                setPadding(0, dp(10), 0, 0)
+                setOnClickListener {
+                    AlertDialog.Builder(activity)
+                        .setTitle("清空历史")
+                        .setMessage("确定清空全部待记历史吗？账单本身不受影响。")
+                        .setPositiveButton("清空") { _, _ ->
+                            scope.launch {
+                                withContext(Dispatchers.IO) {
+                                    CaptureApp.from(activity).repository.clearHistory()
+                                }
+                                toast("已清空待记历史")
+                                onDataChanged()
+                            }
+                        }
+                        .setNegativeButton("取消", null)
+                        .show()
+                }
+            }
+            addView(clearLink)
         }
         container.addView(debugCard)
 
@@ -1250,6 +1264,186 @@ internal class RuleMappingViews(
                     .setMessage("${result.error}\n\n排查建议：\n1. 确保同机已安装并运行「自动记账」\n2. 确保自动记账的本地核心服务已启动（端口 52045）\n3. 检查是否有权限或省电策略拦截了本机环回通信")
                     .setPositiveButton("知道了", null)
                     .show()
+            }
+        }
+    }
+
+    fun showCustomSimulateDialog(
+        onSubmit: ((source: String, amountCents: Long, merchant: String, note: String?) -> Unit)? = null,
+    ) {
+        val container = LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(20), dp(12), dp(20), dp(8))
+        }
+
+        container.addView(TextView(activity).apply {
+            text = "金额（元）"
+            textSize = 12f
+            setTextColor(CaptureUi.TEXT_SECONDARY)
+            setPadding(0, 0, 0, dp(4))
+        })
+        val etAmount = EditText(activity).apply {
+            hint = "如 88.50"
+            setText("88.50")
+            inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL
+            isSingleLine = true
+            setPadding(dp(12), dp(10), dp(12), dp(10))
+            background = CaptureUi.roundedBg(CaptureUi.BG_SUBTLE, dp(8), dp(1), CaptureUi.BORDER)
+        }
+        container.addView(etAmount, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(10) })
+
+        container.addView(TextView(activity).apply {
+            text = "商户名称"
+            textSize = 12f
+            setTextColor(CaptureUi.TEXT_SECONDARY)
+            setPadding(0, 0, 0, dp(4))
+        })
+        val etMerchant = EditText(activity).apply {
+            hint = "如 自定义星巴克"
+            setText("自定义星巴克")
+            isSingleLine = true
+            setPadding(dp(12), dp(10), dp(12), dp(10))
+            background = CaptureUi.roundedBg(CaptureUi.BG_SUBTLE, dp(8), dp(1), CaptureUi.BORDER)
+        }
+        container.addView(etMerchant, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(10) })
+
+        container.addView(TextView(activity).apply {
+            text = "商品说明"
+            textSize = 12f
+            setTextColor(CaptureUi.TEXT_SECONDARY)
+            setPadding(0, 0, 0, dp(4))
+        })
+        val etDesc = EditText(activity).apply {
+            hint = "如 拿铁咖啡（可留空）"
+            setText("拿铁咖啡")
+            isSingleLine = true
+            setPadding(dp(12), dp(10), dp(12), dp(10))
+            background = CaptureUi.roundedBg(CaptureUi.BG_SUBTLE, dp(8), dp(1), CaptureUi.BORDER)
+        }
+        container.addView(etDesc, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(10) })
+
+        container.addView(TextView(activity).apply {
+            text = "支付渠道"
+            textSize = 12f
+            setTextColor(CaptureUi.TEXT_SECONDARY)
+            setPadding(0, 0, 0, dp(4))
+        })
+        var selectedSource = CaptureSource.WECHAT
+        val channelRow = LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL
+        }
+        val btnWechat = TextView(activity).apply {
+            text = "微信支付"
+            textSize = 13f
+            gravity = Gravity.CENTER
+            setPadding(dp(14), dp(8), dp(14), dp(8))
+        }
+        val btnAlipay = TextView(activity).apply {
+            text = "支付宝"
+            textSize = 13f
+            gravity = Gravity.CENTER
+            setPadding(dp(14), dp(8), dp(14), dp(8))
+        }
+        fun updateChannelUi() {
+            val isWechat = selectedSource == CaptureSource.WECHAT
+            btnWechat.setTextColor(if (isWechat) CaptureUi.WECHAT else CaptureUi.TEXT_SECONDARY)
+            btnWechat.background = CaptureUi.rippleBg(
+                fillColor = if (isWechat) CaptureUi.WECHAT_SOFT else CaptureUi.BG_SUBTLE,
+                radiusPx = dp(8),
+                strokeWidthPx = dp(1),
+                strokeColor = if (isWechat) CaptureUi.WECHAT else CaptureUi.BORDER,
+            )
+            btnAlipay.setTextColor(if (!isWechat) CaptureUi.ALIPAY else CaptureUi.TEXT_SECONDARY)
+            btnAlipay.background = CaptureUi.rippleBg(
+                fillColor = if (!isWechat) CaptureUi.ALIPAY_SOFT else CaptureUi.BG_SUBTLE,
+                radiusPx = dp(8),
+                strokeWidthPx = dp(1),
+                strokeColor = if (!isWechat) CaptureUi.ALIPAY else CaptureUi.BORDER,
+            )
+        }
+        btnWechat.setOnClickListener {
+            selectedSource = CaptureSource.WECHAT
+            updateChannelUi()
+        }
+        btnAlipay.setOnClickListener {
+            selectedSource = CaptureSource.ALIPAY
+            updateChannelUi()
+        }
+        updateChannelUi()
+        channelRow.addView(btnWechat, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginEnd = dp(8) })
+        channelRow.addView(btnAlipay, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        container.addView(channelRow, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(6) })
+
+        AlertDialog.Builder(activity)
+            .setTitle("自定义模拟待记")
+            .setView(container)
+            .setPositiveButton("生成待记") { _, _ ->
+                val amountDouble = etAmount.text?.toString()?.toDoubleOrNull() ?: 88.50
+                val amountCents = (amountDouble * 100.0).toLong().coerceAtLeast(1L)
+                val merchant = etMerchant.text?.toString()?.trim().takeIf { !it.isNullOrBlank() } ?: "自定义星巴克"
+                val note = etDesc.text?.toString()?.trim().takeIf { !it.isNullOrBlank() }
+                if (onSubmit != null) {
+                    onSubmit(selectedSource, amountCents, merchant, note)
+                } else {
+                    simulateCustomCapture(selectedSource, amountCents, merchant, note)
+                }
+            }
+            .setNegativeButton("取消", null)
+            .show()
+    }
+
+    private fun simulateCustomCapture(
+        source: String,
+        amountCents: Long,
+        merchant: String,
+        note: String?,
+    ) {
+        val now = System.currentTimeMillis()
+        val appContext = activity.applicationContext
+        scope.launch {
+            try {
+                val outcome = withContext(Dispatchers.IO) {
+                    val rawMethod = if (source == CaptureSource.ALIPAY) "支付宝余额" else "零钱"
+                    val mappedAsset = CaptureRuleMatcher.resolveAssetName(appContext, rawMethod)
+                    val payload = CapturePayload(
+                        captureId = UUID.randomUUID().toString(),
+                        source = source,
+                        amountCents = amountCents,
+                        currency = "CNY",
+                        merchant = merchant,
+                        paymentMethodRaw = rawMethod,
+                        assetName = mappedAsset,
+                        categoryName = null,
+                        paidAt = now,
+                        capturedAt = now,
+                        note = note,
+                        billType = LocalBillType.TYPE_EXPENSE,
+                        subType = LocalBillType.SUBTYPE_NORMAL,
+                        rawJson = JSONObject().apply {
+                            put("simulated", true)
+                            put("amountCents", amountCents)
+                            put("merchant", merchant)
+                            if (note != null) put("description", note)
+                        }.toString(),
+                        ruleVersion = "simulated-custom",
+                    )
+                    val repo = CaptureApp.from(activity).repository
+                    repo.insert(
+                        payload,
+                        transferIncomeDedupEnabled = CapturePrefs.isTransferIncomeDedupEnabled(appContext),
+                        transferIncomeDedupWindowMillis = CapturePrefs.getTransferIncomeDedupWindowMillis(appContext),
+                    )
+                    val pendingList = repo.listPending(10, true)
+                    Pair(payload, pendingList)
+                }
+                val saved = outcome.second.firstOrNull { it.id == outcome.first.captureId }
+                if (saved != null && CapturePrefs.getPromptMode(activity) == CapturePrefs.MODE_BUBBLE) {
+                    CaptureBubbleManager.showBubble(activity, saved, outcome.second.size)
+                }
+                toast("已生成自定义待记")
+                onDataChanged()
+            } catch (t: Throwable) {
+                toast("生成失败：${t.message ?: t.javaClass.simpleName}")
             }
         }
     }

@@ -67,6 +67,7 @@ import com.taostudio.tapaccounting.data.local.AppDatabase
 import com.taostudio.tapaccounting.data.local.entity.Bill
 import com.taostudio.tapaccounting.ui.common.StatusBarStyle
 import com.taostudio.tapaccounting.data.local.entity.ChatMessage
+import com.taostudio.tapaccounting.data.local.entity.AccountingRule
 import com.taostudio.tapaccounting.data.local.entity.AiRule
 import com.taostudio.tapaccounting.data.repository.CategoryRepository
 import com.google.android.material.snackbar.Snackbar
@@ -302,7 +303,7 @@ class ChatActivity : AppCompatActivity() {
     }
     private val searchResultAdapter by lazy {
         DrawerSearchResultAdapter(
-            onClick = { msg ->
+            onClick = { msg: ChatMessage ->
                 messagePipeline.cancelCurrentRequest(showInterruptedMessage = false)
                 pendingScrollToMessageId = msg.id
                 currentBookName = msg.bookName.ifBlank { currentBookName }
@@ -1867,6 +1868,7 @@ class ChatActivity : AppCompatActivity() {
 
             if (conflicts.isEmpty()) {
                 dao.insertRule(newRule.copy(keyword = keyword))
+                syncToAccountingRules(newRule.copy(keyword = keyword))
                 return@withContext RuleSaveOutcome.SAVED
             }
 
@@ -1878,13 +1880,48 @@ class ChatActivity : AppCompatActivity() {
             }
 
             val target = conflicts.first()
-            dao.insertRule(newRule.copy(id = target.id, keyword = keyword))
+            val ruleToSave = newRule.copy(id = target.id, keyword = keyword)
+            dao.insertRule(ruleToSave)
+            syncToAccountingRules(ruleToSave)
             currentEditId?.takeIf { it != target.id }?.let { dao.deleteRuleById(it) }
             conflicts.drop(1).forEach { duplicate ->
                 if (duplicate.id != target.id) dao.deleteRuleById(duplicate.id)
             }
             RuleSaveOutcome.OVERWRITTEN
         }
+
+    private suspend fun syncToAccountingRules(newRule: AiRule) {
+        runCatching {
+            val keyword = newRule.keyword.trim()
+            val existing = db.accountingRuleDao().findByKeyword(keyword)
+            val now = System.currentTimeMillis()
+            val accRule = if (existing != null) {
+                existing.copy(
+                    targetCategory = newRule.targetCategory,
+                    targetType = newRule.targetType ?: existing.targetType,
+                    targetAccount1 = newRule.targetAccount1 ?: existing.targetAccount1,
+                    targetAccount2 = newRule.targetAccount2 ?: existing.targetAccount2,
+                    source = AccountingRule.Source.USER,
+                    enabled = newRule.isEnabled,
+                    updatedAt = now
+                )
+            } else {
+                AccountingRule(
+                    id = 0L,
+                    keyword = keyword,
+                    targetCategory = newRule.targetCategory,
+                    targetType = newRule.targetType,
+                    targetAccount1 = newRule.targetAccount1,
+                    targetAccount2 = newRule.targetAccount2,
+                    source = AccountingRule.Source.USER,
+                    enabled = newRule.isEnabled,
+                    createdAt = now,
+                    updatedAt = now
+                )
+            }
+            db.accountingRuleDao().upsert(accRule)
+        }
+    }
 
     private suspend fun promptKeywordOverwrite(
         keyword: String,

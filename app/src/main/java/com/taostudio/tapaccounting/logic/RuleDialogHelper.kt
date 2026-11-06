@@ -20,6 +20,7 @@ import com.taostudio.tapaccounting.AIService
 import com.taostudio.tapaccounting.Prefs
 import com.taostudio.tapaccounting.R
 import com.taostudio.tapaccounting.data.local.AppDatabase
+import com.taostudio.tapaccounting.data.local.entity.AccountingRule
 import com.taostudio.tapaccounting.data.local.entity.AiRule
 import com.taostudio.tapaccounting.ui.dialog.OverlayDialogs
 
@@ -51,6 +52,7 @@ object RuleDialogHelper {
         ctx: Context,
         rule: AiRule?,
         referenceText: String?,
+        defaultKeyword: String? = null,
         defaultType: Int? = null,
         defaultCat: String? = null,
         defaultAcc1: String? = null,
@@ -95,13 +97,26 @@ object RuleDialogHelper {
             Toast.makeText(ctx, ctx.getString(R.string.extracting_rules), Toast.LENGTH_SHORT).show()
             CoroutineScope(Dispatchers.IO).launch {
                 val remark = referenceText ?: ""
-                val prompt = DEFAULT_RULE_PROMPT
-                    .replace("{{REMARK}}", remark)
-                    .replace("{{CATEGORY}}", tvCategory.text.toString())
+                val currentCategory = tvCategory.text.toString().takeIf { it != ctx.getString(R.string.tap_select_category) }.orEmpty()
+                val currentType = spType.selectedItemPosition
                 try {
-                    val result = AIService.simpleChat(ctx, prompt)
+                    val keywords = AIService.suggestRuleKeywords(
+                        ctx = ctx,
+                        items = listOf(
+                            AIService.RuleKeywordInput(
+                                note = remark,
+                                categoryName = currentCategory,
+                                billType = currentType
+                            )
+                        )
+                    )
+                    val result = keywords.firstOrNull()?.trim().orEmpty()
                     withContext(Dispatchers.Main) {
-                        etKeyword.setText(result.trim())
+                        if (result.isNotEmpty()) {
+                            etKeyword.setText(result)
+                        } else {
+                            Toast.makeText(ctx, ctx.getString(R.string.extract_failed), Toast.LENGTH_SHORT).show()
+                        }
                     }
                 } catch (e: Exception) {
                     withContext(Dispatchers.Main) {
@@ -170,6 +185,8 @@ object RuleDialogHelper {
         switchEnabled.isChecked = rule?.isEnabled ?: true
         if (rule != null) {
             etKeyword.setText(rule.keyword)
+        } else if (!defaultKeyword.isNullOrBlank()) {
+            etKeyword.setText(defaultKeyword)
         }
 
         view.findViewById<TextView>(R.id.tv_dialog_title).text = if (rule == null) ctx.getString(R.string.add_rule_title) else ctx.getString(R.string.edit_rule_title)
@@ -255,6 +272,130 @@ object RuleDialogHelper {
                 dialog = dialog,
                 ctx = ctx,
                 widthRatio = 0.92f,
+                cancelOnTouchOutside = true,
+                useSolidPanelBackground = true
+            )
+        }
+    }
+
+    /**
+     * 以 AccountingRule 统一契约展示规则详情与调整弹窗。
+     */
+    fun showRuleDialog(
+        ctx: Context,
+        rule: AccountingRule?,
+        referenceText: String?,
+        defaultKeyword: String? = null,
+        defaultType: Int? = null,
+        defaultCat: String? = null,
+        defaultAcc1: String? = null,
+        defaultAcc2: String? = null,
+        isOverlay: Boolean = false,
+        categoryOnlyLearnMode: Boolean = false,
+        onSave: (AccountingRule) -> Unit,
+        onDelete: ((AccountingRule) -> Unit)? = null,
+        onCancel: (() -> Unit)? = null
+    ) {
+        val aiRule = rule?.let {
+            AiRule(
+                id = it.id.toInt(),
+                keyword = it.keyword,
+                targetType = it.targetType,
+                targetCategory = it.targetCategory,
+                targetAccount1 = it.targetAccount1,
+                targetAccount2 = it.targetAccount2,
+                isEnabled = it.enabled
+            )
+        }
+        showDialog(
+            ctx = ctx,
+            rule = aiRule,
+            referenceText = referenceText,
+            defaultKeyword = defaultKeyword ?: rule?.keyword,
+            defaultType = defaultType ?: rule?.targetType,
+            defaultCat = defaultCat ?: rule?.targetCategory,
+            defaultAcc1 = defaultAcc1 ?: rule?.targetAccount1,
+            defaultAcc2 = defaultAcc2 ?: rule?.targetAccount2,
+            isOverlay = isOverlay,
+            categoryOnlyLearnMode = categoryOnlyLearnMode,
+            onSave = { savedAiRule ->
+                val now = System.currentTimeMillis()
+                val updatedRule = (rule ?: AccountingRule(
+                    id = 0L,
+                    keyword = savedAiRule.keyword,
+                    targetCategory = savedAiRule.targetCategory,
+                    targetType = savedAiRule.targetType,
+                    targetAccount1 = savedAiRule.targetAccount1,
+                    targetAccount2 = savedAiRule.targetAccount2,
+                    enabled = savedAiRule.isEnabled,
+                    source = AccountingRule.Source.USER,
+                    createdAt = now,
+                    updatedAt = now
+                )).copy(
+                    keyword = savedAiRule.keyword,
+                    targetCategory = savedAiRule.targetCategory,
+                    targetType = savedAiRule.targetType,
+                    targetAccount1 = savedAiRule.targetAccount1,
+                    targetAccount2 = savedAiRule.targetAccount2,
+                    enabled = savedAiRule.isEnabled,
+                    updatedAt = now
+                )
+                onSave(updatedRule)
+            },
+            onDelete = if (onDelete != null && rule != null) {
+                { onDelete(rule) }
+            } else null,
+            onCancel = onCancel
+        )
+    }
+
+    /**
+     * 规则修正冲突裁决确认弹窗。
+     * 支持一键确定覆盖/新建，亦支持点击调整规则深入定制。
+     */
+    fun showCorrectionConfirmDialog(
+        ctx: Context,
+        message: String,
+        keyword: String,
+        targetCategory: String,
+        existingRule: AccountingRule? = null,
+        isOverlay: Boolean = false,
+        onConfirmSave: () -> Unit,
+        onCustomize: () -> Unit,
+        onCancel: () -> Unit = {}
+    ) {
+        val themeCtx = ContextThemeWrapper(ctx, R.style.Theme_TapAccounting)
+        val dialog = AlertDialog.Builder(themeCtx)
+            .setTitle("分类规则")
+            .setMessage(message)
+            .setPositiveButton("确定") { d, _ ->
+                d.dismiss()
+                onConfirmSave()
+            }
+            .setNeutralButton("调整规则") { d, _ ->
+                d.dismiss()
+                onCustomize()
+            }
+            .setNegativeButton("取消") { d, _ ->
+                d.dismiss()
+                onCancel()
+            }
+            .setOnCancelListener { onCancel() }
+            .create()
+
+        if (isOverlay) {
+            OverlayDialogs.showOverlayCenterDialog(
+                dialog = dialog,
+                ctx = ctx,
+                widthRatio = 0.88f,
+                cancelOnTouchOutside = true,
+                useSolidPanelBackground = true
+            )
+        } else {
+            OverlayDialogs.showPageCenterDialog(
+                dialog = dialog,
+                ctx = ctx,
+                widthRatio = 0.88f,
                 cancelOnTouchOutside = true,
                 useSolidPanelBackground = true
             )

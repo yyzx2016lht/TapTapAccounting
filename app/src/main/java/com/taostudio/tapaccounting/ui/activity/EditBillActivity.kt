@@ -12,6 +12,7 @@ import org.json.JSONObject
 import com.taostudio.tapaccounting.TapApplication
 import com.taostudio.tapaccounting.R
 import com.taostudio.tapaccounting.logic.AccountingFormController
+import com.taostudio.tapaccounting.logic.RuleCorrectionCoordinator
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -122,6 +123,31 @@ class EditBillActivity : AppCompatActivity() {
                     formController?.fillDataToUi(json, showToast = false)
                 }
             }
+        }
+    }
+
+    /**
+     * 账单修改分类时触发规则修正协调器
+     */
+    fun triggerCategoryCorrection(
+        oldCategory: String?,
+        newCategory: String?,
+        note: String?,
+        merchant: String? = null,
+        onFinished: () -> Unit = {}
+    ) {
+        if (billId != -1L) {
+            RuleCorrectionCoordinator.onUserCorrectCategory(
+                ctx = this,
+                billId = billId,
+                oldCategory = oldCategory,
+                newCategory = newCategory,
+                note = note,
+                merchant = merchant,
+                onFinished = onFinished
+            )
+        } else {
+            onFinished()
         }
     }
 }

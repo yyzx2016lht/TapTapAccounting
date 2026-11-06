@@ -114,6 +114,12 @@ class PendingListActivity : Activity() {
     private var inboxEventsJob: Job? = null
     private var savedInboxScrollY: Int = 0
     private val pendingCardViews = mutableMapOf<String, View>()
+    private var inboxContainer: LinearLayout? = null
+    private var summaryHeroCardView: View? = null
+    private var emptyStateCardView: View? = null
+    private var ignoredCardView: ViewGroup? = null
+    private var ignoredTitleView: TextView? = null
+    private val ignoredItemRowViews = mutableMapOf<String, View>()
 
     private lateinit var bridgeDot: View
     private lateinit var bridgeBadge: TextView
@@ -865,6 +871,7 @@ class PendingListActivity : Activity() {
 
     private fun buildInboxTab(snapshot: Snapshot): View {
         pendingCardViews.clear()
+        ignoredItemRowViews.clear()
         val scroll = ScrollView(this).apply {
             layoutParams = FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
@@ -875,13 +882,20 @@ class PendingListActivity : Activity() {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(14), dp(14), dp(14), dp(32))
         }
+        inboxContainer = container
         scroll.addView(container)
 
         val items = snapshot.pendingItems
         if (items.isEmpty()) {
-            container.addView(buildEmptyStateCard())
+            val empty = buildEmptyStateCard()
+            emptyStateCardView = empty
+            summaryHeroCardView = null
+            container.addView(empty)
         } else {
-            container.addView(buildSummaryHeroCard(items))
+            emptyStateCardView = null
+            val hero = buildSummaryHeroCard(items)
+            summaryHeroCardView = hero
+            container.addView(hero)
             items.forEach { item ->
                 val card = buildCaptureCard(item, snapshot.accountingContext)
                 pendingCardViews[item.id] = card
@@ -889,13 +903,19 @@ class PendingListActivity : Activity() {
             }
         }
         if (snapshot.ignoredItems.isNotEmpty()) {
-            container.addView(buildIgnoredSection(snapshot.ignoredItems))
+            val ignored = buildIgnoredSection(snapshot.ignoredItems)
+            ignoredCardView = ignored as? ViewGroup
+            container.addView(ignored)
+        } else {
+            ignoredCardView = null
+            ignoredTitleView = null
         }
         return scroll
     }
 
     /** 待记列表底部的“已不计”折叠区，只做恢复，不改变列表主体结构。 */
     private fun buildIgnoredSection(items: List<PaymentCapture>): View {
+        ignoredItemRowViews.clear()
         val card = CaptureUi.card(
             activity = this,
             paddingH = 14,
@@ -916,13 +936,15 @@ class PendingListActivity : Activity() {
                 latestSnapshot?.let { renderCurrentTab(it) }
             }
         }
-        header.addView(TextView(this).apply {
+        val titleTv = TextView(this).apply {
             text = "已不计 (${items.size})"
             textSize = 13.5f
             setTypeface(typeface, Typeface.BOLD)
             setTextColor(CaptureUi.TEXT_SECONDARY)
             layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
-        })
+        }
+        ignoredTitleView = titleTv
+        header.addView(titleTv)
         header.addView(TextView(this).apply {
             text = if (ignoredExpanded) "收起" else "展开"
             textSize = 12f
@@ -945,6 +967,7 @@ class PendingListActivity : Activity() {
                 gravity = Gravity.CENTER_VERTICAL
                 setPadding(0, dp(9), 0, 0)
             }
+            ignoredItemRowViews[item.id] = row
             val amountPrefix = when {
                 item.billType == LocalBillType.TYPE_INCOME ||
                     item.subType == LocalBillType.SUBTYPE_REFUND ||
@@ -986,16 +1009,98 @@ class PendingListActivity : Activity() {
     }
 
     private fun restoreIgnored(item: PaymentCapture) {
-        val curScroll = (bodyFrame.getChildAt(0) as? ScrollView)?.scrollY ?: 0
-        if (curScroll > 0) savedInboxScrollY = curScroll
         scope.launch {
             try {
                 withContext(Dispatchers.IO) {
                     CaptureApp.from(this@PendingListActivity).repository
                         .updateStatus(item.id, CaptureStatus.PENDING)
                 }
+
+                // 局部更新 UI，坚决不全量 load()，彻底杜绝闪烁
+                val snapshot = latestSnapshot
+                val restoredItem = item.copy(status = CaptureStatus.PENDING)
+                val newPending = if (snapshot != null) snapshot.pendingItems + restoredItem else listOf(restoredItem)
+                val newIgnored = snapshot?.ignoredItems?.filterNot { it.id == item.id } ?: emptyList()
+                if (snapshot != null) {
+                    latestSnapshot = snapshot.copy(
+                        pendingItems = newPending,
+                        ignoredItems = newIgnored,
+                    )
+                }
+
+                // 1. 动态更新顶部 Tab 待记数量
+                tabViews[0].text = if (newPending.isNotEmpty()) "待记 ${newPending.size}" else "待记"
+
+                // 2. 动态更新已不计折叠区（标题计数 -1，移除条目 View）
+                ignoredTitleView?.text = "已不计 (${newIgnored.size})"
+                val rowView = ignoredItemRowViews.remove(item.id)
+                if (rowView != null) {
+                    rowView.animate()
+                        .alpha(0f)
+                        .setDuration(180)
+                        .withEndAction {
+                            (rowView.parent as? ViewGroup)?.removeView(rowView)
+                            if (newIgnored.isEmpty()) {
+                                ignoredCardView?.let { ic ->
+                                    (ic.parent as? ViewGroup)?.removeView(ic)
+                                    ignoredCardView = null
+                                    ignoredTitleView = null
+                                }
+                            }
+                        }
+                        .start()
+                } else if (newIgnored.isEmpty()) {
+                    ignoredCardView?.let { ic ->
+                        (ic.parent as? ViewGroup)?.removeView(ic)
+                        ignoredCardView = null
+                        ignoredTitleView = null
+                    }
+                }
+
+                // 3. 动态更新上方待记列表与 Summary 统计卡片
+                val container = inboxContainer
+                if (container != null && currentTab == 0) {
+                    val emptyView = emptyStateCardView
+                    if (emptyView != null && emptyView.parent == container) {
+                        // 若原本为空待记提示视图，则替换为待记列表与 Summary
+                        val emptyIdx = container.indexOfChild(emptyView)
+                        container.removeView(emptyView)
+                        emptyStateCardView = null
+
+                        val hero = buildSummaryHeroCard(newPending)
+                        summaryHeroCardView = hero
+                        container.addView(hero, emptyIdx)
+
+                        val newCard = buildCaptureCard(restoredItem, latestSnapshot?.accountingContext)
+                        pendingCardViews[restoredItem.id] = newCard
+                        container.addView(newCard, emptyIdx + 1)
+                    } else {
+                        // 替换 Summary 卡片以更新金额、笔数和各状态统计
+                        val oldSummary = summaryHeroCardView
+                        if (oldSummary != null && oldSummary.parent == container) {
+                            val summaryIdx = container.indexOfChild(oldSummary)
+                            container.removeViewAt(summaryIdx)
+                            val newSummary = buildSummaryHeroCard(newPending)
+                            summaryHeroCardView = newSummary
+                            container.addView(newSummary, summaryIdx)
+                        }
+
+                        // 将新恢复的 item View 追加/插入到待记列表末尾（即已不计卡片之前）
+                        val newCard = buildCaptureCard(restoredItem, latestSnapshot?.accountingContext)
+                        pendingCardViews[restoredItem.id] = newCard
+                        val insertIdx = if (ignoredCardView != null && ignoredCardView?.parent == container) {
+                            container.indexOfChild(ignoredCardView)
+                        } else {
+                            container.childCount
+                        }
+                        newCard.alpha = 0f
+                        container.addView(newCard, insertIdx)
+                        newCard.animate().alpha(1f).setDuration(200).start()
+                    }
+                }
+
                 toast("已恢复到待记")
-                load()
+                CaptureNotifier.refreshAll(this@PendingListActivity)
             } catch (t: Throwable) {
                 toast("恢复失败：${t.message ?: t.javaClass.simpleName}")
             }
@@ -1168,7 +1273,7 @@ class PendingListActivity : Activity() {
         emptyCard.addView(
             CaptureUi.button(
                 activity = this,
-                text = "+ 模拟一笔示例支出 (长按自定义金额)",
+                text = "+ 模拟一笔示例支出",
                 textColor = CaptureUi.BRAND_DARK,
                 bgColor = CaptureUi.BRAND_SOFT,
                 strokeColor = CaptureUi.BRAND_BORDER,
@@ -2847,65 +2952,44 @@ class PendingListActivity : Activity() {
     }
 
     private fun showCustomSimulateDialog() {
-        val container = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(20), dp(10), dp(20), dp(10))
+        ruleViews.showCustomSimulateDialog { source, amountCents, merchant, note ->
+            simulateCapture(amountCents, merchant, note, source)
         }
-        val etAmount = EditText(this).apply {
-            hint = "金额（元），如 100.00"
-            setText("100.00")
-            inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL
-            isSingleLine = true
-            setPadding(dp(12), dp(10), dp(12), dp(10))
-            background = CaptureUi.roundedBg(CaptureUi.BG_SUBTLE, dp(8), dp(1), CaptureUi.BORDER)
-        }
-        val etMerchant = EditText(this).apply {
-            hint = "商户/说明，如 超市小票示例"
-            setText("超市小票示例")
-            isSingleLine = true
-            setPadding(dp(12), dp(10), dp(12), dp(10))
-            background = CaptureUi.roundedBg(CaptureUi.BG_SUBTLE, dp(8), dp(1), CaptureUi.BORDER)
-        }
-        container.addView(TextView(this).apply { text = "输入模拟金额（元）："; textSize = 12f; setTextColor(CaptureUi.TEXT_SECONDARY); setPadding(0, 0, 0, dp(4)) })
-        container.addView(etAmount, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(12) })
-        container.addView(TextView(this).apply { text = "输入模拟商户名："; textSize = 12f; setTextColor(CaptureUi.TEXT_SECONDARY); setPadding(0, 0, 0, dp(4)) })
-        container.addView(etMerchant, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
-
-        AlertDialog.Builder(this)
-            .setTitle("自定义模拟待记（长按触发）")
-            .setView(container)
-            .setPositiveButton("生成待记") { _, _ ->
-                val amountDouble = etAmount.text?.toString()?.toDoubleOrNull() ?: 3.0
-                val amountCents = (amountDouble * 100.0).toLong().coerceAtLeast(1L)
-                val merchant = etMerchant.text?.toString()?.trim().takeIf { !it.isNullOrBlank() } ?: "示例支出"
-                simulateCapture(amountCents, merchant)
-            }
-            .setNegativeButton("取消", null)
-            .show()
     }
 
-    private fun simulateCapture(amountCents: Long = 300L, merchant: String = "示例支出") {
+    private fun simulateCapture(
+        amountCents: Long = 300L,
+        merchant: String = "示例支出",
+        note: String? = null,
+        source: String = CaptureSource.WECHAT,
+    ) {
         val now = System.currentTimeMillis()
         val scopeCtx = applicationContext
         scope.launch {
             try {
                 val outcome = withContext(Dispatchers.IO) {
-                    val mappedAsset = CaptureRuleMatcher.resolveAssetName(scopeCtx, "零钱")
+                    val rawMethod = if (source == CaptureSource.ALIPAY) "支付宝余额" else "零钱"
+                    val mappedAsset = CaptureRuleMatcher.resolveAssetName(scopeCtx, rawMethod)
                     val payload = CapturePayload(
                         captureId = UUID.randomUUID().toString(),
-                        source = CaptureSource.WECHAT,
+                        source = source,
                         amountCents = amountCents,
                         currency = "CNY",
                         merchant = merchant,
-                        paymentMethodRaw = "零钱",
+                        paymentMethodRaw = rawMethod,
                         assetName = mappedAsset,
                         categoryName = null,
                         paidAt = now,
                         capturedAt = now,
-                        note = null,
+                        note = note,
                         billType = LocalBillType.TYPE_EXPENSE,
                         subType = LocalBillType.SUBTYPE_NORMAL,
-                        rawJson = "{\"simulated\":true,\"amountCents\":$amountCents}",
+                        rawJson = JSONObject().apply {
+                            put("simulated", true)
+                            put("amountCents", amountCents)
+                            put("merchant", merchant)
+                            if (note != null) put("description", note)
+                        }.toString(),
                         ruleVersion = "simulated",
                     )
                     val repo = CaptureApp.from(this@PendingListActivity).repository

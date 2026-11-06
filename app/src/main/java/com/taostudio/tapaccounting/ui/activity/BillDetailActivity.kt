@@ -26,7 +26,11 @@ import com.taostudio.tapaccounting.CategoryIconHelper
 import com.taostudio.tapaccounting.TapApplication
 import com.taostudio.tapaccounting.Prefs
 import com.taostudio.tapaccounting.R
+import com.taostudio.tapaccounting.data.local.entity.AccountingRule
 import com.taostudio.tapaccounting.data.local.entity.Bill
+import com.taostudio.tapaccounting.data.local.entity.BillRuleProvenance
+import com.taostudio.tapaccounting.logic.RuleCorrectionCoordinator
+import com.taostudio.tapaccounting.logic.RuleDialogHelper
 import com.taostudio.tapaccounting.data.repository.CategoryRepository
 import com.taostudio.tapaccounting.logic.BillDeleteUndo
 import com.taostudio.tapaccounting.logic.BillDisplayFormatter
@@ -74,6 +78,9 @@ class BillDetailActivity : AppCompatActivity() {
 
     private var billId: Long = -1L
     private var bill: Bill? = null
+    private var billProvenance: BillRuleProvenance? = null
+    private var matchedRule: AccountingRule? = null
+    private var tvCategoryProvenanceBadge: TextView? = null
 
     private var currentUiType: Int = Bill.TYPE_EXPENSE
     private var currentCategoryName: String = ""
@@ -163,6 +170,7 @@ class BillDetailActivity : AppCompatActivity() {
         layoutAsset.visibility = if (assetEnabled) View.VISIBLE else View.GONE
         dividerAssetTop.visibility = if (assetEnabled) View.VISIBLE else View.GONE
         dividerBookTop.visibility = View.VISIBLE
+        setupCategoryBadge()
     }
 
     private fun setupListeners() {
@@ -189,12 +197,18 @@ class BillDetailActivity : AppCompatActivity() {
         val app = application as TapApplication
         lifecycleScope.launch(Dispatchers.IO) {
             val loadedBill = app.billRepository.getBillById(billId)
+            val prov = if (loadedBill != null) app.database.billRuleProvenanceDao().getByBillId(loadedBill.id) else null
+            val rule = if (prov?.ruleId != null) {
+                app.database.accountingRuleDao().listAll().firstOrNull { it.id == prov.ruleId }
+            } else null
             withContext(Dispatchers.Main) {
                 if (loadedBill == null) {
                     Toast.makeText(this@BillDetailActivity, getString(R.string.bill_not_exist), Toast.LENGTH_SHORT).show()
                     finish()
                     return@withContext
                 }
+                billProvenance = prov
+                matchedRule = rule
                 bindBill(loadedBill)
             }
         }
@@ -245,9 +259,96 @@ class BillDetailActivity : AppCompatActivity() {
         btnRefund.visibility = if (shouldShowRefundButton()) View.VISIBLE else View.GONE
         renderTypeSelector()
         renderCategoryIcon()
+        renderCategoryProvenanceBadge()
         renderAmountDetails()
         renderRefundRecords()
         renderOriginalBill()
+    }
+
+    private fun setupCategoryBadge() {
+        val layoutCategory = findViewById<LinearLayout>(R.id.layout_category) ?: return
+        if (tvCategoryProvenanceBadge == null) {
+            val badge = TextView(this).apply {
+                id = View.generateViewId()
+                val padH = (8 * resources.displayMetrics.density).toInt()
+                val padV = (3 * resources.displayMetrics.density).toInt()
+                setPadding(padH, padV, padH, padV)
+                textSize = 11f
+                setTextColor(Color.parseColor("#4A68D6"))
+                setBackgroundResource(R.drawable.shape_tag_bg)
+                val lp = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply {
+                    marginEnd = (8 * resources.displayMetrics.density).toInt()
+                }
+                layoutParams = lp
+                visibility = View.GONE
+            }
+            val chevronIndex = (layoutCategory.childCount - 1).coerceAtLeast(0)
+            layoutCategory.addView(badge, chevronIndex)
+            tvCategoryProvenanceBadge = badge
+        }
+    }
+
+    private fun renderCategoryProvenanceBadge() {
+        val badge = tvCategoryProvenanceBadge ?: return
+        val currentBill = bill ?: run {
+            badge.visibility = View.GONE
+            return
+        }
+        val prov = billProvenance
+        val badgeText = RuleCorrectionCoordinator.resolveProvenanceBadgeText(prov, matchedRule?.keyword)
+        if (!badgeText.isNullOrBlank()) {
+            badge.text = badgeText
+            badge.visibility = View.VISIBLE
+            badge.setOnClickListener {
+                showProvenanceRuleDetailDialog(currentBill)
+            }
+        } else {
+            badge.visibility = View.GONE
+            badge.setOnClickListener(null)
+        }
+    }
+
+    private fun showProvenanceRuleDetailDialog(currentBill: Bill) {
+        val app = application as TapApplication
+        val prov = billProvenance
+        val rule = matchedRule
+        val keywordToUse = rule?.keyword ?: prov?.keyword ?: currentBill.remark
+        RuleDialogHelper.showRuleDialog(
+            ctx = this,
+            rule = rule,
+            referenceText = currentBill.remark,
+            defaultKeyword = keywordToUse,
+            defaultType = currentBill.type,
+            defaultCat = currentBill.categoryName,
+            isOverlay = false,
+            categoryOnlyLearnMode = true,
+            onSave = { savedRule ->
+                lifecycleScope.launch(Dispatchers.IO) {
+                    val updated = savedRule.copy(source = AccountingRule.Source.USER)
+                    app.database.accountingRuleDao().upsert(updated)
+                    matchedRule = updated
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(this@BillDetailActivity, "规则已更新", Toast.LENGTH_SHORT).show()
+                        renderCategoryProvenanceBadge()
+                    }
+                }
+            },
+            onDelete = if (rule != null) {
+                { deletedRule ->
+                    lifecycleScope.launch(Dispatchers.IO) {
+                        app.database.accountingRuleDao().deleteById(deletedRule.id)
+                        matchedRule = null
+                        withContext(Dispatchers.Main) {
+                            Toast.makeText(this@BillDetailActivity, "规则已删除", Toast.LENGTH_SHORT).show()
+                            renderCategoryProvenanceBadge()
+                        }
+                    }
+                }
+            } else null
+        )
     }
 
     private fun renderAmountDetails() {
@@ -699,8 +800,25 @@ class BillDetailActivity : AppCompatActivity() {
                         )
                     }
                     Toast.makeText(this@BillDetailActivity, message, Toast.LENGTH_SHORT).show()
-                    setResult(RESULT_OK)
-                    finish()
+
+                    val categoryChanged = persistedCategory.isNotBlank() && persistedCategory != initialCategoryName
+                    if (categoryChanged) {
+                        RuleCorrectionCoordinator.onUserCorrectCategory(
+                            ctx = this@BillDetailActivity,
+                            billId = originalBill.id,
+                            oldCategory = initialCategoryName,
+                            newCategory = persistedCategory,
+                            note = updatedBill.remark,
+                            merchant = null,
+                            onFinished = {
+                                setResult(RESULT_OK)
+                                finish()
+                            }
+                        )
+                    } else {
+                        setResult(RESULT_OK)
+                        finish()
+                    }
                 }
             } catch (error: Exception) {
                 withContext(Dispatchers.Main) {

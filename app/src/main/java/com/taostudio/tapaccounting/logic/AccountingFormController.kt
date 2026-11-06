@@ -29,10 +29,12 @@ import org.json.JSONObject
 import com.taostudio.tapaccounting.*
 import com.taostudio.tapaccounting.AmountFormatHelper
 import com.taostudio.tapaccounting.data.local.AppDatabase
+import com.taostudio.tapaccounting.data.local.entity.AccountingRule
 import com.taostudio.tapaccounting.data.local.entity.Asset
 import com.taostudio.tapaccounting.data.local.entity.AiRule
 import com.taostudio.tapaccounting.data.local.entity.Bill
 import com.taostudio.tapaccounting.data.local.entity.BillRuleProvenance
+import com.taostudio.tapaccounting.logic.RuleCorrectionCoordinator
 import com.taostudio.tapaccounting.capture.data.CapturePrefs
 import com.taostudio.tapaccounting.capturebridge.CaptureImportService
 import com.taostudio.tapaccounting.capturebridge.CapturePluginClient
@@ -2516,6 +2518,26 @@ class AccountingFormController(
                 }
                 lastAiSuggestOriginalText = null
 
+                // 账单编辑态分类变更协调触发
+                if (didReplaceExisting && oldBill != null && oldBill.categoryName != rBill.categoryName && rBill.categoryName.isNotBlank()) {
+                    RuleCorrectionCoordinator.onUserCorrectCategory(
+                        ctx = ctx,
+                        billId = oldBill.id,
+                        oldCategory = oldBill.categoryName,
+                        newCategory = rBill.categoryName,
+                        note = rBill.remark,
+                        merchant = null,
+                        onFinished = {
+                            if (pendingBills.isNotEmpty()) {
+                                processNextPendingBill()
+                            } else {
+                                onCloseRequest(true)
+                            }
+                        }
+                    )
+                    return@withContext
+                }
+
                 if (pendingBills.isNotEmpty()) {
                     processNextPendingBill()
                 } else {
@@ -2745,6 +2767,7 @@ class AccountingFormController(
 
         if (existingRules.isEmpty()) {
             dao.insertRule(newRule)
+            saveToAccountingRules(db, newRule)
             return RuleSaveResult.SAVED
         }
 
@@ -2754,6 +2777,7 @@ class AccountingFormController(
         }
         if (sameCategoryRule != null) {
             dao.insertRule(newRule.copy(id = sameCategoryRule.id))
+            saveToAccountingRules(db, newRule)
             return RuleSaveResult.SAVED
         }
 
@@ -2773,10 +2797,43 @@ class AccountingFormController(
                 } else {
                     dao.insertRule(newRule)
                 }
+                saveToAccountingRules(db, newRule)
                 RuleSaveResult.SAVED
             }
             RuleConflictDecision.CANCEL_RECORD,
             RuleConflictDecision.DISMISS -> RuleSaveResult.SKIPPED
+        }
+    }
+
+    private suspend fun saveToAccountingRules(db: AppDatabase, newRule: AiRule) {
+        runCatching {
+            val existing = db.accountingRuleDao().findByKeyword(newRule.keyword.trim())
+            val now = System.currentTimeMillis()
+            val rule = if (existing != null) {
+                existing.copy(
+                    targetCategory = newRule.targetCategory,
+                    targetType = newRule.targetType ?: existing.targetType,
+                    targetAccount1 = newRule.targetAccount1 ?: existing.targetAccount1,
+                    targetAccount2 = newRule.targetAccount2 ?: existing.targetAccount2,
+                    source = AccountingRule.Source.USER,
+                    enabled = newRule.isEnabled,
+                    updatedAt = now
+                )
+            } else {
+                AccountingRule(
+                    id = 0L,
+                    keyword = newRule.keyword.trim(),
+                    targetCategory = newRule.targetCategory,
+                    targetType = newRule.targetType,
+                    targetAccount1 = newRule.targetAccount1,
+                    targetAccount2 = newRule.targetAccount2,
+                    source = AccountingRule.Source.USER,
+                    enabled = newRule.isEnabled,
+                    createdAt = now,
+                    updatedAt = now
+                )
+            }
+            db.accountingRuleDao().upsert(rule)
         }
     }
 

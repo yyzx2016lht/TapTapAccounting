@@ -53,10 +53,13 @@ object RuleLearningManager {
 
     /** 拆分入账成功后批量学习 */
     suspend fun scheduleSplit(context: Context, captureId: String, entries: List<RuleLearnEntry>) {
-        if (CapturePrefs.getRuleLearnMode(context) == CapturePrefs.RULE_LEARN_OFF) {
+        val mode = CapturePrefs.getRuleLearnMode(context)
+        if (mode == CapturePrefs.RULE_LEARN_OFF) {
             clearPendingTasks(context, captureId)
             return
         }
+        // ASK 模式由调用方在入账结果里弹出候选，不在这里静默学习。
+        if (mode == CapturePrefs.RULE_LEARN_ASK) return
         if (entries.isEmpty()) return
         scope.launch {
             runCatching {
@@ -177,10 +180,13 @@ object RuleLearningManager {
 
     /** 入账成功后调用：满足条件就入队，并立刻在后台尝试学习。 */
     suspend fun schedule(context: Context, captureId: String) {
-        if (CapturePrefs.getRuleLearnMode(context) == CapturePrefs.RULE_LEARN_OFF) {
+        val mode = CapturePrefs.getRuleLearnMode(context)
+        if (mode == CapturePrefs.RULE_LEARN_OFF) {
             clearPendingTasks(context, captureId)
             return
         }
+        // ASK 模式由 UI 在保存结果里询问，不在这里静默学习。
+        if (mode == CapturePrefs.RULE_LEARN_ASK) return
 
         val task = try {
             enqueue(context, captureId)

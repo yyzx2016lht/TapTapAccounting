@@ -31,6 +31,7 @@ import com.taostudio.tapaccounting.Utils
 import com.taostudio.tapaccounting.capture.bridge.RuleLearningManager
 import com.taostudio.tapaccounting.capture.contract.CaptureSource
 import com.taostudio.tapaccounting.capture.contract.ImportItemStatus
+import com.taostudio.tapaccounting.capture.data.CapturePrefs
 import com.taostudio.tapaccounting.capture.contract.LocalBillType
 import com.taostudio.tapaccounting.logic.AccountingFormController
 import com.taostudio.tapaccounting.ui.dialog.OverlayDialogs
@@ -1778,7 +1779,11 @@ class OverlayPendingCaptureController(
                             billType = item.billType ?: LocalBillType.TYPE_EXPENSE,
                         )
                     }
-                    RuleLearningManager.scheduleSplit(ctx, item.id, ruleEntries)
+                    if (CapturePrefs.getRuleLearnMode(ctx) == CapturePrefs.RULE_LEARN_ASK) {
+                        askLearnSplitRules(ruleEntries)
+                    } else {
+                        RuleLearningManager.scheduleSplit(ctx, item.id, ruleEntries)
+                    }
 
                     CapturePluginClient.markCapturesRecorded(ctx, listOf(item.id))
                     Utils.toast(ctx, "✓ 已拆成 ${items.size} 笔入账成功")
@@ -1805,6 +1810,36 @@ class OverlayPendingCaptureController(
 
         renderItems()
 
+        if (ctx !is Activity) {
+            dialog.window?.setType(
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
+                    WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+                else
+                    WindowManager.LayoutParams.TYPE_PHONE
+            )
+        }
+        dialog.show()
+    }
+
+    /** ASK 模式：拆分入账后一次性询问是否记住这批明细规则。 */
+    private fun askLearnSplitRules(entries: List<RuleLearningManager.RuleLearnEntry>) {
+        if (entries.isEmpty()) return
+        val preview = entries.take(8).joinToString("\n") { entry ->
+            val leaf = entry.categoryName.substringAfterLast(" - ").substringAfterLast(" > ").trim()
+            "· ${entry.note.take(16)} → $leaf"
+        }
+        val more = if (entries.size > 8) "\n… 还有 ${entries.size - 8} 条" else ""
+        val dialog = AlertDialog.Builder(ContextThemeWrapper(ctx, R.style.Theme_TapAccounting))
+            .setTitle("记住这 ${entries.size} 条规则？")
+            .setMessage("$preview$more")
+            .setPositiveButton("记住") { d, _ ->
+                d.dismiss()
+                scope.launch {
+                    runCatching { RuleLearningManager.learnEntries(ctx, entries) }
+                }
+            }
+            .setNegativeButton("不用", null)
+            .create()
         if (ctx !is Activity) {
             dialog.window?.setType(
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)

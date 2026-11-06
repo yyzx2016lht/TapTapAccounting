@@ -35,6 +35,7 @@ import com.taostudio.tapaccounting.data.local.entity.AiRule
 import com.taostudio.tapaccounting.data.local.entity.Bill
 import com.taostudio.tapaccounting.data.local.entity.BillRuleProvenance
 import com.taostudio.tapaccounting.logic.RuleCorrectionCoordinator
+import com.taostudio.tapaccounting.capture.bridge.RuleLearningManager
 import com.taostudio.tapaccounting.capture.data.CapturePrefs
 import com.taostudio.tapaccounting.capturebridge.CaptureImportService
 import com.taostudio.tapaccounting.capturebridge.CapturePluginClient
@@ -2538,6 +2539,8 @@ class AccountingFormController(
                     return@withContext
                 }
 
+                maybeAskLearnRule(finalCategory, type, rBill.remark, pendingCaptureId)
+
                 if (pendingBills.isNotEmpty()) {
                     processNextPendingBill()
                 } else {
@@ -2886,6 +2889,58 @@ class AccountingFormController(
             ?.replace(">", "-")
             ?.trim()
             .orEmpty()
+    }
+
+    /**
+     * ASK 模式：保存成功后问一次是否把这条备注→分类记成规则。
+     * 不阻塞关窗；用户点“记住”才写 accounting_rules。
+     */
+    private fun maybeAskLearnRule(
+        category: String,
+        type: Int,
+        note: String,
+        captureId: String?,
+    ) {
+        if (captureId == null) return
+        if (CapturePrefs.getRuleLearnMode(ctx) != CapturePrefs.RULE_LEARN_ASK) return
+        if (type != 0 && type != 1) return
+        val cleanNote = note.trim()
+        val cleanCategory = category.trim()
+        if (cleanNote.isEmpty() || cleanCategory.isEmpty()) return
+        val leaf = cleanCategory.substringAfterLast(" - ").substringAfterLast(" > ").trim()
+        if (leaf == "其他" || leaf == "差额调整") return
+
+        val entry = RuleLearningManager.RuleLearnEntry(cleanNote, cleanCategory, type)
+        val dialog = AlertDialog.Builder(ContextThemeWrapper(ctx, R.style.Theme_TapAccounting))
+            .setTitle("记住这条规则？")
+            .setMessage("以后「${cleanNote.take(30)}」自动归入「$cleanCategory」？")
+            .setPositiveButton("记住") { d, _ ->
+                d.dismiss()
+                scope.launch {
+                    runCatching { RuleLearningManager.learnEntries(ctx, listOf(entry)) }
+                }
+            }
+            .setNegativeButton("不用", null)
+            .setCancelable(true)
+            .create()
+
+        if (ctx is Activity) {
+            OverlayDialogs.showPageCenterDialog(
+                dialog = dialog,
+                ctx = ctx,
+                widthRatio = 0.88f,
+                cancelOnTouchOutside = true,
+                useSolidPanelBackground = true,
+            )
+        } else {
+            OverlayDialogs.showOverlayCenterDialog(
+                dialog = dialog,
+                ctx = ctx,
+                widthRatio = 0.88f,
+                cancelOnTouchOutside = true,
+                useSolidPanelBackground = true,
+            )
+        }
     }
 
     private fun finishSaveFlow() {

@@ -1,5 +1,6 @@
 package com.taostudio.tapaccounting.capture.notify
 
+import android.animation.ValueAnimator
 import android.content.Context
 import android.content.res.ColorStateList
 import android.graphics.Color
@@ -14,6 +15,7 @@ import android.provider.Settings
 import android.text.InputType
 import android.view.Gravity
 import android.view.KeyEvent
+import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
@@ -79,6 +81,8 @@ object CaptureBubbleManager {
     private var peekView: View? = null
     private var peekParams: WindowManager.LayoutParams? = null
     private var peekDismissRunnable: Runnable? = null
+    private var peekHintView: View? = null
+    private var peekHintParams: WindowManager.LayoutParams? = null
     @Volatile
     private var isPeeking: Boolean = false
 
@@ -95,7 +99,7 @@ object CaptureBubbleManager {
         val statusText: TextView,
         val noteRow: LinearLayout,
         val noteInput: EditText,
-        val splitCheck: CheckBox,
+        var splitEnabled: Boolean,
         val summaryActions: LinearLayout,
         val inputActions: LinearLayout,
         val resultActions: LinearLayout,
@@ -130,7 +134,6 @@ object CaptureBubbleManager {
                 append(amountStr)
                 item.merchant?.takeIf { it.isNotBlank() }?.let { append(" · ").append(it.take(10)) }
                 assetStr?.let { append(" (").append(it.take(assetLimit)).append(")") }
-                if (!transfer && splitCheck.isChecked) append(" · 拆分")
                 append(" · 待记 ").append(pendingCount).append(" 笔")
             }
         }
@@ -263,21 +266,22 @@ object CaptureBubbleManager {
         }
         etNote.setText(capture.note.orEmpty())
         noteRow.addView(etNote)
-        val cbSplit = CheckBox(app).apply {
-            text = "拆分记账（按备注拆成多条明细）"
-            textSize = 12f
-            setTextColor(Color.parseColor("#CBD5E1"))
-            buttonTintList = ColorStateList.valueOf(Color.parseColor("#93C5FD"))
-            isChecked = capture.splitRequested
-            setPadding(0, dp(6), 0, 0)
-        }
-        noteRow.addView(cbSplit)
-        val imageSplitRow = LinearLayout(app).apply {
+
+        // 拆分/选图放在同一行：拆分为单选按钮式开关，图片只在拆分开启后出现，
+        // 两者高度一致，窗口不会因为文案变化而抖。
+        val splitRow = LinearLayout(app).apply {
             orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
             setPadding(0, dp(8), 0, 0)
         }
-        val btnImageSplit = TextView(app).apply {
-            text = "📷 选图片拆单"
+        val chipSplit = TextView(app).apply {
+            textSize = 12f
+            setTypeface(typeface, Typeface.BOLD)
+            gravity = Gravity.CENTER
+            setPadding(dp(12), dp(6), dp(12), dp(6))
+        }
+        val chipImage = TextView(app).apply {
+            text = "📷 选图"
             textSize = 12f
             setTypeface(typeface, Typeface.BOLD)
             gravity = Gravity.CENTER
@@ -287,9 +291,17 @@ object CaptureBubbleManager {
                 setColor(Color.parseColor("#1E3A8A"))
                 cornerRadius = dp(10).toFloat()
             }
+            visibility = View.GONE
         }
-        imageSplitRow.addView(btnImageSplit)
-        noteRow.addView(imageSplitRow)
+        splitRow.addView(chipSplit)
+        splitRow.addView(
+            chipImage,
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+            ).apply { marginStart = dp(6) },
+        )
+        noteRow.addView(splitRow)
         root.addView(noteRow)
 
         fun actionRow(): LinearLayout = LinearLayout(app).apply {
@@ -381,7 +393,7 @@ object CaptureBubbleManager {
             statusText = tvStatus,
             noteRow = noteRow,
             noteInput = etNote,
-            splitCheck = cbSplit,
+            splitEnabled = capture.splitRequested,
             summaryActions = summaryActions,
             inputActions = inputActions,
             resultActions = resultActions,
@@ -404,21 +416,35 @@ object CaptureBubbleManager {
             Toast.makeText(app, message, Toast.LENGTH_SHORT).show()
         }
 
-        cbSplit.setOnCheckedChangeListener { _, checked ->
-            s.capture = s.capture.copy(splitRequested = checked)
-            s.renderSummary()
+        fun styleSplitChip(active: Boolean) {
+            chipSplit.text = if (active) "✓ 拆分" else "拆分"
+            chipSplit.setTextColor(Color.parseColor(if (active) "#FFFFFF" else "#93C5FD"))
+            chipSplit.background = GradientDrawable().apply {
+                setColor(Color.parseColor(if (active) "#3B82F6" else "#1E3A8A"))
+                cornerRadius = dp(10).toFloat()
+            }
+            // 图片入口只在拆分开启后出现；和拆分按钮同一行，窗口高度不变。
+            chipImage.visibility = if (active) View.VISIBLE else View.GONE
+        }
+
+        chipSplit.setOnClickListener {
+            s.splitEnabled = !s.splitEnabled
+            s.capture = s.capture.copy(splitRequested = s.splitEnabled)
+            styleSplitChip(s.splitEnabled)
             scope.launch {
                 withContext(Dispatchers.IO) {
                     runCatching {
                         CaptureApp.from(app).repository
-                            .updateSplitRequested(s.capture.id, checked)
+                            .updateSplitRequested(s.capture.id, s.splitEnabled)
                     }
                 }
             }
         }
+        styleSplitChip(s.splitEnabled)
 
         var imageSplitHandler: ((Uri) -> Unit)? = null
-        btnImageSplit.setOnClickListener {
+        chipImage.setOnClickListener {
+            if (!s.splitEnabled) return@setOnClickListener
             val amountCents = s.capture.amountCents ?: 0L
             val billType = s.capture.billType ?: LocalBillType.TYPE_EXPENSE
             if (amountCents <= 0L) {
@@ -429,7 +455,6 @@ object CaptureBubbleManager {
                 toast("图片拆单只支持普通支出/收入")
                 return@setOnClickListener
             }
-            if (!cbSplit.isChecked) cbSplit.isChecked = true
             CaptureImagePickerActivity.pickImage(
                 context = app,
                 onPicked = { uri -> imageSplitHandler?.invoke(uri) },
@@ -454,7 +479,8 @@ object CaptureBubbleManager {
             }
             when (state) {
                 BubbleState.SUMMARY -> {
-                    scheduleAutoPeek(app, 2_000L)
+                    // 不再强制 2 秒收起：主要靠“点外面”触发；这里只是兜底，避免卡片一直占着底部。
+                    scheduleAutoPeek(app, 5_000L)
                 }
 
                 BubbleState.INPUT -> {
@@ -669,7 +695,7 @@ object CaptureBubbleManager {
                 return
             }
 
-            if (s.splitCheck.isChecked) {
+            if (s.splitEnabled) {
                 previewSplitThenConfirm(base)
                 return
             }
@@ -920,7 +946,8 @@ object CaptureBubbleManager {
                 WindowManager.LayoutParams.TYPE_PHONE
             }
             flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-                WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
+                WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
+                WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH
             format = PixelFormat.TRANSLUCENT
             gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
             y = dp(68)
@@ -933,6 +960,14 @@ object CaptureBubbleManager {
             currentView = root
             currentParams = params
             session = s
+            (root.parent as? View)?.setOnTouchListener { _, event ->
+                if (event.action == MotionEvent.ACTION_OUTSIDE && s.state == BubbleState.SUMMARY) {
+                    enterPeek(app)
+                    true
+                } else {
+                    false
+                }
+            }
             root.animate()
                 .alpha(1f)
                 .translationY(0f)
@@ -1062,7 +1097,8 @@ object CaptureBubbleManager {
         val view = currentView ?: return
         val params = currentParams ?: return
         params.flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-            WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
+            WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
+            WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH
         runCatching { wm.updateViewLayout(view, params) }
     }
 
@@ -1123,23 +1159,53 @@ object CaptureBubbleManager {
         val wm = app.getSystemService(Context.WINDOW_SERVICE) as? WindowManager ?: return
         val density = app.resources.displayMetrics.density
         fun dp(v: Int): Int = (v * density + 0.5f).toInt()
-        val size = dp(64)
+        val screenW = app.resources.displayMetrics.widthPixels
+        val screenH = app.resources.displayMetrics.heightPixels
+        val circleSize = dp(52)
+        val windowSize = dp(64)
+        val edgeMargin = dp(6)
 
-        val bubble = FrameLayout(app)
-        val amount = TextView(app).apply {
-            text = peekAmountText(s.capture)
-            textSize = 10.5f
+        val bubble = FrameLayout(app).apply {
+            setPadding(dp(6), dp(6), dp(6), dp(6))
+        }
+
+        val circle = TextView(app).apply {
+            val label = peekAmountText(s.capture)
+            text = label
+            textSize = if (label.length > 7) 8.5f else 9.5f
             gravity = Gravity.CENTER
             setTypeface(typeface, Typeface.BOLD)
             setTextColor(Color.WHITE)
-            setPadding(dp(4), 0, dp(4), 0)
+            background = GradientDrawable(
+                GradientDrawable.Orientation.TL_BR,
+                intArrayOf(Color.parseColor("#3B4C63"), Color.parseColor("#0B1220")),
+            ).apply {
+                shape = GradientDrawable.OVAL
+                setStroke(dp(1), Color.parseColor("#4DFFFFFF"))
+            }
+            elevation = dp(8).toFloat()
+        }
+        bubble.addView(circle, FrameLayout.LayoutParams(circleSize, circleSize, Gravity.CENTER))
+
+        val sourceColor = when (s.capture.source) {
+            CaptureSource.WECHAT -> "#07C160"
+            CaptureSource.ALIPAY -> "#1677FF"
+            else -> "#3B82F6"
+        }
+        val dot = View(app).apply {
             background = GradientDrawable().apply {
                 shape = GradientDrawable.OVAL
-                setColor(Color.parseColor("#FA1E293B"))
-                setStroke(dp(1), Color.parseColor("#33FFFFFF"))
+                setColor(Color.parseColor(sourceColor))
+                setStroke(dp(1), Color.parseColor("#CCFFFFFF"))
             }
         }
-        bubble.addView(amount, FrameLayout.LayoutParams(size, size))
+        bubble.addView(
+            dot,
+            FrameLayout.LayoutParams(dp(9), dp(9), Gravity.BOTTOM or Gravity.END).apply {
+                marginEnd = dp(9)
+                bottomMargin = dp(9)
+            },
+        )
 
         val badge = TextView(app).apply {
             tag = "peek_badge"
@@ -1154,18 +1220,16 @@ object CaptureBubbleManager {
         }
         bubble.addView(
             badge,
-            FrameLayout.LayoutParams(dp(20), dp(20), Gravity.TOP or Gravity.END).apply {
-                topMargin = dp(2)
-                marginEnd = dp(2)
+            FrameLayout.LayoutParams(dp(19), dp(19), Gravity.TOP or Gravity.END).apply {
+                topMargin = dp(3)
+                marginEnd = dp(3)
             },
         )
         updatePeekBadge(s, badge)
 
-        bubble.setOnClickListener { exitPeek(app) }
-
         val params = WindowManager.LayoutParams(
-            size,
-            size,
+            windowSize,
+            windowSize,
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
             } else {
@@ -1176,16 +1240,79 @@ object CaptureBubbleManager {
                 WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
             PixelFormat.TRANSLUCENT,
         ).apply {
-            gravity = Gravity.TOP or Gravity.END
-            x = dp(6)
-            val screenH = app.resources.displayMetrics.heightPixels
-            y = (centerY - size / 2).coerceIn(dp(48), screenH - size - dp(48))
+            gravity = Gravity.TOP or Gravity.START
+            x = screenW - windowSize - edgeMargin
+            y = (centerY - windowSize / 2).coerceIn(dp(40), screenH - windowSize - dp(40))
+        }
+
+        var downRawX = 0f
+        var downRawY = 0f
+        var startX = 0
+        var startY = 0
+        var dragging = false
+        val slop = dp(5)
+
+        bubble.setOnTouchListener { v, event ->
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    downRawX = event.rawX
+                    downRawY = event.rawY
+                    startX = params.x
+                    startY = params.y
+                    dragging = false
+                    true
+                }
+
+                MotionEvent.ACTION_MOVE -> {
+                    val dx = event.rawX - downRawX
+                    val dy = event.rawY - downRawY
+                    if (!dragging && (Math.abs(dx) > slop || Math.abs(dy) > slop)) {
+                        dragging = true
+                        cancelPeekDismiss()
+                        showDropHint(app)
+                        bubble.animate().scaleX(0.92f).scaleY(0.92f).alpha(0.92f)
+                            .setDuration(120L).start()
+                    }
+                    if (dragging) {
+                        params.x = (startX + dx).toInt().coerceIn(0, screenW - windowSize)
+                        params.y = (startY + dy).toInt().coerceIn(0, screenH - windowSize)
+                        runCatching { wm.updateViewLayout(bubble, params) }
+                    }
+                    true
+                }
+
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    val wasDragging = dragging
+                    dragging = false
+                    if (wasDragging) {
+                        hideDropHint(app)
+                        bubble.animate().scaleX(1f).scaleY(1f).alpha(1f)
+                            .setDuration(120L).start()
+                        val cx = params.x + windowSize / 2f
+                        val cy = params.y + windowSize / 2f
+                        val nearCenter = Math.abs(cx - screenW / 2f) < screenW * 0.22f &&
+                            Math.abs(cy - screenH / 2f) < screenH * 0.22f
+                        if (nearCenter) {
+                            fadePeekOut(app, notifyDismissed = true)
+                        } else {
+                            snapPeekToEdge(app, wm, bubble, params, screenW, edgeMargin, windowSize)
+                            schedulePeekDismiss(app, 60_000L)
+                        }
+                    } else {
+                        v.performClick()
+                        exitPeek(app)
+                    }
+                    true
+                }
+
+                else -> false
+            }
         }
 
         try {
             bubble.alpha = 0f
-            bubble.scaleX = 0.6f
-            bubble.scaleY = 0.6f
+            bubble.scaleX = 0.55f
+            bubble.scaleY = 0.55f
             wm.addView(bubble, params)
             peekView = bubble
             peekParams = params
@@ -1194,8 +1321,8 @@ object CaptureBubbleManager {
                 .alpha(1f)
                 .scaleX(1f)
                 .scaleY(1f)
-                .setDuration(220L)
-                .setInterpolator(OvershootInterpolator(1.15f))
+                .setDuration(260L)
+                .setInterpolator(OvershootInterpolator(1.1f))
                 .start()
             schedulePeekDismiss(app, 60_000L)
         } catch (_: Throwable) {
@@ -1203,6 +1330,83 @@ object CaptureBubbleManager {
             peekParams = null
             isPeeking = false
         }
+    }
+
+    private fun snapPeekToEdge(
+        app: Context,
+        wm: WindowManager,
+        view: View,
+        params: WindowManager.LayoutParams,
+        screenW: Int,
+        margin: Int,
+        windowSize: Int,
+    ) {
+        val target = if (params.x + windowSize / 2 < screenW / 2) margin else screenW - windowSize - margin
+        ValueAnimator.ofInt(params.x, target).apply {
+            duration = 180L
+            interpolator = DecelerateInterpolator()
+            addUpdateListener {
+                params.x = it.animatedValue as Int
+                runCatching { wm.updateViewLayout(view, params) }
+            }
+            start()
+        }
+    }
+
+    private fun showDropHint(app: Context) {
+        if (peekHintView != null) return
+        val wm = app.getSystemService(Context.WINDOW_SERVICE) as? WindowManager ?: return
+        val density = app.resources.displayMetrics.density
+        fun dp(v: Int): Int = (v * density + 0.5f).toInt()
+        val hint = TextView(app).apply {
+            text = "拖到这里关闭"
+            textSize = 13f
+            setTypeface(typeface, Typeface.BOLD)
+            setTextColor(Color.WHITE)
+            gravity = Gravity.CENTER
+            setPadding(dp(18), dp(11), dp(18), dp(11))
+            background = GradientDrawable().apply {
+                setColor(Color.parseColor("#D90F172A"))
+                cornerRadius = dp(24).toFloat()
+                setStroke(dp(1), Color.parseColor("#66FFFFFF"))
+            }
+        }
+        val params = WindowManager.LayoutParams(
+            WindowManager.LayoutParams.WRAP_CONTENT,
+            WindowManager.LayoutParams.WRAP_CONTENT,
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+            } else {
+                @Suppress("DEPRECATION")
+                WindowManager.LayoutParams.TYPE_PHONE
+            },
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
+                WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
+            PixelFormat.TRANSLUCENT,
+        ).apply {
+            gravity = Gravity.CENTER
+        }
+        try {
+            hint.alpha = 0f
+            wm.addView(hint, params)
+            peekHintView = hint
+            peekHintParams = params
+            hint.animate().alpha(1f).setDuration(120L).start()
+        } catch (_: Throwable) {
+            peekHintView = null
+            peekHintParams = null
+        }
+    }
+
+    private fun hideDropHint(app: Context) {
+        val hint = peekHintView ?: return
+        val wm = app.getSystemService(Context.WINDOW_SERVICE) as? WindowManager
+        peekHintView = null
+        peekHintParams = null
+        hint.animate().alpha(0f).setDuration(100L)
+            .withEndAction { runCatching { wm?.removeViewImmediate(hint) } }
+            .start()
     }
 
     private fun peekAmountText(capture: PaymentCapture): String {
@@ -1271,6 +1475,7 @@ object CaptureBubbleManager {
         val bubble = peekView ?: return
         val wm = context.applicationContext.getSystemService(Context.WINDOW_SERVICE) as? WindowManager
         cancelPeekDismiss()
+        hideDropHint(context)
         peekView = null
         peekParams = null
         isPeeking = false
@@ -1305,6 +1510,7 @@ object CaptureBubbleManager {
     fun dismissImmediate(context: Context, notifyDismissed: Boolean = true) {
         cancelAutoDismiss()
         cancelPeekDismiss()
+        hideDropHint(context)
         val wm = context.applicationContext.getSystemService(Context.WINDOW_SERVICE) as? WindowManager
         val hadPeek = peekView != null
         peekView?.let { runCatching { wm?.removeViewImmediate(it) } }

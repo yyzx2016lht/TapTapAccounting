@@ -2501,15 +2501,6 @@ class PendingListActivity : Activity() {
                     }
                 }
             }
-            // 勾选即进入拆分：有备注自动跑一次 AI 拆单，没备注直接给一条可编辑明细。
-            if (checked && splitSubItems.isEmpty()) {
-                val draftNote = noteInput.text?.toString()?.trim().orEmpty()
-                if (draftNote.isBlank()) {
-                    addEmptySplitRow()
-                } else {
-                    runAiSplit()
-                }
-            }
         }
         if (splitRequested) {
             renderSubItems()

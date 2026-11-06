@@ -969,8 +969,11 @@ class OverlayPendingCaptureController(
         if (mode != FormMode.PENDING || isBatchDrawerOpen || isBusy) return
         val item = currentItem() ?: return
         if (item.id in splitItemIds) return
-        if (item.note.isNullOrBlank() || !item.categoryName.isNullOrBlank()) return
+        // 用输入框里的最新备注，而不是等 debounce 落库后的旧 note。
+        val note = etRemark?.text?.toString()?.trim().orEmpty()
+        if (note.isBlank() || !item.categoryName.isNullOrBlank()) return
         if (item.billType == LocalBillType.TYPE_TRANSFER) return
+        item.note = note
         scope.launch {
             val updatedCount = classifyPendingItems(listOf(item), showToast = false)
             if (updatedCount <= 0) return@launch

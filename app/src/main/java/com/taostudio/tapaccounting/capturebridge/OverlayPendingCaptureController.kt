@@ -810,7 +810,7 @@ class OverlayPendingCaptureController(
             layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
         })
 
-        fun styleCatBadge(tv: TextView, cat: String?) {
+        fun styleCatBadge(tv: TextView, cat: String?, source: String? = null) {
             if (item.id in splitItemIds) {
                 tv.text = "🔀 逐条分类"
                 tv.setTextColor(Color.parseColor("#2563EB"))
@@ -823,7 +823,13 @@ class OverlayPendingCaptureController(
                 return
             }
             val hasCat = !cat.isNullOrBlank()
-            tv.text = if (hasCat) "🏷️ $cat" else "待归类"
+            val sourcePrefix = when (source?.uppercase()) {
+                "MANUAL" -> "手动 · "
+                "RULE" -> "规则 · "
+                "AI" -> "AI · "
+                else -> ""
+            }
+            tv.text = if (hasCat) "🏷️ $sourcePrefix$cat" else "待归类"
             tv.setTextColor(Color.parseColor(if (hasCat) "#059669" else "#D97706"))
             tv.background = rippleBg(
                 fillColor = Color.parseColor(if (hasCat) "#ECFDF5" else "#FFFBEB"),
@@ -840,7 +846,7 @@ class OverlayPendingCaptureController(
         ) {
             editItemFromBatch(index)
         }
-        styleCatBadge(catChip, item.categoryName)
+        styleCatBadge(catChip, item.categoryName, item.categorySource)
         midLine.addView(
             catChip,
             LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
@@ -1148,16 +1154,17 @@ class OverlayPendingCaptureController(
 
                 if (recordedIds.isNotEmpty()) {
                     val recordedSet = recordedIds.toSet()
-                    val askEntries = categorized
-                        .filter { it.id in recordedSet }
-                        .map {
-                            RuleLearningManager.RuleLearnEntry(
-                                note = it.note.orEmpty(),
-                                categoryName = it.categoryName.orEmpty(),
-                                billType = it.billType ?: 0,
-                            )
-                        }
-                    com.taostudio.tapaccounting.logic.RuleAskCoordinator.showIfNeeded(ctx, askEntries)
+                    val recordedItems = categorized.filter { it.id in recordedSet }
+                    val askEntries = recordedItems.map {
+                        RuleLearningManager.RuleLearnEntry(
+                            note = it.note.orEmpty(),
+                            categoryName = it.categoryName.orEmpty(),
+                            billType = it.billType ?: 0,
+                        )
+                    }
+                    val asked = com.taostudio.tapaccounting.logic.RuleAskCoordinator
+                        .showIfNeeded(ctx, askEntries)
+                    if (!asked) showBatchResultCard(recordedItems)
                     Utils.toast(ctx, "✓ 已入账 ${recordedIds.size} 笔")
                 } else if (categorized.isEmpty()) {
                     Utils.toast(ctx, "没有已分类的账单可入账")
@@ -1789,8 +1796,11 @@ class OverlayPendingCaptureController(
                             billType = item.billType ?: LocalBillType.TYPE_EXPENSE,
                         )
                     }
-                    if (!com.taostudio.tapaccounting.logic.RuleAskCoordinator.showIfNeeded(ctx, ruleEntries)) {
+                    val asked = com.taostudio.tapaccounting.logic.RuleAskCoordinator
+                        .showIfNeeded(ctx, ruleEntries)
+                    if (!asked) {
                         RuleLearningManager.scheduleSplit(ctx, item.id, ruleEntries)
+                        showSplitResultCard(items)
                     }
 
                     CapturePluginClient.markCapturesRecorded(ctx, listOf(item.id))
@@ -1818,6 +1828,52 @@ class OverlayPendingCaptureController(
 
         renderItems()
 
+        if (ctx !is Activity) {
+            dialog.window?.setType(
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
+                    WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+                else
+                    WindowManager.LayoutParams.TYPE_PHONE
+            )
+        }
+        dialog.show()
+    }
+
+    /** 拆分入账结果卡：逐条展示明细 + 分类；ASK 模式已经弹过规则询问时不再重复。 */
+    private fun showSplitResultCard(items: List<ParsedSplitItem>) {
+        if (items.isEmpty()) return
+        val message = items.take(10).joinToString("\n") { item ->
+            val cat = item.categoryName?.takeIf { it.isNotBlank() } ?: "未分类"
+            "· ${item.name.take(16)}  ${String.format(Locale.CHINA, "¥%.2f", item.amountCents / 100.0)}  $cat"
+        } + if (items.size > 10) "\n… 还有 ${items.size - 10} 条" else ""
+        val dialog = AlertDialog.Builder(ContextThemeWrapper(ctx, R.style.Theme_TapAccounting))
+            .setTitle("已拆成 ${items.size} 笔")
+            .setMessage(message)
+            .setPositiveButton("知道了", null)
+            .create()
+        if (ctx !is Activity) {
+            dialog.window?.setType(
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
+                    WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+                else
+                    WindowManager.LayoutParams.TYPE_PHONE
+            )
+        }
+        dialog.show()
+    }
+
+    /** 批量入账结果卡：逐笔展示金额 + 分类；ASK 模式已经弹过规则询问时不再重复。 */
+    private fun showBatchResultCard(items: List<CapturePluginClient.PendingCaptureItem>) {
+        if (items.isEmpty()) return
+        val message = items.take(10).joinToString("\n") { item ->
+            val cat = item.categoryName?.takeIf { it.isNotBlank() } ?: "未分类"
+            "· ${String.format(Locale.CHINA, "¥%.2f", item.amountCents / 100.0)}  $cat"
+        } + if (items.size > 10) "\n… 还有 ${items.size - 10} 笔" else ""
+        val dialog = AlertDialog.Builder(ContextThemeWrapper(ctx, R.style.Theme_TapAccounting))
+            .setTitle("本次入账 ${items.size} 笔")
+            .setMessage(message)
+            .setPositiveButton("知道了", null)
+            .create()
         if (ctx !is Activity) {
             dialog.window?.setType(
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)

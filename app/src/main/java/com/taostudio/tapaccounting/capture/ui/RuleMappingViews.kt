@@ -402,6 +402,12 @@ internal class RuleMappingViews(
 
         val categoryPaths = buildCategoryDisplayList(accountingContext)
         val activeRules = rules.toMutableList()
+        val conflictKeywords = activeRules
+            .groupBy { it.keyword.trim().lowercase() }
+            .filterValues { list ->
+                list.map { it.targetCategory?.trim().orEmpty() }.distinct().size > 1
+            }
+            .keys
 
         // 来源筛选："ALL"、"USER"、"SEED"、"AI"
         var currentSourceFilter = "ALL"
@@ -457,6 +463,138 @@ internal class RuleMappingViews(
             addView(actionRow)
         }
         container.addView(infoCard)
+
+        // 规则测试框：输入备注，看实际命中哪条（同关键词冲突时也能看到优先级）
+        val testInput = EditText(activity).apply {
+            hint = "输入一条备注，例如：酸奶 / 星巴克 / 停车费"
+            textSize = 13f
+            isSingleLine = true
+            setTextColor(CaptureUi.TEXT_PRIMARY)
+            setHintTextColor(CaptureUi.TEXT_MUTED)
+            setPadding(dp(12), dp(9), dp(12), dp(9))
+            background = CaptureUi.roundedBg(Color.WHITE, dp(10), dp(1), CaptureUi.BORDER)
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+            ).apply { bottomMargin = dp(8) }
+        }
+        val testCard = CaptureUi.card(activity, paddingH = 14, paddingV = 12, radiusDp = 14).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+            ).apply { bottomMargin = dp(12) }
+            addView(TextView(activity).apply {
+                text = "测试一条备注"
+                textSize = 15f
+                setTypeface(typeface, Typeface.BOLD)
+                setTextColor(CaptureUi.TEXT_PRIMARY)
+            })
+            addView(TextView(activity).apply {
+                text = "看看这条备注实际会命中哪条规则、被谁覆盖。"
+                textSize = 12f
+                setTextColor(CaptureUi.TEXT_SECONDARY)
+                setPadding(0, dp(2), 0, dp(8))
+            })
+            addView(testInput)
+            addView(
+                CaptureUi.button(
+                    activity = activity,
+                    text = "测试命中",
+                    textColor = Color.WHITE,
+                    bgColor = CaptureUi.BRAND,
+                ) {
+                    val note = testInput.text?.toString()?.trim().orEmpty()
+                    if (note.isEmpty()) {
+                        toast("先输入一条备注")
+                        return@button
+                    }
+                    val matches = DefaultAccountingRuleEngine.matchAllNoteWithRules(activeRules, note)
+                    val msg = if (matches.isEmpty()) {
+                        "没有分类规则命中「$note」，会走 AI 分类或保持待分类。"
+                    } else {
+                        buildString {
+                            append("「$note」命中 ${matches.size} 条：\n\n")
+                            matches.take(8).forEachIndexed { index, match ->
+                                append("${index + 1}. ${match.keyword} → ")
+                                append(match.categoryName?.takeIf { it.isNotBlank() } ?: "未分类")
+                                append("（${match.source}）\n")
+                            }
+                            if (matches.size > 8) append("… 还有 ${matches.size - 8} 条")
+                        }
+                    }
+                    val dialog = AlertDialog.Builder(activity)
+                        .setTitle("规则测试")
+                        .setMessage(msg)
+                        .setPositiveButton("知道了", null)
+                        .create()
+                    dialog.show()
+                },
+            )
+        }
+        container.addView(testCard)
+
+        // 最近学习：AI 学到的规则，支持一键撤销
+        val recentRules = activeRules
+            .filter { it.source == AccountingRule.Source.AI && (it.learnedAt ?: 0L) > 0L }
+            .sortedByDescending { it.learnedAt }
+            .take(5)
+        if (recentRules.isNotEmpty()) {
+            val recentCard = CaptureUi.card(activity, paddingH = 14, paddingV = 12, radiusDp = 14).apply {
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                ).apply { bottomMargin = dp(12) }
+                addView(TextView(activity).apply {
+                    text = "最近学习"
+                    textSize = 15f
+                    setTypeface(typeface, Typeface.BOLD)
+                    setTextColor(CaptureUi.TEXT_PRIMARY)
+                })
+                addView(TextView(activity).apply {
+                    text = "AI 刚学到的规则；点「撤销」删除。"
+                    textSize = 12f
+                    setTextColor(CaptureUi.TEXT_SECONDARY)
+                    setPadding(0, dp(2), 0, dp(8))
+                })
+                recentRules.forEach { rule ->
+                    val row = LinearLayout(activity).apply {
+                        orientation = LinearLayout.HORIZONTAL
+                        gravity = Gravity.CENTER_VERTICAL
+                        setPadding(0, dp(4), 0, dp(4))
+                    }
+                    row.addView(TextView(activity).apply {
+                        val leaf = rule.targetCategory?.substringAfterLast(" - ")
+                            ?.substringAfterLast(" > ")?.trim()
+                            ?: rule.targetCategory?.trim().orEmpty()
+                        text = "${rule.keyword} → ${leaf.ifBlank { "未分类" }}"
+                        textSize = 12.5f
+                        setTextColor(CaptureUi.TEXT_SECONDARY)
+                        layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+                    })
+                    row.addView(
+                        CaptureUi.chip(
+                            activity = activity,
+                            text = "撤销",
+                            textColor = CaptureUi.DANGER,
+                            bgColor = CaptureUi.DANGER_SOFT,
+                        ) {
+                            scope.launch {
+                                withContext(Dispatchers.IO) {
+                                    runCatching {
+                                        com.taostudio.tapaccounting.capture.CaptureApp.from(activity)
+                                            .database.accountingRuleDao()
+                                            .deleteById(rule.id)
+                                    }
+                                }
+                                onDataChanged()
+                            }
+                        },
+                    )
+                    addView(row)
+                }
+            }
+            container.addView(recentCard)
+        }
 
         // 来源分段筛选胶囊栏
         val segmentRow = LinearLayout(activity).apply {
@@ -537,6 +675,21 @@ internal class RuleMappingViews(
                     setTextColor(CaptureUi.TEXT_PRIMARY)
                     layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
                 })
+                if (catRules.any { it.keyword.trim().lowercase() in conflictKeywords }) {
+                    header.addView(
+                        CaptureUi.chip(
+                            activity = activity,
+                            text = "冲突",
+                            textColor = CaptureUi.DANGER,
+                            bgColor = CaptureUi.DANGER_SOFT,
+                        ).apply {
+                            layoutParams = LinearLayout.LayoutParams(
+                                ViewGroup.LayoutParams.WRAP_CONTENT,
+                                ViewGroup.LayoutParams.WRAP_CONTENT,
+                            ).apply { marginEnd = dp(6) }
+                        },
+                    )
+                }
                 header.addView(
                     CaptureUi.chip(
                         activity = activity,

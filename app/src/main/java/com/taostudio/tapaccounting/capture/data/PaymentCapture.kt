@@ -31,6 +31,7 @@ data class PaymentCapture(
     val categoryName: String? = null,
     /** 分类来源：[CategorySource.RULE] / [CategorySource.AI] / [CategorySource.MANUAL]；null = 未归类。 */
     val categorySource: String? = null,
+    val categoryRuleId: Long? = null,
     val paymentMethodRaw: String? = null,
     val assetId: Long? = null,
     val assetName: String? = null,

@@ -10,6 +10,14 @@ object CapturePrefs {
     private const val KEY_LEGACY_IMPORTED = "legacy_imported_v1"
     private const val KEY_TRANSFER_INCOME_DEDUP = "transfer_income_dedup_enabled"
     private const val KEY_TRANSFER_INCOME_DEDUP_WINDOW = "transfer_income_dedup_window_seconds"
+    private const val KEY_AI_CATEGORY_MODE = "ai_category_mode"
+    private const val KEY_RULE_LEARN_MODE = "rule_learn_mode"
+
+    const val AI_CATEGORY_CONFIRM = "CONFIRM"
+    const val AI_CATEGORY_DIRECT = "DIRECT"
+    const val RULE_LEARN_AUTO = "AUTO"
+    const val RULE_LEARN_ASK = "ASK"
+    const val RULE_LEARN_OFF = "OFF"
 
     /** 转账到账后，收款方通知通常晚到几十秒；默认 5 分钟内视为同一笔。 */
     const val DEFAULT_TRANSFER_INCOME_DEDUP_WINDOW_SECONDS: Int = 300
@@ -82,5 +90,19 @@ object CapturePrefs {
 
     fun setLegacyImported(context: Context, imported: Boolean) {
         prefs(context).edit().putBoolean(KEY_LEGACY_IMPORTED, imported).apply()
+    }
+
+    fun getAiCategoryMode(context: Context): String =
+        prefs(context).getString(KEY_AI_CATEGORY_MODE, AI_CATEGORY_CONFIRM) ?: AI_CATEGORY_CONFIRM
+
+    fun setAiCategoryMode(context: Context, mode: String) {
+        prefs(context).edit().putString(KEY_AI_CATEGORY_MODE, mode).apply()
+    }
+
+    fun getRuleLearnMode(context: Context): String =
+        prefs(context).getString(KEY_RULE_LEARN_MODE, RULE_LEARN_AUTO) ?: RULE_LEARN_AUTO
+
+    fun setRuleLearnMode(context: Context, mode: String) {
+        prefs(context).edit().putString(KEY_RULE_LEARN_MODE, mode).apply()
     }
 }

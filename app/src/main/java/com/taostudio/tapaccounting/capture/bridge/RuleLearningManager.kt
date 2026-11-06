@@ -32,12 +32,23 @@ object RuleLearningManager {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val mutex = Mutex()
 
+    data class RuleLearnEntry(
+        val note: String,
+        val categoryName: String,
+        val billType: Int,
+    )
+
     data class LearnedRule(
         val keyword: String,
         val categoryName: String,
+        val billType: Int = 0,
     ) {
         val toastText: String get() = RuleLearningPolicy.toastText(keyword, categoryName)
     }
+
+    suspend fun scheduleSplit(context: Context, captureId: String, entries: List<RuleLearnEntry>) {}
+
+    suspend fun learnEntries(context: Context, entries: List<RuleLearnEntry>): List<LearnedRule> = emptyList()
 
     /** 入账成功后调用：满足条件就入队，并立刻在后台尝试学习。 */
     suspend fun schedule(context: Context, captureId: String) {

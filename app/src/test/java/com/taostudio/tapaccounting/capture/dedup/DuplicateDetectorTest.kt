@@ -369,4 +369,89 @@ class DuplicateDetectorTest {
         assertEquals("咖啡 加浓缩", merged.note)
         assertTrue(merged.excludeFromStats)
     }
+
+    @Test
+    fun `wechat payment and bank official account with different txn ids are recognized as duplicate and merged`() {
+        val wechatPay = createCapture(
+            id = "wx_1",
+            amountCents = 1500L,
+            paidAt = 1700000000000L,
+            source = "WECHAT",
+            sourceTxnId = "100004990120261106001",
+            channel = "微信支付",
+            merchant = "瑞幸咖啡",
+            assetName = null,
+            note = "生椰拿铁",
+            billType = LocalBillType.TYPE_EXPENSE,
+        )
+        val bankOfficialAccount = createCapture(
+            id = "bank_1",
+            amountCents = 1500L,
+            paidAt = 1700000005000L, // 5s difference
+            source = "WECHAT",
+            sourceTxnId = "CMB_MSG_REF_998877",
+            channel = "招商银行公众号",
+            merchant = "招商银行信用卡",
+            assetName = "招商银行信用卡(4852)",
+            note = "消费人民币15.00元",
+            billType = LocalBillType.TYPE_EXPENSE,
+        )
+
+        // 验证双向判定均为重复
+        assertTrue(DuplicateDetector.isDuplicate(bankOfficialAccount, wechatPay))
+        assertTrue(DuplicateDetector.isDuplicate(wechatPay, bankOfficialAccount))
+
+        // 验证合并结果：真实商户优先保留、具体卡片资产被补齐、渠道与备注正确合并
+        val merged = DuplicateDetector.merge(wechatPay, bankOfficialAccount)
+        assertEquals("瑞幸咖啡", merged.merchant)
+        assertEquals("招商银行信用卡(4852)", merged.assetName)
+        assertEquals("微信支付 + 招商银行公众号", merged.channel)
+        assertEquals("生椰拿铁 消费人民币15.00元", merged.note)
+    }
+
+    @Test
+    fun `wechat payment and bank official account beyond 300s window are NOT duplicate`() {
+        val wechatPay = createCapture(
+            id = "wx_1",
+            amountCents = 1500L,
+            paidAt = 100000L,
+            source = "WECHAT",
+            sourceTxnId = "wx_txn_1",
+            channel = "微信支付",
+            merchant = "瑞幸咖啡",
+        )
+        val bankOfficialAccount = createCapture(
+            id = "bank_1",
+            amountCents = 1500L,
+            paidAt = 100000L + DuplicateDetector.DEFAULT_WINDOW_MILLIS + 1000L,
+            source = "WECHAT",
+            sourceTxnId = "bank_txn_2",
+            channel = "招商银行公众号",
+            merchant = "招商银行信用卡",
+        )
+        assertFalse(DuplicateDetector.isDuplicate(bankOfficialAccount, wechatPay))
+    }
+
+    @Test
+    fun `two separate bank official account notifications with different txn ids are NOT duplicate`() {
+        val bankNotify1 = createCapture(
+            id = "b1",
+            amountCents = 1500L,
+            paidAt = 100000L,
+            source = "WECHAT",
+            sourceTxnId = "cmb_txn_1",
+            channel = "招商银行公众号",
+            merchant = "招商银行信用卡",
+        )
+        val bankNotify2 = createCapture(
+            id = "b2",
+            amountCents = 1500L,
+            paidAt = 105000L,
+            source = "WECHAT",
+            sourceTxnId = "cmb_txn_2",
+            channel = "招商银行公众号",
+            merchant = "招商银行信用卡",
+        )
+        assertFalse(DuplicateDetector.isDuplicate(bankNotify2, bankNotify1))
+    }
 }

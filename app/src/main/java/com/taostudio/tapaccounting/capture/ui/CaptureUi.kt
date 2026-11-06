@@ -172,6 +172,12 @@ internal object CaptureUi {
         return RippleDrawable(ColorStateList.valueOf(rippleColor), content, mask)
     }
 
+    fun rippleBg(
+        context: Context,
+        fillColor: Int = BG_SURFACE,
+        radiusDp: Int = 8,
+    ): RippleDrawable = rippleBg(fillColor, dp(context, radiusDp))
+
     fun card(
         activity: Activity,
         paddingH: Int = 16,

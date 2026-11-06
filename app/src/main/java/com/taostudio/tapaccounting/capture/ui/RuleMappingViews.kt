@@ -239,44 +239,55 @@ internal class RuleMappingViews(
         val row = LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(2), dp(9), dp(2), dp(9))
+            setPadding(dp(6), dp(8), dp(6), dp(8))
+            isClickable = true
+            background = CaptureUi.rippleBg(activity, CaptureUi.BG_SURFACE)
         }
         val textCol = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
             layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
-            setOnClickListener { showEditAssetMappingDialog(rule, appAssets) }
         }
-        textCol.addView(TextView(activity).apply {
+        val tvPattern = TextView(activity).apply {
             text = rule.pattern
             textSize = 13.5f
             setTypeface(typeface, Typeface.BOLD)
             setTextColor(if (rule.enabled) CaptureUi.TEXT_PRIMARY else CaptureUi.TEXT_MUTED)
-        })
+        }
+        textCol.addView(tvPattern)
         textCol.addView(TextView(activity).apply {
-            text = if (rule.isRegex) "正则匹配 · 点击编辑" else "包含/精确匹配 · 点击编辑"
+            text = if (rule.isRegex) "正则匹配" else "包含/精确匹配"
             textSize = 11f
             setTextColor(CaptureUi.TEXT_MUTED)
         })
         row.addView(textCol)
 
-        row.addView(Switch(activity).apply {
+        val sw = Switch(activity).apply {
             isChecked = rule.enabled
             setOnCheckedChangeListener { _, checked ->
+                tvPattern.setTextColor(if (checked) CaptureUi.TEXT_PRIMARY else CaptureUi.TEXT_MUTED)
                 scope.launch {
                     withContext(Dispatchers.IO) {
                         CaptureApp.from(activity).database.assetMappingDao()
                             .update(rule.copy(enabled = checked))
                     }
-                    onDataChanged()
                 }
             }
+        }
+        row.addView(sw)
+
+        row.addView(TextView(activity).apply {
+            text = "编辑"
+            textSize = 12f
+            setTextColor(CaptureUi.BRAND_DARK)
+            setPadding(dp(8), dp(6), dp(6), dp(6))
+            setOnClickListener { showEditAssetMappingDialog(rule, appAssets) }
         })
 
         row.addView(TextView(activity).apply {
             text = "删除"
             textSize = 12f
             setTextColor(CaptureUi.DANGER)
-            setPadding(dp(10), dp(6), dp(4), dp(6))
+            setPadding(dp(6), dp(6), dp(4), dp(6))
             setOnClickListener {
                 scope.launch {
                     withContext(Dispatchers.IO) {
@@ -286,6 +297,8 @@ internal class RuleMappingViews(
                 }
             }
         })
+
+        row.setOnClickListener { sw.toggle() }
         return row
     }
 
@@ -842,45 +855,6 @@ internal class RuleMappingViews(
         }
         container.addView(promptCard)
 
-        val filterCard = CaptureUi.card(activity).apply {
-            layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-            ).apply { bottomMargin = dp(12) }
-
-            val row = LinearLayout(activity).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.CENTER_VERTICAL
-            }
-            val textCol = LinearLayout(activity).apply {
-                orientation = LinearLayout.VERTICAL
-                layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
-            }
-            textCol.addView(TextView(activity).apply {
-                text = "仅提醒支出与退款（忽略普通收入）"
-                textSize = 15f
-                setTypeface(typeface, Typeface.BOLD)
-                setTextColor(CaptureUi.TEXT_PRIMARY)
-            })
-            textCol.addView(TextView(activity).apply {
-                text = "默认关闭（同时捕获支出、${CaptureSources.displayName(CaptureSource.WECHAT)}转账收款、转账退款与红包）；开启后忽略普通收款"
-                textSize = 12f
-                setTextColor(CaptureUi.TEXT_SECONDARY)
-                setPadding(0, dp(2), 0, 0)
-            })
-            row.addView(textCol)
-            row.addView(Switch(activity).apply {
-                isChecked = CapturePrefs.isOnlyExpense(activity)
-                setOnCheckedChangeListener { _, checked ->
-                    CapturePrefs.setOnlyExpense(activity, checked)
-                    scope.launch { CaptureNotifier.refreshAll(activity) }
-                    onDataChanged()
-                }
-            })
-            addView(row)
-        }
-        container.addView(filterCard)
-
         val transferDedupCard = CaptureUi.card(activity).apply {
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
@@ -890,6 +864,8 @@ internal class RuleMappingViews(
             val headerRow = LinearLayout(activity).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
+                isClickable = true
+                background = CaptureUi.rippleBg(activity, CaptureUi.BG_SURFACE)
             }
             val headerText = LinearLayout(activity).apply {
                 orientation = LinearLayout.VERTICAL
@@ -909,13 +885,14 @@ internal class RuleMappingViews(
                 setPadding(0, dp(2), dp(8), 0)
             })
             headerRow.addView(headerText)
-            headerRow.addView(Switch(activity).apply {
+            val swDedup = Switch(activity).apply {
                 isChecked = CapturePrefs.isTransferIncomeDedupEnabled(activity)
                 setOnCheckedChangeListener { _, checked ->
                     CapturePrefs.setTransferIncomeDedupEnabled(activity, checked)
-                    onDataChanged()
                 }
-            })
+            }
+            headerRow.addView(swDedup)
+            headerRow.setOnClickListener { swDedup.toggle() }
             addView(headerRow)
 
             addView(TextView(activity).apply {
@@ -936,9 +913,25 @@ internal class RuleMappingViews(
                 300 to "5分钟",
                 600 to "10分钟",
             )
+            val optionViews = mutableListOf<TextView>()
+            fun updateWindowSelection(chosenSeconds: Int) {
+                CapturePrefs.setTransferIncomeDedupWindowSeconds(activity, chosenSeconds)
+                windowOptions.forEachIndexed { idx, (sec, _) ->
+                    val isSel = sec == chosenSeconds
+                    val tv = optionViews.getOrNull(idx) ?: return@forEachIndexed
+                    tv.setTypeface(tv.typeface, if (isSel) Typeface.BOLD else Typeface.NORMAL)
+                    tv.setTextColor(if (isSel) CaptureUi.BRAND_DARK else CaptureUi.TEXT_SECONDARY)
+                    tv.background = CaptureUi.rippleBg(
+                        fillColor = if (isSel) CaptureUi.BRAND_SOFT else CaptureUi.BG_SUBTLE,
+                        radiusPx = dp(999),
+                        strokeWidthPx = dp(1),
+                        strokeColor = if (isSel) CaptureUi.BRAND else CaptureUi.BORDER,
+                    )
+                }
+            }
             windowOptions.forEachIndexed { index, (seconds, label) ->
                 val selected = currentWindow == seconds
-                windowRow.addView(TextView(activity).apply {
+                val tv = TextView(activity).apply {
                     text = label
                     textSize = 12.5f
                     gravity = Gravity.CENTER
@@ -954,11 +947,10 @@ internal class RuleMappingViews(
                     layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
                         if (index > 0) marginStart = dp(6)
                     }
-                    setOnClickListener {
-                        CapturePrefs.setTransferIncomeDedupWindowSeconds(activity, seconds)
-                        onDataChanged()
-                    }
-                })
+                    setOnClickListener { updateWindowSelection(seconds) }
+                }
+                optionViews.add(tv)
+                windowRow.addView(tv)
             }
             addView(windowRow)
         }

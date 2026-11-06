@@ -114,6 +114,9 @@ object DuplicateDetector {
         // 所以必须在下面的类型与流水号校验之前裁决，否则永远合并不了（真机已验证）。
         if (isTransferStatusPair(incoming, existing)) return true
 
+        // 银行公众号/动账通知 vs 支付账单（如微信支付凭证 vs 招行公众号），5分钟内、金额一致视为重复
+        if (isBankPaymentPair(incoming, existing)) return true
+
         // 交易类型不同不属于普通重复（应由转账识别处理）
         if (incoming.billType != null && existing.billType != null && incoming.billType != existing.billType) {
             return false
@@ -293,6 +296,66 @@ object DuplicateDetector {
         return Pair(chosenAsset, chosenRaw)
     }
 
+    private val BANK_KEYWORDS = listOf(
+        "银行", "招商", "工行", "建设", "农业", "中行", "交行", "邮储",
+        "平安", "浦发", "民生", "光大", "中信", "兴业", "广发",
+        "储蓄卡", "信用卡", "银行卡"
+    )
+
+    private val BANK_ACTION_KEYWORDS = listOf(
+        "动账", "消费", "入账", "支出", "交易", "转账"
+    )
+
+    /**
+     * 判断账单是否为银行通知（公众号/短信/动账提醒）。
+     */
+    fun isBankNotification(c: PaymentCapture): Boolean {
+        if (c.channel?.contains("+") == true) return false
+        val m = c.merchant?.trim().orEmpty()
+        val ch = c.channel?.trim().orEmpty()
+        val n = c.note?.trim().orEmpty()
+
+        // 商户直接为银行机构（如 "招商银行"、"招商银行信用卡"、"中国工商银行" 等）
+        if (BANK_KEYWORDS.any { m.contains(it) }) return true
+
+        // 或渠道为纯银行渠道且非通用支付平台
+        if (BANK_KEYWORDS.any { ch.contains(it) } && !ch.contains("微信支付") && !ch.contains("支付宝")) {
+            return true
+        }
+
+        // 或文本明确包含动账与银行关键词
+        val text = "$m $ch $n"
+        return text.contains("动账") ||
+            (BANK_KEYWORDS.any { text.contains(it) } && BANK_ACTION_KEYWORDS.any { text.contains(it) } && !text.contains("微信支付凭证"))
+    }
+
+    /**
+     * 判断是否属于“银行通知 ↔ 支付凭证/商户消费”对。
+     *
+     * 场景：用户使用银行卡微信支付，微信产生一条支付凭证（source = WECHAT），
+     * 银行公众号紧接着推送一条动账提醒（source = WECHAT，不同流水号或无流水号）。
+     * 两者同源但属于跨机构通知，在 300s 窗口与金额一致时应合并判重，不按同渠道流水号不相等误杀。
+     */
+    fun isBankPaymentPair(a: PaymentCapture, b: PaymentCapture): Boolean {
+        // 已合并过多渠道的父账单不参与此判断（避免误将后续真实的同渠道消费合并进来）
+        if (a.channel?.contains("+") == true || b.channel?.contains("+") == true) return false
+
+        val aBank = isBankNotification(a)
+        val bBank = isBankNotification(b)
+        // 必须恰好一方为银行通知类消息，另一方为非银行的普通支付/商户账单
+        if (aBank == bBank) return false
+
+        // 交易类型若均存在且明确冲突（如一收一支），不能误判为重复
+        val t1 = a.billType
+        val t2 = b.billType
+        if (t1 != null && t2 != null && t1 != t2) return false
+
+        return true
+    }
+
+    private fun isBankMerchant(name: String): Boolean =
+        BANK_KEYWORDS.any { name.contains(it) }
+
     private fun selectBetterMerchant(m1: String?, m2: String?): String? {
         val t1 = m1?.trim().orEmpty()
         val t2 = m2?.trim().orEmpty()
@@ -301,6 +364,9 @@ object DuplicateDetector {
             t2.isEmpty() -> t1.takeIf { it.isNotEmpty() }
             isDirtyMerchant(t1) && !isDirtyMerchant(t2) -> t2
             !isDirtyMerchant(t1) && isDirtyMerchant(t2) -> t1
+            // 真实商户名优先于银行公众号名（如 "瑞幸咖啡" 优于 "招商银行" / "招商银行信用卡"）
+            !isBankMerchant(t1) && isBankMerchant(t2) -> t1
+            isBankMerchant(t1) && !isBankMerchant(t2) -> t2
             t2.length > t1.length -> t2
             else -> t1
         }
@@ -310,7 +376,9 @@ object DuplicateDetector {
         name.startsWith("待") ||
             name.startsWith("wxid_") ||
             name == "财付通" ||
-            name == "支付宝 - 交易"
+            name == "支付宝 - 交易" ||
+            name == "微信支付凭证" ||
+            name == "微信支付"
 
     private fun selectBetterNote(n1: String?, n2: String?): String? {
         val t1 = n1?.trim().orEmpty()

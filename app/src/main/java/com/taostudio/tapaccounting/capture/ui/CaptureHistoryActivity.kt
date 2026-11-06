@@ -1,6 +1,7 @@
 package com.taostudio.tapaccounting.capture.ui
 
 import android.app.Activity
+import android.app.AlertDialog
 import android.app.Dialog
 import android.content.ClipData
 import android.content.ClipboardManager
@@ -20,6 +21,7 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
+import com.taostudio.tapaccounting.BuildConfig
 import com.taostudio.tapaccounting.R
 import com.taostudio.tapaccounting.capture.CaptureApp
 import com.taostudio.tapaccounting.capture.contract.CaptureSource
@@ -27,21 +29,22 @@ import com.taostudio.tapaccounting.capture.contract.CaptureSources
 import com.taostudio.tapaccounting.capture.contract.LocalBillType
 import com.taostudio.tapaccounting.capture.data.CaptureEvent
 import com.taostudio.tapaccounting.capture.history.AutoAccountingHistoryImporter
+import com.taostudio.tapaccounting.capture.ingest.CaptureIngestCoordinator
+import com.taostudio.tapaccounting.capture.parse.AutoAccountingRuleEngine
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.json.JSONObject
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.UUID
 
 /**
- * 历史数据页：查看所有原始事件、规则命中情况，并可打开原始 JSON。
- *
- * 这里不做编辑/入账；待记仍在 PendingListActivity。页面只负责展示与本地筛选，
- * 数据来源与导入流程保持原有实现。
+ * 历史数据页：查看所有原始事件、规则命中情况，支持规则编写、测试与重跑。
  */
 class CaptureHistoryActivity : Activity() {
 
@@ -56,6 +59,14 @@ class CaptureHistoryActivity : Activity() {
     private lateinit var summaryCaption: TextView
     private lateinit var list: LinearLayout
     private lateinit var importButton: TextView
+
+    private val dataRuleViews by lazy {
+        DataRuleViews(
+            activity = this,
+            scope = scope,
+            onDataChanged = { load() },
+        )
+    }
 
     private var filterTabs: List<TextView> = emptyList()
     private var filter = FILTER_ALL
@@ -115,7 +126,7 @@ class CaptureHistoryActivity : Activity() {
             setTextColor(CaptureUi.TEXT_PRIMARY)
         })
         titleBlock.addView(TextView(this).apply {
-            text = "原始捕获事件 · 只读"
+            text = "原始捕获事件 · 规则匹配与重跑"
             textSize = 11f
             maxLines = 1
             ellipsize = TextUtils.TruncateAt.END
@@ -124,12 +135,33 @@ class CaptureHistoryActivity : Activity() {
         })
         topBar.addView(titleBlock)
 
-        importButton = CaptureUi.button(
+        val rematchButton = CaptureUi.button(
             activity = this,
-            text = "导入",
+            text = "重跑未匹配",
             textColor = CaptureUi.BRAND_DARK,
             bgColor = CaptureUi.BRAND_SOFT,
             strokeColor = CaptureUi.BRAND_BORDER,
+            radiusDp = 10,
+            paddingH = 10,
+            paddingV = 8,
+            textSizeSp = 12f,
+        ) { rematchUnmatchedEvents() }.apply {
+            minimumHeight = dp(40)
+        }
+        topBar.addView(
+            rematchButton,
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+            ).apply { marginEnd = dp(4) },
+        )
+
+        importButton = CaptureUi.button(
+            activity = this,
+            text = "导入",
+            textColor = CaptureUi.TEXT_PRIMARY,
+            bgColor = CaptureUi.BG_SUBTLE,
+            strokeColor = CaptureUi.BORDER,
             radiusDp = 10,
             paddingH = 12,
             paddingV = 8,
@@ -649,7 +681,7 @@ class CaptureHistoryActivity : Activity() {
         val scroll = ScrollView(this).apply {
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
-                (resources.displayMetrics.heightPixels * 0.42f).toInt(),
+                (resources.displayMetrics.heightPixels * 0.35f).toInt(),
             )
             isFillViewport = false
             setPadding(0, dp(8), 0, 0)
@@ -665,17 +697,96 @@ class CaptureHistoryActivity : Activity() {
         })
         content.addView(scroll)
 
-        val footer = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            setPadding(0, dp(10), 0, 0)
+        val actions = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(0, dp(12), 0, 0)
         }
-        footer.addView(
+
+        val primaryRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+        }
+        if (!event.matched) {
+            primaryRow.addView(
+                CaptureUi.button(
+                    activity = this,
+                    text = "🤖 AI 写规则",
+                    textColor = Color.WHITE,
+                    bgColor = CaptureUi.BRAND,
+                    strokeColor = Color.TRANSPARENT,
+                    radiusDp = 10,
+                    paddingV = 9,
+                    textSizeSp = 13f,
+                ) {
+                    generateRuleForEventWithAi(event, dialog)
+                },
+                LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
+                    marginEnd = dp(8)
+                },
+            )
+            primaryRow.addView(
+                CaptureUi.button(
+                    activity = this,
+                    text = "✍️ 手写规则",
+                    textColor = CaptureUi.TEXT_PRIMARY,
+                    bgColor = CaptureUi.BG_SUBTLE,
+                    strokeColor = CaptureUi.BORDER,
+                    radiusDp = 10,
+                    paddingV = 9,
+                    textSizeSp = 13f,
+                ) {
+                    writeRuleForEvent(event, dialog)
+                },
+                LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f),
+            )
+        } else {
+            primaryRow.addView(
+                CaptureUi.button(
+                    activity = this,
+                    text = "🧪 规则测试",
+                    textColor = CaptureUi.BRAND_DARK,
+                    bgColor = CaptureUi.BRAND_SOFT,
+                    strokeColor = CaptureUi.BRAND_BORDER,
+                    radiusDp = 10,
+                    paddingV = 9,
+                    textSizeSp = 13f,
+                ) {
+                    testEventRule(event, dialog)
+                },
+                LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
+                    marginEnd = dp(8)
+                },
+            )
+            primaryRow.addView(
+                CaptureUi.button(
+                    activity = this,
+                    text = "⚡ 重新生成待记",
+                    textColor = Color.WHITE,
+                    bgColor = CaptureUi.BRAND,
+                    strokeColor = Color.TRANSPARENT,
+                    radiusDp = 10,
+                    paddingV = 9,
+                    textSizeSp = 13f,
+                ) {
+                    dialog?.dismiss()
+                    reIngestEvent(event)
+                },
+                LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f),
+            )
+        }
+        actions.addView(primaryRow)
+
+        val secondaryRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(0, dp(8), 0, 0)
+        }
+        secondaryRow.addView(
             CaptureUi.button(
                 activity = this,
                 text = "复制 JSON",
-                textColor = CaptureUi.BRAND_DARK,
-                bgColor = CaptureUi.BRAND_SOFT,
-                strokeColor = CaptureUi.BRAND_BORDER,
+                textColor = CaptureUi.TEXT_PRIMARY,
+                bgColor = CaptureUi.BG_SUBTLE,
+                strokeColor = CaptureUi.BORDER,
+                radiusDp = 10,
                 paddingV = 9,
                 textSizeSp = 12.5f,
             ) { copyJson(raw) },
@@ -683,19 +794,22 @@ class CaptureHistoryActivity : Activity() {
                 marginEnd = dp(8)
             },
         )
-        footer.addView(
+        secondaryRow.addView(
             CaptureUi.button(
                 activity = this,
                 text = "关闭",
                 textColor = CaptureUi.TEXT_SECONDARY,
                 bgColor = CaptureUi.BG_SUBTLE,
                 strokeColor = CaptureUi.BORDER,
+                radiusDp = 10,
                 paddingV = 9,
                 textSizeSp = 12.5f,
             ) { dialog?.dismiss() },
             LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f),
         )
-        content.addView(footer)
+        actions.addView(secondaryRow)
+
+        content.addView(actions)
 
         val container = FrameLayout(this).apply {
             setBackgroundColor(Color.TRANSPARENT)
@@ -731,6 +845,248 @@ class CaptureHistoryActivity : Activity() {
         }
     }
 
+    private fun generateRuleForEventWithAi(event: CaptureEvent, dialog: Dialog? = null) {
+        dialog?.dismiss()
+        val appPkg = AutoAccountingRuleEngine.packageForSource(event.source) ?: event.source
+        dataRuleViews.generateRuleWithAi(
+            sampleJson = event.rawJson,
+            targetApp = appPkg,
+            targetType = event.rawType.ifBlank { "DATA" },
+        )
+    }
+
+    private fun writeRuleForEvent(event: CaptureEvent, dialog: Dialog? = null) {
+        dialog?.dismiss()
+        val appPkg = AutoAccountingRuleEngine.packageForSource(event.source) ?: event.source
+        val type = event.rawType.ifBlank { "DATA" }
+        val titleCandidate = extractTitle(event.rawJson)
+        val defaultName = titleCandidate ?: event.merchant?.takeIf { it.isNotBlank() }?.let { "${event.source}-$it" }
+            ?: "${sourceLabel(event.source)}-自定义规则"
+
+        dataRuleViews.showRuleFormForSample(
+            sampleJson = event.rawJson,
+            targetApp = appPkg,
+            targetType = type,
+            targetName = defaultName,
+        )
+    }
+
+    private fun extractTitle(rawJson: String): String? {
+        return runCatching {
+            val root = JSONObject(rawJson)
+            val mMap = root.optJSONObject("mMap")
+            mMap?.optString("title")?.takeIf { it.isNotBlank() }
+                ?: root.optString("title").takeIf { it.isNotBlank() }
+        }.getOrNull()
+    }
+
+    private fun testEventRule(event: CaptureEvent, dialog: Dialog? = null) {
+        dialog?.dismiss()
+        val progress = AlertDialog.Builder(this)
+            .setTitle("正在测试规则")
+            .setMessage("正在用最新规则库运行 QuickJS 解析…")
+            .setCancelable(false)
+            .create()
+        progress.show()
+
+        scope.launch {
+            val outcome = withContext(Dispatchers.IO) {
+                AutoAccountingRuleEngine.parse(event.source, event.rawType, event.rawJson)
+            }
+            progress.dismiss()
+
+            when (outcome) {
+                is AutoAccountingRuleEngine.ParseOutcome.Matched -> {
+                    val r = outcome.rule
+
+                    if (!event.matched) {
+                        withContext(Dispatchers.IO) {
+                            val app = CaptureApp.from(this@CaptureHistoryActivity)
+                            app.eventRepository.updateMatchResult(
+                                id = event.id,
+                                matched = true,
+                                ruleName = r.ruleName,
+                                autoType = r.type,
+                                localType = r.localType,
+                                localSubType = r.localSubType,
+                                amountCents = r.amountCents,
+                                merchant = r.merchant,
+                                channel = r.channel,
+                            )
+                        }
+                        load()
+                    }
+
+                    val content = buildString {
+                        append("【✓ 命中规则】：").append(r.ruleName).append("\n\n")
+                        append("· 账单类型：").append(r.type)
+                        if (r.localType != null) {
+                            append(" (本地映射: ").append(localTypeLabel(r.localType, r.localSubType)).append(")")
+                        }
+                        append("\n")
+                        append("· 金额：").append(formatAmount(r.amountCents)).append("\n")
+                        append("· 对方户名/商户：").append(r.merchant ?: "—").append("\n")
+                        r.shopItem?.let { append("· 商品说明：").append(it).append("\n") }
+                        r.accountNameFrom?.let { append("· 转出账户：").append(it).append("\n") }
+                        r.accountNameTo?.let { append("· 转入账户：").append(it).append("\n") }
+                        r.channel?.let { append("· 支付方式/渠道：").append(it).append("\n") }
+                        append("· 时间戳：").append(r.paidAt)
+                    }
+
+                    AlertDialog.Builder(this@CaptureHistoryActivity)
+                        .setTitle("🧪 规则测试成功")
+                        .setMessage(content)
+                        .setPositiveButton("知道了", null)
+                        .setNeutralButton("⚡ 重新生成待记") { _, _ ->
+                            reIngestEvent(event)
+                        }
+                        .show()
+                }
+
+                is AutoAccountingRuleEngine.ParseOutcome.NoMatch -> {
+                    AlertDialog.Builder(this@CaptureHistoryActivity)
+                        .setTitle("⚠️ 未命中任何规则")
+                        .setMessage("当前规则库中暂无匹配此事件的规则，或规则在解析时返回 null / 异常。\n\n可以让 AI 自动分析生成规则，或手动编写。")
+                        .setPositiveButton("🤖 AI 写规则") { _, _ ->
+                            generateRuleForEventWithAi(event)
+                        }
+                        .setNeutralButton("✍️ 手写规则") { _, _ ->
+                            writeRuleForEvent(event)
+                        }
+                        .setNegativeButton("取消", null)
+                        .show()
+                }
+            }
+        }
+    }
+
+    private fun reIngestEvent(event: CaptureEvent) {
+        scope.launch {
+            val payload = JSONObject().apply {
+                put("captureId", UUID.randomUUID().toString())
+                put("source", event.source)
+                put("rawType", event.rawType)
+                put("rawJson", event.rawJson)
+                put("capturedAt", event.receivedAt)
+                put("paidAt", event.receivedAt)
+            }
+            val resultAck = withContext(Dispatchers.IO) {
+                CaptureIngestCoordinator.ingest(
+                    this@CaptureHistoryActivity,
+                    BuildConfig.CAPTURE_INGEST_TOKEN,
+                    payload.toString(),
+                )
+            }
+            val ok = runCatching { JSONObject(resultAck).optBoolean("ok") }.getOrDefault(false)
+            if (ok) {
+                Toast.makeText(this@CaptureHistoryActivity, "已重新提交待记条目，请在待记列表查看", Toast.LENGTH_LONG).show()
+                load()
+            } else {
+                Toast.makeText(this@CaptureHistoryActivity, "入库返回：$resultAck", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
+    private fun rematchUnmatchedEvents() {
+        val progress = AlertDialog.Builder(this)
+            .setTitle("正在重跑规则")
+            .setMessage("正在用最新规则库重新匹配历史未匹配事件…")
+            .setCancelable(false)
+            .create()
+        progress.show()
+
+        scope.launch {
+            val app = CaptureApp.from(this@CaptureHistoryActivity)
+            val unmatched = withContext(Dispatchers.IO) {
+                app.eventRepository.listUnmatched(500)
+            }
+            if (unmatched.isEmpty()) {
+                progress.dismiss()
+                Toast.makeText(this@CaptureHistoryActivity, "没有未匹配的事件需要重跑", Toast.LENGTH_SHORT).show()
+                return@launch
+            }
+
+            var newlyMatched = 0
+            val matchedEvents = mutableListOf<CaptureEvent>()
+            withContext(Dispatchers.IO) {
+                AutoAccountingRuleEngine.init(this@CaptureHistoryActivity)
+                for (event in unmatched) {
+                    val outcome = AutoAccountingRuleEngine.parse(event.source, event.rawType, event.rawJson)
+                    if (outcome is AutoAccountingRuleEngine.ParseOutcome.Matched) {
+                        val r = outcome.rule
+                        app.eventRepository.updateMatchResult(
+                            id = event.id,
+                            matched = true,
+                            ruleName = r.ruleName,
+                            autoType = r.type,
+                            localType = r.localType,
+                            localSubType = r.localSubType,
+                            amountCents = r.amountCents,
+                            merchant = r.merchant,
+                            channel = r.channel,
+                        )
+                        newlyMatched++
+                        matchedEvents.add(event)
+                    }
+                }
+            }
+            progress.dismiss()
+            load()
+
+            if (newlyMatched > 0) {
+                AlertDialog.Builder(this@CaptureHistoryActivity)
+                    .setTitle("重跑完成")
+                    .setMessage("共扫描 ${unmatched.size} 条历史未匹配记录，成功匹配到 $newlyMatched 条！\n\n卡片已全部更新为「已命中」。是否现在将这 $newlyMatched 条账单推送到待记列表中？")
+                    .setPositiveButton("全部推送待记") { _, _ ->
+                        batchReIngest(matchedEvents)
+                    }
+                    .setNegativeButton("仅更新历史状态", null)
+                    .show()
+            } else {
+                Toast.makeText(this@CaptureHistoryActivity, "扫描了 ${unmatched.size} 条记录，暂无新匹配", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    private fun batchReIngest(events: List<CaptureEvent>) {
+        val progress = AlertDialog.Builder(this)
+            .setTitle("正在生成待记账单")
+            .setMessage("正在推送…")
+            .setCancelable(false)
+            .create()
+        progress.show()
+
+        scope.launch {
+            var successCount = 0
+            withContext(Dispatchers.IO) {
+                for (event in events) {
+                    val payload = JSONObject().apply {
+                        put("captureId", UUID.randomUUID().toString())
+                        put("source", event.source)
+                        put("rawType", event.rawType)
+                        put("rawJson", event.rawJson)
+                        put("capturedAt", event.receivedAt)
+                        put("paidAt", event.receivedAt)
+                    }
+                    val ack = CaptureIngestCoordinator.ingest(
+                        this@CaptureHistoryActivity,
+                        BuildConfig.CAPTURE_INGEST_TOKEN,
+                        payload.toString(),
+                    )
+                    if (runCatching { JSONObject(ack).optBoolean("ok") }.getOrDefault(false)) {
+                        successCount++
+                    }
+                }
+            }
+            progress.dismiss()
+            Toast.makeText(
+                this@CaptureHistoryActivity,
+                "已将 $successCount 条账单推送到待记列表",
+                Toast.LENGTH_LONG,
+            ).show()
+        }
+    }
+
     private fun copyJson(raw: String) {
         val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         clipboard.setPrimaryClip(ClipData.newPlainText("capture_event", raw))
@@ -759,13 +1115,15 @@ class CaptureHistoryActivity : Activity() {
 
     private fun sourceLabel(source: String): String = CaptureSources.displayName(source)
 
-    private fun typeLabel(event: CaptureEvent): String = when {
-        event.localType == null -> "待分类"
-        event.localType == 0 -> "支出"
-        event.localType == 1 && event.localSubType == 2 -> "退款"
-        event.localType == 1 -> "收入"
-        event.localType == 2 && event.localSubType == 1 -> "还款"
-        event.localType == 2 -> "转账"
+    private fun typeLabel(event: CaptureEvent): String = localTypeLabel(event.localType, event.localSubType)
+
+    private fun localTypeLabel(localType: Int?, localSubType: Int?): String = when {
+        localType == null -> "待分类"
+        localType == 0 -> "支出"
+        localType == 1 && localSubType == 2 -> "退款"
+        localType == 1 -> "收入"
+        localType == 2 && localSubType == 1 -> "还款"
+        localType == 2 -> "转账"
         else -> "未知"
     }
 

@@ -379,6 +379,11 @@ object Prefs {
     fun setIndependentDetailEnabled(ctx: Context, enabled: Boolean) =
         PrefsDisplaySupport.setIndependentDetailEnabled(ctx, enabled)
 
+    fun isBillCategorySourceVisible(ctx: Context): Boolean =
+        PrefsDisplaySupport.isBillCategorySourceVisible(ctx)
+    fun setBillCategorySourceVisible(ctx: Context, visible: Boolean) =
+        PrefsDisplaySupport.setBillCategorySourceVisible(ctx, visible)
+
     fun addOcrDebugRecord(ctx: Context, text: String, source: String = "local_ocr_before_ai") =
         PrefsAiSupport.addOcrDebugRecord(ctx, text, source)
 

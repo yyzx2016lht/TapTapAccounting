@@ -29,6 +29,7 @@ import com.taostudio.tapaccounting.logic.BillDeleteUndo
 import com.taostudio.tapaccounting.logic.BillDisplayFormatter
 import com.taostudio.tapaccounting.logic.BillMutationService
 import com.taostudio.tapaccounting.logic.CurrencyManager
+import com.taostudio.tapaccounting.logic.RuleCorrectionCoordinator
 import com.taostudio.tapaccounting.ui.activity.EditBillActivity
 import com.taostudio.tapaccounting.ui.dialog.OverlayDialogs
 import androidx.recyclerview.widget.RecyclerView
@@ -43,6 +44,37 @@ object BillDetailSheetHelper {
 
     private val dfDetailTime = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
     private val dfDetailTimeShort = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault())
+
+    private fun renderCategorySourceBadge(
+        context: Context,
+        lifecycleOwner: LifecycleOwner,
+        bill: Bill,
+        badge: TextView,
+    ) {
+        badge.visibility = View.GONE
+        if (!Prefs.isBillCategorySourceVisible(context) || bill.id <= 0L) return
+        lifecycleOwner.lifecycleScope.launch(Dispatchers.IO) {
+            val prov = runCatching {
+                AppDatabase.getDatabase(context).billRuleProvenanceDao().getByBillId(bill.id)
+            }.getOrNull()
+            val text = RuleCorrectionCoordinator.resolveProvenanceBadgeText(prov)
+            withContext(Dispatchers.Main) {
+                if (text.isNullOrBlank()) {
+                    badge.visibility = View.GONE
+                    return@withContext
+                }
+                badge.text = text
+                badge.setTextColor(
+                    when (prov?.source?.uppercase()) {
+                        "AI" -> Color.parseColor("#4A68D6")
+                        "RULE" -> Color.parseColor("#B45309")
+                        else -> Color.parseColor("#6B7280")
+                    }
+                )
+                badge.visibility = View.VISIBLE
+            }
+        }
+    }
 
     fun showBillDetailSheet(
         context: Context,
@@ -71,6 +103,7 @@ object BillDetailSheetHelper {
         val layoutCategory = view.findViewById<View>(R.id.layout_detail_category)
         val lineCategory = view.findViewById<View>(R.id.line_category)
         val tvCategory = view.findViewById<TextView>(R.id.tv_detail_category)
+        val tvCategorySourceBadge = view.findViewById<TextView>(R.id.tv_detail_category_source_badge)
         val tvAccountLabel = view.findViewById<TextView>(R.id.tv_detail_account_label)
         val tvAccount = view.findViewById<TextView>(R.id.tv_detail_account)
         val tvTimeLabel = view.findViewById<TextView>(R.id.tv_detail_time_label)
@@ -142,6 +175,7 @@ object BillDetailSheetHelper {
             layoutCategory.visibility = View.VISIBLE
             lineCategory.visibility = View.VISIBLE
             tvCategory.text = BillDisplayFormatter.formatCategoryByPreference(bill.categoryName, true).ifBlank { context.getString(R.string.uncategorized) }
+            renderCategorySourceBadge(context, lifecycleOwner, bill, tvCategorySourceBadge)
 
             if (isRefund) {
                 tvAmount.text = HomeBillFormatHelper.formatMoney(bill.amount, bill.currency)

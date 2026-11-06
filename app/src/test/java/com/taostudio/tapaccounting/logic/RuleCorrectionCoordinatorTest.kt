@@ -60,10 +60,9 @@ class RuleCorrectionCoordinatorTest {
     }
 
     @Test
-    fun testResolveProvenanceBadgeText_shortcut() {
+    fun testResolveProvenanceBadgeText_unknownSourceReturnsNull() {
         val prov = BillRuleProvenance(billId = 4L, source = "SHORTCUT")
-        val badge = RuleCorrectionCoordinator.resolveProvenanceBadgeText(prov)
-        assertEquals("快捷入账", badge)
+        assertNull(RuleCorrectionCoordinator.resolveProvenanceBadgeText(prov))
     }
 
     @Test

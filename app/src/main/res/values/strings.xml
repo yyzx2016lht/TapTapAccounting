@@ -1822,6 +1822,8 @@
     <string name="ai_page_insight_desc">在首页和统计页展示本月消费洞察</string>
     <string name="ai_page_rules_title">本地规则优先</string>
     <string name="ai_page_rules_desc">用你设置的关键词规则修正 AI 识别的分类</string>
+    <string name="ai_page_category_source_title">显示账单分类来源</string>
+    <string name="ai_page_category_source_desc">在账单详情里显示「AI 建议 / 规则命中 / 用户自选」标签</string>
     <string name="ai_page_rules_manage_title">管理规则</string>
     <string name="ai_page_rules_manage_desc">设置关键词与分类的对应关系</string>
     <string name="ai_tile_screen_need_permission">需先开启无障碍服务或 Shizuku 授权</string>

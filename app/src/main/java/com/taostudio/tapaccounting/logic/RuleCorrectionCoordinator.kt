@@ -29,7 +29,6 @@ object RuleCorrectionCoordinator {
     const val SOURCE_MANUAL = "MANUAL"
     const val SOURCE_RULE = "RULE"
     const val SOURCE_AI = "AI"
-    const val SOURCE_SHORTCUT = "SHORTCUT"
 
     enum class CorrectionAction {
         OVERWRITE_USER_RULE,
@@ -67,12 +66,11 @@ object RuleCorrectionCoordinator {
     fun resolveProvenanceBadgeText(source: String?, ruleName: String? = null): String? {
         if (source.isNullOrBlank()) return null
         return when (source.uppercase()) {
-            SOURCE_MANUAL -> "手动分类"
+            SOURCE_MANUAL -> "用户自选"
             SOURCE_RULE -> {
                 if (!ruleName.isNullOrBlank()) "规则命中：$ruleName" else "规则命中"
             }
             SOURCE_AI -> "AI 建议"
-            SOURCE_SHORTCUT -> "快捷入账"
             else -> null
         }
     }

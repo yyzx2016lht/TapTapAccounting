@@ -293,6 +293,10 @@ class BillDetailActivity : AppCompatActivity() {
 
     private fun renderCategoryProvenanceBadge() {
         val badge = tvCategoryProvenanceBadge ?: return
+        if (!Prefs.isBillCategorySourceVisible(this)) {
+            badge.visibility = View.GONE
+            return
+        }
         val currentBill = bill ?: run {
             badge.visibility = View.GONE
             return

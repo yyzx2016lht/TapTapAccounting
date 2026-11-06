@@ -276,23 +276,25 @@ class CaptureRepository(private val dao: PaymentCaptureDao) {
         val existing = dao.findById(id) ?: return null
         val now = System.currentTimeMillis()
         val keepManual = existing.categorySource == CategorySource.MANUAL
-        val matchedCategory = if (keepManual) {
+        val ruleMatch = if (keepManual) {
             null
         } else {
-            CaptureRuleMatcher.resolveNoteCategory(context, cleanNote)
+            com.taostudio.tapaccounting.capture.rules.AccountingRuleEngine.matchNote(context, cleanNote)
         }
         val updated = when {
             keepManual -> existing.copy(note = cleanNote, updatedAt = now)
-            matchedCategory != null -> existing.copy(
+            ruleMatch != null -> existing.copy(
                 note = cleanNote,
-                categoryName = matchedCategory,
+                categoryName = ruleMatch.categoryName,
                 categorySource = CategorySource.RULE,
+                categoryRuleId = ruleMatch.ruleId,
                 updatedAt = now,
             )
             else -> existing.copy(
                 note = cleanNote,
                 categoryName = null,
                 categorySource = null,
+                categoryRuleId = null,
                 updatedAt = now,
             )
         }
@@ -330,10 +332,12 @@ class CaptureRepository(private val dao: PaymentCaptureDao) {
 
         val resolvedCategory: String?
         val resolvedCategorySource: String?
+        val resolvedRuleId: Long?
         when {
             keepManual || (existing.categorySource == CategorySource.MANUAL && explicitCategory == null) -> {
                 resolvedCategory = existing.categoryName
                 resolvedCategorySource = CategorySource.MANUAL
+                resolvedRuleId = existing.categoryRuleId
             }
             explicitCategory != null -> {
                 resolvedCategory = explicitCategory
@@ -342,15 +346,18 @@ class CaptureRepository(private val dao: PaymentCaptureDao) {
                     explicitCategory == existing.categoryName -> existing.categorySource
                     else -> CategorySource.MANUAL
                 }
+                resolvedRuleId = if (resolvedCategorySource == CategorySource.RULE) existing.categoryRuleId else null
             }
             noteChanged -> {
-                val matched = CaptureRuleMatcher.resolveNoteCategory(context, cleanNote)
-                resolvedCategory = matched
+                val matched = com.taostudio.tapaccounting.capture.rules.AccountingRuleEngine.matchNote(context, cleanNote)
+                resolvedCategory = matched?.categoryName
                 resolvedCategorySource = if (matched != null) CategorySource.RULE else null
+                resolvedRuleId = matched?.ruleId
             }
             else -> {
                 resolvedCategory = existing.categoryName
                 resolvedCategorySource = existing.categorySource
+                resolvedRuleId = existing.categoryRuleId
             }
         }
 
@@ -359,6 +366,7 @@ class CaptureRepository(private val dao: PaymentCaptureDao) {
             assetName = cleanAsset,
             categoryName = resolvedCategory,
             categorySource = resolvedCategorySource,
+            categoryRuleId = resolvedRuleId,
             updatedAt = now,
         )
         dao.update(updated)

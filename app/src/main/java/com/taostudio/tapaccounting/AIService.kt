@@ -2063,8 +2063,7 @@ object AIService {
         )
         if (!Prefs.isLocalRuleOverrideEnabled(ctx)) return
 
-        val promptRules = loadActivePromptRules(ctx)
-        applyLocalRuleOverrideOnResult(root, referenceText.trim(), promptRules)
+        applyLocalRuleOverrideOnResult(ctx, root, referenceText.trim())
         normalizeAccountingResult(
             root = root,
             expenseCats = promptContext.expenseCats,
@@ -2082,34 +2081,29 @@ object AIService {
      * 直接在已解析的 JSONObject 上原地修改，保证规则的 type / category_name /
      * asset_name / to_asset_name 不会再被后续步骤覆盖。
      */
-    private fun applyLocalRuleOverrideOnResult(root: JSONObject, userInput: String, allRules: List<com.taostudio.tapaccounting.data.local.entity.AiRule>) {
-        if (allRules.isEmpty()) return
-
-        fun applyRulesToBill(bill: JSONObject) {
-            // 优先取 remarks 作为该条账单的语义文本
+    private suspend fun applyLocalRuleOverrideOnResult(ctx: Context, root: JSONObject, userInput: String) {
+        suspend fun applyRulesToBill(bill: JSONObject) {
             val remarks = bill.optString("remarks", "").trim()
                 .ifEmpty { bill.optString("remark", "").trim() }
-            val categoryName = bill.optString("category_name", "")
+            val ruleMatch = com.taostudio.tapaccounting.capture.rules.AccountingRuleEngine.matchAiBill(ctx, userInput, remarks) ?: return
 
-            // 多账单场景下：仅用 remarks+categoryName 匹配，避免 A 账单规则命中 B/C。
-            // 单账单或 AI 未返回 remarks 时才兜底 userInput。
-            val matchText = if (remarks.isNotBlank()) "$remarks $categoryName" else userInput
-
-            allRules.filter { rule ->
-                rule.keyword.split("\\s+".toRegex()).filter { it.isNotEmpty() }
-                    .all { matchText.contains(it, ignoreCase = true) }
-            }.forEach { rule ->
-                rule.targetType?.takeIf { it in 0..3 }?.let { t ->
-                    bill.put("type", if (t == 3) 2 else t)
-                    if (t == 3) {
-                        bill.put("subType", 1)
-                        bill.put("category_name", "还款")
-                    }
+            ruleMatch.targetType?.takeIf { it in 0..3 }?.let { t ->
+                bill.put("type", if (t == 3) 2 else t)
+                if (t == 3) {
+                    bill.put("subType", 1)
+                    bill.put("category_name", "还款")
                 }
-                if (!rule.targetCategory.isNullOrEmpty()) bill.put("category_name", rule.targetCategory)
-                if (!rule.targetAccount1.isNullOrEmpty()) bill.put("asset_name", rule.targetAccount1)
-                if (!rule.targetAccount2.isNullOrEmpty()) bill.put("to_asset_name", rule.targetAccount2)
             }
+            if (!ruleMatch.categoryName.isNullOrEmpty()) {
+                bill.put("category_name", ruleMatch.categoryName)
+            }
+            if (!ruleMatch.targetAccount1.isNullOrEmpty()) {
+                bill.put("asset_name", ruleMatch.targetAccount1)
+            }
+            if (!ruleMatch.targetAccount2.isNullOrEmpty()) {
+                bill.put("to_asset_name", ruleMatch.targetAccount2)
+            }
+            bill.put("rule_id", ruleMatch.ruleId)
         }
 
         try {

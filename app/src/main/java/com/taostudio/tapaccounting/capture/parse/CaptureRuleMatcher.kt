@@ -92,15 +92,12 @@ object CaptureRuleMatcher {
     /**
      * 只按“用户备注”匹配分类规则。
      *
-     * 只执行 [CategoryRule.MATCH_NOTE] / [CategoryRule.MATCH_ANY]；
-     * 商户规则（[CategoryRule.MATCH_MERCHANT]）数据保留，但不再参与自动归类。
+     * 委托至 [AccountingRuleEngine.matchNote]。
      */
     suspend fun resolveNoteCategory(context: Context, note: String?): String? {
         val n = note?.trim().orEmpty()
         if (n.isEmpty()) return null
-        ensureSeeded(context)
-        val rules = AppDatabase.getDatabase(context).categoryRuleDao().listEnabled()
-        return matchNoteCategory(rules, n)
+        return com.taostudio.tapaccounting.capture.rules.AccountingRuleEngine.matchNote(context, n)?.categoryName
     }
 
     /** 纯规则匹配，便于单测：只认备注，商户规则直接跳过。 */
@@ -122,8 +119,7 @@ object CaptureRuleMatcher {
     /**
      * 根据 备注（最高优）、商户、商品名 匹配本地分类规则。
      *
-     * 只供只读展示等历史场景使用；hook 入库与备注重分类路径必须用
-     * [resolveNoteCategory]，不得再用商户规则自动命中。
+     * 委托至 [AccountingRuleEngine.matchNote]。
      */
     suspend fun resolveCategoryName(
         context: Context,
@@ -132,33 +128,8 @@ object CaptureRuleMatcher {
         note: String?,
         fallbackCategory: String? = null,
     ): String? {
-        ensureSeeded(context)
-        val rules = AppDatabase.getDatabase(context).categoryRuleDao().listEnabled()
-        val m = merchant?.trim().orEmpty()
-        val item = shopItem?.trim().orEmpty()
-        val n = note?.trim().orEmpty()
-
-        // 如果用户手写了备注，先跑一次备注命中（避免商户是笼统的“微信支付”覆盖掉手写备注“咖啡”）
-        if (n.isNotEmpty()) {
-            for (rule in rules) {
-                if (rule.matchField == CategoryRule.MATCH_MERCHANT) continue
-                if (matchesText(rule, n)) return rule.targetCategoryName
-            }
-        }
-
-        // 再跑全字段匹配
-        for (rule in rules) {
-            val targetText = when (rule.matchField) {
-                CategoryRule.MATCH_MERCHANT -> m
-                CategoryRule.MATCH_NOTE -> n
-                else -> "$n $m $item"
-            }
-            if (targetText.isNotBlank() && matchesText(rule, targetText)) {
-                return rule.targetCategoryName
-            }
-        }
-
-        return fallbackCategory?.takeIf { it.isNotBlank() }
+        val matched = com.taostudio.tapaccounting.capture.rules.AccountingRuleEngine.matchNote(context, note, merchant)?.categoryName
+        return matched ?: fallbackCategory?.takeIf { it.isNotBlank() }
     }
 
     private fun matchesText(rule: CategoryRule, text: String): Boolean {

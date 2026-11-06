@@ -10,7 +10,6 @@ import com.taostudio.tapaccounting.RuleKeywordPolicy
 import com.taostudio.tapaccounting.capture.CaptureApp
 import com.taostudio.tapaccounting.capture.contract.LocalBillType
 import com.taostudio.tapaccounting.capture.data.CapturePrefs
-import com.taostudio.tapaccounting.capture.data.CategoryRule
 import com.taostudio.tapaccounting.capture.data.RuleLearningTask
 import com.taostudio.tapaccounting.capture.data.RuleLearningTaskDao
 import com.taostudio.tapaccounting.capture.parse.RuleLearningPolicy
@@ -116,7 +115,6 @@ object RuleLearningManager {
             val app = CaptureApp.from(context)
             val db = app.database
             val accountingRuleDao = db.accountingRuleDao()
-            val categoryRuleDao = db.categoryRuleDao()
 
             val learned = mutableListOf<LearnedRule>()
             val processedKeywordsInBatch = mutableSetOf<String>()
@@ -170,33 +168,6 @@ object RuleLearningManager {
                 }
 
                 if (wasLearned) {
-                    // 同步到 legacy category_rules 表
-                    runCatching {
-                        val legacyRules = categoryRuleDao.findByKeyword(rawKeyword)
-                        when (val legDec = RuleLearningPolicy.decide(legacyRules, rawKeyword, targetCategory)) {
-                            RuleLearningPolicy.Decision.Insert -> {
-                                categoryRuleDao.upsert(
-                                    RuleLearningPolicy.newAiRule(
-                                        keyword = rawKeyword,
-                                        targetCategoryName = targetCategory,
-                                        learnedAt = now,
-                                    )
-                                )
-                            }
-                            is RuleLearningPolicy.Decision.Update -> {
-                                categoryRuleDao.update(
-                                    legDec.rule.copy(
-                                        targetCategoryName = targetCategory,
-                                        source = CategoryRule.SOURCE_AI,
-                                        learnedAt = now,
-                                        enabled = true,
-                                    )
-                                )
-                            }
-                            RuleLearningPolicy.Decision.SkipSameCategory,
-                            RuleLearningPolicy.Decision.SkipProtected -> {}
-                        }
-                    }
                     learned += LearnedRule(rawKeyword, targetCategory, entry.billType)
                 }
             }
@@ -378,7 +349,6 @@ object RuleLearningManager {
 
         val db = app.database
         val accountingRuleDao = db.accountingRuleDao()
-        val categoryRuleDao = db.categoryRuleDao()
 
         val existingAcc = accountingRuleDao.findAllByKeyword(keyword)
         val now = System.currentTimeMillis()
@@ -411,36 +381,6 @@ object RuleLearningManager {
 
             RuleLearningPolicy.UnifiedDecision.SkipSameCategory,
             RuleLearningPolicy.UnifiedDecision.SkipProtected -> null
-        }
-
-        if (learned != null) {
-            // 同步 legacy category_rules 表
-            runCatching {
-                val existingLegacy = categoryRuleDao.findByKeyword(keyword)
-                when (val legDec = RuleLearningPolicy.decide(existingLegacy, keyword, targetCategory)) {
-                    RuleLearningPolicy.Decision.Insert -> {
-                        categoryRuleDao.upsert(
-                            RuleLearningPolicy.newAiRule(
-                                keyword = keyword,
-                                targetCategoryName = targetCategory,
-                                learnedAt = now,
-                            )
-                        )
-                    }
-                    is RuleLearningPolicy.Decision.Update -> {
-                        categoryRuleDao.update(
-                            legDec.rule.copy(
-                                targetCategoryName = targetCategory,
-                                source = CategoryRule.SOURCE_AI,
-                                learnedAt = now,
-                                enabled = true,
-                            )
-                        )
-                    }
-                    RuleLearningPolicy.Decision.SkipSameCategory,
-                    RuleLearningPolicy.Decision.SkipProtected -> {}
-                }
-            }
         }
 
         taskDao.deleteById(task.id)

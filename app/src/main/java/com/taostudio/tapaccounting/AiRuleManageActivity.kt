@@ -22,7 +22,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import com.taostudio.tapaccounting.data.local.AppDatabase
-import com.taostudio.tapaccounting.data.local.entity.AiRule
+import com.taostudio.tapaccounting.data.local.entity.AccountingRule
 import com.taostudio.tapaccounting.ui.common.MultiSelectMotion
 import com.taostudio.tapaccounting.ui.dialog.OverlayDialogs
 import kotlin.coroutines.resume
@@ -40,10 +40,10 @@ class AiRuleManageActivity : AppCompatActivity() {
     private lateinit var adapter: RuleAdapter
     private lateinit var db: AppDatabase
 
-    private var allRules: List<AiRule> = emptyList()
+    private var allRules: List<AccountingRule> = emptyList()
     private var keyword: String = ""
     private var isMultiSelectMode = false
-    private val selectedRuleIds = mutableSetOf<Int>()
+    private val selectedRuleIds = mutableSetOf<Long>()
     private enum class RuleSaveOutcome { SAVED, OVERWRITTEN, CANCELED }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -75,7 +75,11 @@ class AiRuleManageActivity : AppCompatActivity() {
             },
             onToggleEnabled = { rule, enabled ->
                 lifecycleScope.launch {
-                    db.aiRuleDao().updateRule(rule.copy(isEnabled = enabled))
+                    withContext(Dispatchers.IO) {
+                        db.accountingRuleDao().updateEnabled(rule.id, enabled)
+                    }
+                    allRules = allRules.map { if (it.id == rule.id) it.copy(enabled = enabled) else it }
+                    submitFilteredRules()
                 }
             },
             isMultiSelectMode = { isMultiSelectMode },
@@ -85,20 +89,7 @@ class AiRuleManageActivity : AppCompatActivity() {
         rvRules.layoutManager = LinearLayoutManager(this)
         rvRules.adapter = adapter
 
-        lifecycleScope.launch {
-            db.aiRuleDao().getAllRules().collectLatest { rules ->
-                allRules = rules
-                if (isMultiSelectMode) {
-                    selectedRuleIds.retainAll(rules.map { it.id }.toSet())
-                    if (selectedRuleIds.isEmpty()) {
-                        exitMultiSelectMode()
-                    } else {
-                        updateMultiSelectUi()
-                    }
-                }
-                submitFilteredRules()
-            }
-        }
+        loadRules()
 
         etRuleSearch.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
@@ -115,6 +106,21 @@ class AiRuleManageActivity : AppCompatActivity() {
         btnRuleDeleteMulti.setOnClickListener { deleteSelectedRules() }
     }
 
+    private fun loadRules() {
+        lifecycleScope.launch {
+            allRules = withContext(Dispatchers.IO) { db.accountingRuleDao().listAll() }
+            if (isMultiSelectMode) {
+                selectedRuleIds.retainAll(allRules.map { it.id }.toSet())
+                if (selectedRuleIds.isEmpty()) {
+                    exitMultiSelectMode()
+                } else {
+                    updateMultiSelectUi()
+                }
+            }
+            submitFilteredRules()
+        }
+    }
+
     private fun submitFilteredRules() {
         val filtered = if (keyword.isBlank()) {
             allRules
@@ -126,7 +132,7 @@ class AiRuleManageActivity : AppCompatActivity() {
         updateMultiSelectUi()
     }
 
-    private fun buildSearchSource(rule: AiRule): String {
+    private fun buildSearchSource(rule: AccountingRule): String {
         return listOf(
             rule.keyword,
             rule.targetCategory.orEmpty(),
@@ -142,7 +148,7 @@ class AiRuleManageActivity : AppCompatActivity() {
         ).joinToString(" ").lowercase()
     }
 
-    private fun enterMultiSelectMode(initialRule: AiRule) {
+    private fun enterMultiSelectMode(initialRule: AccountingRule) {
         val offset = captureRuleListOffset()
         isMultiSelectMode = true
         selectedRuleIds.clear()
@@ -161,7 +167,7 @@ class AiRuleManageActivity : AppCompatActivity() {
         updateMultiSelectUi()
     }
 
-    private fun toggleRuleSelection(rule: AiRule) {
+    private fun toggleRuleSelection(rule: AccountingRule) {
         if (!selectedRuleIds.add(rule.id)) {
             selectedRuleIds.remove(rule.id)
         }
@@ -243,8 +249,11 @@ class AiRuleManageActivity : AppCompatActivity() {
             .setMessage(getString(R.string.delete_rule_confirm, toDelete.size))
             .setPositiveButton(R.string.delete) { _, _ ->
                 lifecycleScope.launch {
-                    toDelete.forEach { db.aiRuleDao().deleteRule(it) }
+                    withContext(Dispatchers.IO) {
+                        toDelete.forEach { db.accountingRuleDao().deleteById(it.id) }
+                    }
                     exitMultiSelectMode()
+                    loadRules()
                 }
             }
             .setNegativeButton(R.string.cancel, null)
@@ -257,66 +266,63 @@ class AiRuleManageActivity : AppCompatActivity() {
         )
     }
 
-    private fun showEditDeleteDialog(rule: AiRule?) {
-        com.taostudio.tapaccounting.logic.RuleDialogHelper.showDialog(
+    private fun showEditDeleteDialog(rule: AccountingRule?) {
+        com.taostudio.tapaccounting.logic.RuleDialogHelper.showRuleDialog(
             ctx = this,
             rule = rule,
             referenceText = null,
             onSave = { newRule ->
                 lifecycleScope.launch {
-                    val outcome = saveRuleWithKeywordConflictPrompt(
-                        newRule = newRule,
-                        editingRuleId = rule?.id
-                    )
+                    val outcome = saveRuleWithKeywordConflictPrompt(newRule)
                     when (outcome) {
                         RuleSaveOutcome.SAVED -> Utils.toast(this@AiRuleManageActivity, getString(R.string.rule_saved))
                         RuleSaveOutcome.OVERWRITTEN -> Utils.toast(this@AiRuleManageActivity, getString(R.string.rule_overwritten))
                         RuleSaveOutcome.CANCELED -> Utils.toast(this@AiRuleManageActivity, getString(R.string.rule_save_canceled))
                     }
+                    loadRules()
                 }
             },
             onDelete = {
                 lifecycleScope.launch {
-                    db.aiRuleDao().deleteRule(it)
+                    withContext(Dispatchers.IO) { db.accountingRuleDao().deleteById(it.id) }
+                    loadRules()
                 }
             }
         )
     }
 
-    private suspend fun saveRuleWithKeywordConflictPrompt(
-        newRule: AiRule,
-        editingRuleId: Int?
-    ): RuleSaveOutcome = withContext(Dispatchers.IO) {
-        val dao = db.aiRuleDao()
-        val keyword = newRule.keyword.trim()
-        val currentEditId = editingRuleId ?: newRule.id.takeIf { it > 0 }
-        val conflicts = dao.getRulesByKeyword(keyword)
-            .filter { existing -> currentEditId == null || existing.id != currentEditId }
+    private suspend fun saveRuleWithKeywordConflictPrompt(newRule: AccountingRule): RuleSaveOutcome =
+        withContext(Dispatchers.IO) {
+            val dao = db.accountingRuleDao()
+            val keyword = newRule.keyword.trim()
+            val currentEditId = newRule.id.takeIf { it > 0L }
+            val conflicts = dao.findAllByKeyword(keyword)
+                .filter { existing -> currentEditId == null || existing.id != currentEditId }
 
-        if (conflicts.isEmpty()) {
-            val toSave = newRule.copy(keyword = keyword)
-            if (toSave.id > 0) dao.updateRule(toSave) else dao.insertRule(toSave)
-            return@withContext RuleSaveOutcome.SAVED
-        }
+            if (conflicts.isEmpty()) {
+                val toSave = newRule.copy(keyword = keyword)
+                if (toSave.id > 0L) dao.update(toSave) else dao.upsert(toSave)
+                return@withContext RuleSaveOutcome.SAVED
+            }
 
-        val shouldOverwrite = withContext(Dispatchers.Main) {
-            promptKeywordOverwrite(
-                keyword = keyword,
-                existingCount = conflicts.size
-            )
-        }
-        if (!shouldOverwrite) {
-            return@withContext RuleSaveOutcome.CANCELED
-        }
+            val shouldOverwrite = withContext(Dispatchers.Main) {
+                promptKeywordOverwrite(
+                    keyword = keyword,
+                    existingCount = conflicts.size
+                )
+            }
+            if (!shouldOverwrite) {
+                return@withContext RuleSaveOutcome.CANCELED
+            }
 
-        val target = conflicts.first()
-        dao.insertRule(newRule.copy(id = target.id, keyword = keyword))
-        currentEditId?.takeIf { it != target.id }?.let { dao.deleteRuleById(it) }
-        conflicts.drop(1).forEach { duplicate ->
-            if (duplicate.id != target.id) dao.deleteRuleById(duplicate.id)
+            val target = conflicts.first()
+            dao.upsert(newRule.copy(id = target.id, keyword = keyword))
+            currentEditId?.takeIf { it != target.id }?.let { dao.deleteById(it) }
+            conflicts.drop(1).forEach { duplicate ->
+                if (duplicate.id != target.id) dao.deleteById(duplicate.id)
+            }
+            RuleSaveOutcome.OVERWRITTEN
         }
-        RuleSaveOutcome.OVERWRITTEN
-    }
 
     private suspend fun promptKeywordOverwrite(
         keyword: String,
@@ -357,17 +363,17 @@ class AiRuleManageActivity : AppCompatActivity() {
         super.onBackPressed()
     }
     inner class RuleAdapter(
-        private val onClick: (AiRule) -> Unit,
-        private val onLongClick: (AiRule) -> Unit,
-        private val onToggleEnabled: (AiRule, Boolean) -> Unit,
+        private val onClick: (AccountingRule) -> Unit,
+        private val onLongClick: (AccountingRule) -> Unit,
+        private val onToggleEnabled: (AccountingRule, Boolean) -> Unit,
         private val isMultiSelectMode: () -> Boolean,
-        private val isSelected: (AiRule) -> Boolean
+        private val isSelected: (AccountingRule) -> Boolean
     ) : RecyclerView.Adapter<RuleAdapter.ViewHolder>() {
 
-        private var items = emptyList<AiRule>()
-        val currentItems: List<AiRule> get() = items
+        private var items = emptyList<AccountingRule>()
+        val currentItems: List<AccountingRule> get() = items
 
-        fun submitList(list: List<AiRule>) {
+        fun submitList(list: List<AccountingRule>) {
             items = list
             notifyDataSetChanged()
         }
@@ -382,8 +388,8 @@ class AiRuleManageActivity : AppCompatActivity() {
             val rule = items[position]
 
             holder.tvKeyword.text = rule.keyword
-            holder.tvKeyword.setTextColor(Color.parseColor(if (rule.isEnabled) "#24344A" else "#8A98AD"))
-            holder.tvStatus.visibility = if (rule.isEnabled) View.GONE else View.VISIBLE
+            holder.tvKeyword.setTextColor(Color.parseColor(if (rule.enabled) "#24344A" else "#8A98AD"))
+            holder.tvStatus.visibility = if (rule.enabled) View.GONE else View.VISIBLE
 
             val ctx = holder.itemView.context
             val parts = mutableListOf<String>()
@@ -406,11 +412,11 @@ class AiRuleManageActivity : AppCompatActivity() {
             }
             holder.cbSelect.visibility = if (isMultiSelectMode()) View.VISIBLE else View.GONE
             holder.cbSelect.isChecked = isSelected(rule)
-            val restingAlpha = if (rule.isEnabled) 1f else 0.72f
+            val restingAlpha = if (rule.enabled) 1f else 0.72f
             holder.itemView.alpha = if (isMultiSelectMode() && isSelected(rule)) restingAlpha * 0.82f else restingAlpha
 
             holder.switchEnabled.setOnCheckedChangeListener(null)
-            holder.switchEnabled.isChecked = rule.isEnabled
+            holder.switchEnabled.isChecked = rule.enabled
             holder.switchEnabled.isEnabled = !isMultiSelectMode()
             holder.switchEnabled.alpha = if (isMultiSelectMode()) 0.45f else 1f
             holder.switchEnabled.setOnCheckedChangeListener { _, checked ->

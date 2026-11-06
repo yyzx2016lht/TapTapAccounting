@@ -7,7 +7,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 import com.google.gson.Gson
 import com.taostudio.tapaccounting.data.local.AppDatabase
 import com.taostudio.tapaccounting.data.local.entity.Asset
-import com.taostudio.tapaccounting.data.local.entity.AiRule as DbAiRule
+import com.taostudio.tapaccounting.data.local.entity.AccountingRule
 import com.taostudio.tapaccounting.data.local.entity.Bill
 import com.taostudio.tapaccounting.data.local.entity.Category
 import com.taostudio.tapaccounting.logic.SplitAmounts
@@ -2252,13 +2252,13 @@ object AIService {
         return expenseSignals.count { normalized.contains(it) } >= 2 && incomeSignals.none { normalized.contains(it) }
     }
 
-    private suspend fun loadActivePromptRules(ctx: Context): List<DbAiRule> = withContext(Dispatchers.IO) {
-        AppDatabase.getDatabase(ctx).aiRuleDao().getEnabledRulesList()
+    private suspend fun loadActivePromptRules(ctx: Context): List<AccountingRule> = withContext(Dispatchers.IO) {
+        AppDatabase.getDatabase(ctx).accountingRuleDao().listEnabled()
     }
 
-    private fun findMatchedPromptRules(text: String, allRules: List<DbAiRule>): List<DbAiRule> =
+    private fun findMatchedPromptRules(text: String, allRules: List<AccountingRule>): List<AccountingRule> =
         allRules.filter { rule ->
-            rule.isEnabled && rule.keyword.split("\\s+".toRegex()).filter { it.isNotEmpty() }
+            rule.enabled && rule.keyword.split("\\s+".toRegex()).filter { it.isNotEmpty() }
                 .all { text.contains(it, ignoreCase = true) }
         }
 

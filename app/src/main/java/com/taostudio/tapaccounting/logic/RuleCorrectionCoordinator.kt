@@ -6,7 +6,6 @@ import android.widget.Toast
 import com.taostudio.tapaccounting.RuleKeywordPolicy
 import com.taostudio.tapaccounting.data.local.AppDatabase
 import com.taostudio.tapaccounting.data.local.entity.AccountingRule
-import com.taostudio.tapaccounting.data.local.entity.AiRule
 import com.taostudio.tapaccounting.data.local.entity.Bill
 import com.taostudio.tapaccounting.data.local.entity.BillRuleProvenance
 import kotlinx.coroutines.CoroutineScope
@@ -225,22 +224,6 @@ object RuleCorrectionCoordinator {
                                 )
                             }
                             db.accountingRuleDao().upsert(ruleToSave)
-
-                            // 同步兼容旧版 ai_rule 表
-                            runCatching {
-                                val legacyId = db.aiRuleDao().getRulesByKeyword(decision.keyword).firstOrNull()?.id ?: 0
-                                db.aiRuleDao().insertRule(
-                                    AiRule(
-                                        id = legacyId,
-                                        keyword = decision.keyword,
-                                        targetType = ruleToSave.targetType,
-                                        targetCategory = decision.targetCategory,
-                                        targetAccount1 = ruleToSave.targetAccount1,
-                                        targetAccount2 = ruleToSave.targetAccount2,
-                                        isEnabled = true
-                                    )
-                                )
-                            }
 
                             withContext(Dispatchers.Main) {
                                 val toastMsg = if (decision.action == CorrectionAction.OVERWRITE_USER_RULE) {

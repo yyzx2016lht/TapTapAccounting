@@ -1860,15 +1860,12 @@ class ChatActivity : AppCompatActivity() {
 
     private suspend fun saveRuleWithKeywordConflictPrompt(newRule: AiRule): RuleSaveOutcome =
         withContext(Dispatchers.IO) {
-            val dao = db.aiRuleDao()
+            val dao = db.accountingRuleDao()
             val keyword = newRule.keyword.trim()
-            val currentEditId = newRule.id.takeIf { it > 0 }
-            val conflicts = dao.getRulesByKeyword(keyword)
-                .filter { existing -> currentEditId == null || existing.id != currentEditId }
+            val conflicts = dao.findAllByKeyword(keyword)
 
             if (conflicts.isEmpty()) {
-                dao.insertRule(newRule.copy(keyword = keyword))
-                syncToAccountingRules(newRule.copy(keyword = keyword))
+                upsertUserAccountingRule(newRule)
                 return@withContext RuleSaveOutcome.SAVED
             }
 
@@ -1880,47 +1877,49 @@ class ChatActivity : AppCompatActivity() {
             }
 
             val target = conflicts.first()
-            val ruleToSave = newRule.copy(id = target.id, keyword = keyword)
-            dao.insertRule(ruleToSave)
-            syncToAccountingRules(ruleToSave)
-            currentEditId?.takeIf { it != target.id }?.let { dao.deleteRuleById(it) }
+            upsertUserAccountingRule(newRule, preferredId = target.id)
             conflicts.drop(1).forEach { duplicate ->
-                if (duplicate.id != target.id) dao.deleteRuleById(duplicate.id)
+                if (duplicate.id != target.id) dao.deleteById(duplicate.id)
             }
             RuleSaveOutcome.OVERWRITTEN
         }
 
-    private suspend fun syncToAccountingRules(newRule: AiRule) {
-        runCatching {
-            val keyword = newRule.keyword.trim()
-            val existing = db.accountingRuleDao().findByKeyword(keyword)
-            val now = System.currentTimeMillis()
-            val accRule = if (existing != null) {
-                existing.copy(
-                    targetCategory = newRule.targetCategory,
-                    targetType = newRule.targetType ?: existing.targetType,
-                    targetAccount1 = newRule.targetAccount1 ?: existing.targetAccount1,
-                    targetAccount2 = newRule.targetAccount2 ?: existing.targetAccount2,
-                    source = AccountingRule.Source.USER,
-                    enabled = newRule.isEnabled,
-                    updatedAt = now
-                )
-            } else {
-                AccountingRule(
-                    id = 0L,
-                    keyword = keyword,
-                    targetCategory = newRule.targetCategory,
-                    targetType = newRule.targetType,
-                    targetAccount1 = newRule.targetAccount1,
-                    targetAccount2 = newRule.targetAccount2,
-                    source = AccountingRule.Source.USER,
-                    enabled = newRule.isEnabled,
-                    createdAt = now,
-                    updatedAt = now
-                )
-            }
-            db.accountingRuleDao().upsert(accRule)
+    /** 记账习惯规则统一写入 accounting_rules；旧 ai_rule 只读兼容，不再双写。 */
+    private suspend fun upsertUserAccountingRule(newRule: AiRule, preferredId: Long? = null) {
+        val dao = db.accountingRuleDao()
+        val keyword = newRule.keyword.trim()
+        val now = System.currentTimeMillis()
+        val existing = preferredId
+            ?.let { id -> dao.findAllByKeyword(keyword).firstOrNull { it.id == id } }
+            ?: dao.findAllByKeyword(keyword).firstOrNull()
+        val accRule = if (existing != null) {
+            existing.copy(
+                keyword = keyword,
+                targetCategory = newRule.targetCategory,
+                targetType = newRule.targetType ?: existing.targetType,
+                targetAccount1 = newRule.targetAccount1 ?: existing.targetAccount1,
+                targetAccount2 = newRule.targetAccount2 ?: existing.targetAccount2,
+                source = AccountingRule.Source.USER,
+                enabled = newRule.isEnabled,
+                updatedAt = now
+            )
+        } else {
+            AccountingRule(
+                id = 0L,
+                keyword = keyword,
+                matchField = AccountingRule.MatchField.REMARK,
+                matchMode = AccountingRule.MatchMode.ALL_TOKENS,
+                targetCategory = newRule.targetCategory,
+                targetType = newRule.targetType,
+                targetAccount1 = newRule.targetAccount1,
+                targetAccount2 = newRule.targetAccount2,
+                source = AccountingRule.Source.USER,
+                enabled = newRule.isEnabled,
+                createdAt = now,
+                updatedAt = now
+            )
         }
+        dao.upsert(accRule)
     }
 
     private suspend fun promptKeywordOverwrite(

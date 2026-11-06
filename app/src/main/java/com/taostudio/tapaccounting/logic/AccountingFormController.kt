@@ -2762,12 +2762,12 @@ class AccountingFormController(
 
     private suspend fun saveRuleWithDedupDecision(newRule: AiRule): RuleSaveResult {
         val db = AppDatabase.getDatabase(ctx)
-        val dao = db.aiRuleDao()
-        val existingRules = dao.getRulesByKeyword(newRule.keyword.trim())
+        val dao = db.accountingRuleDao()
+        val keyword = newRule.keyword.trim()
+        val existingRules = dao.findAllByKeyword(keyword)
 
         if (existingRules.isEmpty()) {
-            dao.insertRule(newRule)
-            saveToAccountingRules(db, newRule)
+            upsertUserAccountingRule(db, newRule, existingId = null)
             return RuleSaveResult.SAVED
         }
 
@@ -2776,8 +2776,7 @@ class AccountingFormController(
             normalizeRuleCategory(it.targetCategory) == normalizedNewCategory
         }
         if (sameCategoryRule != null) {
-            dao.insertRule(newRule.copy(id = sameCategoryRule.id))
-            saveToAccountingRules(db, newRule)
+            upsertUserAccountingRule(db, newRule, existingId = sameCategoryRule.id)
             return RuleSaveResult.SAVED
         }
 
@@ -2791,13 +2790,7 @@ class AccountingFormController(
 
         return when (chosen) {
             RuleConflictDecision.OVERWRITE -> {
-                val target = existingRules.firstOrNull()
-                if (target != null) {
-                    dao.insertRule(newRule.copy(id = target.id))
-                } else {
-                    dao.insertRule(newRule)
-                }
-                saveToAccountingRules(db, newRule)
+                upsertUserAccountingRule(db, newRule, existingId = existingRules.firstOrNull()?.id)
                 RuleSaveResult.SAVED
             }
             RuleConflictDecision.CANCEL_RECORD,
@@ -2805,36 +2798,40 @@ class AccountingFormController(
         }
     }
 
-    private suspend fun saveToAccountingRules(db: AppDatabase, newRule: AiRule) {
-        runCatching {
-            val existing = db.accountingRuleDao().findByKeyword(newRule.keyword.trim())
-            val now = System.currentTimeMillis()
-            val rule = if (existing != null) {
-                existing.copy(
-                    targetCategory = newRule.targetCategory,
-                    targetType = newRule.targetType ?: existing.targetType,
-                    targetAccount1 = newRule.targetAccount1 ?: existing.targetAccount1,
-                    targetAccount2 = newRule.targetAccount2 ?: existing.targetAccount2,
-                    source = AccountingRule.Source.USER,
-                    enabled = newRule.isEnabled,
-                    updatedAt = now
-                )
-            } else {
-                AccountingRule(
-                    id = 0L,
-                    keyword = newRule.keyword.trim(),
-                    targetCategory = newRule.targetCategory,
-                    targetType = newRule.targetType,
-                    targetAccount1 = newRule.targetAccount1,
-                    targetAccount2 = newRule.targetAccount2,
-                    source = AccountingRule.Source.USER,
-                    enabled = newRule.isEnabled,
-                    createdAt = now,
-                    updatedAt = now
-                )
-            }
-            db.accountingRuleDao().upsert(rule)
+    /** 记账习惯规则统一写入 accounting_rules；旧 ai_rule 只读兼容，不再双写。 */
+    private suspend fun upsertUserAccountingRule(db: AppDatabase, newRule: AiRule, existingId: Long?) {
+        val dao = db.accountingRuleDao()
+        val keyword = newRule.keyword.trim()
+        val now = System.currentTimeMillis()
+        val existing = existingId?.let { id -> dao.findAllByKeyword(keyword).firstOrNull { it.id == id } }
+        val rule = if (existing != null) {
+            existing.copy(
+                keyword = keyword,
+                targetCategory = newRule.targetCategory,
+                targetType = newRule.targetType ?: existing.targetType,
+                targetAccount1 = newRule.targetAccount1 ?: existing.targetAccount1,
+                targetAccount2 = newRule.targetAccount2 ?: existing.targetAccount2,
+                source = AccountingRule.Source.USER,
+                enabled = newRule.isEnabled,
+                updatedAt = now
+            )
+        } else {
+            AccountingRule(
+                id = 0L,
+                keyword = keyword,
+                matchField = AccountingRule.MatchField.REMARK,
+                matchMode = AccountingRule.MatchMode.ALL_TOKENS,
+                targetCategory = newRule.targetCategory,
+                targetType = newRule.targetType,
+                targetAccount1 = newRule.targetAccount1,
+                targetAccount2 = newRule.targetAccount2,
+                source = AccountingRule.Source.USER,
+                enabled = newRule.isEnabled,
+                createdAt = now,
+                updatedAt = now
+            )
         }
+        dao.upsert(rule)
     }
 
     private enum class RuleConflictDecision { OVERWRITE, CANCEL_RECORD, DISMISS }

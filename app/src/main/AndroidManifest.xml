@@ -199,7 +199,7 @@
 
     <activity android:name=".ui.main.assets.AssetDetailActivity" android:label="资产详情" />
     <activity android:name=".ui.main.assets.AssetStatsActivity" android:label="资产统计" />
-    <activity android:name=".AiRuleManageActivity" android:label="AI规则管理" />
+    <activity android:name=".AiRuleManageActivity" android:label="记账习惯规则" />
     <activity android:name=".AiFeatureSettingsActivity" android:label="@string/title_ai_features" />
     <activity android:name=".AiConfigActivity" android:label="@string/title_ai_config" />
     <activity android:name=".ui.import.ImportOnboardingActivity" android:label="@string/import_onboarding_title" />

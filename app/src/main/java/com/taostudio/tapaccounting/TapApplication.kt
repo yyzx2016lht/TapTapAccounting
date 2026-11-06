@@ -5,6 +5,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import com.taostudio.tapaccounting.data.local.AppDatabase
+import com.taostudio.tapaccounting.data.local.DataRepair
 import com.taostudio.tapaccounting.data.local.MigrationManager
 import com.taostudio.tapaccounting.data.repository.AssetRepository
 import com.taostudio.tapaccounting.data.repository.BillRepository
@@ -77,6 +78,7 @@ class TapApplication : Application() {
         CoroutineScope(Dispatchers.IO).launch {
             try {
                 MigrationManager.migrateIfNecessary(this@TapApplication, database)
+                DataRepair.runIfNeeded(this@TapApplication)
                 database.sharedLedgerDao().getAll().forEach { ledger ->
                     if (database.budgetDao().getAllByBookId(ledger.bookId).isNotEmpty()) {
                         database.bookDao().getById(ledger.bookId)?.name?.let { bookName ->

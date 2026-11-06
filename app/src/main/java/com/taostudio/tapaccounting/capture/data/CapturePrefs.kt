@@ -15,6 +15,7 @@ object CapturePrefs {
     private const val KEY_AI_CATEGORY_MODE = "ai_category_mode"
     private const val KEY_RULE_LEARN_MODE = "rule_learn_mode"
     private const val KEY_DATA_RULES_ENABLED = "data_rules_enabled"
+    private const val KEY_EMPTY_CATEGORY_BACKFILLED = "empty_category_backfilled_v1"
 
     const val AI_CATEGORY_CONFIRM = "CONFIRM"
     const val AI_CATEGORY_DIRECT = "DIRECT"
@@ -190,5 +191,13 @@ object CapturePrefs {
 
     fun setDataRulesEnabled(context: Context, enabled: Boolean) {
         prefs(context).edit().putBoolean(KEY_DATA_RULES_ENABLED, enabled).apply()
+    }
+
+    /** 历史空分类是否已回填到「其他」，只跑一次。 */
+    fun hasBackfilledEmptyCategories(context: Context): Boolean =
+        prefs(context).getBoolean(KEY_EMPTY_CATEGORY_BACKFILLED, false)
+
+    fun setBackfilledEmptyCategories(context: Context, done: Boolean) {
+        prefs(context).edit().putBoolean(KEY_EMPTY_CATEGORY_BACKFILLED, done).apply()
     }
 }

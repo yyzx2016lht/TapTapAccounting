@@ -34,6 +34,13 @@ interface BillDao {
     )
     suspend fun relinkCategoryId(categoryName: String, type: Int, categoryId: Long): Int
 
+    /** 历史空分类账单一次性回填到「其他」；只处理收支，不动转账/还款。 */
+    @Query(
+        "UPDATE bills SET categoryName=:name, categoryId=:categoryId " +
+            "WHERE type=:type AND (categoryName IS NULL OR TRIM(categoryName)='')"
+    )
+    suspend fun backfillEmptyCategory(type: Int, name: String, categoryId: Long): Int
+
     @Delete
     suspend fun delete(bill: Bill)
 

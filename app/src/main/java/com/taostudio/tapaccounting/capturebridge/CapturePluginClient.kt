@@ -170,7 +170,6 @@ object CapturePluginClient {
         withContext(Dispatchers.IO) {
             val ok = CaptureRepository(AppDatabase.getDatabase(context).paymentCaptureDao())
                 .updateStatus(captureId, CaptureStatus.IGNORED)
-            CaptureInboxEvents.notifyChanged()
             CaptureNotifier.refreshAll(context)
             ok
         }

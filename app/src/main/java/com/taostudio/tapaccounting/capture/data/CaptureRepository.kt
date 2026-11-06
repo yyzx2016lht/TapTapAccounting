@@ -239,9 +239,9 @@ class CaptureRepository(private val dao: PaymentCaptureDao) {
         return listPending(200, onlyExpense = true).size
     }
 
-    suspend fun updateStatus(id: String, status: String): Boolean {
+    suspend fun updateStatus(id: String, status: String, notify: Boolean = true): Boolean {
         val updated = dao.updateStatus(id, status, System.currentTimeMillis()) > 0
-        if (updated) {
+        if (updated && notify) {
             CaptureInboxEvents.notifyChanged()
         }
         return updated
@@ -451,7 +451,8 @@ class CaptureRepository(private val dao: PaymentCaptureDao) {
                     id = existingAcc?.id ?: 0L,
                     keyword = ruleKeyword,
                     matchField = AccountingRule.MatchField.ANY,
-                    matchMode = AccountingRule.MatchMode.SUBSTRING,
+                    matchMode = com.taostudio.tapaccounting.capture.parse.RuleLearningPolicy
+                        .preferredMatchMode(ruleKeyword),
                     targetCategory = resolvedCategory,
                     sort = existingAcc?.sort ?: 0,
                     enabled = true,

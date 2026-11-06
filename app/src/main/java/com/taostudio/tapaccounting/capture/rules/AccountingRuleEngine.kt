@@ -65,6 +65,28 @@ object DefaultAccountingRuleEngine : AccountingRuleEngine {
         a.id.compareTo(b.id)
     }
 
+    /**
+     * 实际命中排序：保留用户 sort 优先级，再让“完全一致 > 长关键词 > 短关键词”胜出。
+     * 不改变规则列表页的 USER > SEED/IMPORT > AI 展示顺序。
+     */
+    private val matchRuleComparator = Comparator<AccountingRule> { a, b ->
+        var cmp = a.sort.compareTo(b.sort)
+        if (cmp != 0) return@Comparator cmp
+        cmp = matchModePriority(a.matchMode).compareTo(matchModePriority(b.matchMode))
+        if (cmp != 0) return@Comparator cmp
+        cmp = b.keyword.trim().length.compareTo(a.keyword.trim().length)
+        if (cmp != 0) return@Comparator cmp
+        cmp = sourcePriority(a.source).compareTo(sourcePriority(b.source))
+        if (cmp != 0) return@Comparator cmp
+        a.id.compareTo(b.id)
+    }
+
+    private fun matchModePriority(mode: String?): Int = when (mode) {
+        AccountingRule.MatchMode.EXACT -> 0
+        AccountingRule.MatchMode.ALL_TOKENS -> 1
+        else -> 2
+    }
+
     fun sourcePriority(source: String): Int = when (source) {
         AccountingRule.Source.USER -> 1
         AccountingRule.Source.IMPORT, AccountingRule.Source.SEED -> 2
@@ -86,6 +108,9 @@ object DefaultAccountingRuleEngine : AccountingRuleEngine {
             }.getOrDefault(false)
         } else {
             when (rule.matchMode) {
+                AccountingRule.MatchMode.EXACT -> {
+                    text.trim().equals(rule.keyword.trim(), ignoreCase = true)
+                }
                 AccountingRule.MatchMode.ALL_TOKENS -> {
                     val tokens = rule.keyword.split("\\s+".toRegex()).filter { it.isNotEmpty() }
                     if (tokens.isEmpty()) false
@@ -117,7 +142,7 @@ object DefaultAccountingRuleEngine : AccountingRuleEngine {
         val cleanMerchant = merchant?.trim()?.takeIf { it.isNotEmpty() }
         if (cleanNote == null && cleanMerchant == null) return emptyList()
 
-        val sortedRules = rules.filter { it.enabled }.sortedWith(ruleComparator)
+        val sortedRules = rules.filter { it.enabled }.sortedWith(matchRuleComparator)
         val result = mutableListOf<RuleMatch>()
         val matchedRuleIds = mutableSetOf<Long>()
 

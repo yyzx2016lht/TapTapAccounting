@@ -47,7 +47,7 @@ object CaptureReconciler {
         var updated = 0
         statuses.forEach { (captureId, status) ->
             if (status.equals(CaptureStatus.RECORDED, ignoreCase = true) &&
-                repository.updateStatus(captureId, CaptureStatus.RECORDED)
+                repository.updateStatus(captureId, CaptureStatus.RECORDED, notify = false)
             ) {
                 updated++
             }

@@ -125,6 +125,17 @@ internal object RuleLearningPolicy {
         }
     }
 
+    /**
+     * AI 学到的短关键词（1–2 字）容易误伤更长的复合词，例如“苹果”命中“苹果电脑”。
+     * 短词只做完全一致；3 字以上仍允许包含匹配。
+     */
+    fun preferredMatchMode(keyword: String): String =
+        if (keyword.trim().length <= 2) {
+            AccountingRule.MatchMode.EXACT
+        } else {
+            AccountingRule.MatchMode.SUBSTRING
+        }
+
     fun newAccountingRule(
         keyword: String,
         targetCategory: String,
@@ -133,7 +144,7 @@ internal object RuleLearningPolicy {
     ): AccountingRule = AccountingRule(
         keyword = keyword,
         matchField = AccountingRule.MatchField.NOTE,
-        matchMode = AccountingRule.MatchMode.SUBSTRING,
+        matchMode = preferredMatchMode(keyword),
         isRegex = false,
         targetType = targetType,
         targetCategory = targetCategory,

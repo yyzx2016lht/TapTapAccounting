@@ -128,6 +128,48 @@ class AccountingRuleEngineTest {
     }
 
     @Test
+    fun `exact mode does not match compound words`() {
+        val rule = AccountingRule(
+            id = 1,
+            keyword = "苹果",
+            matchField = AccountingRule.MatchField.NOTE,
+            matchMode = AccountingRule.MatchMode.EXACT,
+            isRegex = false,
+        )
+
+        assertTrue(engine.matchesText(rule, "苹果"))
+        assertTrue(engine.matchesText(rule, "  苹果  "))
+        assertFalse(engine.matchesText(rule, "苹果电脑"))
+        assertFalse(engine.matchesText(rule, "买了苹果"))
+    }
+
+    @Test
+    fun `longer keyword wins over shorter substring at same sort`() {
+        val shortRule = AccountingRule(
+            id = 1,
+            keyword = "苹果",
+            matchField = AccountingRule.MatchField.NOTE,
+            matchMode = AccountingRule.MatchMode.SUBSTRING,
+            targetCategory = "水果",
+            sort = 0,
+            source = AccountingRule.Source.AI,
+        )
+        val longRule = AccountingRule(
+            id = 2,
+            keyword = "苹果电脑",
+            matchField = AccountingRule.MatchField.NOTE,
+            matchMode = AccountingRule.MatchMode.SUBSTRING,
+            targetCategory = "数码",
+            sort = 0,
+            source = AccountingRule.Source.AI,
+        )
+
+        val match = engine.matchNoteWithRules(listOf(shortRule, longRule), "买了苹果电脑")
+        assertNotNull(match)
+        assertEquals("数码", match?.categoryName)
+    }
+
+    @Test
     fun `all tokens matching mode`() {
         val rule = AccountingRule(
             id = 1,

@@ -8,6 +8,18 @@ import org.junit.Test
 class RuleLearningPolicyTest {
 
     @Test
+    fun `short ai keywords use exact match`() {
+        assertEquals(
+            AccountingRule.MatchMode.EXACT,
+            RuleLearningPolicy.preferredMatchMode("苹果"),
+        )
+        assertEquals(
+            AccountingRule.MatchMode.SUBSTRING,
+            RuleLearningPolicy.preferredMatchMode("星巴克"),
+        )
+    }
+
+    @Test
     fun `user rule is protected from being overwritten by ai`() {
         val userRule = AccountingRule(
             id = 1,

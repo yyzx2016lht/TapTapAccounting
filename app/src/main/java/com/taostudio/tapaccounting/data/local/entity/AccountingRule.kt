@@ -40,6 +40,7 @@ data class AccountingRule(
     object MatchMode {
         const val SUBSTRING = "SUBSTRING"
         const val ALL_TOKENS = "ALL_TOKENS"
+        const val EXACT = "EXACT"
     }
     object Source {
         const val USER = "USER"

@@ -5,6 +5,7 @@ import android.app.AlertDialog
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color
+import android.graphics.Rect
 import android.graphics.Typeface
 import android.os.Build
 import android.os.Bundle
@@ -63,6 +64,8 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
@@ -113,11 +116,21 @@ class PendingListActivity : Activity() {
     private var skipNextResumeLoad = false
     private var loadJob: Job? = null
     private var inboxEventsJob: Job? = null
+    private var imeWasVisible = false
     private var savedInboxScrollY: Int = 0
     private var savedRulesScrollY: Int = 0
     private val pendingCardViews = mutableMapOf<String, View>()
+    private val pendingCategoryChips = mutableMapOf<String, TextView>()
+    private val pendingCategorySources = mutableMapOf<String, String?>()
+    private val pendingAssetChips = mutableMapOf<String, TextView>()
+    private val pendingBookChips = mutableMapOf<String, TextView>()
     private var inboxContainer: LinearLayout? = null
     private var summaryHeroCardView: View? = null
+    private var summaryStatsTitleView: TextView? = null
+    private var summaryStatsSubView: TextView? = null
+    private var summaryAmountView: TextView? = null
+    private var summaryAmountLabelView: TextView? = null
+    private var summaryImportButton: TextView? = null
     private var emptyStateCardView: View? = null
     private var ignoredCardView: ViewGroup? = null
     private var ignoredTitleView: TextView? = null
@@ -133,6 +146,7 @@ class PendingListActivity : Activity() {
         setContentView(buildRoot())
         CaptureUi.applyLightStatusBar(this)
         requestNotificationPermissionIfNeeded()
+        installImeHideWatcher()
     }
 
     override fun onResume() {
@@ -149,7 +163,12 @@ class PendingListActivity : Activity() {
         // 悬浮窗是浮层，不会让本页走 onResume；入账后靠这个信号即时刷新列表。
         if (inboxEventsJob == null) {
             inboxEventsJob = scope.launch {
-                CaptureInboxEvents.changes.collect { load() }
+                CaptureInboxEvents.changes
+                    .conflate()
+                    .collectLatest {
+                        delay(120)
+                        load()
+                    }
             }
         }
     }
@@ -164,6 +183,21 @@ class PendingListActivity : Activity() {
         noteSaveJobs.values.forEach { it.cancel() }
         scope.cancel()
         super.onDestroy()
+    }
+
+    /** 按返回键收起输入法时，输入框通常不会失焦；这里主动清焦点，触发 AI 归类。 */
+    private fun installImeHideWatcher() {
+        val root = findViewById<View>(android.R.id.content) ?: return
+        root.viewTreeObserver.addOnGlobalLayoutListener {
+            val rect = Rect()
+            root.getWindowVisibleDisplayFrame(rect)
+            val screenHeight = root.rootView.height
+            val visible = screenHeight > 0 && screenHeight - rect.bottom > dp(120)
+            if (imeWasVisible && !visible) {
+                (currentFocus as? EditText)?.clearFocus()
+            }
+            imeWasVisible = visible
+        }
     }
 
     private fun buildRoot(): View {
@@ -895,6 +929,10 @@ class PendingListActivity : Activity() {
 
     private fun buildInboxTab(snapshot: Snapshot): View {
         pendingCardViews.clear()
+        pendingCategoryChips.clear()
+        pendingCategorySources.clear()
+        pendingAssetChips.clear()
+        pendingBookChips.clear()
         ignoredItemRowViews.clear()
         val scroll = ScrollView(this).apply {
             layoutParams = FrameLayout.LayoutParams(
@@ -937,6 +975,207 @@ class PendingListActivity : Activity() {
         return scroll
     }
 
+    private fun stylePendingCategoryChip(tv: TextView, cat: String?, source: String?) {
+        val ok = !cat.isNullOrBlank()
+        val prefix = when (source) {
+            CategorySource.AI -> "AI · "
+            CategorySource.RULE -> "规则 · "
+            CategorySource.MANUAL -> "手动 · "
+            else -> ""
+        }
+        tv.text = if (ok) "分类 · $prefix$cat" else "待选分类"
+        tv.setTextColor(if (ok) CaptureUi.SUCCESS else CaptureUi.BRAND_DARK)
+        tv.background = CaptureUi.rippleBg(
+            fillColor = if (ok) CaptureUi.SUCCESS_SOFT else CaptureUi.BRAND_SOFT,
+            radiusPx = dp(8),
+            strokeWidthPx = dp(1),
+            strokeColor = if (ok) CaptureUi.SUCCESS_BORDER else CaptureUi.BRAND_BORDER,
+        )
+        CaptureUi.applyTrailingIcon(
+            tv,
+            this,
+            R.drawable.ic_chevron_down,
+            if (ok) CaptureUi.SUCCESS else CaptureUi.BRAND_DARK,
+            10,
+        )
+    }
+
+    /** 只更新单张卡片的分类胶囊，不重建整页。 */
+    private fun updatePendingCategory(itemId: String, categoryName: String?, source: String?) {
+        val chip = pendingCategoryChips[itemId] ?: return
+        val snapshot = latestSnapshot ?: return
+        val newPending = snapshot.pendingItems.map { item ->
+            if (item.id == itemId) {
+                item.copy(categoryName = categoryName, categorySource = source)
+            } else {
+                item
+            }
+        }
+        latestSnapshot = snapshot.copy(pendingItems = newPending)
+        pendingCategorySources[itemId] = source
+        stylePendingCategoryChip(chip, categoryName, source)
+        updateSummaryStatsOnly()
+    }
+
+    private fun applyPendingCategoryUpdates(updates: Map<String, Pair<String?, String?>>) {
+        if (updates.isEmpty()) return
+        val snapshot = latestSnapshot ?: return
+        val newPending = snapshot.pendingItems.map { item ->
+            val update = updates[item.id]
+            if (update != null) {
+                item.copy(categoryName = update.first, categorySource = update.second)
+            } else {
+                item
+            }
+        }
+        latestSnapshot = snapshot.copy(pendingItems = newPending)
+        updates.forEach { (id, update) ->
+            pendingCategorySources[id] = update.second
+            pendingCategoryChips[id]?.let { chip ->
+                stylePendingCategoryChip(chip, update.first, update.second)
+            }
+        }
+        updateSummaryStatsOnly()
+    }
+
+    private fun updateSummaryImportButton() {
+        val button = summaryImportButton ?: return
+        val items = latestSnapshot?.pendingItems.orEmpty().filterNot { it.splitRequested }
+        val readyCount = items.count {
+            !it.categoryName.isNullOrBlank() && (it.amountCents ?: 0L) > 0L
+        }
+        button.text = if (isAiBusy) "自动归类中…" else "一键入账 ($readyCount)"
+        button.isEnabled = !isAiBusy
+    }
+
+    /** 只刷新统计文字和按钮，不重建 hero、不改变滚动位置。 */
+    private fun updateSummaryStatsOnly() {
+        val items = latestSnapshot?.pendingItems ?: return
+        if (items.isEmpty()) return
+        val expenseCents = items
+            .filter { it.billType == null || it.billType == LocalBillType.TYPE_EXPENSE }
+            .mapNotNull { it.amountCents }
+            .sum()
+        val incomeCents = items
+            .filter { it.billType == LocalBillType.TYPE_INCOME || it.subType == LocalBillType.SUBTYPE_REFUND }
+            .mapNotNull { it.amountCents }
+            .sum()
+        val batchItems = items.filterNot { it.splitRequested }
+        val readyCount = batchItems.count {
+            !it.categoryName.isNullOrBlank() && (it.amountCents ?: 0L) > 0L
+        }
+        val missingCount = batchItems.count { it.categoryName.isNullOrBlank() }
+        summaryStatsTitleView?.text = "待处理 ${items.size} 笔"
+        summaryStatsSubView?.apply {
+            text = when {
+                batchItems.isEmpty() -> "已勾选拆分 ${items.size} 笔，请逐笔点“拆分入账”"
+                missingCount == 0 -> "全部已匹配分类，可直接一键入账"
+                else -> "已就绪 $readyCount 笔 · 待分类 $missingCount 笔"
+            }
+            setTextColor(if (missingCount == 0) CaptureUi.SUCCESS else CaptureUi.TEXT_SECONDARY)
+        }
+        val showIncomePrimary = expenseCents == 0L && incomeCents > 0L
+        summaryAmountView?.apply {
+            text = if (showIncomePrimary) "+${formatAmount(incomeCents)}" else "-${formatAmount(expenseCents)}"
+            setTextColor(if (showIncomePrimary) CaptureUi.SUCCESS else CaptureUi.TEXT_PRIMARY)
+        }
+        summaryAmountLabelView?.text = when {
+            showIncomePrimary -> "合计收入/退款"
+            incomeCents > 0L -> "支出 · 另有收入/退款 +${formatAmount(incomeCents)}"
+            else -> "合计支出"
+        }
+        updateSummaryImportButton()
+    }
+
+    private fun updatePendingAsset(itemId: String, assetName: String?, rawChannel: String?) {
+        val chip = pendingAssetChips[itemId] ?: return
+        val hasAsset = !assetName.isNullOrBlank()
+        chip.text = when {
+            hasAsset -> "账户 · $assetName"
+            !rawChannel.isNullOrBlank() -> "绑定账户 · $rawChannel"
+            else -> "选择账户"
+        }
+        chip.setTextColor(if (hasAsset) CaptureUi.TEXT_SECONDARY else CaptureUi.WARNING)
+        chip.background = CaptureUi.rippleBg(
+            fillColor = if (hasAsset) CaptureUi.BG_SUBTLE else CaptureUi.WARNING_SOFT,
+            radiusPx = dp(8),
+            strokeWidthPx = dp(1),
+            strokeColor = if (hasAsset) CaptureUi.BORDER else CaptureUi.WARNING_BORDER,
+        )
+        CaptureUi.applyTrailingIcon(
+            chip,
+            this,
+            R.drawable.ic_chevron_down,
+            if (hasAsset) CaptureUi.TEXT_SECONDARY else CaptureUi.WARNING,
+            10,
+        )
+    }
+
+    private fun updatePendingBook(itemId: String, book: String) {
+        val chip = pendingBookChips[itemId] ?: return
+        chip.text = "账本 · $book"
+    }
+
+    private fun updateInboxTabCount(pending: List<PaymentCapture> = latestSnapshot?.pendingItems.orEmpty()) {
+        tabViews[0].text = if (pending.isNotEmpty()) "待记 ${pending.size}" else "待记"
+    }
+
+    private fun refreshSummaryHeroCard() {
+        val snapshot = latestSnapshot ?: return
+        val container = inboxContainer ?: return
+        if (currentTab != 0) return
+        val items = snapshot.pendingItems
+        if (items.isEmpty()) {
+            val old = summaryHeroCardView
+            if (old != null) {
+                (old.parent as? ViewGroup)?.removeView(old)
+                summaryHeroCardView = null
+            }
+            if (emptyStateCardView == null) {
+                val empty = buildEmptyStateCard()
+                emptyStateCardView = empty
+                container.addView(empty, 0)
+            }
+            return
+        }
+        emptyStateCardView?.let { empty ->
+            (empty.parent as? ViewGroup)?.removeView(empty)
+            emptyStateCardView = null
+        }
+        val old = summaryHeroCardView
+        val index = old?.let { container.indexOfChild(it) }?.takeIf { it >= 0 } ?: 0
+        if (old != null) container.removeView(old)
+        val newHero = buildSummaryHeroCard(items)
+        summaryHeroCardView = newHero
+        container.addView(newHero, index.coerceAtMost(container.childCount))
+    }
+
+    /** 入账成功后只移除对应卡片，更新统计和空状态，不触发整页重读。 */
+    private suspend fun removePendingCards(ids: Set<String>) {
+        if (ids.isEmpty()) return
+        val snapshot = latestSnapshot ?: return
+        val container = inboxContainer ?: return
+        val scroll = (bodyFrame.getChildAt(0) as? ScrollView)?.scrollY ?: 0
+        var removedAbove = 0
+        ids.forEach { id ->
+            val card = pendingCardViews.remove(id) ?: return@forEach
+            if (card.top < scroll) removedAbove += card.height
+            (card.parent as? ViewGroup)?.removeView(card)
+            pendingCategoryChips.remove(id)
+            pendingCategorySources.remove(id)
+            pendingAssetChips.remove(id)
+            pendingBookChips.remove(id)
+        }
+        val newPending = snapshot.pendingItems.filterNot { it.id in ids }
+        latestSnapshot = snapshot.copy(pendingItems = newPending)
+        updateInboxTabCount(newPending)
+        refreshSummaryHeroCard()
+        if (removedAbove > 0) {
+            (bodyFrame.getChildAt(0) as? ScrollView)?.scrollTo(0, (scroll - removedAbove).coerceAtLeast(0))
+        }
+        CaptureNotifier.refreshAll(this)
+    }
+
     /** 待记列表底部的“已不计”折叠区，只做恢复，不改变列表主体结构。 */
     private fun buildIgnoredSection(items: List<PaymentCapture>): View {
         ignoredItemRowViews.clear()
@@ -956,8 +1195,7 @@ class PendingListActivity : Activity() {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             setOnClickListener {
-                ignoredExpanded = !ignoredExpanded
-                latestSnapshot?.let { renderCurrentTab(it) }
+                toggleIgnoredSection()
             }
         }
         val titleTv = TextView(this).apply {
@@ -1030,6 +1268,27 @@ class PendingListActivity : Activity() {
             card.addView(row)
         }
         return card
+    }
+
+    private fun toggleIgnoredSection() {
+        ignoredExpanded = !ignoredExpanded
+        rebuildIgnoredSection()
+    }
+
+    private fun rebuildIgnoredSection() {
+        val snapshot = latestSnapshot ?: return
+        val container = inboxContainer ?: return
+        val old = ignoredCardView
+        val index = old?.let { container.indexOfChild(it) }?.takeIf { it >= 0 } ?: container.childCount
+        if (old != null) container.removeView(old)
+        if (snapshot.ignoredItems.isEmpty()) {
+            ignoredCardView = null
+            ignoredTitleView = null
+            return
+        }
+        val newSection = buildIgnoredSection(snapshot.ignoredItems)
+        ignoredCardView = newSection as? ViewGroup
+        container.addView(newSection, index.coerceAtMost(container.childCount))
     }
 
     private fun restoreIgnored(item: PaymentCapture) {
@@ -1169,13 +1428,15 @@ class PendingListActivity : Activity() {
             orientation = LinearLayout.VERTICAL
             layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
         }
-        leftCol.addView(TextView(this).apply {
+        val statsTitle = TextView(this).apply {
             text = "待处理 ${items.size} 笔"
             textSize = 16.5f
             setTypeface(typeface, Typeface.BOLD)
             setTextColor(CaptureUi.TEXT_PRIMARY)
-        })
-        leftCol.addView(TextView(this).apply {
+        }
+        summaryStatsTitleView = statsTitle
+        leftCol.addView(statsTitle)
+        val statsSub = TextView(this).apply {
             text = when {
                 batchItems.isEmpty() && items.isNotEmpty() ->
                     "已勾选拆分 ${items.size} 笔，请逐笔点“拆分入账”"
@@ -1185,7 +1446,9 @@ class PendingListActivity : Activity() {
             textSize = 12f
             setTextColor(if (unmappedCount == 0) CaptureUi.SUCCESS else CaptureUi.TEXT_SECONDARY)
             setPadding(0, dp(2), 0, 0)
-        })
+        }
+        summaryStatsSubView = statsSub
+        leftCol.addView(statsSub)
         statsRow.addView(leftCol)
 
         val rightCol = LinearLayout(this).apply {
@@ -1193,13 +1456,15 @@ class PendingListActivity : Activity() {
             gravity = Gravity.END
         }
         val showIncomePrimary = expenseCents == 0L && incomeCents > 0L
-        rightCol.addView(TextView(this).apply {
+        val amountView = TextView(this).apply {
             text = if (showIncomePrimary) "+${formatAmount(incomeCents)}" else "-${formatAmount(expenseCents)}"
             textSize = 20f
             setTypeface(typeface, Typeface.BOLD)
             setTextColor(if (showIncomePrimary) CaptureUi.SUCCESS else CaptureUi.TEXT_PRIMARY)
-        })
-        rightCol.addView(TextView(this).apply {
+        }
+        summaryAmountView = amountView
+        rightCol.addView(amountView)
+        val amountLabel = TextView(this).apply {
             text = when {
                 showIncomePrimary -> "合计收入/退款"
                 incomeCents > 0L -> "支出 · 另有收入/退款 +${formatAmount(incomeCents)}"
@@ -1207,43 +1472,35 @@ class PendingListActivity : Activity() {
             }
             textSize = 11f
             setTextColor(CaptureUi.TEXT_MUTED)
-        })
+        }
+        summaryAmountLabelView = amountLabel
+        rightCol.addView(amountLabel)
         statsRow.addView(rightCol)
         card.addView(statsRow)
 
-        // 批量动作行
+        // 批量动作行：只保留一键入账；缺分类在入账流程里自动兜底。
         val batchRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             setPadding(0, dp(12), 0, 0)
         }
-        val aiBtn = CaptureUi.button(
-            activity = this,
-            text = if (isAiBusy) "归类中…" else "智能归类 (${items.size})",
-            textColor = CaptureUi.BRAND_DARK,
-            bgColor = CaptureUi.BRAND_SOFT,
-            strokeColor = CaptureUi.BRAND_BORDER,
-            onClick = { if (!isAiBusy) runBatchAiClassify(items) },
-        )
-        batchRow.addView(
-            aiBtn,
-            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginEnd = dp(8) },
-        )
 
         val canImportAll = readyItems.isNotEmpty() || missingCategoryItems.isNotEmpty()
         val importAllBtn = CaptureUi.button(
             activity = this,
-            text = "一键入账 (${readyItems.size})",
+            text = if (isAiBusy) "自动归类中…" else "一键入账 (${readyItems.size})",
             textColor = if (canImportAll) Color.WHITE else CaptureUi.TEXT_MUTED,
             bgColor = if (canImportAll) CaptureUi.BRAND else CaptureUi.BG_SEGMENT,
             onClick = {
+                if (isAiBusy) return@button
                 when {
                     canImportAll -> confirmAndBatchImport(readyItems, missingCategoryItems)
                     items.any { it.splitRequested } ->
                         toast("勾选拆分的账单请逐笔点“拆分入账”")
-                    else -> toast("请先点左侧“智能归类”或为账单选择分类")
+                    else -> toast("请先为账单选择分类")
                 }
             },
         )
+        summaryImportButton = importAllBtn
         batchRow.addView(
             importAllBtn,
             LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f),
@@ -1504,6 +1761,7 @@ class PendingListActivity : Activity() {
         ) {
             showAssetPicker(item, ctx)
         }
+        pendingAssetChips[item.id] = assetChip
         chipRow1.addView(
             assetChip,
             LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
@@ -1512,23 +1770,9 @@ class PendingListActivity : Activity() {
         )
 
         var currentCategory = item.categoryName
-        fun styleCategoryChip(tv: TextView, cat: String?) {
-            val ok = !cat.isNullOrBlank()
-            tv.text = if (ok) "分类 · $cat" else "待选分类"
-            tv.setTextColor(if (ok) CaptureUi.SUCCESS else CaptureUi.BRAND_DARK)
-            tv.background = CaptureUi.rippleBg(
-                fillColor = if (ok) CaptureUi.SUCCESS_SOFT else CaptureUi.BRAND_SOFT,
-                radiusPx = dp(8),
-                strokeWidthPx = dp(1),
-                strokeColor = if (ok) CaptureUi.SUCCESS_BORDER else CaptureUi.BRAND_BORDER,
-            )
-            CaptureUi.applyTrailingIcon(
-                tv,
-                this@PendingListActivity,
-                R.drawable.ic_chevron_down,
-                if (ok) CaptureUi.SUCCESS else CaptureUi.BRAND_DARK,
-                10,
-            )
+        var currentCategorySource = item.categorySource
+        fun styleCategoryChip(tv: TextView, cat: String?, source: String? = currentCategorySource) {
+            stylePendingCategoryChip(tv, cat, source)
         }
         val categoryChip = CaptureUi.chip(
             activity = this,
@@ -1540,8 +1784,10 @@ class PendingListActivity : Activity() {
         ) {
             showCategoryPicker(item, ctx)
         }
-        styleCategoryChip(categoryChip, currentCategory)
+        styleCategoryChip(categoryChip, currentCategory, currentCategorySource)
         categoryChip.visibility = if (item.splitRequested) View.GONE else View.VISIBLE
+        pendingCategoryChips[item.id] = categoryChip
+        pendingCategorySources[item.id] = currentCategorySource
         chipRow1.addView(categoryChip)
         card.addView(chipRow1)
 
@@ -1586,6 +1832,7 @@ class PendingListActivity : Activity() {
             }
         }
         styleBookChip(bookChip, currentBook)
+        pendingBookChips[item.id] = bookChip
         chipRow2.addView(
             bookChip,
             LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
@@ -1668,9 +1915,15 @@ class PendingListActivity : Activity() {
                             .repository
                             .updateNoteAndReclassify(this@PendingListActivity, item.id, newNote)
                     }
-                    if (updated != null && updated.categoryName != currentCategory) {
+                    if (updated != null &&
+                        (updated.categoryName != currentCategory ||
+                            updated.categorySource != currentCategorySource)
+                    ) {
                         currentCategory = updated.categoryName
-                        styleCategoryChip(categoryChip, currentCategory)
+                        currentCategorySource = updated.categorySource
+                        pendingCategorySources[item.id] = currentCategorySource
+                        styleCategoryChip(categoryChip, currentCategory, currentCategorySource)
+                        updateSummaryStatsOnly()
                     }
                 }
             }
@@ -1702,7 +1955,10 @@ class PendingListActivity : Activity() {
                                     }
                                     if (updated != null) {
                                         currentCategory = matched
-                                        styleCategoryChip(categoryChip, currentCategory)
+                                        currentCategorySource = CategorySource.RULE
+                                        pendingCategorySources[item.id] = currentCategorySource
+                                        styleCategoryChip(categoryChip, currentCategory, currentCategorySource)
+                                        updateSummaryStatsOnly()
                                     }
                                 }
                             }
@@ -1726,9 +1982,15 @@ class PendingListActivity : Activity() {
                         captureId = item.id,
                     )
                 }
-                if (updated != null && updated.categoryName != currentCategory) {
+                if (updated != null &&
+                    (updated.categoryName != currentCategory ||
+                        updated.categorySource != currentCategorySource)
+                ) {
                     currentCategory = updated.categoryName
-                    styleCategoryChip(categoryChip, currentCategory)
+                    currentCategorySource = updated.categorySource
+                    pendingCategorySources[item.id] = currentCategorySource
+                    styleCategoryChip(categoryChip, currentCategory, currentCategorySource)
+                    updateSummaryStatsOnly()
                 }
             }
         }
@@ -2402,12 +2664,12 @@ class PendingListActivity : Activity() {
             currentBook = currentBook,
         ) { chosenBook ->
             onResult?.invoke(chosenBook)
+            updatePendingBook(item.id, chosenBook)
             scope.launch {
                 withContext(Dispatchers.IO) {
                     CaptureApp.from(this@PendingListActivity).repository
                         .updateBookName(item.id, chosenBook)
                 }
-                load()
             }
         }
     }
@@ -2420,15 +2682,18 @@ class PendingListActivity : Activity() {
             title = "选择对应账户资产",
             allowClear = true,
         ) { chosenAsset ->
-            mutate { repo ->
-                repo.updateDraft(
-                    context = this@PendingListActivity,
-                    id = item.id,
-                    note = item.note,
-                    assetName = chosenAsset,
-                    categoryName = item.categoryName,
-                    rememberAssetMapping = rawChannel.isNotEmpty() && chosenAsset.isNotBlank(),
-                )
+            scope.launch {
+                withContext(Dispatchers.IO) {
+                    CaptureApp.from(this@PendingListActivity).repository.updateDraft(
+                        context = this@PendingListActivity,
+                        id = item.id,
+                        note = item.note,
+                        assetName = chosenAsset,
+                        categoryName = item.categoryName,
+                        rememberAssetMapping = rawChannel.isNotEmpty() && chosenAsset.isNotBlank(),
+                    )
+                }
+                updatePendingAsset(item.id, chosenAsset, rawChannel)
             }
         }
     }
@@ -2453,15 +2718,18 @@ class PendingListActivity : Activity() {
             onCancel = { onResult?.invoke(null) },
         ) { chosenCat ->
             if (onResult == null) {
-                mutate { repo ->
-                    repo.updateDraft(
-                        context = this@PendingListActivity,
-                        id = item.id,
-                        note = item.note,
-                        assetName = item.assetName,
-                        categoryName = chosenCat,
-                        categorySource = CategorySource.MANUAL,
-                    )
+                scope.launch {
+                    withContext(Dispatchers.IO) {
+                        CaptureApp.from(this@PendingListActivity).repository.updateDraft(
+                            context = this@PendingListActivity,
+                            id = item.id,
+                            note = item.note,
+                            assetName = item.assetName,
+                            categoryName = chosenCat,
+                            categorySource = CategorySource.MANUAL,
+                        )
+                    }
+                    updatePendingCategory(item.id, chosenCat, CategorySource.MANUAL)
                 }
             } else {
                 scope.launch {
@@ -2477,7 +2745,11 @@ class PendingListActivity : Activity() {
                             )
                         }
                     }.getOrNull()
-                    if (updated == null) toast("保存分类失败")
+                    if (updated == null) {
+                        toast("保存分类失败")
+                    } else {
+                        updatePendingCategory(item.id, chosenCat, CategorySource.MANUAL)
+                    }
                     onResult.invoke(if (updated != null) chosenCat else null)
                 }
             }
@@ -2485,80 +2757,8 @@ class PendingListActivity : Activity() {
     }
 
     // ════════════════════════════════════════════════════════
-    //  批量智能归类 & 批量一键入账
+    //  批量一键入账
     // ════════════════════════════════════════════════════════
-
-    private fun runBatchAiClassify(items: List<PaymentCapture>) {
-        isAiBusy = true
-        latestSnapshot?.let { renderCurrentTab(it) }
-        scope.launch {
-            try {
-                // 先等待所有正在防抖输入的备注落库，确保发给 AI 的是最新的备注。
-                noteSaveJobs.values.forEach { it.join() }
-                val freshItems = withContext(Dispatchers.IO) {
-                    val repo = CaptureApp.from(this@PendingListActivity).repository
-                    items.mapNotNull { repo.findById(it.id) }
-                }
-                // 没备注不调 AI；已有本地规则/手动分类的也不重复调。
-                val targets = freshItems.filter {
-                    !it.splitRequested &&
-                        !it.note.isNullOrBlank() &&
-                        it.categoryName.isNullOrBlank() &&
-                        it.billType != LocalBillType.TYPE_TRANSFER
-                }
-                if (targets.isEmpty()) {
-                    toast("没有可智能归类的备注；没备注的账单保持待归类")
-                    return@launch
-                }
-                toast("正在智能归类 ${targets.size} 笔…")
-                val outcome = bridge.classifyNotes(
-                    targets.map { item ->
-                        CaptureBridgeClient.NoteClassifyInput(
-                            captureId = item.id,
-                            note = item.note,
-                            billType = item.billType,
-                        )
-                    }
-                )
-                if (!outcome.ok) {
-                    toast("智能归类未完成：${outcome.error ?: "请检查敲敲记账 AI 设置"}")
-                    return@launch
-                }
-                var updatedCount = 0
-                withContext(Dispatchers.IO) {
-                    val repo = CaptureApp.from(this@PendingListActivity).repository
-                    for (item in targets) {
-                        val category = outcome.categories[item.id]?.takeIf { it.isNotBlank() }
-                            ?: continue
-                        // AI 返回时用户可能又改了备注或已手动分类：以数据库最新状态为准。
-                        val latest = repo.findById(item.id) ?: continue
-                        if (latest.note?.trim() != item.note?.trim()) continue
-                        if (!latest.categoryName.isNullOrBlank()) continue
-                        repo.updateDraft(
-                            context = this@PendingListActivity,
-                            id = latest.id,
-                            note = latest.note,
-                            assetName = latest.assetName,
-                            categoryName = category,
-                            categorySource = CategorySource.AI,
-                        )
-                        updatedCount++
-                    }
-                }
-                val unresolved = targets.size - updatedCount
-                toast(
-                    if (unresolved == 0) {
-                        "已智能归类 $updatedCount 笔，确认后可点“一键入账”"
-                    } else {
-                        "已智能归类 $updatedCount 笔，$unresolved 笔暂无法判断（保持待归类）"
-                    }
-                )
-            } finally {
-                isAiBusy = false
-                load()
-            }
-        }
-    }
 
     /**
      * 批量入账前防护：扫描待入账列表，若存在未指定资产的条目，弹出友好的确认对话框。
@@ -2594,65 +2794,124 @@ class PendingListActivity : Activity() {
     }
 
     /**
-     * 一键入账：只入账已有分类的条目；缺分类的不静默丢弃，
-     * 入账完成后弹窗列出并逐笔让用户补分类，取消/未选则保留 PENDING。
+     * 一键入账：
+     * 1. 有备注、缺分类的先自动跑一次 AI；
+     * 2. 没备注、缺分类的不弹窗，留在待记并用 Toast 汇总；
+     * 3. 有备注但 AI 仍分不出的，才弹“逐笔补分类”。
      */
     private fun batchImportWithMissing(
         readyItems: List<PaymentCapture>,
         missingItems: List<PaymentCapture>,
     ) {
+        if (isAiBusy) return
+        isAiBusy = true
+        updateSummaryImportButton()
         scope.launch {
-            noteSaveJobs.values.forEach { it.join() }
-            val repo = CaptureApp.from(this@PendingListActivity).repository
-            val requestedIds = (readyItems + missingItems).map { it.id }.distinct()
-            val freshItems = withContext(Dispatchers.IO) {
-                requestedIds.mapNotNull { repo.findById(it) }
-            }
-            val freshReady = freshItems.filter {
-                !it.splitRequested &&
-                    !it.categoryName.isNullOrBlank() &&
-                    (it.amountCents ?: 0L) > 0L
-            }
-            val freshMissing = freshItems.filter { !it.splitRequested && it.needsCategory() }
-            val splitSkipped = freshItems.count { it.splitRequested }
-
-            if (freshReady.isNotEmpty()) {
-                val bills = freshReady.map { item ->
-                    ImportBill(
-                        captureId = item.id,
-                        type = item.billType ?: LocalBillType.TYPE_EXPENSE,
-                        subType = item.subType ?: LocalBillType.SUBTYPE_NORMAL,
-                        needsRefundLink = item.needsRefundLink,
-                        amountCents = item.amountCents ?: 0L,
-                        currency = item.currency,
-                        paidAt = item.paidAt,
-                        assetName = item.assetName ?: item.paymentMethodRaw,
-                        toAssetName = item.toAssetName,
-                        categoryName = item.categoryName,
-                        remarks = item.note?.takeIf { it.isNotBlank() } ?: item.merchant.orEmpty(),
-                        note = item.note,
-                        bookName = item.bookName?.takeIf { it.isNotBlank() }
-                            ?: latestSnapshot?.accountingContext?.currentBookName
-                            ?: latestSnapshot?.accountingContext?.defaultBookName,
-                        excludeFromStats = item.excludeFromStats,
-                    )
+            var noNoteSkipped: List<PaymentCapture> = emptyList()
+            var noteMissingForPrompt: List<PaymentCapture> = emptyList()
+            try {
+                noteSaveJobs.values.forEach { it.join() }
+                val repo = CaptureApp.from(this@PendingListActivity).repository
+                val requestedIds = (readyItems + missingItems).map { it.id }.distinct()
+                var freshItems = withContext(Dispatchers.IO) {
+                    requestedIds.mapNotNull { repo.findById(it) }
                 }
-                val result = bridge.importBills(bills, UUID.randomUUID().toString())
-                if (result == null) {
-                    toast("敲敲记账桥接不可用，未入账")
-                } else {
-                    val resultsArr = result.optJSONArray("results")
-                    var successCount = 0
-                    var firstError: String? = null
-                    val successfulIds = mutableSetOf<String>()
-                    if (resultsArr != null) {
+
+                // 一键入账前兜底：只给“有备注、还没分类”的条目补一次 AI。
+                val aiTargets = freshItems.filter {
+                    !it.splitRequested &&
+                        !it.note.isNullOrBlank() &&
+                        it.categoryName.isNullOrBlank() &&
+                        it.billType != LocalBillType.TYPE_TRANSFER
+                }
+                if (aiTargets.isNotEmpty() && Prefs.getAiKey(this@PendingListActivity).isNotBlank()) {
+                    val outcome = withContext(Dispatchers.IO) {
+                        bridge.classifyNotes(
+                            aiTargets.map { item ->
+                                CaptureBridgeClient.NoteClassifyInput(
+                                    captureId = item.id,
+                                    note = item.note,
+                                    billType = item.billType,
+                                )
+                            }
+                        )
+                    }
+                    if (outcome.ok) {
+                        val updates = mutableMapOf<String, Pair<String?, String?>>()
                         withContext(Dispatchers.IO) {
+                            for (item in aiTargets) {
+                                val category = outcome.categories[item.id]
+                                    ?.takeIf { it.isNotBlank() } ?: continue
+                                val latest = repo.findById(item.id) ?: continue
+                                if (latest.note?.trim() != item.note?.trim()) continue
+                                if (!latest.categoryName.isNullOrBlank()) continue
+                                val updated = repo.updateDraft(
+                                    context = this@PendingListActivity,
+                                    id = latest.id,
+                                    note = latest.note,
+                                    assetName = latest.assetName,
+                                    categoryName = category,
+                                    categorySource = CategorySource.AI,
+                                ) ?: continue
+                                updates[latest.id] = updated.categoryName to CategorySource.AI
+                            }
+                        }
+                        if (updates.isNotEmpty()) {
+                            applyPendingCategoryUpdates(updates)
+                            freshItems = withContext(Dispatchers.IO) {
+                                requestedIds.mapNotNull { repo.findById(it) }
+                            }
+                        }
+                    }
+                }
+
+                val freshReady = freshItems.filter {
+                    !it.splitRequested &&
+                        !it.categoryName.isNullOrBlank() &&
+                        (it.amountCents ?: 0L) > 0L
+                }
+                val allMissing = freshItems.filter { !it.splitRequested && it.needsCategory() }
+                noNoteSkipped = allMissing.filter { it.note.isNullOrBlank() }
+                noteMissingForPrompt = allMissing.filter { !it.note.isNullOrBlank() }
+                val splitSkipped = freshItems.count { it.splitRequested }
+
+                if (freshReady.isNotEmpty()) {
+                    val bills = freshReady.map { item ->
+                        ImportBill(
+                            captureId = item.id,
+                            type = item.billType ?: LocalBillType.TYPE_EXPENSE,
+                            subType = item.subType ?: LocalBillType.SUBTYPE_NORMAL,
+                            needsRefundLink = item.needsRefundLink,
+                            amountCents = item.amountCents ?: 0L,
+                            currency = item.currency,
+                            paidAt = item.paidAt,
+                            assetName = item.assetName ?: item.paymentMethodRaw,
+                            toAssetName = item.toAssetName,
+                            categoryName = item.categoryName,
+                            remarks = item.note?.takeIf { it.isNotBlank() } ?: item.merchant.orEmpty(),
+                            note = item.note,
+                            bookName = item.bookName?.takeIf { it.isNotBlank() }
+                                ?: latestSnapshot?.accountingContext?.currentBookName
+                                ?: latestSnapshot?.accountingContext?.defaultBookName,
+                            excludeFromStats = item.excludeFromStats,
+                        )
+                    }
+                    val result = CaptureInboxEvents.suppressing {
+                        bridge.importBills(bills, UUID.randomUUID().toString())
+                    }
+                    if (result == null) {
+                        toast("敲敲记账桥接不可用，未入账")
+                    } else {
+                        val resultsArr = result.optJSONArray("results")
+                        var successCount = 0
+                        var firstError: String? = null
+                        val successfulIds = mutableSetOf<String>()
+                        if (resultsArr != null) {
                             for (i in 0 until resultsArr.length()) {
                                 val r = resultsArr.optJSONObject(i) ?: continue
                                 val cid = r.optString("captureId")
                                 val st = r.optString("status")
                                 if (st == ImportItemStatus.CREATED || st == ImportItemStatus.DUPLICATE) {
-                                    repo.updateStatus(cid, CaptureStatus.RECORDED)
                                     successfulIds.add(cid)
                                     // 首次成功才学习；duplicate 不重复学习。
                                     if (st == ImportItemStatus.CREATED) {
@@ -2664,43 +2923,119 @@ class PendingListActivity : Activity() {
                                 }
                             }
                         }
-                    }
-                    val askEntries = freshReady
-                        .filter { it.id in successfulIds }
-                        .map {
-                            RuleLearningManager.RuleLearnEntry(
-                                note = it.note.orEmpty(),
-                                categoryName = it.categoryName.orEmpty(),
-                                billType = it.billType ?: 0,
-                            )
+                        val importedItems = freshReady.filter { it.id in successfulIds }
+                        if (importedItems.isNotEmpty()) {
+                            // 状态已由 importBills 统一推进；这里只做局部 UI 更新。
+                            latestSnapshot?.let { snap ->
+                                val recorded = importedItems.map {
+                                    it.copy(status = CaptureStatus.RECORDED)
+                                }
+                                val newHistory = (recorded + snap.historyItems).take(200)
+                                latestSnapshot = snap.copy(
+                                    historyItems = newHistory,
+                                    historyCount = snap.historyCount + recorded.size,
+                                )
+                                val newHistoryCount = latestSnapshot?.historyCount ?: 0
+                                tabViews.getOrNull(3)?.text = if (newHistoryCount > 0) {
+                                    "历史 $newHistoryCount"
+                                } else {
+                                    "历史"
+                                }
+                            }
+                            removePendingCards(successfulIds)
+                            val askEntries = importedItems.map {
+                                RuleLearningManager.RuleLearnEntry(
+                                    note = it.note.orEmpty(),
+                                    categoryName = it.categoryName.orEmpty(),
+                                    billType = it.billType ?: 0,
+                                )
+                            }
+                            val asked = com.taostudio.tapaccounting.logic.RuleAskCoordinator
+                                .showIfNeeded(this@PendingListActivity, askEntries)
+                            val failCount = bills.size - successCount
+                            if (failCount > 0) {
+                                toast("入账 $successCount 笔，失败 $failCount 笔（${humanizeImportError(firstError)}）")
+                            }
+                            if (!asked) {
+                                showBatchResultCard(importedItems) {
+                                    if (noteMissingForPrompt.isNotEmpty()) {
+                                        promptMissingCategories(noteMissingForPrompt)
+                                    }
+                                }
+                            } else if (noteMissingForPrompt.isNotEmpty()) {
+                                promptMissingCategories(noteMissingForPrompt)
+                            }
+                        } else {
+                            val failCount = bills.size
+                            toast("入账失败 $failCount 笔（${humanizeImportError(firstError)}）")
+                            if (noteMissingForPrompt.isNotEmpty()) {
+                                promptMissingCategories(noteMissingForPrompt)
+                            }
                         }
-                    com.taostudio.tapaccounting.logic.RuleAskCoordinator
-                        .showIfNeeded(this@PendingListActivity, askEntries)
-                    val failCount = bills.size - successCount
-                    if (failCount == 0) {
-                        toast("✓ 已成功入账 $successCount 笔")
-                    } else {
-                        toast("入账 $successCount 笔，失败 $failCount 笔（${humanizeImportError(firstError)}）")
+                    }
+                } else {
+                    if (noteMissingForPrompt.isNotEmpty()) {
+                        promptMissingCategories(noteMissingForPrompt)
+                    } else if (noNoteSkipped.isEmpty()) {
+                        toast("没有可入账的账单")
                     }
                 }
-            } else if (freshMissing.isEmpty()) {
-                toast("没有可入账的账单")
-            }
-            if (splitSkipped > 0) {
-                toast("已跳过 $splitSkipped 笔勾选拆分的账单，请逐笔点“拆分入账”")
-            }
 
-            load()
-            if (freshMissing.isNotEmpty()) {
-                promptMissingCategories(freshMissing)
+                if (noNoteSkipped.isNotEmpty()) {
+                    toastNoNoteSkipped(noNoteSkipped)
+                }
+                if (splitSkipped > 0) {
+                    toast("已跳过 $splitSkipped 笔勾选拆分的账单，请逐笔点“拆分入账”")
+                }
+            } catch (t: Throwable) {
+                if (t is CancellationException) return@launch
+                toast("入账失败：${t.message ?: t.javaClass.simpleName}")
+            } finally {
+                isAiBusy = false
+                updateSummaryImportButton()
+                CaptureNotifier.refreshAll(this@PendingListActivity)
             }
         }
     }
 
-    private fun promptMissingCategories(items: List<PaymentCapture>) {
+    private fun toastNoNoteSkipped(items: List<PaymentCapture>) {
         if (items.isEmpty()) return
+        val preview = items.take(3).joinToString("、") { item ->
+            buildString {
+                append(formatAmount(item.amountCents))
+                item.merchant?.takeIf { it.isNotBlank() }?.let { append(" ").append(it.take(8)) }
+            }
+        }
+        val suffix = if (items.size > 3) " 等 ${items.size} 笔" else ""
+        toast("${items.size} 笔没备注，未入账：$preview$suffix")
+    }
+
+    private fun showBatchResultCard(
+        items: List<PaymentCapture>,
+        onDismiss: (() -> Unit)? = null,
+    ) {
+        if (items.isEmpty()) {
+            onDismiss?.invoke()
+            return
+        }
+        val message = items.take(10).joinToString("\n") { item ->
+            val category = item.categoryName?.takeIf { it.isNotBlank() } ?: "未分类"
+            "· ${formatAmount(item.amountCents)}  $category"
+        } + if (items.size > 10) "\n… 还有 ${items.size - 10} 笔" else ""
+        AlertDialog.Builder(this)
+            .setTitle("本次入账 ${items.size} 笔")
+            .setMessage(message)
+            .setPositiveButton("知道了") { _, _ -> onDismiss?.invoke() }
+            .setOnCancelListener { onDismiss?.invoke() }
+            .show()
+    }
+
+    private fun promptMissingCategories(items: List<PaymentCapture>) {
+        // 没备注的已经用 Toast 汇总，不再弹窗打扰。
+        val targets = items.filter { !it.note.isNullOrBlank() }
+        if (targets.isEmpty()) return
         val preview = buildString {
-            items.take(8).forEach { item ->
+            targets.take(8).forEach { item ->
                 append("· ").append(formatAmount(item.amountCents))
                 item.merchant?.takeIf { it.isNotBlank() }?.let { append(" ").append(it.take(14)) }
                 item.note?.takeIf { it.isNotBlank() }?.let {
@@ -2708,13 +3043,13 @@ class PendingListActivity : Activity() {
                 }
                 append('\n')
             }
-            if (items.size > 8) append("… 还有 ${items.size - 8} 笔")
+            if (targets.size > 8) append("… 还有 ${targets.size - 8} 笔")
         }
         AlertDialog.Builder(this)
-            .setTitle("${items.size} 笔缺少分类，已跳过入账")
+            .setTitle("${targets.size} 笔有备注但暂未分出分类")
             .setMessage("以下待记仍保留在列表里，需逐笔补分类：\n\n$preview")
             .setPositiveButton("逐笔补分类") { _, _ ->
-                promptMissingCategoryAt(items, 0, 0)
+                promptMissingCategoryAt(targets, 0, 0)
             }
             .setNegativeButton("稍后", null)
             .show()
@@ -2731,7 +3066,7 @@ class PendingListActivity : Activity() {
             } else {
                 toast("未补分类，缺分类账单仍保留在待记")
             }
-            load()
+            refreshSummaryHeroCard()
             return
         }
         val item = items[index]
@@ -2755,8 +3090,27 @@ class PendingListActivity : Activity() {
 
     private fun ignore(item: PaymentCapture) {
         splitDrafts.remove(item.id)
-        mutate { repository ->
-            repository.updateStatus(item.id, CaptureStatus.IGNORED)
+        scope.launch {
+            withContext(Dispatchers.IO) {
+                CaptureApp.from(this@PendingListActivity).repository
+                    .updateStatus(item.id, CaptureStatus.IGNORED)
+            }
+            val snapshot = latestSnapshot ?: return@launch
+            val newPending = snapshot.pendingItems.filterNot { it.id == item.id }
+            val newIgnored = snapshot.ignoredItems + item.copy(status = CaptureStatus.IGNORED)
+            latestSnapshot = snapshot.copy(pendingItems = newPending, ignoredItems = newIgnored)
+            pendingCardViews.remove(item.id)?.let { card ->
+                (card.parent as? ViewGroup)?.removeView(card)
+            }
+            pendingCategoryChips.remove(item.id)
+            pendingCategorySources.remove(item.id)
+            pendingAssetChips.remove(item.id)
+            pendingBookChips.remove(item.id)
+            updateInboxTabCount(newPending)
+            refreshSummaryHeroCard()
+            rebuildIgnoredSection()
+            CaptureNotifier.refreshAll(this@PendingListActivity)
+            toast("已移到「已不计」")
         }
     }
 
@@ -2868,7 +3222,7 @@ class PendingListActivity : Activity() {
         if (type in setOf(LocalBillType.TYPE_EXPENSE, LocalBillType.TYPE_INCOME) &&
             item.categoryName.isNullOrBlank()
         ) {
-            toast("请先为该笔账单选择分类，或点顶部“智能归类”")
+            toast("请先为该笔账单选择分类")
             showCategoryPicker(item, latestSnapshot?.accountingContext)
             return
         }

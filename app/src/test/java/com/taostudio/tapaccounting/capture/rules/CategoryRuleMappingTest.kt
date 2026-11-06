@@ -2,6 +2,7 @@ package com.taostudio.tapaccounting.capture.rules
 
 import com.taostudio.tapaccounting.capture.CaptureInboxEvents
 import com.taostudio.tapaccounting.data.local.entity.AccountingRule
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
@@ -132,7 +133,7 @@ class CategoryRuleMappingTest {
     @Test
     fun testCaptureInboxEventsNotify() = runBlocking {
         var notified = false
-        val job = launch {
+        val job = launch(start = CoroutineStart.UNDISPATCHED) {
             CaptureInboxEvents.changes.first()
             notified = true
         }

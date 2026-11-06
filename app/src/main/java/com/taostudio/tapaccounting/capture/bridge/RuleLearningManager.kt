@@ -156,6 +156,7 @@ object RuleLearningManager {
                             decision.rule.copy(
                                 targetCategory = targetCategory,
                                 targetType = entry.billType,
+                                matchMode = RuleLearningPolicy.preferredMatchMode(rawKeyword),
                                 source = AccountingRule.Source.AI,
                                 learnedAt = now,
                                 updatedAt = now,
@@ -376,6 +377,7 @@ object RuleLearningManager {
                     decision.rule.copy(
                         targetCategory = targetCategory,
                         targetType = task.billType,
+                        matchMode = RuleLearningPolicy.preferredMatchMode(keyword),
                         source = AccountingRule.Source.AI,
                         learnedAt = now,
                         updatedAt = now,

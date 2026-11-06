@@ -596,6 +596,76 @@ internal class RuleMappingViews(
             container.addView(recentCard)
         }
 
+        // 短关键词体检：1–2 字 AI 规则如果还是“包含匹配”，容易误伤“苹果电脑”这类复合词。
+        val shortKeywordRules = activeRules.filter {
+            it.source == AccountingRule.Source.AI &&
+                !it.isRegex &&
+                it.keyword.trim().length <= 2 &&
+                it.matchMode != AccountingRule.MatchMode.EXACT
+        }
+        if (shortKeywordRules.isNotEmpty()) {
+            val healthCard = CaptureUi.card(activity, paddingH = 14, paddingV = 12, radiusDp = 14).apply {
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                ).apply { bottomMargin = dp(12) }
+                addView(TextView(activity).apply {
+                    text = "短关键词体检"
+                    textSize = 15f
+                    setTypeface(typeface, Typeface.BOLD)
+                    setTextColor(CaptureUi.TEXT_PRIMARY)
+                })
+                addView(TextView(activity).apply {
+                    text = "这些 1–2 字规则会按“包含”匹配，可能把“苹果电脑”判成水果。"
+                    textSize = 12f
+                    setTextColor(CaptureUi.TEXT_SECONDARY)
+                    setPadding(0, dp(2), 0, dp(8))
+                })
+                shortKeywordRules.take(6).forEach { rule ->
+                    val row = LinearLayout(activity).apply {
+                        orientation = LinearLayout.HORIZONTAL
+                        gravity = Gravity.CENTER_VERTICAL
+                        setPadding(0, dp(4), 0, dp(4))
+                    }
+                    row.addView(TextView(activity).apply {
+                        val leaf = rule.targetCategory?.trim().orEmpty()
+                        text = "${rule.keyword} → ${leaf.ifBlank { "未分类" }}"
+                        textSize = 12.5f
+                        setTextColor(CaptureUi.TEXT_SECONDARY)
+                        layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+                    })
+                    row.addView(
+                        CaptureUi.chip(
+                            activity = activity,
+                            text = "改为完全一致",
+                            textColor = CaptureUi.BRAND_DARK,
+                            bgColor = CaptureUi.BRAND_SOFT,
+                        ) {
+                            scope.launch {
+                                withContext(Dispatchers.IO) {
+                                    runCatching {
+                                        val dao = com.taostudio.tapaccounting.capture.CaptureApp.from(activity)
+                                            .database.accountingRuleDao()
+                                        dao.upsert(
+                                            rule.copy(
+                                                matchMode = AccountingRule.MatchMode.EXACT,
+                                                updatedAt = System.currentTimeMillis(),
+                                            )
+                                        )
+                                        AccountingRuleEngine.invalidateCache()
+                                    }
+                                }
+                                toast("已改为完全一致：${rule.keyword}")
+                                onDataChanged()
+                            }
+                        },
+                    )
+                    addView(row)
+                }
+            }
+            container.addView(healthCard)
+        }
+
         // 来源分段筛选胶囊栏
         val segmentRow = LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -919,6 +989,7 @@ internal class RuleMappingViews(
 
         var selectedMode = when {
             existing?.isRegex == true -> "REGEX"
+            existing?.matchMode == AccountingRule.MatchMode.EXACT -> "EXACT"
             existing?.matchMode == AccountingRule.MatchMode.ALL_TOKENS -> "ALL_TOKENS"
             else -> "SUBSTRING"
         }
@@ -926,6 +997,7 @@ internal class RuleMappingViews(
         val modeRow = LinearLayout(activity).apply { orientation = LinearLayout.HORIZONTAL }
         val modeOptions = listOf(
             Triple("SUBSTRING", "包含匹配", "子串匹配"),
+            Triple("EXACT", "完全一致", "整条备注完全一致"),
             Triple("ALL_TOKENS", "全词匹配", "空格分词全部包含"),
             Triple("REGEX", "正则表达式", "高级正则匹配"),
         )
@@ -1054,10 +1126,10 @@ internal class RuleMappingViews(
                 }
 
                 val isRegex = selectedMode == "REGEX"
-                val matchMode = if (selectedMode == "ALL_TOKENS") {
-                    AccountingRule.MatchMode.ALL_TOKENS
-                } else {
-                    AccountingRule.MatchMode.SUBSTRING
+                val matchMode = when (selectedMode) {
+                    "EXACT" -> AccountingRule.MatchMode.EXACT
+                    "ALL_TOKENS" -> AccountingRule.MatchMode.ALL_TOKENS
+                    else -> AccountingRule.MatchMode.SUBSTRING
                 }
 
                 val ruleToSave = AccountingRule(

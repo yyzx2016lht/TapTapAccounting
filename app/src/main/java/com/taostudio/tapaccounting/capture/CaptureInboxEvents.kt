@@ -5,6 +5,7 @@ import com.taostudio.tapaccounting.data.local.AppDatabase
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * 待记收件箱的进程内刷新信号。
@@ -16,12 +17,28 @@ import kotlinx.coroutines.flow.asSharedFlow
 object CaptureInboxEvents {
 
     private val _changes = MutableSharedFlow<Unit>(extraBufferCapacity = 16)
+    private val suppressDepth = AtomicInteger(0)
 
     /** 待记状态/列表发生变化，收件箱应重读一次数据库。 */
     val changes: SharedFlow<Unit> = _changes.asSharedFlow()
 
     fun notifyChanged() {
-        _changes.tryEmit(Unit)
+        if (suppressDepth.get() == 0) {
+            _changes.tryEmit(Unit)
+        }
+    }
+
+    /**
+     * 批量操作期间静默刷新信号：调用方会自己做局部 UI 更新，
+     * 避免每写一条状态就触发一次整页重读。
+     */
+    suspend fun <T> suppressing(block: suspend () -> T): T {
+        suppressDepth.incrementAndGet()
+        return try {
+            block()
+        } finally {
+            suppressDepth.decrementAndGet()
+        }
     }
 
     /**

@@ -475,6 +475,8 @@ class OverlayService : Service() {
                 }
             }
             ACTION_SHOW_OVERLAY -> {
+                // 敲击唤出记账悬浮窗时，右侧小圈淡出，避免两个悬浮物并排。
+                com.taostudio.tapaccounting.capture.notify.CaptureBubbleManager.fadePeekOut(this)
                 val prefill = intent?.getStringExtra(EXTRA_PREFILL)?.let { raw ->
                     runCatching { JSONObject(raw) }.getOrNull()
                 }

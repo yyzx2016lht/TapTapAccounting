@@ -6,6 +6,7 @@ import android.graphics.Color
 import android.graphics.PixelFormat
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
+import android.net.Uri
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
@@ -16,10 +17,14 @@ import android.view.KeyEvent
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
+import android.view.animation.AccelerateInterpolator
+import android.view.animation.DecelerateInterpolator
+import android.view.animation.OvershootInterpolator
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
 import android.widget.EditText
 import android.widget.CheckBox
+import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
@@ -36,6 +41,7 @@ import com.taostudio.tapaccounting.capture.contract.ImportItemStatus
 import com.taostudio.tapaccounting.capture.contract.LocalBillType
 import com.taostudio.tapaccounting.capture.data.CategorySource
 import com.taostudio.tapaccounting.capture.data.PaymentCapture
+import com.taostudio.tapaccounting.capture.ui.CaptureImagePickerActivity
 import com.taostudio.tapaccounting.capture.ui.SplitConfirmSheet
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -68,6 +74,13 @@ object CaptureBubbleManager {
     private var currentParams: WindowManager.LayoutParams? = null
     private var dismissRunnable: Runnable? = null
     private var session: BubbleSession? = null
+
+    /** 收起后贴在屏幕右侧的小圈（显示金额），最多停留 60 秒。 */
+    private var peekView: View? = null
+    private var peekParams: WindowManager.LayoutParams? = null
+    private var peekDismissRunnable: Runnable? = null
+    @Volatile
+    private var isPeeking: Boolean = false
 
     /** OverlayService 用来在气泡消失后判断自己是否该停掉。 */
     @Volatile
@@ -127,7 +140,7 @@ object CaptureBubbleManager {
         Build.VERSION.SDK_INT < Build.VERSION_CODES.M || Settings.canDrawOverlays(context)
 
     /** OverlayService 判断自己是否还被气泡占用。 */
-    fun isShowing(): Boolean = currentView != null
+    fun isShowing(): Boolean = currentView != null || peekView != null
 
     /**
      * 气泡已经在屏幕上时，后续同一笔支付的其它事件只更新“待记 N 笔”，
@@ -137,7 +150,10 @@ object CaptureBubbleManager {
         val current = session ?: return
         current.pendingCount = count
         mainHandler.post {
-            if (session === current) current.renderSummary()
+            if (session === current) {
+                current.renderSummary()
+                if (isPeeking) updatePeekBadge(current)
+            }
         }
     }
 
@@ -256,6 +272,24 @@ object CaptureBubbleManager {
             setPadding(0, dp(6), 0, 0)
         }
         noteRow.addView(cbSplit)
+        val imageSplitRow = LinearLayout(app).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(0, dp(8), 0, 0)
+        }
+        val btnImageSplit = TextView(app).apply {
+            text = "📷 选图片拆单"
+            textSize = 12f
+            setTypeface(typeface, Typeface.BOLD)
+            gravity = Gravity.CENTER
+            setTextColor(Color.parseColor("#93C5FD"))
+            setPadding(dp(10), dp(6), dp(10), dp(6))
+            background = GradientDrawable().apply {
+                setColor(Color.parseColor("#1E3A8A"))
+                cornerRadius = dp(10).toFloat()
+            }
+        }
+        imageSplitRow.addView(btnImageSplit)
+        noteRow.addView(imageSplitRow)
         root.addView(noteRow)
 
         fun actionRow(): LinearLayout = LinearLayout(app).apply {
@@ -383,6 +417,26 @@ object CaptureBubbleManager {
             }
         }
 
+        var imageSplitHandler: ((Uri) -> Unit)? = null
+        btnImageSplit.setOnClickListener {
+            val amountCents = s.capture.amountCents ?: 0L
+            val billType = s.capture.billType ?: LocalBillType.TYPE_EXPENSE
+            if (amountCents <= 0L) {
+                toast("金额缺失，无法拆单")
+                return@setOnClickListener
+            }
+            if (billType != LocalBillType.TYPE_EXPENSE && billType != LocalBillType.TYPE_INCOME) {
+                toast("图片拆单只支持普通支出/收入")
+                return@setOnClickListener
+            }
+            if (!cbSplit.isChecked) cbSplit.isChecked = true
+            CaptureImagePickerActivity.pickImage(
+                context = app,
+                onPicked = { uri -> imageSplitHandler?.invoke(uri) },
+                onCancelled = { toast("已取消选图，待记仍保留") },
+            )
+        }
+
         fun applyState(state: BubbleState) {
             val previous = s.state
             s.state = state
@@ -400,7 +454,7 @@ object CaptureBubbleManager {
             }
             when (state) {
                 BubbleState.SUMMARY -> {
-                    scheduleAutoDismiss(app, 4_000L)
+                    scheduleAutoPeek(app, 2_000L)
                 }
 
                 BubbleState.INPUT -> {
@@ -503,6 +557,32 @@ object CaptureBubbleManager {
             }
         }
 
+        fun showSplitConfirm(base: PaymentCapture, preview: CaptureBridgeClient.SplitPreviewResult) {
+            if (!isActive()) return
+            cancelAutoDismiss()
+            s.state = BubbleState.SPLIT
+            s.root.removeAllViews()
+            s.root.setPadding(0, 0, 0, 0)
+            s.root.background = null
+            s.root.addView(
+                SplitConfirmSheet.buildOverlayContent(
+                    context = app,
+                    capture = base,
+                    preview = preview,
+                    onCancel = { dismissImmediate(app) },
+                    onEdit = {
+                        dismissImmediate(app)
+                        toast("已保留待记，可在待记列表改备注后重试")
+                    },
+                    onConfirm = { items ->
+                        val total = base.amountCents ?: 0L
+                        dismissImmediate(app)
+                        scope.launch { importGroupAndToast(base, items, total) }
+                    },
+                )
+            )
+        }
+
         /**
          * 勾选拆分时：调用 App 只拆条目/金额，再弹确认页；不勾选不会走这里。
          * 取消确认页只关闭气泡，待记保持 PENDING。
@@ -531,29 +611,43 @@ object CaptureBubbleManager {
                 }
                 return
             }
-            if (!isActive()) return
-            cancelAutoDismiss()
-            s.state = BubbleState.SPLIT
-            s.root.removeAllViews()
-            s.root.setPadding(0, 0, 0, 0)
-            s.root.background = null
-            s.root.addView(
-                SplitConfirmSheet.buildOverlayContent(
-                    context = app,
-                    capture = base,
-                    preview = preview,
-                    onCancel = { dismissImmediate(app) },
-                    onEdit = {
-                        dismissImmediate(app)
-                        toast("已保留待记，可在待记列表改备注后重试")
-                    },
-                    onConfirm = { items ->
-                        val total = base.amountCents ?: 0L
-                        dismissImmediate(app)
-                        scope.launch { importGroupAndToast(base, items, total) }
-                    },
-                )
+            showSplitConfirm(base, preview)
+        }
+
+        /** 图片拆单：把当前待记按小票识别成多条明细，再走同一个确认页。 */
+        suspend fun previewImageSplitThenConfirm(base: PaymentCapture, imageUri: Uri) {
+            val amountCents = base.amountCents ?: 0L
+            val billType = base.billType ?: LocalBillType.TYPE_EXPENSE
+            if (amountCents <= 0L) {
+                fineTune(base.note, BubbleRecordPolicy.Block.AMOUNT_MISSING.message)
+                return
+            }
+            if (billType != LocalBillType.TYPE_EXPENSE && billType != LocalBillType.TYPE_INCOME) {
+                toast("图片拆单只支持普通支出/收入")
+                return
+            }
+            if (isActive()) setStatus("正在识别图片并拆分…", "#94A3B8")
+            val preview = CaptureBridgeClient(app).previewImageSplit(
+                captureId = base.id,
+                totalCents = amountCents,
+                billType = billType,
+                imageUri = imageUri,
             )
+            if (!preview.ok) {
+                if (isActive()) {
+                    setStatus(
+                        "拆分未完成：${humanizeSplitError(preview.error, preview.message)}",
+                        "#FCA5A5",
+                    )
+                    applyState(BubbleState.INPUT)
+                }
+                return
+            }
+            showSplitConfirm(base, preview)
+        }
+
+        imageSplitHandler = { uri ->
+            scope.launch { previewImageSplitThenConfirm(s.capture, uri) }
         }
 
         suspend fun classifyThenResult() {
@@ -972,6 +1066,230 @@ object CaptureBubbleManager {
         runCatching { wm.updateViewLayout(view, params) }
     }
 
+    // ---------------------------------------------------------------- 收起小圈
+
+    private fun scheduleAutoPeek(app: Context, delayMs: Long) {
+        cancelAutoDismiss()
+        val runnable = Runnable { enterPeek(app) }
+        dismissRunnable = runnable
+        mainHandler.postDelayed(runnable, delayMs)
+    }
+
+    private fun schedulePeekDismiss(app: Context, delayMs: Long) {
+        cancelPeekDismiss()
+        val runnable = Runnable { fadePeekOut(app, notifyDismissed = true) }
+        peekDismissRunnable = runnable
+        mainHandler.postDelayed(runnable, delayMs)
+    }
+
+    private fun cancelPeekDismiss() {
+        peekDismissRunnable?.let { mainHandler.removeCallbacks(it) }
+        peekDismissRunnable = null
+    }
+
+    /** 摘要态 2 秒后：整张卡向右边缘缩成一个显示金额的小圈。 */
+    private fun enterPeek(app: Context) {
+        val s = session ?: return
+        val view = currentView ?: return
+        if (s.state != BubbleState.SUMMARY || s.busy) return
+        cancelAutoDismiss()
+        val loc = IntArray(2)
+        view.getLocationOnScreen(loc)
+        val centerY = loc[1] + view.height / 2
+        view.animate().cancel()
+        view.pivotX = view.width.toFloat()
+        view.pivotY = view.height / 2f
+        view.animate()
+            .scaleX(0.12f)
+            .scaleY(0.12f)
+            .alpha(0f)
+            .setDuration(260L)
+            .setInterpolator(AccelerateInterpolator())
+            .withLayer()
+            .withEndAction {
+                if (session !== s || currentView !== view) return@withEndAction
+                val wm = app.getSystemService(Context.WINDOW_SERVICE) as? WindowManager
+                runCatching { wm?.removeViewImmediate(view) }
+                currentView = null
+                view.scaleX = 1f
+                view.scaleY = 1f
+                view.alpha = 1f
+                showPeek(app, s, centerY)
+            }
+            .start()
+    }
+
+    private fun showPeek(app: Context, s: BubbleSession, centerY: Int) {
+        val wm = app.getSystemService(Context.WINDOW_SERVICE) as? WindowManager ?: return
+        val density = app.resources.displayMetrics.density
+        fun dp(v: Int): Int = (v * density + 0.5f).toInt()
+        val size = dp(64)
+
+        val bubble = FrameLayout(app)
+        val amount = TextView(app).apply {
+            text = peekAmountText(s.capture)
+            textSize = 10.5f
+            gravity = Gravity.CENTER
+            setTypeface(typeface, Typeface.BOLD)
+            setTextColor(Color.WHITE)
+            setPadding(dp(4), 0, dp(4), 0)
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.OVAL
+                setColor(Color.parseColor("#FA1E293B"))
+                setStroke(dp(1), Color.parseColor("#33FFFFFF"))
+            }
+        }
+        bubble.addView(amount, FrameLayout.LayoutParams(size, size))
+
+        val badge = TextView(app).apply {
+            tag = "peek_badge"
+            textSize = 9f
+            gravity = Gravity.CENTER
+            setTypeface(typeface, Typeface.BOLD)
+            setTextColor(Color.WHITE)
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.OVAL
+                setColor(Color.parseColor("#EF4444"))
+            }
+        }
+        bubble.addView(
+            badge,
+            FrameLayout.LayoutParams(dp(20), dp(20), Gravity.TOP or Gravity.END).apply {
+                topMargin = dp(2)
+                marginEnd = dp(2)
+            },
+        )
+        updatePeekBadge(s, badge)
+
+        bubble.setOnClickListener { exitPeek(app) }
+
+        val params = WindowManager.LayoutParams(
+            size,
+            size,
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+            } else {
+                @Suppress("DEPRECATION")
+                WindowManager.LayoutParams.TYPE_PHONE
+            },
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
+            PixelFormat.TRANSLUCENT,
+        ).apply {
+            gravity = Gravity.TOP or Gravity.END
+            x = dp(6)
+            val screenH = app.resources.displayMetrics.heightPixels
+            y = (centerY - size / 2).coerceIn(dp(48), screenH - size - dp(48))
+        }
+
+        try {
+            bubble.alpha = 0f
+            bubble.scaleX = 0.6f
+            bubble.scaleY = 0.6f
+            wm.addView(bubble, params)
+            peekView = bubble
+            peekParams = params
+            isPeeking = true
+            bubble.animate()
+                .alpha(1f)
+                .scaleX(1f)
+                .scaleY(1f)
+                .setDuration(220L)
+                .setInterpolator(OvershootInterpolator(1.15f))
+                .start()
+            schedulePeekDismiss(app, 60_000L)
+        } catch (_: Throwable) {
+            peekView = null
+            peekParams = null
+            isPeeking = false
+        }
+    }
+
+    private fun peekAmountText(capture: PaymentCapture): String {
+        val cents = capture.amountCents ?: return "待记"
+        val refund = capture.subType == LocalBillType.SUBTYPE_REFUND || capture.needsRefundLink
+        val income = capture.billType == LocalBillType.TYPE_INCOME
+        val prefix = if (income || refund) "+" else "-"
+        return String.format(Locale.CHINA, "%s¥%.2f", prefix, cents / 100.0)
+    }
+
+    private fun updatePeekBadge(s: BubbleSession) {
+        val badge = peekView?.findViewWithTag<TextView>("peek_badge") ?: return
+        updatePeekBadge(s, badge)
+    }
+
+    private fun updatePeekBadge(s: BubbleSession, badge: TextView) {
+        if (s.pendingCount > 1) {
+            badge.text = if (s.pendingCount > 9) "9+" else s.pendingCount.toString()
+            badge.visibility = View.VISIBLE
+        } else {
+            badge.visibility = View.GONE
+        }
+    }
+
+    /** 点小圈：展开回完整卡。 */
+    private fun exitPeek(app: Context) {
+        val bubble = peekView ?: return
+        val wm = app.getSystemService(Context.WINDOW_SERVICE) as? WindowManager ?: return
+        val s = session ?: return
+        val root = s.root
+        val params = currentParams ?: return
+        cancelPeekDismiss()
+        peekView = null
+        peekParams = null
+        isPeeking = false
+        runCatching { wm.removeViewImmediate(bubble) }
+        if (currentView != null) return
+
+        root.animate().cancel()
+        root.alpha = 0f
+        root.scaleX = 0.12f
+        root.scaleY = 0.12f
+        try {
+            wm.addView(root, params)
+            currentView = root
+            root.post {
+                if (currentView !== root) return@post
+                root.pivotX = root.width.toFloat()
+                root.pivotY = root.height / 2f
+                root.animate()
+                    .alpha(1f)
+                    .scaleX(1f)
+                    .scaleY(1f)
+                    .setDuration(240L)
+                    .setInterpolator(DecelerateInterpolator())
+                    .start()
+            }
+            scheduleAutoPeek(app, 6_000L)
+        } catch (_: Throwable) {
+            currentView = null
+        }
+    }
+
+    /** 敲击唤出记账悬浮窗时：小圈淡出，只留悬浮窗。 */
+    fun fadePeekOut(context: Context, notifyDismissed: Boolean = false) {
+        val bubble = peekView ?: return
+        val wm = context.applicationContext.getSystemService(Context.WINDOW_SERVICE) as? WindowManager
+        cancelPeekDismiss()
+        peekView = null
+        peekParams = null
+        isPeeking = false
+        bubble.animate().cancel()
+        bubble.animate()
+            .alpha(0f)
+            .scaleX(0.7f)
+            .scaleY(0.7f)
+            .setDuration(180L)
+            .withEndAction {
+                runCatching { wm?.removeViewImmediate(bubble) }
+                if (notifyDismissed) {
+                    session = null
+                    onDismissed?.invoke()
+                }
+            }
+            .start()
+    }
+
     private fun scheduleAutoDismiss(app: Context, delayMs: Long) {
         cancelAutoDismiss()
         val runnable = Runnable { dismissImmediate(app) }
@@ -986,14 +1304,21 @@ object CaptureBubbleManager {
 
     fun dismissImmediate(context: Context, notifyDismissed: Boolean = true) {
         cancelAutoDismiss()
+        cancelPeekDismiss()
+        val wm = context.applicationContext.getSystemService(Context.WINDOW_SERVICE) as? WindowManager
+        val hadPeek = peekView != null
+        peekView?.let { runCatching { wm?.removeViewImmediate(it) } }
+        peekView = null
+        peekParams = null
+        isPeeking = false
         val view = currentView ?: run {
             session = null
+            if (notifyDismissed && hadPeek) onDismissed?.invoke()
             return
         }
         currentView = null
         currentParams = null
         session = null
-        val wm = context.applicationContext.getSystemService(Context.WINDOW_SERVICE) as? WindowManager
         runCatching { wm?.removeViewImmediate(view) }
         if (notifyDismissed) {
             onDismissed?.invoke()

@@ -137,6 +137,9 @@ class OverlayManager(private val ctx: Context) {
     private var pendingCaptureId: String? = null
     private var pendingRequestId: String? = null
 
+    /** 待记模式下点截图：复用截屏管线，但结果走待记的识图拆单。 */
+    private var screenCaptureForPendingSplit = false
+
     fun isShowing(): Boolean = overlayView != null
 
     /** F08: AI 面板处于 pin/小圆状态时，服务不能按 idle 退出。 */
@@ -430,12 +433,22 @@ class OverlayManager(private val ctx: Context) {
             btn.animate().scaleX(0.72f).scaleY(0.72f).setDuration(90L).withEndAction {
                 btn.animate().scaleX(1f).scaleY(1f).setDuration(140L).start()
             }.start()
-            startScreenCaptureRecognition(btn)
+            if (pendingCaptureController?.isPendingMode() == true) {
+                screenCaptureForPendingSplit = true
+                startScreenCaptureRecognition(btn)
+            } else {
+                startScreenCaptureRecognition(btn)
+            }
         }
 
         if (Prefs.isShowAiImage(ctx)) {
             btnAiImage?.visibility = View.VISIBLE
             btnAiImage?.setOnClickListener {
+                val pending = pendingCaptureController
+                if (pending?.isPendingMode() == true) {
+                    pending.startImageSplitFromPicker()
+                    return@setOnClickListener
+                }
                 overlayView?.visibility = View.INVISIBLE
                 ImagePickerActivity.onImagesPicked = { uris ->
                     ImagePickerActivity.onImagesPicked = null
@@ -741,6 +754,13 @@ class OverlayManager(private val ctx: Context) {
 
     /** 截屏成功 → toast → 扫光反馈 → 识别；未进入记账则删临时截屏。 */
     private fun beginScreenCaptureAccounting(uri: android.net.Uri) {
+        if (screenCaptureForPendingSplit) {
+            screenCaptureForPendingSplit = false
+            pendingScreenCaptureFile = screenCaptureFileFromUri(uri)
+            finishScreenCaptureFlow(restoreOverlay = true)
+            pendingCaptureController?.splitCurrentItemWithImage(uri)
+            return
+        }
         pendingScreenCaptureFile = screenCaptureFileFromUri(uri)
         Utils.toast(ctx, ctx.getString(R.string.toast_screenshot_success))
         playCaptureDoneHint {
@@ -873,6 +893,7 @@ class OverlayManager(private val ctx: Context) {
     }
 
     private fun handleScreenCaptureError(message: String) {
+        screenCaptureForPendingSplit = false
         Logger.d(ctx, "OverlayManager", "Screen capture recognition error callback: $message")
         hideScreenCaptureLoadingOverlay()
         setOverlayVisible(true)
@@ -882,6 +903,7 @@ class OverlayManager(private val ctx: Context) {
     }
 
     private fun handleScreenCaptureCancelled() {
+        screenCaptureForPendingSplit = false
         Logger.d(ctx, "OverlayManager", "Screen capture recognition cancelled")
         hideScreenCaptureLoadingOverlay()
         setOverlayVisible(true)

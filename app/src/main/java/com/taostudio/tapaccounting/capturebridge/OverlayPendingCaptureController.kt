@@ -8,6 +8,7 @@ import android.graphics.Rect
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.RippleDrawable
+import android.net.Uri
 import android.os.Build
 import android.text.Editable
 import android.text.InputType
@@ -29,10 +30,12 @@ import androidx.appcompat.view.ContextThemeWrapper
 import com.taostudio.tapaccounting.Prefs
 import com.taostudio.tapaccounting.R
 import com.taostudio.tapaccounting.Utils
+import com.taostudio.tapaccounting.capture.bridge.CaptureBridgeClient
 import com.taostudio.tapaccounting.capture.bridge.RuleLearningManager
 import com.taostudio.tapaccounting.capture.contract.CaptureSource
 import com.taostudio.tapaccounting.capture.contract.ImportItemStatus
 import com.taostudio.tapaccounting.capture.contract.LocalBillType
+import com.taostudio.tapaccounting.capture.ui.CaptureImagePickerActivity
 import com.taostudio.tapaccounting.logic.AccountingFormController
 import com.taostudio.tapaccounting.ui.dialog.OverlayDialogs
 import kotlinx.coroutines.CoroutineScope
@@ -191,6 +194,7 @@ class OverlayPendingCaptureController(
             } else {
                 applyItemToSingleForm(0)
             }
+            applyAiEntriesForMode()
         }
     }
 
@@ -262,6 +266,7 @@ class OverlayPendingCaptureController(
         setSingleFormVisible(true)
         formController.updateCaptureContext(null, null)
         formController.restoreDraft(newBillDraft)
+        applyAiEntriesForMode()
         renderContextBar()
     }
 
@@ -380,6 +385,18 @@ class OverlayPendingCaptureController(
         }
     }
 
+    /** 待记模式不需要整张账单的智能识别；只保留图片/截图的识图拆单入口。 */
+    private fun applyAiEntriesForMode() {
+        val pending = mode == FormMode.PENDING
+        formController.btnAiIcon.visibility = if (pending) View.GONE else View.VISIBLE
+        formController.btnVoice.visibility = when {
+            pending -> View.GONE
+            Prefs.isShowAiVoice(ctx) -> View.VISIBLE
+            else -> View.GONE
+        }
+        formController.layoutAiTextEntry.visibility = if (pending) View.GONE else View.VISIBLE
+    }
+
     private fun switchToNewBillMode() {
         if (isBusy || mode == FormMode.NEW_BILL) return
         formController.hideAmountKeypad()
@@ -396,6 +413,7 @@ class OverlayPendingCaptureController(
         formController.updateCaptureContext(null, null)
         formController.restoreDraft(newBillDraft)
         renderContextBar()
+        applyAiEntriesForMode()
         animateFormSwap()
     }
 
@@ -417,6 +435,7 @@ class OverlayPendingCaptureController(
         setSingleFormVisible(true)
         restorePendingDraftOrItem()
         renderContextBar()
+        applyAiEntriesForMode()
         animateFormSwap()
     }
 
@@ -1584,6 +1603,88 @@ class OverlayPendingCaptureController(
                 showSplitPreviewDialog(item, totalCents, parsedItems, fallbackCategory)
             } catch (e: Exception) {
                 Utils.toast(ctx, "拆分异常：${e.message ?: e.javaClass.simpleName}")
+            } finally {
+                btnSplitPreview?.text = "拆单预览"
+                btnSplitPreview?.isEnabled = true
+                isBusy = false
+            }
+        }
+    }
+
+    /** 当前悬浮窗是否处于待记模式（有待记数据时自动进入）。 */
+    fun isPendingMode(): Boolean = mode == FormMode.PENDING
+
+    /** 图片拆单：选择图片，把当前待记拆成多条明细。 */
+    fun startImageSplitFromPicker() {
+        if (mode != FormMode.PENDING || isBusy) return
+        if (switchSplitBill?.isChecked != true) switchSplitBill?.isChecked = true
+        CaptureImagePickerActivity.pickImage(
+            context = ctx,
+            onPicked = { uri -> splitCurrentItemWithImage(uri) },
+            onCancelled = { Utils.toast(ctx, "已取消选图，待记仍保留") },
+        )
+    }
+
+    /** 截图/选图统一入口：按图片识别明细，再走现有拆单确认面板。 */
+    fun splitCurrentItemWithImage(uri: Uri) {
+        if (mode != FormMode.PENDING || isBusy) return
+        val item = currentItem() ?: return
+        val amountStr = etAmount?.text?.toString()?.trim().orEmpty()
+        val money = amountStr.toDoubleOrNull() ?: (item.amountCents / 100.0)
+        val totalCents = (money * 100.0).roundToLong()
+        if (totalCents <= 0L) {
+            Utils.toast(ctx, "付款金额无效，无法拆分")
+            etAmount?.requestFocus()
+            return
+        }
+        val billType = item.billType ?: LocalBillType.TYPE_EXPENSE
+        if (billType != LocalBillType.TYPE_EXPENSE && billType != LocalBillType.TYPE_INCOME) {
+            Utils.toast(ctx, "转账/还款/退款不支持图片拆分")
+            return
+        }
+        if (switchSplitBill?.isChecked != true) switchSplitBill?.isChecked = true
+
+        btnSplitPreview?.text = "识别中…"
+        btnSplitPreview?.isEnabled = false
+        isBusy = true
+        scope.launch {
+            try {
+                val preview = withContext(Dispatchers.IO) {
+                    CaptureBridgeClient(ctx).previewImageSplit(
+                        captureId = item.id,
+                        totalCents = totalCents,
+                        billType = billType,
+                        imageUri = uri,
+                    )
+                }
+                if (!preview.ok) {
+                    Utils.toast(ctx, humanizeSplitError(preview.error, preview.message))
+                    return@launch
+                }
+                val parsedItems = preview.items.map {
+                    ParsedSplitItem(it.name, it.amountCents, it.categoryName, it.inferred)
+                }.toMutableList()
+                if (parsedItems.isEmpty()) {
+                    Utils.toast(ctx, "未能从图片识别出明细条目，请换一张图")
+                    return@launch
+                }
+                if (parsedItems.size == 1 && parsedItems[0].amountCents == totalCents) {
+                    switchSplitBill?.isChecked = false
+                    val single = parsedItems[0]
+                    etRemark?.setText(single.name)
+                    if (!single.categoryName.isNullOrBlank()) {
+                        formController.applyCategoryName(single.categoryName, "AI", null)
+                        item.categoryName = single.categoryName
+                    }
+                    splitItemIds.remove(item.id)
+                    Utils.toast(ctx, "识别为单笔消费，已自动转为普通记账")
+                    return@launch
+                }
+                val fallbackCategory = preview.fallbackCategoryName
+                    ?.takeUnless { it.isBlank() || it == "null" } ?: "其他"
+                showSplitPreviewDialog(item, totalCents, parsedItems, fallbackCategory)
+            } catch (e: Exception) {
+                Utils.toast(ctx, "图片拆分异常：${e.message ?: e.javaClass.simpleName}")
             } finally {
                 btnSplitPreview?.text = "拆单预览"
                 btnSplitPreview?.isEnabled = true

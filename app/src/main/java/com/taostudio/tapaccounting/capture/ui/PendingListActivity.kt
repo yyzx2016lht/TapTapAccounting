@@ -2165,7 +2165,8 @@ class PendingListActivity : Activity() {
             primaryButton?.let { btn ->
                 if (splitRequested) {
                     if (splitSubItems.isEmpty()) {
-                        btn.text = "请先添加明细"
+                        btn.text = "拆分入账 (0)"
+                        btn.isEnabled = false
                         btn.setTextColor(CaptureUi.TEXT_MUTED)
                         btn.background = CaptureUi.rippleBg(
                             fillColor = CaptureUi.BG_SUBTLE,
@@ -2174,6 +2175,7 @@ class PendingListActivity : Activity() {
                             strokeColor = CaptureUi.BORDER,
                         )
                     } else {
+                        btn.isEnabled = true
                         btn.text = "确认拆分入账 (${splitSubItems.size}笔)"
                         btn.setTextColor(Color.WHITE)
                         btn.background = CaptureUi.rippleBg(
@@ -2183,6 +2185,7 @@ class PendingListActivity : Activity() {
                         )
                     }
                 } else {
+                    btn.isEnabled = true
                     btn.text = "直接入账"
                     btn.setTextColor(Color.WHITE)
                     btn.background = CaptureUi.rippleBg(
@@ -2222,18 +2225,13 @@ class PendingListActivity : Activity() {
         card.addView(splitWorkArea)
 
         lateinit var btnAiSplit: TextView
-        btnAiSplit = CaptureUi.chip(
-            activity = this,
-            text = "📝 按备注 AI 拆单",
-            textColor = CaptureUi.BRAND_DARK,
-            bgColor = CaptureUi.BRAND_SOFT,
-            strokeColor = CaptureUi.BRAND_BORDER,
-        ) {
+
+        fun runAiSplit() {
             val draftNote = noteInput.text?.toString()?.trim().orEmpty()
             if (draftNote.isBlank()) {
                 toast("请先在备注框输入如「苹果30 雪梨40」")
                 noteInput.requestFocus()
-                return@chip
+                return
             }
             if (!splitBox.isChecked) {
                 splitBox.isChecked = true
@@ -2254,6 +2252,7 @@ class PendingListActivity : Activity() {
                         totalCents = item.amountCents ?: 0L,
                         billType = item.billType ?: LocalBillType.TYPE_EXPENSE,
                     )
+                    if (!splitRequested) return@launch
                     if (preview.ok) {
                         splitSubItems.clear()
                         val newItems = preview.items
@@ -2278,6 +2277,14 @@ class PendingListActivity : Activity() {
                 }
             }
         }
+
+        btnAiSplit = CaptureUi.chip(
+            activity = this,
+            text = "📝 按备注 AI 拆单",
+            textColor = CaptureUi.BRAND_DARK,
+            bgColor = CaptureUi.BRAND_SOFT,
+            strokeColor = CaptureUi.BRAND_BORDER,
+        ) { runAiSplit() }
         splitActionsRow.addView(
             btnAiSplit,
             LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginEnd = dp(6) },
@@ -2358,6 +2365,20 @@ class PendingListActivity : Activity() {
             btnImageSplit,
             LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginEnd = dp(6) },
         )
+        fun addEmptySplitRow() {
+            val currentSum = splitSubItems.sumOf { it.amountCents }
+            val total = item.amountCents ?: 0L
+            val rem = (total - currentSum).coerceAtLeast(0L)
+            splitSubItems.add(
+                CaptureBridgeClient.SplitItem(
+                    name = "明细 ${splitSubItems.size + 1}",
+                    amountCents = if (rem > 0L) rem else 100L,
+                    categoryName = item.categoryName,
+                )
+            )
+            renderSubItems()
+        }
+
         splitActionsRow.addView(
             CaptureUi.chip(
                 activity = this,
@@ -2365,19 +2386,7 @@ class PendingListActivity : Activity() {
                 textColor = CaptureUi.TEXT_SECONDARY,
                 bgColor = CaptureUi.BG_SUBTLE,
                 strokeColor = CaptureUi.BORDER,
-            ) {
-                val currentSum = splitSubItems.sumOf { it.amountCents }
-                val total = item.amountCents ?: 0L
-                val rem = (total - currentSum).coerceAtLeast(0L)
-                splitSubItems.add(
-                    CaptureBridgeClient.SplitItem(
-                        name = "明细 ${splitSubItems.size + 1}",
-                        amountCents = if (rem > 0L) rem else 100L,
-                        categoryName = item.categoryName,
-                    )
-                )
-                renderSubItems()
-            },
+            ) { addEmptySplitRow() },
         )
 
         // 第四行：操作栏（直接入账 / 拆分入账 / 悬浮窗改 / 不计）
@@ -2390,7 +2399,7 @@ class PendingListActivity : Activity() {
         val btnPrimary = CaptureUi.button(
             activity = this,
             text = if (splitRequested) {
-                if (splitSubItems.isEmpty()) "请先添加明细" else "确认拆分入账 (${splitSubItems.size}笔)"
+                if (splitSubItems.isEmpty()) "拆分入账 (0)" else "确认拆分入账 (${splitSubItems.size}笔)"
             } else {
                 "直接入账"
             },
@@ -2450,6 +2459,7 @@ class PendingListActivity : Activity() {
             }
         }
         primaryButton = btnPrimary
+        btnPrimary.isEnabled = !isInitialEmptySplit
 
         btnQuickRecord = CaptureUi.button(
             activity = this,
@@ -2489,6 +2499,15 @@ class PendingListActivity : Activity() {
                         CaptureApp.from(this@PendingListActivity).repository
                             .updateSplitRequested(item.id, checked)
                     }
+                }
+            }
+            // 勾选即进入拆分：有备注自动跑一次 AI 拆单，没备注直接给一条可编辑明细。
+            if (checked && splitSubItems.isEmpty()) {
+                val draftNote = noteInput.text?.toString()?.trim().orEmpty()
+                if (draftNote.isBlank()) {
+                    addEmptySplitRow()
+                } else {
+                    runAiSplit()
                 }
             }
         }

@@ -65,6 +65,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import com.taostudio.tapaccounting.data.local.AppDatabase
 import com.taostudio.tapaccounting.data.local.entity.Bill
+import com.taostudio.tapaccounting.logic.RuleCorrectionCoordinator
 import com.taostudio.tapaccounting.ui.common.StatusBarStyle
 import com.taostudio.tapaccounting.data.local.entity.ChatMessage
 import com.taostudio.tapaccounting.data.local.entity.AccountingRule
@@ -76,7 +77,6 @@ import com.taostudio.tapaccounting.ui.main.home.CalendarActivity
 import com.taostudio.tapaccounting.logic.BillMutationService
 import com.taostudio.tapaccounting.logic.CurrencyManager
 import com.taostudio.tapaccounting.logic.RuleDialogHelper
-import com.taostudio.tapaccounting.logic.RuleLearnPromptHelper
 import com.taostudio.tapaccounting.ui.dialog.OverlayDialogs
 import java.io.File
 import java.io.FileOutputStream
@@ -1815,22 +1815,15 @@ class ChatActivity : AppCompatActivity() {
         originalBill: Bill,
         updatedBill: Bill
     ) {
-        if (originalBill.categoryName == updatedBill.categoryName) return
-        val referenceText = updatedBill.remark.ifBlank { originalBill.remark }.trim()
-        if (referenceText.isBlank()) return
-
-        RuleLearnPromptHelper.show(
+        // 分类或备注变化都走统一修正协调器；没有 provenance 时仍可按备注新建规则。
+        RuleCorrectionCoordinator.onUserEditedBill(
             ctx = this,
-            model = RuleLearnPromptHelper.PromptModel(
-                referenceText = referenceText,
-                beforeType = originalBill.type,
-                afterType = updatedBill.type,
-                beforeCategory = originalBill.categoryName,
-                afterCategory = updatedBill.categoryName
-            ),
-            isOverlay = false,
-            onContinue = { openChatRuleEditor(referenceText, updatedBill) },
-            onDismiss = {}
+            billId = updatedBill.id,
+            oldCategory = originalBill.categoryName,
+            newCategory = updatedBill.categoryName,
+            oldRemark = originalBill.remark,
+            newRemark = updatedBill.remark,
+            onFinished = {},
         )
     }
 

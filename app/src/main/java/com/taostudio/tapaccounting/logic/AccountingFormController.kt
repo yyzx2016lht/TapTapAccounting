@@ -2513,6 +2513,7 @@ class AccountingFormController(
                         val acc1ToSuggest = if (changedType != null) (changedAcc1 ?: accountName1) else null
 
                         val suggestion = RuleCreateSuggestion(
+                            billId = rBill.id,
                             originalText = originalText,
                             beforeType = lastAiSuggestType,
                             beforeCategory = lastAiSuggestCategory?.takeIf { it.isNotBlank() },
@@ -2682,6 +2683,7 @@ class AccountingFormController(
     private var hasFinishedSaveFlow = false
 
     private data class RuleCreateSuggestion(
+        val billId: Long,
         val originalText: String,
         val beforeType: Int?,
         val beforeCategory: String?,
@@ -2693,33 +2695,20 @@ class AccountingFormController(
 
     private fun handleRulePromptAfterBookkeeping(suggestion: RuleCreateSuggestion) {
         val safeContext = ctx
-        val isOverlayContext = safeContext !is Activity
         if (safeContext is Activity && safeContext.isFinishing) {
             finishSaveFlow()
             return
         }
 
-        RuleLearnPromptHelper.show(
+        // 主记账 AI 纠错也走统一修正协调器；没有 provenance 时会按备注创建新规则。
+        RuleCorrectionCoordinator.onUserCorrectCategory(
             ctx = safeContext,
-            model = RuleLearnPromptHelper.PromptModel(
-                referenceText = suggestion.originalText,
-                beforeType = suggestion.beforeType,
-                afterType = suggestion.finalType,
-                beforeCategory = suggestion.beforeCategory,
-                afterCategory = suggestion.finalCategory
-            ),
-            isOverlay = isOverlayContext,
-            onContinue = {
-                showCreateRuleDialog(
-                    suggestion.originalText,
-                    suggestion.finalType,
-                    suggestion.finalCategory,
-                    suggestion.finalAcc1,
-                    suggestion.finalAcc2,
-                    finishOnDone = true
-                )
-            },
-            onDismiss = { finishSaveFlow() }
+            billId = suggestion.billId,
+            oldCategory = suggestion.beforeCategory,
+            newCategory = suggestion.finalCategory,
+            note = suggestion.originalText,
+            merchant = null,
+            onFinished = { finishSaveFlow() }
         )
     }
 
@@ -2921,36 +2910,8 @@ class AccountingFormController(
         if (leaf == "其他" || leaf == "差额调整") return
 
         val entry = RuleLearningManager.RuleLearnEntry(cleanNote, cleanCategory, type)
-        val dialog = AlertDialog.Builder(ContextThemeWrapper(ctx, R.style.Theme_TapAccounting))
-            .setTitle("记住这条规则？")
-            .setMessage("以后「${cleanNote.take(30)}」自动归入「$cleanCategory」？")
-            .setPositiveButton("记住") { d, _ ->
-                d.dismiss()
-                scope.launch {
-                    runCatching { RuleLearningManager.learnEntries(ctx, listOf(entry)) }
-                }
-            }
-            .setNegativeButton("不用", null)
-            .setCancelable(true)
-            .create()
-
-        if (ctx is Activity) {
-            OverlayDialogs.showPageCenterDialog(
-                dialog = dialog,
-                ctx = ctx,
-                widthRatio = 0.88f,
-                cancelOnTouchOutside = true,
-                useSolidPanelBackground = true,
-            )
-        } else {
-            OverlayDialogs.showOverlayCenterDialog(
-                dialog = dialog,
-                ctx = ctx,
-                widthRatio = 0.88f,
-                cancelOnTouchOutside = true,
-                useSolidPanelBackground = true,
-            )
-        }
+        // 与列表/批量/气泡/拆分共用同一套 ASK 提示。
+        RuleAskCoordinator.showIfNeeded(ctx, listOf(entry))
     }
 
     private fun finishSaveFlow() {

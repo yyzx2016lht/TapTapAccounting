@@ -2510,4 +2510,15 @@
     <string name="rule_learn_update_existing">已存在同关键词规则，是否更新？</string>
     <string name="rule_learn_success">规则已保存</string>
     <string name="rule_learn_updated">规则已更新</string>
+
+    <!-- 待记保存与 AI 模式 (T03) -->
+    <string name="pending_save_hint_need_category_or_remark">写个备注，或选个分类</string>
+    <string name="btn_confirm_record">确认入账</string>
+    <string name="btn_change_category">改分类</string>
+    <string name="category_source_manual">手动</string>
+    <string name="category_source_rule">规则</string>
+    <string name="category_source_ai">AI 建议</string>
+    <string name="toast_ai_classifying">AI 智能归类中…</string>
+    <string name="toast_ai_classify_failed">AI 归类失败，请手动选择分类</string>
+    <string name="toast_ai_no_key">未配置 AI API Key，请手动选择分类</string>
 </resources>

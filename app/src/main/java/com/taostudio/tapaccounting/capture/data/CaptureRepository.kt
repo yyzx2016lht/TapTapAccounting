@@ -314,39 +314,64 @@ class CaptureRepository(private val dao: PaymentCaptureDao) {
     suspend fun updateDraft(
         context: Context,
         id: String,
-        note: String?,
-        assetName: String?,
-        categoryName: String?,
+        note: String? = null,
+        assetName: String? = null,
+        categoryName: String? = null,
         categorySource: String? = null,
         rememberAssetMapping: Boolean = false,
         rememberCategoryKeyword: String? = null,
     ): PaymentCapture? {
         val existing = dao.findById(id) ?: return null
         val now = System.currentTimeMillis()
-        val cleanNote = note?.trim()?.takeIf { it.isNotEmpty() }
+        val noteProvided = note != null
+        val cleanNote = if (noteProvided) note?.trim()?.takeIf { it.isNotEmpty() } else existing.note
         val cleanAsset = assetName?.trim()?.takeIf { it.isNotEmpty() } ?: existing.assetName
-        val explicitCategory = categoryName?.trim()?.takeIf { it.isNotEmpty() }
-        val noteChanged = cleanNote != existing.note
-        val keepManual = existing.categorySource == CategorySource.MANUAL &&
-            categorySource != null && categorySource != CategorySource.MANUAL
+        val noteChanged = noteProvided && cleanNote != existing.note
 
         val resolvedCategory: String?
         val resolvedCategorySource: String?
         val resolvedRuleId: Long?
         when {
-            keepManual || (existing.categorySource == CategorySource.MANUAL && explicitCategory == null) -> {
+            categorySource == CategorySource.MANUAL -> {
+                val trimmed = categoryName?.trim()
+                if (trimmed.isNullOrEmpty()) {
+                    resolvedCategory = null
+                    resolvedCategorySource = null
+                    resolvedRuleId = null
+                } else {
+                    resolvedCategory = trimmed
+                    resolvedCategorySource = CategorySource.MANUAL
+                    resolvedRuleId = null
+                }
+            }
+            categorySource == CategorySource.AI -> {
+                val trimmed = categoryName?.trim()
+                resolvedCategory = trimmed?.takeIf { it.isNotEmpty() }
+                resolvedCategorySource = if (resolvedCategory != null) CategorySource.AI else null
+                resolvedRuleId = null
+            }
+            categorySource == CategorySource.RULE -> {
+                val trimmed = categoryName?.trim()
+                resolvedCategory = trimmed?.takeIf { it.isNotEmpty() }
+                resolvedCategorySource = if (resolvedCategory != null) CategorySource.RULE else null
+                resolvedRuleId = existing.categoryRuleId
+            }
+            categoryName != null -> {
+                val trimmed = categoryName.trim()
+                if (trimmed.isEmpty()) {
+                    resolvedCategory = null
+                    resolvedCategorySource = null
+                    resolvedRuleId = null
+                } else {
+                    resolvedCategory = trimmed
+                    resolvedCategorySource = if (trimmed == existing.categoryName) existing.categorySource else CategorySource.MANUAL
+                    resolvedRuleId = if (resolvedCategorySource == CategorySource.RULE) existing.categoryRuleId else null
+                }
+            }
+            existing.categorySource == CategorySource.MANUAL -> {
                 resolvedCategory = existing.categoryName
                 resolvedCategorySource = CategorySource.MANUAL
                 resolvedRuleId = existing.categoryRuleId
-            }
-            explicitCategory != null -> {
-                resolvedCategory = explicitCategory
-                resolvedCategorySource = when {
-                    categorySource != null -> categorySource
-                    explicitCategory == existing.categoryName -> existing.categorySource
-                    else -> CategorySource.MANUAL
-                }
-                resolvedRuleId = if (resolvedCategorySource == CategorySource.RULE) existing.categoryRuleId else null
             }
             noteChanged -> {
                 val matched = com.taostudio.tapaccounting.capture.rules.AccountingRuleEngine.matchNote(context, cleanNote)

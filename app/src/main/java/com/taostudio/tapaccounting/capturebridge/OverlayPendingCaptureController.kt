@@ -89,6 +89,7 @@ class OverlayPendingCaptureController(
         btnModePending?.setOnClickListener { switchToPendingMode() }
         btnModeNew?.setOnClickListener { switchToNewBillMode() }
         formController.setOnRemarkChangedListener { note -> onSingleRemarkChanged(note) }
+        formController.setOnCategoryChangedListener { categoryName -> onSingleCategoryChanged(categoryName) }
         renderContextBar()
     }
 
@@ -125,6 +126,7 @@ class OverlayPendingCaptureController(
 
     fun destroy() {
         formController.setOnRemarkChangedListener(null)
+        formController.setOnCategoryChangedListener(null)
         noteSyncJobs.values.forEach { it.cancel() }
         scope.cancel()
     }
@@ -382,6 +384,35 @@ class OverlayPendingCaptureController(
         scheduleSingleNoteSync(item, note)
     }
 
+    private fun onSingleCategoryChanged(categoryName: String) {
+        if (mode != FormMode.PENDING) return
+        val item = currentItem() ?: return
+        if (formController.currentCaptureId() != item.id) return
+        val cleanCat = categoryName.trim().takeIf { it.isNotEmpty() }
+        item.categoryName = cleanCat
+        item.categorySource = if (cleanCat != null) "MANUAL" else null
+        item.categoryRuleId = null
+        if (pendingDraft != null && pendingDraftItemId == item.id) {
+            val draftCategory = pendingDraft?.categoryName.orEmpty()
+            pendingDraft = pendingDraft?.copy(
+                categoryName = cleanCat.orEmpty(),
+                categorySource = if (cleanCat != null) "MANUAL" else null,
+                categoryRuleId = null,
+            )
+        }
+        scope.launch {
+            CapturePluginClient.updateCaptureDraft(
+                context = ctx,
+                captureId = item.id,
+                categoryName = cleanCat.orEmpty(),
+                categorySource = if (cleanCat != null) "MANUAL" else null,
+            )
+            if (isBatchDrawerOpen) {
+                renderBatchDrawer()
+            }
+        }
+    }
+
     private fun scheduleSingleNoteSync(
         item: CapturePluginClient.PendingCaptureItem,
         note: String,
@@ -395,13 +426,15 @@ class OverlayPendingCaptureController(
             item.note = cleanNote.takeIf { it.isNotEmpty() }
             val previousCategory = item.categoryName.orEmpty()
             val formCategory = formController.currentCategoryName()
-            if (res.categoryName != item.categoryName) {
+            if (res.categoryName != item.categoryName || res.categorySource != item.categorySource) {
                 item.categoryName = res.categoryName
+                item.categorySource = res.categorySource
+                item.categoryRuleId = res.categoryRuleId
                 if (formCategory == previousCategory &&
                     mode == FormMode.PENDING && !isBatchDrawerOpen &&
                     pendingItems.getOrNull(currentIndex)?.id == item.id
                 ) {
-                    formController.applyCategoryName(res.categoryName)
+                    formController.applyCategoryName(res.categoryName, res.categorySource, res.categoryRuleId)
                 }
             }
             if (pendingDraft != null && pendingDraftItemId == item.id) {
@@ -412,6 +445,16 @@ class OverlayPendingCaptureController(
                         res.categoryName.orEmpty()
                     } else {
                         draftCategory
+                    },
+                    categorySource = if (draftCategory == previousCategory) {
+                        res.categorySource
+                    } else {
+                        pendingDraft?.categorySource
+                    },
+                    categoryRuleId = if (draftCategory == previousCategory) {
+                        res.categoryRuleId
+                    } else {
+                        pendingDraft?.categoryRuleId
                     },
                 )
             }

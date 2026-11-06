@@ -328,6 +328,19 @@ internal object CaptureImportService {
             captureId = import.captureId,
             requestId = requestId,
         )
+        try {
+            val capture = db.paymentCaptureDao().findById(import.captureId)
+            val provSource = capture?.categorySource ?: com.taostudio.tapaccounting.data.local.entity.BillRuleProvenance.Source.MANUAL
+            db.billRuleProvenanceDao().upsert(
+                com.taostudio.tapaccounting.data.local.entity.BillRuleProvenance(
+                    billId = saved.id,
+                    captureId = import.captureId,
+                    source = provSource,
+                    ruleId = capture?.categoryRuleId,
+                    keyword = null,
+                )
+            )
+        } catch (_: Exception) {}
         return Triple(import.captureId, saved.id, ImportItemStatus.CREATED)
     }
 
@@ -886,6 +899,39 @@ internal object CaptureImportService {
             )
         }
         return JSONObject().put("ok", true).put("drafts", drafts)
+    }
+
+    /**
+     * 单条备注智能分类 helper。
+     *
+     * 成功返回规范后的分类展示名（如 "餐饮 - 午餐"）；
+     * 失败 / 超时 / 未配置 key / AI 无法判断返回 null。
+     */
+    suspend fun classifySingleNote(
+        ctx: Context,
+        captureId: String,
+        note: String,
+        billType: Int
+    ): String? {
+        val clean = note.trim()
+        if (clean.isEmpty()) return null
+        val req = JSONArray().put(
+            JSONObject()
+                .put("captureId", captureId)
+                .put("note", clean)
+                .put("billType", billType)
+        )
+        val resp = try {
+            classifyNotes(ctx, req)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            return null
+        }
+        if (!resp.optBoolean("ok", false)) return null
+        val drafts = resp.optJSONArray("drafts") ?: return null
+        val first = drafts.optJSONObject(0) ?: return null
+        return first.optString("categoryName").takeIf { it.isNotBlank() }
     }
 
     // ---------------- 工具 ----------------

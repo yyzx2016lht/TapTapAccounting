@@ -32,6 +32,8 @@ object CapturePluginClient {
         val currency: String,
         val merchant: String?,
         var categoryName: String?,
+        var categorySource: String? = null,
+        var categoryRuleId: Long? = null,
         val paymentMethodRaw: String?,
         var assetName: String?,
         val toAssetName: String?,
@@ -96,6 +98,8 @@ object CapturePluginClient {
                     currency = item.currency,
                     merchant = item.merchant?.takeIf { it.isNotBlank() },
                     categoryName = resolvedCat,
+                    categorySource = item.categorySource,
+                    categoryRuleId = item.categoryRuleId,
                     paymentMethodRaw = item.paymentMethodRaw?.takeIf { it.isNotBlank() },
                     assetName = resolvedAsset,
                     toAssetName = item.toAssetName,
@@ -113,6 +117,8 @@ object CapturePluginClient {
     data class DraftUpdateResult(
         val ok: Boolean,
         val categoryName: String? = null,
+        val categorySource: String? = null,
+        val categoryRuleId: Long? = null,
         val assetName: String? = null,
         val note: String? = null,
     )
@@ -120,7 +126,7 @@ object CapturePluginClient {
     suspend fun updateCaptureDraft(
         context: Context,
         captureId: String,
-        note: String?,
+        note: String? = null,
         assetName: String? = null,
         categoryName: String? = null,
         categorySource: String? = null,
@@ -151,6 +157,8 @@ object CapturePluginClient {
         DraftUpdateResult(
             ok = true,
             categoryName = resolvedCat,
+            categorySource = updated.categorySource,
+            categoryRuleId = updated.categoryRuleId,
             assetName = updated.assetName,
             note = updated.note,
         )
@@ -184,6 +192,8 @@ object CapturePluginClient {
             item.displayAsset()?.let { put("asset_name", it) }
             item.toAssetName?.let { put("to_asset_name", it) }
             item.categoryName?.let { put("category_name", it) }
+            item.categorySource?.let { put("category_source", it) }
+            item.categoryRuleId?.let { put("category_rule_id", it) }
             put("time", timeFmt.format(Date(item.paidAt)))
             val remark = item.note?.takeIf { it.isNotBlank() }
                 ?: item.merchant?.takeIf { it.isNotBlank() }

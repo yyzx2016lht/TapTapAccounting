@@ -159,50 +159,58 @@ internal object CaptureIngestCoordinator {
     }
 
     private fun maybeNotify(app: Context, pendingItems: List<PaymentCapture>) {
-        when (CapturePrefs.getPromptMode(app)) {
-            CapturePrefs.MODE_SILENT -> Unit
+        val bubbleEnabled = CapturePrefs.isBubbleEnabled(app)
+        val notifEnabled = CapturePrefs.isNotificationEnabled(app)
+        if (!bubbleEnabled && !notifEnabled) {
+            return
+        }
 
-            CapturePrefs.MODE_BUBBLE -> {
-                val latest = pendingItems.firstOrNull()
-                if (latest == null ||
-                    !com.taostudio.tapaccounting.capture.notify.CaptureBubbleManager
-                        .canDrawOverlays(app)
-                ) {
+        if (notifEnabled) {
+            CaptureNotifier.refreshWithItems(app, pendingItems)
+        }
+
+        if (bubbleEnabled) {
+            val latest = pendingItems.firstOrNull()
+            if (latest == null ||
+                !com.taostudio.tapaccounting.capture.notify.CaptureBubbleManager
+                    .canDrawOverlays(app)
+            ) {
+                if (!notifEnabled) {
                     CaptureNotifier.refreshWithItems(app, pendingItems)
-                    return
                 }
-                // 屏幕上已经有气泡：只更新笔数，不再弹第二个。
-                if (com.taostudio.tapaccounting.capture.notify.CaptureBubbleManager.isShowing()) {
-                    com.taostudio.tapaccounting.capture.notify.CaptureBubbleManager
-                        .updatePendingCount(pendingItems.size)
-                    return
+                return
+            }
+            // 屏幕上已经有气泡：只更新笔数，不再弹第二个。
+            if (com.taostudio.tapaccounting.capture.notify.CaptureBubbleManager.isShowing()) {
+                com.taostudio.tapaccounting.capture.notify.CaptureBubbleManager
+                    .updatePendingCount(pendingItems.size)
+                return
+            }
+            // 同一笔支付可能连续到达 WCDB/AppMessage/到账通知多条事件；
+            // 450ms 内只保留最后一次，避免一个动作连弹多个气泡。
+            bubbleJob?.cancel()
+            bubbleJob = bgScope.launch {
+                delay(450L)
+                val intent = android.content.Intent(
+                    app,
+                    com.taostudio.tapaccounting.OverlayService::class.java,
+                ).apply {
+                    action = com.taostudio.tapaccounting.OverlayService.ACTION_SHOW_CAPTURE_BUBBLE
+                    putExtra(
+                        com.taostudio.tapaccounting.OverlayService.EXTRA_CAPTURE_ID,
+                        latest.id,
+                    )
                 }
-                // 同一笔支付可能连续到达 WCDB/AppMessage/到账通知多条事件；
-                // 450ms 内只保留最后一次，避免一个动作连弹多个气泡。
-                bubbleJob?.cancel()
-                bubbleJob = bgScope.launch {
-                    delay(450L)
-                    val intent = android.content.Intent(
-                        app,
-                        com.taostudio.tapaccounting.OverlayService::class.java,
-                    ).apply {
-                        action = com.taostudio.tapaccounting.OverlayService.ACTION_SHOW_CAPTURE_BUBBLE
-                        putExtra(
-                            com.taostudio.tapaccounting.OverlayService.EXTRA_CAPTURE_ID,
-                            latest.id,
-                        )
-                    }
-                    // 后台起 FGS 可能被 ROM 拒绝；失败时至少保留通知，不静默丢提醒。
-                    runCatching {
-                        com.taostudio.tapaccounting.OverlayService.startCompat(app, intent)
-                    }.onFailure {
-                        Log.w(TAG, "start bubble service failed: ${it.message}")
+                // 后台起 FGS 可能被 ROM 拒绝；失败时至少保留通知，不静默丢提醒。
+                runCatching {
+                    com.taostudio.tapaccounting.OverlayService.startCompat(app, intent)
+                }.onFailure {
+                    Log.w(TAG, "start bubble service failed: ${it.message}")
+                    if (!notifEnabled) {
                         CaptureNotifier.refreshWithItems(app, pendingItems)
                     }
                 }
             }
-
-            else -> CaptureNotifier.refreshWithItems(app, pendingItems)
         }
     }
 

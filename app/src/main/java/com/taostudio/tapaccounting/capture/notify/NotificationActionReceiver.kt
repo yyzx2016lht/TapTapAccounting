@@ -50,6 +50,7 @@ class NotificationActionReceiver : BroadcastReceiver() {
                     }
 
                     ACTION_IGNORE_CAPTURE -> {
+                        CaptureNotifier.cancelItem(ctx, captureId)
                         withContext(Dispatchers.IO) {
                             repo.updateStatus(captureId, CaptureStatus.IGNORED)
                         }

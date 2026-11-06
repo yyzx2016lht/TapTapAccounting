@@ -483,6 +483,49 @@
                 android:textColor="#333333" />
         </LinearLayout>
 
+        <LinearLayout
+            android:id="@+id/layout_split_toggle_row"
+            android:layout_width="match_parent"
+            android:layout_height="36dp"
+            android:layout_marginTop="6dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:visibility="gone">
+
+            <androidx.appcompat.widget.SwitchCompat
+                android:id="@+id/switch_split_bill"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="拆分记账"
+                android:textColor="#334155"
+                android:textSize="13sp" />
+
+            <TextView
+                android:id="@+id/tv_split_hint"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:layout_weight="1"
+                android:text="按备注拆为多条明细"
+                android:textColor="#94A3B8"
+                android:textSize="11.5sp" />
+
+            <TextView
+                android:id="@+id/btn_split_preview"
+                android:layout_width="wrap_content"
+                android:layout_height="28dp"
+                android:background="@drawable/shape_tag_bg"
+                android:clickable="true"
+                android:focusable="true"
+                android:gravity="center"
+                android:paddingHorizontal="10dp"
+                android:text="拆单预览"
+                android:textColor="@color/brand_primary"
+                android:textSize="12sp"
+                android:textStyle="bold"
+                android:visibility="gone" />
+        </LinearLayout>
+
         <EditText
             android:id="@+id/et_remark"
             android:layout_width="match_parent"

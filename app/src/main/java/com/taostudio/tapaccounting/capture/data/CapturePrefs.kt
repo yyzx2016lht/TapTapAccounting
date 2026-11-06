@@ -5,6 +5,8 @@ import android.content.Context
 object CapturePrefs {
     private const val PREF_NAME = "capture_plugin_prefs"
     private const val KEY_PROMPT_MODE = "prompt_mode"
+    private const val KEY_BUBBLE_ENABLED = "alert_bubble_enabled"
+    private const val KEY_NOTIFICATION_ENABLED = "alert_notification_enabled"
     private const val KEY_ONLY_EXPENSE = "only_expense_v2"
     private const val KEY_SEEDED_DEFAULTS = "seeded_defaults_v1"
     private const val KEY_LEGACY_IMPORTED = "legacy_imported_v1"
@@ -35,12 +37,87 @@ object CapturePrefs {
         context.applicationContext.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
 
     /**
-     * P3 起主应用接管气泡：默认付款瞬间弹底部胶囊；用户可在主应用设置页改成通知/静默。
+     * 气泡提醒开关（底部轻胶囊）。
      */
-    fun getPromptMode(context: Context): String =
-        prefs(context).getString(KEY_PROMPT_MODE, MODE_BUBBLE) ?: MODE_BUBBLE
+    fun isBubbleEnabled(context: Context): Boolean {
+        val p = prefs(context)
+        if (p.contains(KEY_BUBBLE_ENABLED)) {
+            return p.getBoolean(KEY_BUBBLE_ENABLED, true)
+        }
+        val legacy = p.getString(KEY_PROMPT_MODE, null)
+        return when (legacy) {
+            MODE_SILENT, MODE_NOTIFICATION -> false
+            else -> true
+        }
+    }
+
+    fun setBubbleEnabled(context: Context, enabled: Boolean) {
+        prefs(context).edit().putBoolean(KEY_BUBBLE_ENABLED, enabled).apply()
+        syncLegacyPromptMode(context)
+    }
+
+    /**
+     * 通知栏待记开关。
+     */
+    fun isNotificationEnabled(context: Context): Boolean {
+        val p = prefs(context)
+        if (p.contains(KEY_NOTIFICATION_ENABLED)) {
+            return p.getBoolean(KEY_NOTIFICATION_ENABLED, true)
+        }
+        val legacy = p.getString(KEY_PROMPT_MODE, null)
+        return when (legacy) {
+            MODE_SILENT -> false
+            else -> true
+        }
+    }
+
+    fun setNotificationEnabled(context: Context, enabled: Boolean) {
+        prefs(context).edit().putBoolean(KEY_NOTIFICATION_ENABLED, enabled).apply()
+        syncLegacyPromptMode(context)
+    }
+
+    /**
+     * 是否完全静默（气泡与通知栏均关闭）。
+     */
+    fun isSilent(context: Context): Boolean =
+        !isBubbleEnabled(context) && !isNotificationEnabled(context)
+
+    fun setSilent(context: Context) {
+        prefs(context).edit()
+            .putBoolean(KEY_BUBBLE_ENABLED, false)
+            .putBoolean(KEY_NOTIFICATION_ENABLED, false)
+            .putString(KEY_PROMPT_MODE, MODE_SILENT)
+            .apply()
+    }
+
+    /**
+     * 兼容保留现有模式判断（如当两者皆关时等价于 MODE_SILENT；气泡开时为 MODE_BUBBLE；仅通知开时为 MODE_NOTIFICATION 等，确保其他组件读取正常）。
+     */
+    fun getPromptMode(context: Context): String {
+        val bubble = isBubbleEnabled(context)
+        val notif = isNotificationEnabled(context)
+        return when {
+            bubble -> MODE_BUBBLE
+            notif -> MODE_NOTIFICATION
+            else -> MODE_SILENT
+        }
+    }
 
     fun setPromptMode(context: Context, mode: String) {
+        val (bubble, notif) = when (mode) {
+            MODE_SILENT -> false to false
+            MODE_NOTIFICATION -> false to true
+            else -> true to true
+        }
+        prefs(context).edit()
+            .putString(KEY_PROMPT_MODE, mode)
+            .putBoolean(KEY_BUBBLE_ENABLED, bubble)
+            .putBoolean(KEY_NOTIFICATION_ENABLED, notif)
+            .apply()
+    }
+
+    private fun syncLegacyPromptMode(context: Context) {
+        val mode = getPromptMode(context)
         prefs(context).edit().putString(KEY_PROMPT_MODE, mode).apply()
     }
 

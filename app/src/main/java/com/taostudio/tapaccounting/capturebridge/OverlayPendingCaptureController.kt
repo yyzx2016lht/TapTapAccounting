@@ -1,18 +1,22 @@
 package com.taostudio.tapaccounting.capturebridge
 
+import android.app.Activity
 import android.content.Context
 import android.content.res.ColorStateList
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.RippleDrawable
+import android.os.Build
 import android.text.Editable
 import android.text.InputType
 import android.text.TextUtils
 import android.text.TextWatcher
 import android.view.Gravity
+import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
+import android.view.WindowManager
 import android.view.animation.DecelerateInterpolator
 import android.view.inputmethod.EditorInfo
 import android.widget.EditText
@@ -24,6 +28,7 @@ import androidx.appcompat.view.ContextThemeWrapper
 import com.taostudio.tapaccounting.Prefs
 import com.taostudio.tapaccounting.R
 import com.taostudio.tapaccounting.Utils
+import com.taostudio.tapaccounting.capture.bridge.RuleLearningManager
 import com.taostudio.tapaccounting.capture.contract.CaptureSource
 import com.taostudio.tapaccounting.capture.contract.ImportItemStatus
 import com.taostudio.tapaccounting.capture.contract.LocalBillType
@@ -41,6 +46,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.util.Locale
 import java.util.UUID
+import kotlin.math.roundToLong
 
 /**
  * 敲敲记账悬浮窗内的「待记无感联动控制器」：
@@ -68,6 +74,22 @@ class OverlayPendingCaptureController(
     private val btnModePending: TextView? = rootFloatingView.findViewById(R.id.btn_capture_mode_pending)
     private val btnModeNew: TextView? = rootFloatingView.findViewById(R.id.btn_capture_mode_new)
 
+    private val splitToggleRow: View? = rootFloatingView.findViewById(R.id.layout_split_toggle_row)
+    private val switchSplitBill: androidx.appcompat.widget.SwitchCompat? = rootFloatingView.findViewById(R.id.switch_split_bill)
+    private val tvSplitHint: TextView? = rootFloatingView.findViewById(R.id.tv_split_hint)
+    private val btnSplitPreview: TextView? = rootFloatingView.findViewById(R.id.btn_split_preview)
+    private val tvCategory: TextView? = rootFloatingView.findViewById(R.id.tv_category)
+    private val layoutCategory: View? = rootFloatingView.findViewById(R.id.layout_category)
+    private val tvCategorySourceBadge: View? = rootFloatingView.findViewById(R.id.tv_category_source_badge)
+    private val etRemark: EditText? = rootFloatingView.findViewById(R.id.et_remark)
+    private val etAmount: EditText? = rootFloatingView.findViewById(R.id.et_amount)
+    private val btnSave: TextView? = rootFloatingView.findViewById(R.id.btn_save)
+    private val tvSaveDisabledHint: TextView? = rootFloatingView.findViewById(R.id.tv_save_disabled_hint)
+
+    private var isSplitMode: Boolean = false
+    private var previousCategoryText: String? = null
+    private val splitItemIds = mutableSetOf<String>()
+
     private enum class FormMode { PENDING, NEW_BILL }
 
     private var mode: FormMode = FormMode.NEW_BILL
@@ -90,6 +112,36 @@ class OverlayPendingCaptureController(
         btnModeNew?.setOnClickListener { switchToNewBillMode() }
         formController.setOnRemarkChangedListener { note -> onSingleRemarkChanged(note) }
         formController.setOnCategoryChangedListener { categoryName -> onSingleCategoryChanged(categoryName) }
+
+        switchSplitBill?.setOnCheckedChangeListener { _, isChecked ->
+            onSplitToggleChanged(isChecked)
+        }
+        btnSplitPreview?.setOnClickListener {
+            triggerSplitPreview()
+        }
+        layoutCategory?.setOnTouchListener { _, event ->
+            if (isSplitMode && event.action == MotionEvent.ACTION_UP) {
+                Utils.toast(ctx, "已开启拆分记账，分类将在拆单预览中逐条设置")
+                val note = etRemark?.text?.toString()?.trim().orEmpty()
+                if (note.isNotBlank()) {
+                    triggerSplitPreview()
+                } else {
+                    etRemark?.requestFocus()
+                }
+                true
+            } else {
+                false
+            }
+        }
+        btnSave?.setOnTouchListener { _, event ->
+            if (isSplitMode && event.action == MotionEvent.ACTION_UP) {
+                triggerSplitPreview()
+                true
+            } else {
+                false
+            }
+        }
+
         renderContextBar()
     }
 
@@ -98,8 +150,16 @@ class OverlayPendingCaptureController(
      * @param hasExplicitPrefill 调用方已经传了特定 prefill（比如从插件点“悬浮窗细改”跳过来），此时不再重复拉取覆盖。
      * @param startInBatchMode 是否直接展开多笔批量速清面板。
      */
-    fun loadIfNeeded(hasExplicitPrefill: Boolean, startInBatchMode: Boolean = false) {
-        if (hasExplicitPrefill) return
+    fun loadIfNeeded(hasExplicitPrefill: Boolean, startInBatchMode: Boolean = false, splitRequested: Boolean = false) {
+        if (hasExplicitPrefill) {
+            if (splitRequested && switchSplitBill != null) {
+                val cid = formController.currentCaptureId()
+                if (cid != null) splitItemIds.add(cid)
+                splitToggleRow?.visibility = View.VISIBLE
+                switchSplitBill.isChecked = true
+            }
+            return
+        }
         if (!CapturePluginClient.isPluginInstalled(ctx)) return
 
         scope.launch {
@@ -127,6 +187,8 @@ class OverlayPendingCaptureController(
     fun destroy() {
         formController.setOnRemarkChangedListener(null)
         formController.setOnCategoryChangedListener(null)
+        layoutCategory?.setOnTouchListener(null)
+        btnSave?.setOnTouchListener(null)
         noteSyncJobs.values.forEach { it.cancel() }
         scope.cancel()
     }
@@ -151,6 +213,22 @@ class OverlayPendingCaptureController(
         val prefill = CapturePluginClient.toPrefillJson(item)
         formController.updateCaptureContext(item.id, UUID.randomUUID().toString())
         formController.fillDataToUi(prefill, showToast = false, forceMultiMode = false)
+
+        val canSplit = (item.billType == LocalBillType.TYPE_EXPENSE || item.billType == LocalBillType.TYPE_INCOME)
+        if (canSplit) {
+            splitToggleRow?.visibility = View.VISIBLE
+            val isSplit = item.id in splitItemIds
+            switchSplitBill?.isChecked = isSplit
+            if (isSplit) {
+                onSplitToggleChanged(true)
+            }
+        } else {
+            splitToggleRow?.visibility = View.GONE
+            switchSplitBill?.isChecked = false
+            if (isSplitMode) {
+                onSplitToggleChanged(false)
+            }
+        }
         renderContextBar()
     }
 
@@ -164,6 +242,11 @@ class OverlayPendingCaptureController(
         currentIndex = 0
         noteSyncJobs.values.forEach { it.cancel() }
         noteSyncJobs.clear()
+        splitToggleRow?.visibility = View.GONE
+        if (isSplitMode) {
+            onSplitToggleChanged(false)
+            switchSplitBill?.isChecked = false
+        }
         contextContainer?.visibility = View.GONE
         hideBatchPanel()
         setSingleFormVisible(true)
@@ -293,6 +376,11 @@ class OverlayPendingCaptureController(
         snapshotPendingDraftIfNeeded()
         mode = FormMode.NEW_BILL
         isBatchDrawerOpen = false
+        splitToggleRow?.visibility = View.GONE
+        if (isSplitMode) {
+            onSplitToggleChanged(false)
+            switchSplitBill?.isChecked = false
+        }
         hideBatchPanel()
         setSingleFormVisible(true)
         formController.updateCaptureContext(null, null)
@@ -307,6 +395,14 @@ class OverlayPendingCaptureController(
         newBillDraft = formController.snapshotDraft()
         mode = FormMode.PENDING
         isBatchDrawerOpen = false
+        val current = currentItem()
+        val canSplit = current != null && (current.billType == LocalBillType.TYPE_EXPENSE || current.billType == LocalBillType.TYPE_INCOME)
+        if (canSplit) {
+            splitToggleRow?.visibility = View.VISIBLE
+            switchSplitBill?.isChecked = current?.id in splitItemIds
+        } else {
+            splitToggleRow?.visibility = View.GONE
+        }
         hideBatchPanel()
         setSingleFormVisible(true)
         restorePendingDraftOrItem()
@@ -381,6 +477,9 @@ class OverlayPendingCaptureController(
         val item = currentItem() ?: return
         // 悬浮窗被外部 prefill 复用时，表单已不属于当前待记，不能把备注写回旧 capture。
         if (formController.currentCaptureId() != item.id) return
+        if (isSplitMode) {
+            updateSplitSaveGuard()
+        }
         scheduleSingleNoteSync(item, note)
     }
 
@@ -712,6 +811,17 @@ class OverlayPendingCaptureController(
         })
 
         fun styleCatBadge(tv: TextView, cat: String?) {
+            if (item.id in splitItemIds) {
+                tv.text = "🔀 逐条分类"
+                tv.setTextColor(Color.parseColor("#2563EB"))
+                tv.background = rippleBg(
+                    fillColor = Color.parseColor("#EFF6FF"),
+                    radiusPx = dp(7),
+                    strokeWidthPx = dp(1),
+                    strokeColor = Color.parseColor("#BFDBFE"),
+                )
+                return
+            }
             val hasCat = !cat.isNullOrBlank()
             tv.text = if (hasCat) "🏷️ $cat" else "待归类"
             tv.setTextColor(Color.parseColor(if (hasCat) "#059669" else "#D97706"))
@@ -750,6 +860,22 @@ class OverlayPendingCaptureController(
                 marginEnd = dp(4)
             }
         )
+
+        if (item.billType == LocalBillType.TYPE_EXPENSE || item.billType == LocalBillType.TYPE_INCOME) {
+            midLine.addView(
+                smallChipButton(
+                    text = "拆分",
+                    textColor = ctx.getColor(R.color.brand_primary_dark),
+                    bgColor = ctx.getColor(R.color.brand_primary_soft),
+                ) {
+                    editItemFromBatch(index)
+                    switchSplitBill?.isChecked = true
+                },
+                LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                    marginEnd = dp(4)
+                }
+            )
+        }
 
         midLine.addView(
             smallChipButton(
@@ -1181,5 +1307,531 @@ class OverlayPendingCaptureController(
         setPadding(dp(9), dp(5), dp(9), dp(5))
         background = rippleBg(bgColor, dp(8))
         setOnClickListener { onClick() }
+    }
+
+    // ════════════════════════════════════════════════════════
+    //  拆分记账：状态联动、AI 拆解预览与确认入账
+    // ════════════════════════════════════════════════════════
+
+    data class ParsedSplitItem(
+        var name: String,
+        var amountCents: Long,
+        var categoryName: String?,
+        var inferred: Boolean = false,
+    )
+
+    private fun onSplitToggleChanged(isChecked: Boolean) {
+        isSplitMode = isChecked
+        val item = currentItem() ?: return
+        if (isChecked) {
+            splitItemIds.add(item.id)
+        } else {
+            splitItemIds.remove(item.id)
+        }
+
+        if (isChecked) {
+            btnSplitPreview?.visibility = View.VISIBLE
+            btnSave?.text = "拆分记账"
+            previousCategoryText = tvCategory?.text?.toString()
+            tvCategory?.text = "逐条分类"
+            tvCategorySourceBadge?.visibility = View.GONE
+            etRemark?.hint = "必填：输入明细，如「可乐 3 元，西瓜 15 元」"
+            updateSplitSaveGuard()
+        } else {
+            btnSplitPreview?.visibility = View.GONE
+            btnSave?.text = ctx.getString(R.string.save_and_record)
+            val restoredCat = item.categoryName?.takeIf { it.isNotBlank() }
+                ?: previousCategoryText?.takeIf { it.isNotBlank() && it != "逐条分类" }
+                ?: ctx.getString(R.string.select_category)
+            tvCategory?.text = restoredCat
+            formController.applyCategoryName(
+                categoryName = item.categoryName.orEmpty(),
+                source = item.categorySource,
+                ruleId = item.categoryRuleId,
+            )
+            etRemark?.hint = ctx.getString(R.string.hint_remark)
+            formController.updateSaveButtonState()
+        }
+    }
+
+    private fun updateSplitSaveGuard() {
+        if (!isSplitMode) return
+        val note = etRemark?.text?.toString()?.trim().orEmpty()
+        if (note.isEmpty()) {
+            btnSave?.alpha = 0.45f
+            tvSaveDisabledHint?.visibility = View.VISIBLE
+            tvSaveDisabledHint?.text = "开启拆分需填写明细备注"
+        } else {
+            btnSave?.alpha = 1.0f
+            tvSaveDisabledHint?.visibility = View.GONE
+        }
+    }
+
+    private fun triggerSplitPreview() {
+        if (isBusy) return
+        val item = currentItem() ?: return
+        val amountStr = etAmount?.text?.toString()?.trim().orEmpty()
+        val money = amountStr.toDoubleOrNull() ?: (item.amountCents / 100.0)
+        val totalCents = (money * 100.0).roundToLong()
+        if (totalCents <= 0L) {
+            Utils.toast(ctx, "付款金额无效，无法拆分")
+            etAmount?.requestFocus()
+            return
+        }
+        val note = etRemark?.text?.toString()?.trim().orEmpty()
+        if (note.isEmpty()) {
+            Utils.toast(ctx, "备注为必填，请输入待拆分的明细或账单内容")
+            etRemark?.requestFocus()
+            return
+        }
+        val billType = item.billType ?: LocalBillType.TYPE_EXPENSE
+        if (billType != LocalBillType.TYPE_EXPENSE && billType != LocalBillType.TYPE_INCOME) {
+            Utils.toast(ctx, "转账/还款/退款不支持文字拆分")
+            return
+        }
+
+        btnSplitPreview?.text = "拆分中…"
+        btnSplitPreview?.isEnabled = false
+        isBusy = true
+        scope.launch {
+            try {
+                val payload = JSONObject().apply {
+                    put("captureId", item.id)
+                    put("note", note)
+                    put("totalCents", totalCents)
+                    put("billType", billType)
+                }
+                val previewJson = withContext(Dispatchers.IO) {
+                    CaptureImportService.previewSplit(ctx, payload)
+                }
+                if (!previewJson.optBoolean("ok", false)) {
+                    val err = previewJson.optString("error", "split_failed")
+                    val msg = previewJson.optString("message", "AI 拆分失败，请改备注")
+                    Utils.toast(ctx, humanizeSplitError(err, msg))
+                    return@launch
+                }
+
+                val itemsArr = previewJson.optJSONArray("items") ?: JSONArray()
+                val parsedItems = mutableListOf<ParsedSplitItem>()
+                for (i in 0 until itemsArr.length()) {
+                    val obj = itemsArr.optJSONObject(i) ?: continue
+                    val name = obj.optString("name", "").trim()
+                    val cents = obj.optLong("amountCents", 0L)
+                    val cat = obj.optString("categoryName", "").trim().takeIf { it.isNotEmpty() }
+                    val inferred = obj.optBoolean("inferred", false)
+                    if (name.isNotEmpty()) {
+                        parsedItems.add(ParsedSplitItem(name, cents, cat, inferred))
+                    }
+                }
+
+                if (parsedItems.isEmpty()) {
+                    Utils.toast(ctx, "未能从备注中识别出明细条目，请改备注")
+                    return@launch
+                }
+
+                // 若拆出只有 1 条且金额相等则平滑降级为单笔
+                if (parsedItems.size == 1 && parsedItems[0].amountCents == totalCents) {
+                    switchSplitBill?.isChecked = false
+                    val single = parsedItems[0]
+                    etRemark?.setText(single.name)
+                    if (!single.categoryName.isNullOrBlank()) {
+                        formController.applyCategoryName(single.categoryName, "AI", null)
+                        item.categoryName = single.categoryName
+                    }
+                    splitItemIds.remove(item.id)
+                    Utils.toast(ctx, "识别为单笔消费，已自动转为普通记账")
+                    return@launch
+                }
+
+                val fallbackCategory = previewJson.optString("fallbackCategoryName", "其他")
+                    .takeUnless { it.isBlank() || it == "null" } ?: "其他"
+
+                showSplitPreviewDialog(item, totalCents, parsedItems, fallbackCategory)
+            } catch (e: Exception) {
+                Utils.toast(ctx, "拆分异常：${e.message ?: e.javaClass.simpleName}")
+            } finally {
+                btnSplitPreview?.text = "拆单预览"
+                btnSplitPreview?.isEnabled = true
+                isBusy = false
+            }
+        }
+    }
+
+    private fun showSplitPreviewDialog(
+        item: CapturePluginClient.PendingCaptureItem,
+        totalCents: Long,
+        items: MutableList<ParsedSplitItem>,
+        fallbackCategory: String,
+    ) {
+        val dialogView = LinearLayout(ctx).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(16), dp(14), dp(16), dp(14))
+            background = roundedBg(Color.WHITE, dp(18), dp(1), Color.parseColor("#E2E8F0"))
+        }
+
+        val header = LinearLayout(ctx).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(0, 0, 0, dp(6))
+        }
+        val titleText = TextView(ctx).apply {
+            text = "拆分记账预览"
+            textSize = 16f
+            setTypeface(typeface, Typeface.BOLD)
+            setTextColor(Color.parseColor("#0F172A"))
+            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+        }
+        header.addView(titleText)
+        dialogView.addView(header)
+
+        val tvSub = TextView(ctx).apply {
+            text = "${item.sourceLabel()} · 应付总额: ¥${String.format(Locale.CHINA, "%.2f", totalCents / 100.0)}"
+            textSize = 12f
+            setTextColor(Color.parseColor("#64748B"))
+            setPadding(0, 0, 0, dp(8))
+        }
+        dialogView.addView(tvSub)
+
+        val maxScrollHeight = (ctx.resources.displayMetrics.heightPixels * 0.40f).toInt()
+        val scroll = object : ScrollView(ctx) {
+            override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+                val capped = MeasureSpec.makeMeasureSpec(maxScrollHeight, MeasureSpec.AT_MOST)
+                super.onMeasure(widthMeasureSpec, capped)
+            }
+        }
+        val itemsContainer = LinearLayout(ctx).apply {
+            orientation = LinearLayout.VERTICAL
+        }
+        scroll.addView(itemsContainer)
+        dialogView.addView(scroll)
+
+        val summaryText = TextView(ctx).apply {
+            textSize = 12.5f
+            setPadding(0, dp(8), 0, dp(4))
+        }
+        dialogView.addView(summaryText)
+
+        val actionsRow = LinearLayout(ctx).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(0, dp(4), 0, dp(6))
+        }
+        var btnAddAdjustment: View? = null
+
+        val footer = LinearLayout(ctx).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(0, dp(10), 0, 0)
+        }
+        val btnCancelDialog = smallChipButton("改备注", Color.parseColor("#64748B"), Color.parseColor("#F1F5F9")) {}
+        btnCancelDialog.textSize = 13f
+        btnCancelDialog.setPadding(dp(14), dp(10), dp(14), dp(10))
+
+        val btnConfirm = TextView(ctx).apply {
+            text = "确认入账"
+            textSize = 13.5f
+            setTypeface(typeface, Typeface.BOLD)
+            gravity = Gravity.CENTER
+            setTextColor(Color.WHITE)
+            setPadding(dp(16), dp(10), dp(16), dp(10))
+            background = rippleBg(ctx.getColor(R.color.brand_primary), dp(10))
+        }
+        footer.addView(btnCancelDialog, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 0.8f).apply { marginEnd = dp(8) })
+        footer.addView(btnConfirm, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1.4f))
+        dialogView.addView(footer)
+
+        lateinit var updateSummary: () -> Unit
+        lateinit var renderItems: () -> Unit
+
+        updateSummary = {
+            val curSum = items.sumOf { it.amountCents }
+            val diff = totalCents - curSum
+            btnAddAdjustment?.visibility = if (diff > 0L) View.VISIBLE else View.GONE
+            val sumYuan = curSum / 100.0
+            val totalYuan = totalCents / 100.0
+            val diffYuan = Math.abs(diff) / 100.0
+
+            when {
+                diff == 0L -> {
+                    summaryText.text = String.format(Locale.CHINA, "已拆合计 ¥%.2f / 付款 ¥%.2f (已配平)", sumYuan, totalYuan)
+                    summaryText.setTextColor(Color.parseColor("#059669"))
+                    btnConfirm.alpha = 1.0f
+                }
+                diff > 0L -> {
+                    summaryText.text = String.format(Locale.CHINA, "已拆合计 ¥%.2f / 付款 ¥%.2f (还差 ¥%.2f)", sumYuan, totalYuan, diffYuan)
+                    summaryText.setTextColor(Color.parseColor("#D97706"))
+                    btnConfirm.alpha = 0.5f
+                }
+                else -> {
+                    summaryText.text = String.format(Locale.CHINA, "已拆合计 ¥%.2f / 付款 ¥%.2f (超出 ¥%.2f)", sumYuan, totalYuan, diffYuan)
+                    summaryText.setTextColor(Color.parseColor("#DC2626"))
+                    btnConfirm.alpha = 0.5f
+                }
+            }
+            btnConfirm.text = "确认入账 (${items.size}笔)"
+        }
+
+        val btnAddRow = smallChipButton("+ 手动加一项", Color.parseColor("#334155"), Color.parseColor("#F1F5F9")) {
+            items.add(ParsedSplitItem("", 0L, fallbackCategory, false))
+            renderItems()
+        }
+        actionsRow.addView(
+            btnAddRow,
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                marginEnd = dp(8)
+            }
+        )
+        btnAddAdjustment = smallChipButton("+ 补差额调整项", ctx.getColor(R.color.brand_primary_dark), ctx.getColor(R.color.brand_primary_soft)) {
+            val curSum = items.sumOf { it.amountCents }
+            val diff = totalCents - curSum
+            if (diff > 0L) {
+                items.add(ParsedSplitItem("差额调整", diff, fallbackCategory, true))
+                renderItems()
+            }
+        }
+        actionsRow.addView(btnAddAdjustment)
+        dialogView.addView(actionsRow, dialogView.indexOfChild(summaryText) + 1)
+
+        renderItems = {
+            itemsContainer.removeAllViews()
+            items.forEachIndexed { index, subItem ->
+                val row = LinearLayout(ctx).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                    setPadding(0, dp(3), 0, dp(3))
+                }
+
+                val etName = EditText(ctx).apply {
+                    setText(subItem.name)
+                    hint = "名称"
+                    textSize = 12.5f
+                    setTextColor(Color.parseColor("#0F172A"))
+                    setHintTextColor(Color.parseColor("#94A3B8"))
+                    isSingleLine = true
+                    setPadding(dp(8), dp(6), dp(8), dp(6))
+                    background = roundedBg(Color.parseColor("#F8FAFC"), dp(6), dp(1), Color.parseColor("#CBD5E1"))
+                    addTextChangedListener(object : TextWatcher {
+                        override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+                        override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = Unit
+                        override fun afterTextChanged(s: Editable?) {
+                            if (index < items.size) {
+                                items[index].name = s?.toString()?.trim().orEmpty()
+                            }
+                        }
+                    })
+                }
+                row.addView(etName, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1.2f).apply { marginEnd = dp(6) })
+
+                val etAmt = EditText(ctx).apply {
+                    val amtYuan = subItem.amountCents / 100.0
+                    if (amtYuan > 0) setText(String.format(Locale.CHINA, "%.2f", amtYuan))
+                    hint = "金额"
+                    inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL
+                    textSize = 12.5f
+                    setTextColor(Color.parseColor("#0F172A"))
+                    setHintTextColor(Color.parseColor("#94A3B8"))
+                    isSingleLine = true
+                    setPadding(dp(8), dp(6), dp(8), dp(6))
+                    background = roundedBg(Color.parseColor("#F8FAFC"), dp(6), dp(1), Color.parseColor("#CBD5E1"))
+                    addTextChangedListener(object : TextWatcher {
+                        override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+                        override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = Unit
+                        override fun afterTextChanged(s: Editable?) {
+                            val cents = (s?.toString()?.toDoubleOrNull()?.times(100.0))?.roundToLong() ?: 0L
+                            if (index < items.size) {
+                                items[index].amountCents = cents
+                                updateSummary()
+                            }
+                        }
+                    })
+                }
+                row.addView(etAmt, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 0.9f).apply { marginEnd = dp(6) })
+
+                val hasCat = !subItem.categoryName.isNullOrBlank()
+                val catChip = smallChipButton(
+                    text = subItem.categoryName?.takeIf { it.isNotBlank() } ?: "选分类",
+                    textColor = Color.parseColor(if (hasCat) "#059669" else "#D97706"),
+                    bgColor = Color.parseColor(if (hasCat) "#ECFDF5" else "#FFFBEB"),
+                ) {
+                    OverlayDialogs.showGridCategoryPicker(
+                        ctx = ctx,
+                        currentSelectionText = subItem.categoryName.orEmpty(),
+                        type = item.billType ?: LocalBillType.TYPE_EXPENSE,
+                        allowClear = false,
+                        onCancel = {},
+                    ) { chosenCat ->
+                        if (chosenCat.isNotBlank() && index < items.size) {
+                            items[index].categoryName = chosenCat
+                            renderItems()
+                        }
+                    }
+                }
+                row.addView(catChip, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginEnd = dp(4) })
+
+                val btnDel = TextView(ctx).apply {
+                    text = "✕"
+                    textSize = 12f
+                    gravity = Gravity.CENTER
+                    setTextColor(Color.parseColor("#94A3B8"))
+                    setPadding(dp(6), dp(6), dp(6), dp(6))
+                    setOnClickListener {
+                        if (items.size > 1 && index < items.size) {
+                            items.removeAt(index)
+                            renderItems()
+                        } else {
+                            Utils.toast(ctx, "至少保留一项明细")
+                        }
+                    }
+                }
+                row.addView(btnDel)
+                itemsContainer.addView(row)
+            }
+            updateSummary()
+        }
+
+        val dialog = AlertDialog.Builder(ContextThemeWrapper(ctx, R.style.Theme_TapAccounting))
+            .setView(dialogView)
+            .create()
+
+        header.addView(
+            TextView(ctx).apply {
+                text = "✕"
+                textSize = 15f
+                setTextColor(Color.parseColor("#64748B"))
+                setPadding(dp(8), dp(4), dp(8), dp(4))
+                setOnClickListener { dialog.dismiss() }
+            }
+        )
+
+        btnCancelDialog.setOnClickListener {
+            dialog.dismiss()
+            etRemark?.requestFocus()
+        }
+
+        btnConfirm.setOnClickListener {
+            val curSum = items.sumOf { it.amountCents }
+            val diff = totalCents - curSum
+            if (diff != 0L) {
+                if (diff > 0L) {
+                    Utils.toast(ctx, "金额未配平，还差 ¥${String.format(Locale.CHINA, "%.2f", diff / 100.0)}，可点击「补差额调整项」")
+                } else {
+                    Utils.toast(ctx, "金额超出付款 ¥${String.format(Locale.CHINA, "%.2f", -diff / 100.0)}，禁止保存")
+                }
+                return@setOnClickListener
+            }
+            if (items.any { it.amountCents <= 0L }) {
+                Utils.toast(ctx, "所有明细金额必须大于 0")
+                return@setOnClickListener
+            }
+            if (items.any { it.name.isBlank() }) {
+                Utils.toast(ctx, "请补齐所有明细的名称")
+                return@setOnClickListener
+            }
+            if (items.any { it.categoryName.isNullOrBlank() }) {
+                Utils.toast(ctx, "有条目缺少分类，请先选择分类")
+                return@setOnClickListener
+            }
+
+            btnConfirm.isEnabled = false
+            btnConfirm.text = "入账中…"
+            scope.launch {
+                try {
+                    val groupItems = JSONArray()
+                    items.forEach { sub ->
+                        groupItems.put(
+                            JSONObject().apply {
+                                put("name", sub.name)
+                                put("amountCents", sub.amountCents)
+                                put("categoryName", sub.categoryName)
+                            }
+                        )
+                    }
+                    val payload = JSONObject().apply {
+                        put("captureId", item.id)
+                        put("type", item.billType ?: LocalBillType.TYPE_EXPENSE)
+                        put("subType", item.subType ?: LocalBillType.SUBTYPE_NORMAL)
+                        put("needsRefundLink", item.needsRefundLink)
+                        put("totalCents", totalCents)
+                        put("currency", item.currency.ifBlank { "CNY" })
+                        put("paidAt", item.paidAt)
+                        putOpt("assetName", item.displayAsset())
+                        putOpt("bookName", item.bookName)
+                        put("items", groupItems)
+                    }
+                    val requestId = UUID.randomUUID().toString()
+                    val importRes = withContext(Dispatchers.IO) {
+                        CaptureImportService.importBillGroup(ctx, payload, requestId)
+                    }
+                    if (!importRes.optBoolean("ok", false)) {
+                        val err = importRes.optString("error", "import_failed")
+                        val msg = importRes.optString("message", "入账失败")
+                        Utils.toast(ctx, "拆分入账失败：${humanizeSplitError(err, msg)}")
+                        btnConfirm.isEnabled = true
+                        btnConfirm.text = "确认入账 (${items.size}笔)"
+                        return@launch
+                    }
+
+                    val ruleEntries = items.map {
+                        RuleLearningManager.RuleLearnEntry(
+                            note = it.name,
+                            categoryName = it.categoryName.orEmpty(),
+                            billType = item.billType ?: LocalBillType.TYPE_EXPENSE,
+                        )
+                    }
+                    RuleLearningManager.scheduleSplit(ctx, item.id, ruleEntries)
+
+                    CapturePluginClient.markCapturesRecorded(ctx, listOf(item.id))
+                    Utils.toast(ctx, "✓ 已拆成 ${items.size} 笔入账成功")
+                    dialog.dismiss()
+
+                    pendingItems.removeAll { it.id == item.id }
+                    if (pendingItems.isEmpty()) {
+                        pendingDraft = null
+                        pendingDraftItemId = null
+                        hasPendingDraft = false
+                        clearPendingContext()
+                        onCloseOverlay(true)
+                    } else {
+                        currentIndex = currentIndex.coerceIn(0, pendingItems.lastIndex)
+                        applyItemToSingleForm(currentIndex)
+                    }
+                } catch (e: Exception) {
+                    Utils.toast(ctx, "入账异常：${e.message ?: e.javaClass.simpleName}")
+                    btnConfirm.isEnabled = true
+                    btnConfirm.text = "确认入账 (${items.size}笔)"
+                }
+            }
+        }
+
+        renderItems()
+
+        if (ctx !is Activity) {
+            dialog.window?.setType(
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
+                    WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+                else
+                    WindowManager.LayoutParams.TYPE_PHONE
+            )
+        }
+        dialog.show()
+    }
+
+    private fun humanizeSplitError(error: String?, message: String?): String {
+        val code = error?.trim().orEmpty()
+        val fallback = message?.trim().orEmpty()
+        return when {
+            code == "split_empty" -> fallback.ifEmpty { "没从备注里拆出条目，请把备注写成「苹果30 雪梨40」" }
+            code == "split_total_exceeds" -> fallback.ifEmpty { "明细合计超过付款，请改备注" }
+            code == "split_total_mismatch" -> fallback.ifEmpty { "拆分合计与付款不一致，请重新确认" }
+            code == "split_amount_missing" -> fallback.ifEmpty { "有多项缺金额，请补金额或改备注" }
+            code == "split_amount_invalid" -> fallback.ifEmpty { "有条目金额无效，请改备注" }
+            code == "split_unsupported_type" -> fallback.ifEmpty { "转账/还款/退款不支持文字拆分" }
+            code == "ai_not_configured" -> fallback.ifEmpty { "请先在敲敲记账设置中配置 AI API Key" }
+            code == "ai_timeout" -> fallback.ifEmpty { "AI 拆分超时，请重试或改备注" }
+            code == "split_ai_failed" -> fallback.ifEmpty { "AI 拆分失败，请检查 AI 设置或改备注" }
+            code == "missing_category" -> fallback.ifEmpty { "有条目缺少分类，请先选择分类" }
+            code.startsWith("category_not_found") -> fallback.ifEmpty { "分类在敲敲记账中不存在" }
+            else -> fallback.ifEmpty { code }
+        }
     }
 }

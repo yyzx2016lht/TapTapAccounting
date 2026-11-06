@@ -507,17 +507,23 @@ internal object CaptureImportService {
 
         return when (val outcome = SplitAmounts.validate(totalCents, rawItems)) {
             is SplitAmounts.Outcome.Ok -> {
+                val db = AppDatabase.getDatabase(ctx)
+                val fallbackCategory = resolveFallbackCategory(db, billType)
                 val items = JSONArray()
                 outcome.items.forEach { item ->
+                    val resolvedCat = runCatching {
+                        com.taostudio.tapaccounting.capture.parse.CaptureRuleMatcher.resolveNoteCategory(ctx, item.name)
+                    }.getOrNull()?.takeIf { it.isNotBlank() }
+                        ?: fallbackCategory
                     items.put(
                         JSONObject()
                             .put("name", item.name)
                             .put("amountCents", item.amountCents)
                             .put("inferred", item.inferred)
+                            .putOpt("categoryName", resolvedCat)
                     )
                 }
-                val db = AppDatabase.getDatabase(ctx)
-                val fallbackCategory = resolveFallbackCategory(db, billType)
+                val canDegrade = outcome.items.size == 1 && outcome.items[0].amountCents == totalCents
                 JSONObject()
                     .put("ok", true)
                     .put("items", items)
@@ -525,6 +531,7 @@ internal object CaptureImportService {
                     .put("diffCents", outcome.diffCents)
                     .put("totalCents", totalCents)
                     .put("fallbackCategoryName", fallbackCategory ?: JSONObject.NULL)
+                    .put("canDegradeToSingle", canDegrade)
             }
 
             is SplitAmounts.Outcome.Error -> errorJson(outcome.code, outcome.message)
@@ -690,15 +697,19 @@ internal object CaptureImportService {
         if (items.isEmpty()) return errorJson("split_empty", "缺少拆分条目")
 
         val sumCents = items.sumOf { it.amountCents }
-        val totalCents = payload.optLong("totalCents", sumCents)
-        if (totalCents != sumCents) {
+        val db = AppDatabase.getDatabase(ctx)
+        val capture = db.paymentCaptureDao().findById(captureId)
+        val expectedTotal = if (payload.has("totalCents")) {
+            payload.optLong("totalCents")
+        } else {
+            capture?.amountCents ?: sumCents
+        }
+        if (expectedTotal != sumCents) {
             return errorJson(
                 "split_total_mismatch",
                 "拆分合计与付款不一致，请重新确认",
             )
         }
-
-        val db = AppDatabase.getDatabase(ctx)
         val bookRows = db.bookDao().getAll()
         val books = BookAccountManager.getBookAccounts(ctx, bookRows.map { it.name })
         val defaultBook = BookAccountManager.getDefaultBook(ctx, books)
@@ -760,6 +771,17 @@ internal object CaptureImportService {
                         requestId = requestId,
                     )
                     billIds.add(saved.id)
+                    try {
+                        db.billRuleProvenanceDao().upsert(
+                            com.taostudio.tapaccounting.data.local.entity.BillRuleProvenance(
+                                billId = saved.id,
+                                captureId = captureId,
+                                source = com.taostudio.tapaccounting.data.local.entity.BillRuleProvenance.Source.AI,
+                                ruleId = null,
+                                keyword = null,
+                            )
+                        )
+                    } catch (_: Exception) {}
                 }
 
                 val inserted = db.externalImportDao().insertIgnore(
@@ -809,6 +831,21 @@ internal object CaptureImportService {
         if (!outcome.duplicate) {
             db.billDao().getBillById(outcome.billIds.firstOrNull() ?: -1L)?.let { bill ->
                 BillMutationService.notifyBillCreated(bill, captureId)
+            }
+            // 标记 splitRequested，确保排除单条规则学习
+            runCatching {
+                db.paymentCaptureDao().updateSplitRequested(captureId, true, System.currentTimeMillis())
+            }
+            // 拆分成组入账成功后，调用 RuleLearningManager.scheduleSplit 批量规则学习
+            runCatching {
+                val entries = items.map { item ->
+                    RuleLearningManager.RuleLearnEntry(
+                        note = item.name,
+                        categoryName = item.categoryName.orEmpty(),
+                        billType = type,
+                    )
+                }
+                RuleLearningManager.scheduleSplit(ctx, captureId, entries)
             }
         }
         // 拆分入账同样要把待记推进到 RECORDED，并通知收件箱刷新（悬浮窗后面可能正开着列表）。

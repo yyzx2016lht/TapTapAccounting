@@ -15,6 +15,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.CheckBox
 import android.widget.EditText
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.Switch
@@ -734,8 +735,9 @@ internal class RuleMappingViews(
         }
         scroll.addView(container)
 
-        val currentMode = CapturePrefs.getPromptMode(activity)
         val hasOverlayPerm = CaptureBubbleManager.canDrawOverlays(activity)
+        var bubbleEnabled = CapturePrefs.isBubbleEnabled(activity)
+        var notifEnabled = CapturePrefs.isNotificationEnabled(activity)
 
         val promptCard = CaptureUi.card(activity).apply {
             layoutParams = LinearLayout.LayoutParams(
@@ -750,83 +752,136 @@ internal class RuleMappingViews(
                 setTextColor(CaptureUi.TEXT_PRIMARY)
             })
             addView(TextView(activity).apply {
-                text = "选择付款成功那一刻插件如何提示你（无论选哪种，敲击手机背面都能在记账悬浮窗里看到待记）："
+                text = "选择付款成功那一刻插件如何提示你（多选组合，或选完全静默；无论选哪种，敲击手机背面都能在记账悬浮窗里看到待记）："
                 textSize = 12.5f
                 setTextColor(CaptureUi.TEXT_SECONDARY)
                 setLineSpacing(0f, 1.2f)
                 setPadding(0, dp(4), 0, dp(12))
             })
 
-            val modes = listOf(
-                Triple(
-                    CapturePrefs.MODE_BUBBLE,
+            data class OptionItem(
+                val key: String,
+                val title: String,
+                val desc: String,
+            )
+            val optionItems = listOf(
+                OptionItem(
+                    "BUBBLE",
                     "底部轻胶囊气泡",
-                    "付款后在屏幕底部浮出 4 秒轻提示，可点开顺手补一句备注",
+                    "付款后在屏幕底部浮出轻胶囊，可点开顺手补一句备注",
                 ),
-                Triple(
-                    CapturePrefs.MODE_NOTIFICATION,
-                    "仅通知栏静默汇总",
-                    "不弹悬浮气泡；下拉通知栏可直接打字补最新一笔备注",
+                OptionItem(
+                    "NOTIFICATION",
+                    "下拉通知栏待记",
+                    "通知栏展示分组待记卡片，支持每笔快捷打字补备注与不计",
                 ),
-                Triple(
-                    CapturePrefs.MODE_SILENT,
+                OptionItem(
+                    "SILENT",
                     "完全静默留底",
                     "付款时不打扰，全部攒进待记，等敲击手机背面记账时统一处理",
                 ),
             )
-            modes.forEach { (modeKey, title, desc) ->
-                val selected = currentMode == modeKey
+
+            class OptionViewHolder(
+                val card: LinearLayout,
+                val iconView: ImageView,
+                val titleView: TextView,
+                val descView: TextView,
+            )
+
+            val viewHolders = mutableMapOf<String, OptionViewHolder>()
+
+            fun updateViewsState() {
+                val silent = !bubbleEnabled && !notifEnabled
+                optionItems.forEach { item ->
+                    val isChecked = when (item.key) {
+                        "BUBBLE" -> bubbleEnabled
+                        "NOTIFICATION" -> notifEnabled
+                        "SILENT" -> silent
+                        else -> false
+                    }
+                    val holder = viewHolders[item.key] ?: return@forEach
+                    holder.card.background = CaptureUi.rippleBg(
+                        fillColor = if (isChecked) CaptureUi.BRAND_SOFT else CaptureUi.BG_SUBTLE,
+                        radiusPx = dp(12),
+                        strokeWidthPx = dp(1),
+                        strokeColor = if (isChecked) CaptureUi.BRAND else CaptureUi.BORDER,
+                    )
+                    holder.iconView.setImageDrawable(
+                        CaptureUi.tintedDrawable(
+                            activity,
+                            if (isChecked) R.drawable.ic_book_selected_check else R.drawable.ic_book_unselected_box,
+                            if (isChecked) CaptureUi.BRAND else CaptureUi.TEXT_MUTED,
+                        )
+                    )
+                    holder.titleView.setTextColor(if (isChecked) CaptureUi.BRAND_DARK else CaptureUi.TEXT_PRIMARY)
+                }
+            }
+
+            optionItems.forEach { item ->
                 val optionCard = LinearLayout(activity).apply {
                     orientation = LinearLayout.HORIZONTAL
                     gravity = Gravity.CENTER_VERTICAL
                     setPadding(dp(13), dp(11), dp(13), dp(11))
-                    background = CaptureUi.rippleBg(
-                        fillColor = if (selected) CaptureUi.BRAND_SOFT else CaptureUi.BG_SUBTLE,
-                        radiusPx = dp(12),
-                        strokeWidthPx = dp(1),
-                        strokeColor = if (selected) CaptureUi.BRAND else CaptureUi.BORDER,
-                    )
                     layoutParams = LinearLayout.LayoutParams(
                         ViewGroup.LayoutParams.MATCH_PARENT,
                         ViewGroup.LayoutParams.WRAP_CONTENT,
                     ).apply { bottomMargin = dp(8) }
-                    setOnClickListener {
-                        CapturePrefs.setPromptMode(activity, modeKey)
-                        scope.launch { CaptureNotifier.refreshAll(activity) }
-                        onDataChanged()
-                    }
                 }
-                val radioDot = CaptureUi.icon(
-                    activity,
-                    if (selected) R.drawable.ic_radio_on else R.drawable.ic_radio_off,
-                    18,
-                    if (selected) CaptureUi.BRAND else CaptureUi.TEXT_MUTED,
-                ).apply {
+                val checkIcon = ImageView(activity).apply {
                     layoutParams = LinearLayout.LayoutParams(dp(18), dp(18)).apply {
                         marginEnd = dp(10)
                     }
                 }
-                optionCard.addView(radioDot)
+                optionCard.addView(checkIcon)
 
                 val textCol = LinearLayout(activity).apply {
                     orientation = LinearLayout.VERTICAL
                     layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
                 }
-                textCol.addView(TextView(activity).apply {
-                    text = title
+                val titleTv = TextView(activity).apply {
+                    text = item.title
                     textSize = 14f
                     setTypeface(typeface, Typeface.BOLD)
-                    setTextColor(if (selected) CaptureUi.BRAND_DARK else CaptureUi.TEXT_PRIMARY)
-                })
-                textCol.addView(TextView(activity).apply {
-                    text = desc
+                }
+                val descTv = TextView(activity).apply {
+                    text = item.desc
                     textSize = 11.5f
                     setTextColor(CaptureUi.TEXT_SECONDARY)
                     setPadding(0, dp(2), 0, 0)
-                })
+                }
+                textCol.addView(titleTv)
+                textCol.addView(descTv)
                 optionCard.addView(textCol)
+
+                viewHolders[item.key] = OptionViewHolder(optionCard, checkIcon, titleTv, descTv)
+
+                optionCard.setOnClickListener {
+                    when (item.key) {
+                        "BUBBLE" -> {
+                            val newBubble = !bubbleEnabled
+                            bubbleEnabled = newBubble
+                            CapturePrefs.setBubbleEnabled(activity, newBubble)
+                        }
+                        "NOTIFICATION" -> {
+                            val newNotif = !notifEnabled
+                            notifEnabled = newNotif
+                            CapturePrefs.setNotificationEnabled(activity, newNotif)
+                        }
+                        "SILENT" -> {
+                            bubbleEnabled = false
+                            notifEnabled = false
+                            CapturePrefs.setSilent(activity)
+                        }
+                    }
+                    updateViewsState()
+                    scope.launch { CaptureNotifier.refreshAll(activity) }
+                }
+
                 addView(optionCard)
             }
+
+            updateViewsState()
 
             if (!hasOverlayPerm) {
                 addView(

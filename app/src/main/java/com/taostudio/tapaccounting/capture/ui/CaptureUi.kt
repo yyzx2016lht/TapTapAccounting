@@ -145,7 +145,7 @@ internal object CaptureUi {
         textView.compoundDrawablePadding = dp(context, 4)
     }
 
-    private fun tintedDrawable(context: Context, @DrawableRes res: Int, tint: Int): Drawable? =
+    fun tintedDrawable(context: Context, @DrawableRes res: Int, tint: Int): Drawable? =
         ContextCompat.getDrawable(context, res)?.mutate()?.apply { setTint(tint) }
 
     fun roundedBg(

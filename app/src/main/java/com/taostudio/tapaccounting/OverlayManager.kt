@@ -405,7 +405,8 @@ class OverlayManager(private val ctx: Context) {
             formController = formController!!,
             onCloseOverlay = { isSaved -> removeOverlay(isSaved) }
         ).also {
-            it.loadIfNeeded(hasExplicitPrefill = prefill != null || !captureId.isNullOrBlank())
+            val isSplit = prefill?.optBoolean("splitRequested", false) ?: false
+            it.loadIfNeeded(hasExplicitPrefill = prefill != null || !captureId.isNullOrBlank(), splitRequested = isSplit)
         }
 
         voiceHandler = VoiceInputHandler(

@@ -15,6 +15,7 @@ interface AccountingRuleEngine {
     suspend fun matchNote(context: Context, note: String?, merchant: String? = null): RuleMatch?
     suspend fun matchAiBill(context: Context, userInput: String?, remarks: String?): RuleMatch?
     suspend fun matchAllNote(context: Context, note: String?, merchant: String? = null): List<RuleMatch>
+    fun invalidateCache() {}
 
     companion object : AccountingRuleEngine by DefaultAccountingRuleEngine {
         val INSTANCE: AccountingRuleEngine get() = DefaultAccountingRuleEngine
@@ -22,6 +23,13 @@ interface AccountingRuleEngine {
 }
 
 object DefaultAccountingRuleEngine : AccountingRuleEngine {
+
+    @Volatile
+    private var cachedRules: List<AccountingRule>? = null
+
+    override fun invalidateCache() {
+        cachedRules = null
+    }
 
     override suspend fun matchNote(context: Context, note: String?, merchant: String?): RuleMatch? {
         val rules = loadRules(context)
@@ -39,7 +47,9 @@ object DefaultAccountingRuleEngine : AccountingRuleEngine {
     }
 
     private suspend fun loadRules(context: Context): List<AccountingRule> = withContext(Dispatchers.IO) {
-        AppDatabase.getDatabase(context).accountingRuleDao().listEnabled()
+        cachedRules ?: AppDatabase.getDatabase(context).accountingRuleDao().listEnabled().also {
+            cachedRules = it
+        }
     }
 
     /**

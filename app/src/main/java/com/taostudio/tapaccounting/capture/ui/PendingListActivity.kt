@@ -42,10 +42,10 @@ import com.taostudio.tapaccounting.capture.contract.LocalBillType
 import com.taostudio.tapaccounting.capture.data.AssetMappingRule
 import com.taostudio.tapaccounting.capture.data.CapturePrefs
 import com.taostudio.tapaccounting.capture.data.CaptureRepository
-import com.taostudio.tapaccounting.capture.data.CategoryRule
 import com.taostudio.tapaccounting.capture.data.CategorySource
 import com.taostudio.tapaccounting.capture.data.PaymentCapture
 import com.taostudio.tapaccounting.capture.data.RuleBundleCodec
+import com.taostudio.tapaccounting.data.local.entity.AccountingRule
 import com.taostudio.tapaccounting.BuildConfig
 import com.taostudio.tapaccounting.Prefs
 import com.taostudio.tapaccounting.R
@@ -56,6 +56,7 @@ import com.taostudio.tapaccounting.capture.notify.CaptureBubbleManager
 import com.taostudio.tapaccounting.capture.notify.CaptureNotifier
 import com.taostudio.tapaccounting.capture.parse.AutoAccountingRuleEngine
 import com.taostudio.tapaccounting.capture.parse.CaptureRuleMatcher
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -328,7 +329,7 @@ class PendingListActivity : Activity() {
                         historyCount = repository.countHistory(),
                         eventCount = app.eventRepository.count(),
                         assetRules = db.assetMappingDao().listAll(),
-                        categoryRules = db.categoryRuleDao().listAll(),
+                        accountingRules = db.accountingRuleDao().listAll(),
                         ruleBundle = RuleBundleStore.load(this@PendingListActivity),
                         accountingContext = accountingCtx,
                         bridgeAvailable = ping.ok,
@@ -350,6 +351,7 @@ class PendingListActivity : Activity() {
                 renderCurrentTab(snapshot)
                 CaptureNotifier.refreshAll(this@PendingListActivity)
             } catch (t: Throwable) {
+                if (t is CancellationException) return@launch
                 updateBridgeStatus(false, null)
                 toast("读取失败：${t.message ?: t.javaClass.simpleName}")
             }
@@ -440,7 +442,7 @@ class PendingListActivity : Activity() {
             content.removeAllViews()
             content.addView(
                 when (rulesSection) {
-                    1 -> ruleViews.buildCategoryRuleTab(snapshot.categoryRules, snapshot.accountingContext)
+                    1 -> ruleViews.buildCategoryRuleTab(snapshot.accountingRules, snapshot.accountingContext)
                     2 -> ruleViews.buildAssetMappingTab(snapshot.assetRules, snapshot.accountingContext)
                     else -> dataRuleViews.buildDataRuleTab(snapshot.ruleBundle)
                 },
@@ -1102,6 +1104,7 @@ class PendingListActivity : Activity() {
                 toast("已恢复到待记")
                 CaptureNotifier.refreshAll(this@PendingListActivity)
             } catch (t: Throwable) {
+                if (t is CancellationException) return@launch
                 toast("恢复失败：${t.message ?: t.javaClass.simpleName}")
             }
         }
@@ -2732,6 +2735,7 @@ class PendingListActivity : Activity() {
                 }
                 load()
             } catch (t: Throwable) {
+                if (t is CancellationException) return@launch
                 toast("操作失败：${t.message ?: t.javaClass.simpleName}")
             }
         }
@@ -3009,6 +3013,7 @@ class PendingListActivity : Activity() {
                 updateTabSelection()
                 load()
             } catch (t: Throwable) {
+                if (t is CancellationException) return@launch
                 toast("模拟失败：${t.message ?: t.javaClass.simpleName}")
             }
         }
@@ -3091,7 +3096,7 @@ class PendingListActivity : Activity() {
         val historyCount: Int = 0,
         val eventCount: Int = 0,
         val assetRules: List<AssetMappingRule>,
-        val categoryRules: List<CategoryRule>,
+        val accountingRules: List<AccountingRule>,
         val ruleBundle: RuleBundleCodec.Bundle,
         val accountingContext: AccountingContext?,
         val bridgeAvailable: Boolean,

@@ -1,6 +1,7 @@
 package com.taostudio.tapaccounting.capture.data
 
 import android.content.Context
+import com.taostudio.tapaccounting.capture.CaptureInboxEvents
 import com.taostudio.tapaccounting.capture.contract.CapturePayload
 import com.taostudio.tapaccounting.capture.contract.CaptureStatus
 import com.taostudio.tapaccounting.capture.contract.LocalBillType
@@ -237,8 +238,13 @@ class CaptureRepository(private val dao: PaymentCaptureDao) {
         return listPending(200, onlyExpense = true).size
     }
 
-    suspend fun updateStatus(id: String, status: String): Boolean =
-        dao.updateStatus(id, status, System.currentTimeMillis()) > 0
+    suspend fun updateStatus(id: String, status: String): Boolean {
+        val updated = dao.updateStatus(id, status, System.currentTimeMillis()) > 0
+        if (updated) {
+            CaptureInboxEvents.notifyChanged()
+        }
+        return updated
+    }
 
     suspend fun updateNote(id: String, note: String?): Boolean =
         dao.updateNote(id, note?.takeIf { it.isNotBlank() }, System.currentTimeMillis()) > 0

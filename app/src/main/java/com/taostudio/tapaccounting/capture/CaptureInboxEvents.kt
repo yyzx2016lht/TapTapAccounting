@@ -48,4 +48,28 @@ object CaptureInboxEvents {
         }
         notifyChanged()
     }
+
+    /**
+     * 待记标记为不计：把同一 captureId 的待记推进到 IGNORED 并通知收件箱重读。
+     */
+    suspend fun markIgnored(db: AppDatabase, captureId: String?) {
+        if (captureId.isNullOrBlank()) return
+        markIgnored(db, listOf(captureId))
+    }
+
+    suspend fun markIgnored(db: AppDatabase, captureIds: Collection<String>) {
+        val ids = captureIds.asSequence()
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .distinct()
+            .toList()
+        if (ids.isEmpty()) return
+        val now = System.currentTimeMillis()
+        runCatching {
+            ids.forEach { id ->
+                db.paymentCaptureDao().updateStatus(id, CaptureStatus.IGNORED, now)
+            }
+        }
+        notifyChanged()
+    }
 }

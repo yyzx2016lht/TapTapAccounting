@@ -15,6 +15,9 @@ interface AccountingRuleDao {
     @Query("SELECT * FROM accounting_rules WHERE enabled = 1 ORDER BY sort ASC, id ASC")
     suspend fun listEnabled(): List<AccountingRule>
 
+    @Query("SELECT * FROM accounting_rules WHERE source = :source ORDER BY sort ASC, id ASC")
+    suspend fun listBySource(source: String): List<AccountingRule>
+
     @Query("SELECT * FROM accounting_rules WHERE keyword = :keyword LIMIT 1")
     suspend fun findByKeyword(keyword: String): AccountingRule?
 

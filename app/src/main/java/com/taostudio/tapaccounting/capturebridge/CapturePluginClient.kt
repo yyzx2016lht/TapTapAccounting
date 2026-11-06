@@ -1,12 +1,14 @@
 package com.taostudio.tapaccounting.capturebridge
 
 import android.content.Context
+import com.taostudio.tapaccounting.capture.CaptureInboxEvents
 import com.taostudio.tapaccounting.capture.contract.CaptureContract
 import com.taostudio.tapaccounting.capture.contract.CaptureSource
 import com.taostudio.tapaccounting.capture.contract.CaptureSources
 import com.taostudio.tapaccounting.capture.contract.CaptureStatus
 import com.taostudio.tapaccounting.capture.data.CapturePrefs
 import com.taostudio.tapaccounting.capture.data.CaptureRepository
+import com.taostudio.tapaccounting.capture.notify.CaptureNotifier
 import com.taostudio.tapaccounting.data.local.AppDatabase
 import com.taostudio.tapaccounting.logic.AssetNameResolver
 import com.taostudio.tapaccounting.logic.CategoryNameResolver
@@ -166,8 +168,11 @@ object CapturePluginClient {
 
     suspend fun ignoreCapture(context: Context, captureId: String): Boolean =
         withContext(Dispatchers.IO) {
-            CaptureRepository(AppDatabase.getDatabase(context).paymentCaptureDao())
+            val ok = CaptureRepository(AppDatabase.getDatabase(context).paymentCaptureDao())
                 .updateStatus(captureId, CaptureStatus.IGNORED)
+            CaptureInboxEvents.notifyChanged()
+            CaptureNotifier.refreshAll(context)
+            ok
         }
 
     suspend fun markCapturesRecorded(context: Context, captureIds: List<String>): Boolean =

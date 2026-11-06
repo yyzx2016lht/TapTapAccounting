@@ -5,6 +5,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.widget.Toast
+import com.taostudio.tapaccounting.capture.CaptureInboxEvents
 import com.taostudio.tapaccounting.capture.contract.CaptureStatus
 import com.taostudio.tapaccounting.capture.data.CaptureRepository
 import com.taostudio.tapaccounting.capture.data.CategorySource
@@ -54,6 +55,7 @@ class NotificationActionReceiver : BroadcastReceiver() {
                         withContext(Dispatchers.IO) {
                             repo.updateStatus(captureId, CaptureStatus.IGNORED)
                         }
+                        CaptureInboxEvents.notifyChanged()
                         Toast.makeText(ctx, "已标记该笔为不计", Toast.LENGTH_SHORT).show()
                     }
                 }

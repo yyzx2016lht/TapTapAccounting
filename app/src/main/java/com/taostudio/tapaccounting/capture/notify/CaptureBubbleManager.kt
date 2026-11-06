@@ -24,6 +24,7 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import com.taostudio.tapaccounting.capture.CaptureApp
+import com.taostudio.tapaccounting.capture.CaptureInboxEvents
 import com.taostudio.tapaccounting.capture.bridge.CaptureBridgeClient
 import com.taostudio.tapaccounting.capture.bridge.CaptureNoteClassifier
 import com.taostudio.tapaccounting.capture.bridge.RuleLearningManager
@@ -723,6 +724,7 @@ object CaptureBubbleManager {
             withContext(Dispatchers.IO) {
                 repository.updateStatus(latest.id, CaptureStatus.IGNORED)
             }
+            CaptureInboxEvents.notifyChanged()
             CaptureNotifier.refreshAll(app)
             toast("已标记不计，可在待记列表底部恢复")
             dismissImmediate(app)

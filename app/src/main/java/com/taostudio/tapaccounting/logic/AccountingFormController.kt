@@ -332,8 +332,16 @@ class AccountingFormController(
     fun showCategoryPicker() {
         if (!isActivityAlive()) return
         val currentType = if (spType.selectedItemPosition == 1) Prefs.TYPE_INCOME else Prefs.TYPE_EXPENSE
-        OverlayDialogs.showGridCategoryPicker(ctx, tvCategory.text.toString(), currentType) { selectedCategory ->
-            val normalized = if (selectedCategory.isBlank()) "" else selectedCategory.replace(" > ", " - ")
+        // 已入账账单不允许清空分类；待记/新账仍可回待选。
+        val allowClear = editingBillId == null
+        OverlayDialogs.showGridCategoryPicker(
+            ctx = ctx,
+            currentSelectionText = tvCategory.text.toString(),
+            type = currentType,
+            allowClear = allowClear,
+        ) { selectedCategory ->
+            var normalized = if (selectedCategory.isBlank()) "" else selectedCategory.replace(" > ", " - ")
+            if (normalized.isBlank() && editingBillId != null) normalized = "其他"
             val source = if (normalized.isNotBlank()) BillRuleProvenance.Source.MANUAL else null
             applyCategoryName(normalized, source, null)
             if (!suppressCategoryCallback) {

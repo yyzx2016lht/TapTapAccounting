@@ -644,7 +644,12 @@ class BillDetailActivity : AppCompatActivity() {
             return
         }
         val pickerType = if (currentUiType == Bill.TYPE_INCOME) Prefs.TYPE_INCOME else Prefs.TYPE_EXPENSE
-        OverlayDialogs.showGridCategoryPicker(this, currentCategoryName, pickerType) { selectedCategory ->
+        OverlayDialogs.showGridCategoryPicker(
+            ctx = this,
+            currentSelectionText = currentCategoryName,
+            type = pickerType,
+            allowClear = false,
+        ) { selectedCategory ->
             currentCategoryName = selectedCategory
             tvCategory.text = selectedCategory.ifBlank { getString(R.string.select_category) }
             tvCategoryInitial.text = buildCategoryInitial(tvCategory.text.toString())

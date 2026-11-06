@@ -85,21 +85,25 @@ internal class HomeMultiSelectController(
 
             val recyclerView = getRecyclerView()
             val deletedIds = billsToDelete.map { it.id }
-            BillRowAnimator.collapseThen(BillRowAnimator.findRows(recyclerView, deletedIds)) {
+            BillRowAnimator.deleteThen(recyclerView, deletedIds) {
                 val db = AppDatabase.getDatabase(fragment.requireContext())
                 fragment.lifecycleScope.launch(Dispatchers.IO) {
                     val rows = BillDeleteUndo.delete(db, billsToDelete) ?: return@launch
                     withContext(Dispatchers.Main) {
+                        // 删除完成：退出多选（底栏滑出），撤销条等底栏走完再出来，避免两个底部控件叠在一起。
                         getHomeAdapter().clearSelection()
                         onDataChanged()
-                        BillUndoController.showNow(
-                            fragment.requireActivity().findViewById(android.R.id.content),
-                            fragment.getString(R.string.deleted_bills_fmt, billsToDelete.size),
-                            rows
-                        ) {
-                            onDataChanged()
-                            BillRowAnimator.expandAfterRefresh(recyclerView, rows.map { it.originalBillId })
-                        }
+                        BillUndoController.showAfterSelectionExit(
+                            anchor = fragment.requireActivity().findViewById(android.R.id.content),
+                            message = fragment.getString(R.string.deleted_bills_fmt, billsToDelete.size),
+                            rows = rows,
+                            onRestored = {
+                                BillRowAnimator.restoreThen(
+                                    recyclerView,
+                                    rows.map { it.originalBillId }
+                                ) { onDataChanged() }
+                            }
+                        )
                     }
                 }
             }

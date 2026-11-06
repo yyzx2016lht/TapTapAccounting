@@ -17,7 +17,7 @@ import kotlinx.coroutines.withContext
 /**
  * 删除账单后的「已删除 + 撤销」提示条。
  *
- * 交互约定（用户明确要求）：点删除**不再二次确认**，直接删；底部提示条给出 6 秒撤销窗口，
+ * 交互约定（用户明确要求）：点删除**不再二次确认**，直接删；底部提示条给出 4 秒撤销窗口，
  * 点「撤销」就把账单恢复回来；窗口超时（用户没管）再补一个 Toast 确认最终结果。
  *
  * 为什么有些场景要 [request] 而不是直接弹：删除常发生在「删完立刻 finish」的页面
@@ -26,7 +26,9 @@ import kotlinx.coroutines.withContext
  */
 object BillUndoController {
 
-    private const val UNDO_WINDOW_MS = 2000
+    private const val UNDO_WINDOW_MS = 4000
+    /** 多选栏退场大致要这么久：撤销条等它走完再出来，避免两个底部控件叠在一起。 */
+    private const val SELECTION_EXIT_DELAY_MS = 220L
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
@@ -46,6 +48,32 @@ object BillUndoController {
         val item = pending ?: return
         pending = null
         showNow(anchor, item.message, item.rows, onRestored)
+    }
+
+    /**
+     * 多选批量删除专用：删除动画结束后先退出多选（底栏滑出），
+     * 等它走完再把「已删除 + 撤销」放出来——两个底部控件同时出现会互相压，很难看。
+     */
+    fun showAfterSelectionExit(
+        anchor: View?,
+        message: String,
+        rows: List<DeletedBill>,
+        onRestored: () -> Unit
+    ) {
+        if (rows.isEmpty()) return
+        val target = anchor
+        if (target == null) {
+            request(message, rows)
+            return
+        }
+        target.postDelayed({
+            if (target.isAttachedToWindow) {
+                showNow(target, message, rows, onRestored)
+            } else {
+                // 页面已经退出去了：记下来，回到承载页再弹。
+                request(message, rows)
+            }
+        }, SELECTION_EXIT_DELAY_MS)
     }
 
     /** 删完仍停留在当前页面的场景，直接弹。anchor 为 null 时退化为 [request]。 */

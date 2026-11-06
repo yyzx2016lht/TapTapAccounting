@@ -255,7 +255,8 @@ class HomeFragment : Fragment() {
             fragment = this,
             dfDetailTime = dfDetailTime,
             dfDetailTimeShort = dfDetailTimeShort,
-            onDataChanged = { homeViewModel.reload() },
+            // 删除/退款/移动账本都会写 bills 表，Room Flow 会自动重推；
+            // 这里再强制重载会让列表多重建一次（删完「闪一下」的来源）。
             getRecyclerView = { rvTransactions }
         )
     }
@@ -425,7 +426,8 @@ class HomeFragment : Fragment() {
             getHomeAdapter = { homeAdapter },
             dismissKeyboardForDialog = { dismissKeyboardForDialog() },
             configureDialogWindow = { dialog, width, dim -> configureDialogWindow(dialog, width, dim) },
-            onDataChanged = { homeViewModel.reload() },
+            // 删除/退款/移动账本都会写 bills 表，Room Flow 会自动重推；
+            // 这里再强制重载会让列表多重建一次（删完「闪一下」的来源）。
             getRecyclerView = { rvTransactions },
         )
 

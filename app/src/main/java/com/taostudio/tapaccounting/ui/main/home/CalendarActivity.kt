@@ -56,6 +56,9 @@ import com.taostudio.tapaccounting.ui.activity.EditBillActivity
 import com.taostudio.tapaccounting.ui.dialog.OverlayDialogs
 import com.taostudio.tapaccounting.ui.main.SharedYearMonthSession
 import com.taostudio.tapaccounting.ui.main.YearMonthPickerDialog
+import com.taostudio.tapaccounting.ui.billdetail.BillDetailSheetActions
+import com.taostudio.tapaccounting.ui.billdetail.BillDetailSheetController
+import com.taostudio.tapaccounting.ui.billdetail.BillDetailSheetRequest
 import com.taostudio.tapaccounting.ui.common.BillDetailStatsToggle
 import com.taostudio.tapaccounting.ui.common.MultiSelectBarSummary
 import com.taostudio.tapaccounting.ui.common.MultiSelectMotion
@@ -305,12 +308,12 @@ class CalendarActivity : AppCompatActivity() {
             if (billsToDelete.isEmpty()) return@setOnClickListener
 
             val deletedIds = billsToDelete.map { it.id }
-            BillRowAnimator.collapseThen(BillRowAnimator.findRows(rvDailyBills, deletedIds)) {
+            BillRowAnimator.deleteThen(rvDailyBills, deletedIds) {
                 val db = AppDatabase.getDatabase(this)
                 lifecycleScope.launch {
                     val rows = BillDeleteUndo.delete(db, billsToDelete) ?: return@launch
 
-                    dailyAdapter.clearSelection()
+                    dailyAdapter.deselectAll()
                     loadDataForMonth()
                     BillUndoController.showNow(
                         findViewById(android.R.id.content),
@@ -495,8 +498,6 @@ class CalendarActivity : AppCompatActivity() {
         rvDailyBills.adapter = dailyAdapter
     }
 
-    private fun isRefundBill(bill: Bill): Boolean = bill.subType == Bill.SUBTYPE_REFUND
-
     private fun stripRefundPrefix(categoryName: String): String {
         return BillDisplayFormatter.stripRefundPrefix(categoryName)
     }
@@ -506,461 +507,40 @@ class CalendarActivity : AppCompatActivity() {
         return max(base, bill.amount)
     }
 
-    private fun refundAmountOfExpenseBill(bill: Bill): Double {
-        if (bill.type != Bill.TYPE_EXPENSE || isRefundBill(bill)) return 0.0
-        return (originalAmountOfExpenseBill(bill) - bill.amount).coerceAtLeast(0.0)
-    }
-
     private fun formatMoney(amount: Double, currency: String = "CNY"): String {
         val symbol = CurrencyManager.getSymbol(currency)
         return "$symbol${String.format(Locale.getDefault(), "%.2f", amount)}"
     }
 
-    private fun fillLinkedBillRow(row: View, bill: Bill, forceGrayStyle: Boolean) {
-        val tvCategory = row.findViewById<TextView>(R.id.tv_bill_category)
-        val tvDetail = row.findViewById<TextView>(R.id.tv_bill_detail)
-        val tvAmount = row.findViewById<TextView>(R.id.tv_bill_amount)
-        val tvTime = row.findViewById<TextView>(R.id.tv_bill_time)
-        val ivIcon = row.findViewById<ImageView>(R.id.iv_bill_category_icon)
-        val iconContainer = row.findViewById<View?>(R.id.layout_icon_container)
-
-        val isTransfer = bill.type == Bill.TYPE_TRANSFER
-        val isRepayment = isTransfer && bill.subType == Bill.SUBTYPE_REPAYMENT
-        val isRefund = isRefundBill(bill)
-        val showCategoryIcon = Prefs.isShowBillCategoryIcon(this)
-        val showFullCategory = Prefs.isShowBillFullCategory(this)
-        val remarkPriority = Prefs.isBillRemarkPriority(this)
-        val symbol = CurrencyManager.getSymbol(bill.currency)
-        val baseCategory = stripRefundPrefix(bill.categoryName)
-
-        row.setBackgroundResource(if (forceGrayStyle) R.drawable.bg_bill_item_refund else R.drawable.bg_bill_item)
-        iconContainer?.setBackgroundResource(if (forceGrayStyle) R.drawable.bg_circle_refund else R.drawable.bg_circle_soft)
-
-        val categoryText = when {
-            isRepayment -> "还款"
-            isTransfer -> "转账"
-            else -> BillDisplayFormatter.formatCategoryByPreference(bill.categoryName, showFullCategory).ifEmpty { "未分类" }
-        }
-
-        val refundAmount = refundAmountOfExpenseBill(bill)
-        tvAmount.text = if (!forceGrayStyle && !isRefund && bill.type == Bill.TYPE_EXPENSE && refundAmount > 0.0) {
-            BillDisplayFormatter.buildRefundedExpenseAmountText(
-                netAmount = bill.amount,
-                originalAmount = BillDisplayFormatter.originalAmountOfExpenseBill(bill),
-                currency = bill.currency
-            )
-        } else {
-            val sign = when {
-                forceGrayStyle || isRefund -> ""
-                bill.type == Bill.TYPE_EXPENSE -> "-"
-                bill.type == Bill.TYPE_INCOME -> "+"
-                else -> ""
-            }
-            "$sign$symbol${String.format(Locale.getDefault(), "%.2f", bill.amount)}"
-        }
-
-        if (forceGrayStyle || isRefund) {
-            tvAmount.setTextColor(Color.parseColor("#9AA1AA"))
-            tvCategory.setTextColor(Color.parseColor("#8E98A3"))
-            tvDetail.setTextColor(Color.parseColor("#A1A8AF"))
-            tvTime.setTextColor(Color.parseColor("#A1A8AF"))
-        } else {
-            tvCategory.setTextColor(Color.parseColor("#1A1A1A"))
-            tvDetail.setTextColor(Color.parseColor("#8A8A8E"))
-            tvTime.setTextColor(Color.parseColor("#8A8A8E"))
-            if (bill.excludeFromStats) {
-                tvAmount.setTextColor(Color.parseColor("#9AA1AA"))
-            } else {
-                when (bill.type) {
-                    Bill.TYPE_EXPENSE -> tvAmount.setTextColor(BillColors.expense)
-                    Bill.TYPE_INCOME -> tvAmount.setTextColor(BillColors.income)
-                    else -> tvAmount.setTextColor(Color.parseColor("#5F6772"))
-                }
-            }
-        }
-
-        val detailStr = buildString {
-            if (isTransfer) {
-                append(bill.accountName)
-                if (bill.toAccountName.isNotEmpty()) {
-                    append(" -> ")
-                    append(bill.toAccountName)
-                }
-            } else {
-                if (bill.accountName.isNotEmpty()) append(bill.accountName)
-                if (!forceGrayStyle) {
-                    val refundAmount = refundAmountOfExpenseBill(bill)
-                    if (refundAmount > 0.0 && bill.type == Bill.TYPE_EXPENSE) {
-                        append("(退款")
-                        append(symbol)
-                        append(String.format(Locale.getDefault(), "%.2f", refundAmount))
-                        append(")")
-                    }
-                }
-            }
-            if (bill.remark.isNotEmpty()) {
-                if (isNotEmpty()) append(" | ")
-                append(bill.remark)
-            }
-        }
-
-        val detailSuffix = if (isTransfer) {
-            buildString {
-                append(bill.accountName)
-                if (bill.toAccountName.isNotEmpty()) {
-                    append(" -> ")
-                    append(bill.toAccountName)
-                }
-            }
-        } else {
-            bill.accountName
-        }
-        val (primaryText, secondaryText) = BillDisplayFormatter.resolvePrimarySecondaryText(
-            categoryText = categoryText,
-            remarkText = bill.remark,
-            suffixText = detailSuffix,
-            remarkPriority = remarkPriority
-        )
-        tvCategory.text = primaryText
-
-        if (forceGrayStyle) {
-            tvDetail.text = dfDetailTimeShort.format(Date(bill.time))
-            tvDetail.visibility = View.VISIBLE
-            if (bill.accountName.isNotEmpty()) {
-                tvTime.text = bill.accountName
-                tvTime.visibility = View.VISIBLE
-            } else {
-                tvTime.visibility = View.GONE
-            }
-        } else {
-            if (secondaryText.isNotEmpty()) {
-                tvDetail.text = secondaryText
-                tvDetail.visibility = View.VISIBLE
-            } else {
-                tvDetail.visibility = View.GONE
-            }
-            tvTime.text = dfDetailTimeShort.format(Date(bill.time))
-            tvTime.visibility = View.VISIBLE
-        }
-
-        if (!showCategoryIcon) {
-            iconContainer?.setBackgroundColor(Color.TRANSPARENT)
-            iconContainer?.layoutParams = iconContainer?.layoutParams?.apply {
-                val widthPx = (row.resources.displayMetrics.density * 10).toInt()
-                val heightPx = (row.resources.displayMetrics.density * 44).toInt()
-                width = widthPx
-                height = heightPx
-            }
-            ivIcon.clearColorFilter()
-            ivIcon.layoutParams = ivIcon.layoutParams.apply {
-                val px = (ivIcon.resources.displayMetrics.density * 6).toInt()
-                width = px
-                height = px
-            }
-            ivIcon.setImageResource(
-                when (bill.type) {
-                    Bill.TYPE_EXPENSE -> R.drawable.bg_bill_dot_expense
-                    Bill.TYPE_INCOME -> R.drawable.bg_bill_dot_income
-                    else -> R.drawable.bg_bill_dot_neutral
-                }
-            )
-        } else {
-            iconContainer?.layoutParams = iconContainer?.layoutParams?.apply {
-                val widthPx = (row.resources.displayMetrics.density * 44).toInt()
-                val heightPx = (row.resources.displayMetrics.density * 44).toInt()
-                width = widthPx
-                height = heightPx
-            }
-            ivIcon.layoutParams = ivIcon.layoutParams.apply {
-                val px = (ivIcon.resources.displayMetrics.density * 21).toInt()
-                width = px
-                height = px
-            }
-            val iconLookupName = if (isRefund) baseCategory else bill.categoryName
-            val iconLookupType = if (isRefund) Bill.TYPE_EXPENSE else bill.type
-            lifecycleScope.launch {
-                val iconUrl = CategoryIconHelper.findCategoryIcon(this@CalendarActivity, iconLookupName, iconLookupType)
-                if (iconUrl.isNotEmpty()) {
-                    Glide.with(row).load(iconUrl).into(ivIcon)
-                } else {
-                    ivIcon.setImageResource(R.mipmap.ic_launcher)
-                }
-            }
-        }
-    }
-
-    private fun addLinkedBillRow(container: LinearLayout, bill: Bill, forceGrayStyle: Boolean, onClick: (() -> Unit)? = null) {
-        val row = layoutInflater.inflate(R.layout.item_home_transaction, container, false)
-        fillLinkedBillRow(row, bill, forceGrayStyle)
-        row.findViewById<View>(R.id.cb_bill_select).visibility = View.GONE
-        row.setOnClickListener { onClick?.invoke() }
-        container.addView(row)
-    }
-
-    private fun renderRefundRecords(view: View, sourceBill: Bill, onItemClick: (Bill) -> Unit) {
-        val section = view.findViewById<LinearLayout>(R.id.layout_refund_records_section)
-        val container = view.findViewById<LinearLayout>(R.id.layout_refund_records_container)
-        section.visibility = View.GONE
-        container.removeAllViews()
-
-        lifecycleScope.launch(Dispatchers.IO) {
-            val refunds = AppDatabase.getDatabase(this@CalendarActivity).billDao().getRefundBillsBySourceId(sourceBill.id)
-            withContext(Dispatchers.Main) {
-                if (refunds.isEmpty()) {
-                    section.visibility = View.GONE
-                    return@withContext
-                }
-                section.visibility = View.VISIBLE
-                refunds.forEach { refundBill ->
-                    addLinkedBillRow(container, refundBill, forceGrayStyle = true) {
-                        onItemClick(refundBill)
-                    }
-                }
-            }
-        }
-    }
-
-    private fun renderOriginalBill(view: View, originalBill: Bill) {
-        val section = view.findViewById<LinearLayout>(R.id.layout_original_bill_section)
-        val container = view.findViewById<LinearLayout>(R.id.layout_original_bill_container)
-        container.removeAllViews()
-        section.visibility = View.VISIBLE
-        addLinkedBillRow(container, originalBill, forceGrayStyle = false) {
-            showBillDetailSheet(originalBill)
-        }
+    private val billDetailSheetController by lazy(LazyThreadSafetyMode.NONE) {
+        BillDetailSheetController(this, lifecycleScope)
     }
 
     private fun showBillDetailSheet(bill: Bill) {
-        if (Prefs.isIndependentDetailEnabled(this) && bill.id > 0L) {
-            com.taostudio.tapaccounting.ui.activity.BillDetailActivity.start(this, bill.id)
-            return
-        }
-        val bottomSheet = com.google.android.material.bottomsheet.BottomSheetDialog(this)
-        val view = layoutInflater.inflate(R.layout.layout_bill_detail_bottom_sheet, null)
-
-        val tvAmount = view.findViewById<TextView>(R.id.tv_detail_amount)
-        val tvAmountLabel = view.findViewById<TextView>(R.id.tv_detail_amount_label)
-        val tvAmountFormula = view.findViewById<TextView>(R.id.tv_detail_amount_formula)
-        val tvTitle = view.findViewById<TextView>(R.id.tv_title)
-        val layoutCategory = view.findViewById<View>(R.id.layout_detail_category)
-        val lineCategory = view.findViewById<View>(R.id.line_category)
-        val tvCategory = view.findViewById<TextView>(R.id.tv_detail_category)
-        val tvAccountLabel = view.findViewById<TextView>(R.id.tv_detail_account_label)
-        val tvAccount = view.findViewById<TextView>(R.id.tv_detail_account)
-        val tvTimeLabel = view.findViewById<TextView>(R.id.tv_detail_time_label)
-        val layoutFeeDetail = view.findViewById<View>(R.id.layout_detail_fee)
-        val lineFeeDetail = view.findViewById<View>(R.id.line_fee_detail)
-        val tvFeeDetail = view.findViewById<TextView>(R.id.tv_detail_fee)
-
-        val btnExcludeStats = view.findViewById<TextView>(R.id.btn_exclude_stats)
-        val btnRefund = view.findViewById<View>(R.id.btn_refund)
-        val btnEdit = view.findViewById<View>(R.id.btn_edit)
-        val btnDelete = view.findViewById<View>(R.id.btn_delete)
-
-        val isTransfer = bill.type == Bill.TYPE_TRANSFER
-        val isRepayment = isTransfer && bill.subType == Bill.SUBTYPE_REPAYMENT
-        val isRefund = isRefundBill(bill)
-        var linkedOriginalForRefund: Bill? = null
-        tvAmountFormula.visibility = View.GONE
-        view.findViewById<LinearLayout>(R.id.layout_refund_records_section).visibility = View.GONE
-        view.findViewById<LinearLayout>(R.id.layout_original_bill_section).visibility = View.GONE
-
-        if (isTransfer) {
-            tvTitle.text = if (isRepayment) "还款详情" else "转账详情"
-            tvAmountLabel.text = if (isRepayment) "还款金额" else "转账金额"
-            tvAmount.text = formatMoney(bill.amount, bill.currency)
-            tvAmount.setTextColor(Color.parseColor("#1A1A1A"))
-            layoutCategory.visibility = View.GONE
-            lineCategory.visibility = View.GONE
-            tvAccountLabel.text = "账户"
-            tvTimeLabel.text = "时间"
-            tvAccount.text = bill.accountName + if (bill.toAccountName.isNotEmpty()) " -> ${bill.toAccountName}" else ""
-            if (!isRepayment && bill.fee > 0.0) {
-                layoutFeeDetail.visibility = View.VISIBLE
-                lineFeeDetail.visibility = View.VISIBLE
-                tvFeeDetail.text = "-${formatMoney(bill.fee, bill.currency)}"
-            } else {
-                layoutFeeDetail.visibility = View.GONE
-                lineFeeDetail.visibility = View.GONE
-            }
-        } else {
-            layoutFeeDetail.visibility = View.GONE
-            lineFeeDetail.visibility = View.GONE
-            tvTitle.text = "详情"
-            tvAmountLabel.text = "金额"
-            layoutCategory.visibility = View.VISIBLE
-            lineCategory.visibility = View.VISIBLE
-            tvCategory.text = BillDisplayFormatter.formatCategoryByPreference(bill.categoryName, true).ifEmpty { "未分类" }
-
-            if (isRefund) {
-                tvAmount.text = formatMoney(bill.amount, bill.currency)
-                tvAmount.setTextColor(Color.parseColor("#9AA1AA"))
-                tvAccountLabel.text = "入账账户"
-                tvTimeLabel.text = "入账时间"
-                tvAccount.text = bill.accountName
-
-                lifecycleScope.launch(Dispatchers.IO) {
-                    val original = bill.relatedBillId?.let { AppDatabase.getDatabase(this@CalendarActivity).billDao().getBillById(it) }
-                    withContext(Dispatchers.Main) {
-                        if (original != null) {
-                            linkedOriginalForRefund = original
-                            renderOriginalBill(view, original)
-                        }
-                    }
-                }
-            } else {
-                tvAccountLabel.text = "账户"
-                tvTimeLabel.text = "时间"
-                tvAccount.text = bill.accountName
-
-                if (bill.type == Bill.TYPE_EXPENSE) {
-                    val originalAmount = originalAmountOfExpenseBill(bill)
-                    val refundedAmount = refundAmountOfExpenseBill(bill)
-                    if (refundedAmount > 0.0) {
-                        tvAmount.text = BillDisplayFormatter.buildRefundedExpenseAmountText(
-                            netAmount = bill.amount,
-                            originalAmount = originalAmount,
-                            currency = bill.currency
-                        )
-                        tvAmountFormula.visibility = View.VISIBLE
-                        tvAmountFormula.text = "退款${formatMoney(refundedAmount, bill.currency)}，实际支出${formatMoney(bill.amount, bill.currency)}"
-                        renderRefundRecords(view, bill) { refundBill -> showBillDetailSheet(refundBill) }
-                    } else {
-                        tvAmount.text = "-${formatMoney(bill.amount, bill.currency)}"
-                    }
-                    if (bill.excludeFromStats) {
-                        tvAmount.setTextColor(Color.parseColor("#9AA1AA"))
-                    } else {
-                        tvAmount.setTextColor(BillColors.expense)
-                    }
-                } else {
-                    tvAmount.text = "+${formatMoney(bill.amount, bill.currency)}"
-                    if (bill.excludeFromStats) {
-                        tvAmount.setTextColor(Color.parseColor("#9AA1AA"))
-                    } else {
-                        tvAmount.setTextColor(Color.parseColor("#4CAF50"))
-                    }
-                }
-            }
-        }
-
-        val timeStr = dfDetailTimeShort.format(Date(bill.time))
-        view.findViewById<TextView>(R.id.tv_detail_time).text = timeStr
-
-        val recordTimeStr = dfDetailTime.format(Date(bill.time))
-        view.findViewById<TextView>(R.id.tv_detail_record_time).text = "记录于 $recordTimeStr"
-        view.findViewById<TextView>(R.id.tv_detail_book_name).text =
-            bill.bookName.ifEmpty { BookAccountManager.getDefaultBook(this@CalendarActivity) }
-        val tvRemark = view.findViewById<TextView>(R.id.tv_detail_remark)
-        tvRemark.text = bill.remark.ifEmpty { "无备注" }
-        if (!isRefund && bill.type == Bill.TYPE_EXPENSE && refundAmountOfExpenseBill(bill) > 0.0) {
-            lifecycleScope.launch(Dispatchers.IO) {
-                val refunds = AppDatabase.getDatabase(this@CalendarActivity).billDao().getRefundBillsBySourceId(bill.id)
-                withContext(Dispatchers.Main) {
-                    tvRemark.text = BillDisplayFormatter.buildRefundFlowRemark(bill.remark, refunds)
-                }
-            }
-        }
-
-        if (isRefund) {
-            btnExcludeStats.visibility = View.GONE
-            btnRefund.visibility = View.GONE
-        } else if (bill.type == Bill.TYPE_INCOME || bill.type == Bill.TYPE_TRANSFER || bill.amount <= 0.0) {
-            btnRefund.visibility = View.GONE
-        } else {
-            btnRefund.visibility = View.VISIBLE
-        }
-
-        BillDetailStatsToggle.bind(
-            btnExcludeStats,
-            bill = bill,
-            context = this,
-            scope = lifecycleScope
-        ) { excluded ->
-            tvAmount.setTextColor(
-                when {
-                    excluded -> Color.parseColor("#9AA1AA")
-                    bill.type == Bill.TYPE_INCOME -> Color.parseColor("#4CAF50")
-                    else -> BillColors.expense
-                }
-            )
-        }
-
-        btnRefund.setOnClickListener {
-            bottomSheet.dismiss()
-            showRefundSheet(bill)
-        }
-
-        btnEdit.setOnClickListener {
-            bottomSheet.dismiss()
-            if (isRefund) {
-                val cachedOriginal = linkedOriginalForRefund
-                if (cachedOriginal != null) {
-                    showRefundSheet(cachedOriginal, bill)
-                    return@setOnClickListener
-                }
-                lifecycleScope.launch(Dispatchers.IO) {
-                    val source = bill.relatedBillId?.let { AppDatabase.getDatabase(this@CalendarActivity).billDao().getBillById(it) }
-                    withContext(Dispatchers.Main) {
-                        if (source != null) {
-                            showRefundSheet(source, bill)
-                        } else {
-                            val intent = Intent(this@CalendarActivity, EditBillActivity::class.java)
-                            intent.putExtra("BILL_ID", bill.id)
-                            startActivity(intent)
-                        }
-                    }
-                }
-            } else {
-                val intent = Intent(this, EditBillActivity::class.java)
-                intent.putExtra("BILL_ID", bill.id)
-                startActivity(intent)
-            }
-        }
-
-        btnDelete.setOnClickListener {
-            bottomSheet.dismiss()
-            BillRowAnimator.collapseThen(
-                rows = BillRowAnimator.findRows(rvDailyBills, listOf(bill.id)),
-                startDelayMs = BillRowAnimator.SHEET_DISMISS_DELAY_MS
+        billDetailSheetController.show(
+            request = BillDetailSheetRequest(
+                bill = bill,
+                listRecyclerView = rvDailyBills
+            ),
+            actions = object : BillDetailSheetActions(
+                context = this,
+                scope = lifecycleScope,
+                onDataChanged = { loadDataForMonth() },
+                undoAnchor = { findViewById(android.R.id.content) }
             ) {
-                lifecycleScope.launch(Dispatchers.IO) {
-                    val db = AppDatabase.getDatabase(this@CalendarActivity)
-                    val rows = BillDeleteUndo.delete(db, listOf(bill)) ?: return@launch
+                override fun onRefund(bill: Bill) {
+                    showRefundSheet(bill)
+                }
 
-                    withContext(Dispatchers.Main) {
-                        loadDataForMonth()
-                        BillUndoController.showNow(
-                            findViewById(android.R.id.content),
-                            getString(R.string.bill_deleted_undo),
-                            rows
-                        ) {
-                            loadDataForMonth()
-                            BillRowAnimator.expandAfterRefresh(rvDailyBills, rows.map { it.originalBillId })
-                        }
-                    }
+                override fun onEditRefund(originalBill: Bill, refundBill: Bill) {
+                    showRefundSheet(originalBill, refundBill)
+                }
+
+                override fun onLinkedBillClick(bill: Bill) {
+                    showBillDetailSheet(bill)
                 }
             }
-        }
-
-        bottomSheet.setContentView(view)
-        configureDetailBottomSheet(bottomSheet)
-        bottomSheet.show()
-    }
-
-    private fun configureDetailBottomSheet(bottomSheet: BottomSheetDialog) {
-        bottomSheet.dismissWithAnimation = true
-        bottomSheet.setOnShowListener { dialog ->
-            val bsDialog = dialog as? BottomSheetDialog ?: return@setOnShowListener
-            val bottomSheetView =
-                bsDialog.findViewById<View>(com.google.android.material.R.id.design_bottom_sheet) ?: return@setOnShowListener
-            val behavior = BottomSheetBehavior.from(bottomSheetView)
-            behavior.isFitToContents = true
-            behavior.skipCollapsed = true
-            behavior.isHideable = true
-            behavior.isDraggable = true
-            behavior.state = BottomSheetBehavior.STATE_EXPANDED
-        }
+        )
     }
 
     private fun configureRefundBottomSheet(bottomSheet: BottomSheetDialog, contentView: View) {

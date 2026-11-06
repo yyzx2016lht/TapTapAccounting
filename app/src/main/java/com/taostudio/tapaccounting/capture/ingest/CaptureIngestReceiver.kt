@@ -30,6 +30,10 @@ class CaptureIngestReceiver : BroadcastReceiver() {
             try {
                 val ack = CaptureIngestCoordinator.ingest(app, token, payload)
                 val ok = runCatching { JSONObject(ack).optBoolean("ok", false) }.getOrDefault(false)
+                if (ok) {
+                    // 只有真实投递（插件 hook/relay）会走到这里；模拟数据直接调 Coordinator，不置位。
+                    com.taostudio.tapaccounting.capture.data.CapturePrefs.setHookDelivered(app, true)
+                }
                 pendingResult.setResultCode(if (ok) 1 else 0)
                 pendingResult.setResultData(ack)
             } catch (t: Throwable) {

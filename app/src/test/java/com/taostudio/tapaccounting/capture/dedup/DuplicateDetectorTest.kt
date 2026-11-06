@@ -28,6 +28,7 @@ class DuplicateDetectorTest {
         groupId: String? = null,
         excludeFromStats: Boolean = false,
         note: String? = null,
+        rawJson: String? = null,
     ): PaymentCapture = PaymentCapture(
         id = id,
         source = source,
@@ -48,7 +49,7 @@ class DuplicateDetectorTest {
         note = note,
         status = status,
         needsAmount = false,
-        rawJson = null,
+        rawJson = rawJson,
         ruleVersion = null,
         sourceAppVersion = null,
         excludeFromStats = excludeFromStats,
@@ -453,5 +454,168 @@ class DuplicateDetectorTest {
             merchant = "招商银行信用卡",
         )
         assertFalse(DuplicateDetector.isDuplicate(bankNotify2, bankNotify1))
+    }
+
+    @Test
+    fun `same notification content with different message ids is duplicate`() {
+        val first = createCapture(
+            id = "1",
+            amountCents = 3777L,
+            paidAt = 1793973710000L,
+            source = "WECHAT",
+            sourceTxnId = "2282119369562455545",
+            channel = "微信[微信支付-亲属卡消费]",
+            merchant = "美团平台商户",
+            rawJson = """{"mMap":{"description":"通过农业银行储蓄卡(3077)扣款￥37.77\n支付场景美团平台商户","title":"亲属卡使用通知","display_name":"亲属卡","source":"微信支付","t":1793973714262}}""",
+        )
+        val second = createCapture(
+            id = "2",
+            amountCents = 3777L,
+            paidAt = 1793973710000L,
+            source = "WECHAT",
+            sourceTxnId = "11014367",
+            channel = "微信[微信支付-亲属卡消费]",
+            merchant = "美团平台商户",
+            rawJson = """{"mMap":{"description":"通过农业银行储蓄卡(3077)扣款￥37.77\n支付场景美团平台商户","title":"亲属卡使用通知","display_name":"亲属卡","source":"微信支付","t":1793973714396}}""",
+        )
+        assertTrue(DuplicateDetector.isDuplicate(second, first))
+    }
+
+    @Test
+    fun `refund notice duplicates with different message ids are duplicate`() {
+        val first = createCapture(
+            id = "1",
+            amountCents = 1L,
+            paidAt = 1793969421000L,
+            source = "WECHAT",
+            sourceTxnId = "11014253",
+            channel = "微信[微信支付-转账退款]",
+            merchant = "微信退款",
+            billType = LocalBillType.TYPE_INCOME,
+            rawJson = """{"mMap":{"description":"退款金额￥0.01\n退款方式退回建设银行 (3529) \n退款原因吴希城6.4退还了你的转账\n到账时间2026-11-06 20:50:21\n备注退款资金已到账","title":"转账退款到账通知","display_name":"微信支付","source":"微信支付","t":1793969433744}}""",
+        )
+        val second = createCapture(
+            id = "2",
+            amountCents = 1L,
+            paidAt = 1793969421000L,
+            source = "WECHAT",
+            sourceTxnId = "6588979317083192462",
+            channel = "微信[微信支付-转账退款]",
+            merchant = "微信退款",
+            billType = LocalBillType.TYPE_INCOME,
+            rawJson = """{"mMap":{"description":"退款金额￥0.01\n退款方式退回建设银行 (3529) \n退款原因吴希城6.4退还了你的转账\n到账时间2026-11-06 20:50:21\n备注退款资金已到账","title":"转账退款到账通知","display_name":"微信支付","source":"微信支付","t":1793969433540}}""",
+        )
+        assertTrue(DuplicateDetector.isDuplicate(second, first))
+    }
+
+    @Test
+    fun `transfer refund status and refund notice are the same refund event`() {
+        val status = createCapture(
+            id = "status",
+            amountCents = 1L,
+            paidAt = 1793969421477L,
+            source = "WECHAT",
+            sourceTxnId = "53010003514244202611064291744091:4",
+            channel = "微信[转账退款]",
+            merchant = "吴希城6.4",
+            billType = LocalBillType.TYPE_INCOME,
+            assetName = "微信",
+            rawJson = """{"type":"transfer","isSend":0,"content":"{\"msg\":{\"appmsg\":{\"wcpayinfo\":{\"feedesc\":\"￥0.01\",\"paysubtype\":\"4\",\"transferid\":\"1000050001202611060626501786220\",\"transcationid\":\"53010003514244202611064291744091\",\"begintransfertime\":\"1793954025\"}}}}"}""",
+        ).copy(subType = LocalBillType.SUBTYPE_REFUND, needsRefundLink = true)
+
+        val notice = createCapture(
+            id = "notice",
+            amountCents = 1L,
+            paidAt = 1793969421000L,
+            source = "WECHAT",
+            sourceTxnId = "11014253",
+            channel = "微信[微信支付-转账退款]",
+            merchant = "微信退款",
+            billType = LocalBillType.TYPE_INCOME,
+            assetName = null,
+            rawJson = """{"mMap":{"description":"退款金额￥0.01\n退款方式退回建设银行 (3529) \n退款原因吴希城6.4退还了你的转账\n到账时间2026-11-06 20:50:21\n备注退款资金已到账","title":"转账退款到账通知","display_name":"微信支付","source":"微信支付","t":1793969433744}}""",
+        ).copy(subType = LocalBillType.SUBTYPE_REFUND, needsRefundLink = true)
+
+        assertTrue(DuplicateDetector.isDuplicate(notice, status))
+        assertTrue(DuplicateDetector.isDuplicate(status, notice))
+    }
+
+    @Test
+    fun `merged bank notification group still merges with wechat payment main`() {
+        val wechatMain = createCapture(
+            id = "wechat",
+            amountCents = 42500L,
+            paidAt = 1794007638318L,
+            source = "WECHAT",
+            sourceTxnId = "6664364887011952822",
+            channel = "微信[微信支付-在线支付] + 微信支付[通知-消费]",
+            merchant = "广东技术师范大学",
+            paymentMethodRaw = "建设银行储蓄卡(3529)",
+            assetName = "建设银行(3529)",
+        )
+        val bankGroup = createCapture(
+            id = "bank",
+            amountCents = 42500L,
+            paidAt = 1794007637000L,
+            source = "WECHAT",
+            sourceTxnId = "4276949758579215594",
+            channel = "微信[中国建设银行-支出] + 建设银行动账提醒",
+            merchant = "动账提醒",
+            paymentMethodRaw = "中国建设银行储蓄账户(3529)",
+            assetName = "建设银行(3529)",
+        )
+
+        assertTrue(DuplicateDetector.isDuplicate(bankGroup, wechatMain))
+        assertTrue(DuplicateDetector.isDuplicate(wechatMain, bankGroup))
+    }
+
+    @Test
+    fun `medium confidence notification duplicate auto merges`() {
+        val first = createCapture(
+            id = "1",
+            amountCents = 1500L,
+            paidAt = 100000L,
+            source = "WECHAT",
+            sourceTxnId = "msg_1",
+            channel = "微信[微信支付-亲属卡消费]",
+            merchant = "美团平台商户",
+            rawJson = """{"mMap":{"description":"通过农业银行储蓄卡(3077)扣款￥15.00\n支付场景美团平台商户","title":"亲属卡使用通知","t":100001}}""",
+        )
+        val second = createCapture(
+            id = "2",
+            amountCents = 1500L,
+            paidAt = 103000L,
+            source = "WECHAT",
+            sourceTxnId = "msg_2",
+            channel = "微信[微信支付-亲属卡消费]",
+            merchant = "美团平台商户",
+            rawJson = """{"mMap":{"description":"通过农业银行储蓄卡(3077)扣款￥15.00\n支付场景美团平台商户","title":"亲属卡使用通知","t":103001}}""",
+        )
+        assertTrue(DuplicateDetector.isDuplicate(second, first))
+    }
+
+    @Test
+    fun `real transfer messages with different txn ids are not merged by notification rule`() {
+        val first = createCapture(
+            id = "1",
+            amountCents = 1L,
+            paidAt = 1793954022000L,
+            source = "WECHAT",
+            sourceTxnId = "53010003514244202611064291744091:1",
+            channel = "微信[转账付款]",
+            merchant = "向吴希城6.4转账",
+            rawJson = """{"type":"transfer","content":"{\"msg\":{\"appmsg\":{\"wcpayinfo\":{\"feedesc\":\"￥0.01\",\"paysubtype\":\"1\",\"transferid\":\"1000050001202611060626501786220\",\"transcationid\":\"53010003514244202611064291744091\"}}}}"}""",
+        )
+        val second = createCapture(
+            id = "2",
+            amountCents = 1L,
+            paidAt = 1793954046000L,
+            source = "WECHAT",
+            sourceTxnId = "53010003532076202611061411223764:1",
+            channel = "微信[转账付款]",
+            merchant = "向吴希城6.4转账",
+            rawJson = """{"type":"transfer","content":"{\"msg\":{\"appmsg\":{\"wcpayinfo\":{\"feedesc\":\"￥0.01\",\"paysubtype\":\"1\",\"transferid\":\"1000050001202611060626501786221\",\"transcationid\":\"53010003532076202611061411223764\"}}}}"}""",
+        )
+        assertFalse(DuplicateDetector.isDuplicate(second, first))
     }
 }

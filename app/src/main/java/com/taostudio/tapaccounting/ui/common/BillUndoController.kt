@@ -26,7 +26,7 @@ import kotlinx.coroutines.withContext
  */
 object BillUndoController {
 
-    private const val UNDO_WINDOW_MS = 2000
+    private const val UNDO_WINDOW_MS = 4000
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 

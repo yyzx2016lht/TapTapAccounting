@@ -58,6 +58,8 @@ data class PaymentCapture(
     val needsAmount: Boolean = false,
     val rawJson: String? = null,
     val ruleVersion: String? = null,
+    /** 命中的系统规则名，例如「微信转账」「微信支付转账（红包）退款」。 */
+    val ruleName: String? = null,
     val sourceAppVersion: String? = null,
     /** 父账单 id；若当前记录被判定为重复并合并进另一条账单，此字段记录父账单 id。 */
     val groupId: String? = null,

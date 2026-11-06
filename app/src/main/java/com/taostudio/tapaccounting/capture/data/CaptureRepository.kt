@@ -33,6 +33,7 @@ class CaptureRepository(private val dao: PaymentCaptureDao) {
         payload: CapturePayload,
         transferIncomeDedupEnabled: Boolean = true,
         transferIncomeDedupWindowMillis: Long = DuplicateDetector.DEFAULT_WINDOW_MILLIS,
+        ruleName: String? = null,
     ): InsertOutcome {
         val now = System.currentTimeMillis()
 
@@ -72,7 +73,7 @@ class CaptureRepository(private val dao: PaymentCaptureDao) {
             }
         }
 
-        val entity = payload.toEntity(now)
+        val entity = payload.toEntity(now, ruleName)
 
         // 自动去重与跨渠道合并检测（5分钟时间窗口，金额完全一致）
         val amount = entity.amountCents
@@ -586,7 +587,7 @@ class CaptureRepository(private val dao: PaymentCaptureDao) {
         return mergedCount
     }
 
-    private fun CapturePayload.toEntity(now: Long): PaymentCapture = PaymentCapture(
+    private fun CapturePayload.toEntity(now: Long, ruleName: String?): PaymentCapture = PaymentCapture(
         id = captureId,
         source = source,
         sourceTxnId = sourceTxnId?.takeIf { it.isNotBlank() },
@@ -609,6 +610,7 @@ class CaptureRepository(private val dao: PaymentCaptureDao) {
         needsAmount = needsAmount || amountCents == null,
         rawJson = rawJson,
         ruleVersion = ruleVersion,
+        ruleName = ruleName,
         sourceAppVersion = sourceAppVersion,
         excludeFromStats = excludeFromStats,
         groupId = groupId?.takeIf { it.isNotBlank() },

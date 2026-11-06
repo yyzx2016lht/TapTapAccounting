@@ -58,7 +58,7 @@ import com.taostudio.tapaccounting.data.local.entity.SyncedRemoteFile
 import com.taostudio.tapaccounting.logic.InvestmentInterestService
 
 /** 与 backupIfDowngrade 第三个参数保持同步。 */
-private const val DB_VERSION = 43
+private const val DB_VERSION = 44
 
 /**
  * Room 主库。改 schema 前请先读本节，避免误用破坏性迁移或漏改版本号。
@@ -821,6 +821,13 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /** v44：待记卡片展示命中规则名。 */
+        val MIGRATION_43_44 = object : Migration(43, 44) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                CAPTURE_MIGRATION_43_44_SQL.forEach(database::execSQL)
+            }
+        }
+
         fun getDatabase(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 val appCtx = context.applicationContext
@@ -874,7 +881,8 @@ abstract class AppDatabase : RoomDatabase() {
                         MIGRATION_39_40,
                         MIGRATION_40_41,
                         MIGRATION_41_42,
-                        MIGRATION_42_43
+                        MIGRATION_42_43,
+                        MIGRATION_43_44
                     )
                     // 仅处理降级：清库并按当前代码 schema 重建。升级缺迁移时仍应抛异常，不要改成 fallbackToDestructiveMigration()。
                     .fallbackToDestructiveMigrationOnDowngrade()

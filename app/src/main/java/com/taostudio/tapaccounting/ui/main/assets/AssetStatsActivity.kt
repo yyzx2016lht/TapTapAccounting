@@ -443,11 +443,12 @@ class AssetStatsActivity : AppCompatActivity() {
         btnMsDelete.setOnClickListener {
             val targets = billAdapter.getSelectedBills()
             if (targets.isEmpty()) return@setOnClickListener
-            BillRowAnimator.collapseThen(BillRowAnimator.findRows(rvBillList, targets.map { it.id })) {
+            BillRowAnimator.deleteThen(rvBillList, targets.map { it.id }) {
                 lifecycleScope.launch(Dispatchers.IO) {
                     val rows = BillDeleteUndo.delete(db, targets) ?: return@launch
                     withContext(Dispatchers.Main) {
-                        billAdapter.clearSelection()
+                        // 不退出多选，只清空勾选，方便连续删多批。
+                        billAdapter.deselectAll()
                         filteredBillsCache.clear()
                         billRowsCache.clear()
                         categoryBreakdownCache.clear()

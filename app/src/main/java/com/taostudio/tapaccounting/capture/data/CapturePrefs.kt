@@ -10,6 +10,7 @@ object CapturePrefs {
     private const val KEY_ONLY_EXPENSE = "only_expense_v2"
     private const val KEY_SEEDED_DEFAULTS = "seeded_defaults_v1"
     private const val KEY_LEGACY_IMPORTED = "legacy_imported_v1"
+    private const val KEY_HOOK_DELIVERED = "hook_delivered_v1"
     private const val KEY_TRANSFER_INCOME_DEDUP = "transfer_income_dedup_enabled"
     private const val KEY_TRANSFER_INCOME_DEDUP_WINDOW = "transfer_income_dedup_window_seconds"
     private const val KEY_AI_CATEGORY_MODE = "ai_category_mode"
@@ -169,6 +170,19 @@ object CapturePrefs {
 
     fun setLegacyImported(context: Context, imported: Boolean) {
         prefs(context).edit().putBoolean(KEY_LEGACY_IMPORTED, imported).apply()
+    }
+
+    /**
+     * 插件是否真正投递过捕获数据（不是模拟/回放）。
+     *
+     * 主应用本身不 hook 微信/支付宝；没有这个信号时，待记收件箱入口对普通用户
+     * 只是一个永远空着的壳，所以默认隐藏。
+     */
+    fun hasHookDelivered(context: Context): Boolean =
+        prefs(context).getBoolean(KEY_HOOK_DELIVERED, false)
+
+    fun setHookDelivered(context: Context, delivered: Boolean) {
+        prefs(context).edit().putBoolean(KEY_HOOK_DELIVERED, delivered).apply()
     }
 
     fun getAiCategoryMode(context: Context): String =

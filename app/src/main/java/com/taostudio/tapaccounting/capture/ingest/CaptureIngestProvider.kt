@@ -7,6 +7,7 @@ import android.net.Uri
 import android.os.Bundle
 import android.util.Log
 import com.taostudio.tapaccounting.capture.contract.CaptureContract
+import com.taostudio.tapaccounting.capture.data.CapturePrefs
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import org.json.JSONObject
@@ -34,6 +35,12 @@ class CaptureIngestProvider : ContentProvider() {
         val ack = try {
             runBlocking(Dispatchers.IO) {
                 CaptureIngestCoordinator.ingest(ctx, token, payload)
+            }.also { result ->
+                val ok = runCatching { JSONObject(result).optBoolean("ok", false) }.getOrDefault(false)
+                if (ok) {
+                    // 只有真实投递（插件 hook/relay）会走到这里；模拟数据直接调 Coordinator，不置位。
+                    CapturePrefs.setHookDelivered(ctx.applicationContext ?: ctx, true)
+                }
             }
         } catch (t: Throwable) {
             Log.w(TAG, "provider ingest failed", t)

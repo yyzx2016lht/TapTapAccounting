@@ -303,6 +303,14 @@ class BillDetailActivity : AppCompatActivity() {
         }
         val prov = billProvenance
         val badgeText = RuleCorrectionCoordinator.resolveProvenanceBadgeText(prov, matchedRule?.keyword)
+            ?: if (currentBill.categoryName.isNotBlank() && currentBill.type in 0..1) {
+                RuleCorrectionCoordinator.resolveProvenanceBadgeText(
+                    RuleCorrectionCoordinator.SOURCE_MANUAL,
+                    null,
+                )
+            } else {
+                null
+            }
         if (!badgeText.isNullOrBlank()) {
             badge.text = badgeText
             badge.visibility = View.VISIBLE

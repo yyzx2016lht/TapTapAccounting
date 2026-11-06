@@ -333,17 +333,17 @@ class AssetDetailActivity : AppCompatActivity() {
         btnMsDelete.setOnClickListener {
             val targets = adapter.getSelectedBills()
             if (targets.isEmpty()) return@setOnClickListener
-            BillRowAnimator.collapseThen(BillRowAnimator.findRows(rvTransactions, targets.map { it.id })) {
+            BillRowAnimator.deleteThen(rvTransactions, targets.map { it.id }) {
                 lifecycleScope.launch(Dispatchers.IO) {
                     val rows = BillDeleteUndo.delete(db, targets) ?: return@launch
                     withContext(Dispatchers.Main) {
-                        adapter.clearSelection()
+                        // 不退出多选，只清空勾选，方便连续删多批。
+                        adapter.deselectAll()
                         BillUndoController.showNow(
                             findViewById(android.R.id.content),
                             getString(R.string.deleted_bills_fmt, targets.size),
                             rows
                         ) {
-                            adapter.clearSelection()
                             BillRowAnimator.expandAfterRefresh(rvTransactions, rows.map { it.originalBillId })
                         }
                     }

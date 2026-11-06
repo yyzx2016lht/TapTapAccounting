@@ -2434,17 +2434,23 @@ class AccountingFormController(
                             requestId = requestId
                         )
                     }
-                    val provSource = currentCategorySource ?: BillRuleProvenance.Source.MANUAL
-                    val provRuleId = currentCategoryRuleId
-                    val provKeyword = currentRuleKeyword
+                }
+                // 所有新账单/编辑账单都记录分类来源；手动新账默认“用户自选”。
+                if (rBill.id > 0L && rBill.type in 0..1 && rBill.categoryName.isNotBlank()) {
+                    val existingProv = runCatching {
+                        db.billRuleProvenanceDao().getByBillId(rBill.id)
+                    }.getOrNull()
+                    val provSource = currentCategorySource
+                        ?: existingProv?.source
+                        ?: BillRuleProvenance.Source.MANUAL
                     try {
                         db.billRuleProvenanceDao().upsert(
                             BillRuleProvenance(
                                 billId = rBill.id,
-                                captureId = pendingCaptureId,
+                                captureId = pendingCaptureId ?: existingProv?.captureId,
                                 source = provSource,
-                                ruleId = provRuleId,
-                                keyword = provKeyword,
+                                ruleId = currentCategoryRuleId ?: existingProv?.ruleId,
+                                keyword = currentRuleKeyword ?: existingProv?.keyword,
                             )
                         )
                     } catch (_: Exception) {}

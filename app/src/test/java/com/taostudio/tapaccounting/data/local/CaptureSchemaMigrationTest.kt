@@ -12,8 +12,8 @@ import java.sql.Connection
 import java.sql.DriverManager
 
 /**
- * 用 JVM SQLite 执行 [CAPTURE_MIGRATION_41_42_SQL] 与 [CAPTURE_MIGRATION_42_43_SQL]，
- * 再和 Room 导出的 43.json 逐列/逐索引比对。
+ * 用 JVM SQLite 执行 [CAPTURE_MIGRATION_41_42_SQL]、[CAPTURE_MIGRATION_42_43_SQL]
+ * 与 [CAPTURE_MIGRATION_43_44_SQL]，再和 Room 导出的 44.json 逐列/逐索引比对。
  *
  * 之所以不用 `MigrationTestHelper`：设备不一定常连；这个测试不需要 Android，
  * 能直接在 `:app:testDebugUnitTest` 里拦住“SQL 少列/类型错/索引名错/唯一性错”的问题。
@@ -35,9 +35,9 @@ class CaptureSchemaMigrationTest {
     @Test
     fun migrationSqlMatchesRoomSchema() {
         val schemaFile = File(
-            "schemas/com.taostudio.tapaccounting.data.local.AppDatabase/43.json",
+            "schemas/com.taostudio.tapaccounting.data.local.AppDatabase/44.json",
         )
-        assertTrue("找不到 Room 导出的 43.json：${schemaFile.absolutePath}", schemaFile.isFile)
+        assertTrue("找不到 Room 导出的 44.json：${schemaFile.absolutePath}", schemaFile.isFile)
 
         val database = JSONObject(schemaFile.readText()).getJSONObject("database")
         val entities = database.getJSONArray("entities")
@@ -64,11 +64,12 @@ class CaptureSchemaMigrationTest {
                         "`isEnabled` INTEGER NOT NULL)"
                 )
                 CAPTURE_MIGRATION_42_43_SQL.forEach { statement.execute(it) }
+                CAPTURE_MIGRATION_43_44_SQL.forEach { statement.execute(it) }
             }
 
             captureTables.forEach { table ->
                 val entity = entitiesByTable[table]
-                assertNotNull("43.json 里没有 $table 的 Entity", entity)
+                assertNotNull("44.json 里没有 $table 的 Entity", entity)
                 assertColumns(connection, table, entity!!)
                 assertPrimaryKey(connection, table, entity)
                 assertIndices(connection, table, entity)

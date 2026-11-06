@@ -123,6 +123,7 @@
                 android:layout_marginBottom="16dp"
                 android:clickable="true"
                 android:focusable="true"
+                android:visibility="gone"
                 android:foreground="?attr/selectableItemBackground"
                 style="@style/SettingsCard">
 

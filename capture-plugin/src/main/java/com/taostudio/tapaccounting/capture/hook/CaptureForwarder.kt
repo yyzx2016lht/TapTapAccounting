@@ -36,11 +36,17 @@ internal object CaptureForwarder {
 
     private const val RULE_VERSION = "probe-2"
     private const val DEDUP_WINDOW_MS = 30_000L
+    private const val CONTENT_DEDUP_WINDOW_MS = 2_000L
     private const val MAX_SEEN = 512
     private const val TAG = "TapCaptureForward"
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private val seen = ConcurrentHashMap<String, Long>()
+
+    /** 完全相同的原始报文：防止广播/relay/重试重复投递。 */
+    private val seenRaw = ConcurrentHashMap<String, Long>()
+
+    /** 去掉易变字段后的内容指纹：防止同一条通知 t/消息 id 不同被重复投递。 */
+    private val seenContent = ConcurrentHashMap<String, Long>()
 
     fun forward(
         source: String,
@@ -61,9 +67,20 @@ internal object CaptureForwarder {
         }
 
         val now = System.currentTimeMillis()
-        val dedupKey = md5(raw)
-        if (!markSeen(dedupKey, now)) {
-            log("forward skipped (dup in ${DEDUP_WINDOW_MS / 1000}s) source=$source")
+        val rawKey = md5(raw)
+        if (!markSeen(seenRaw, rawKey, now, DEDUP_WINDOW_MS)) {
+            log("forward skipped (exact dup ${DEDUP_WINDOW_MS / 1000}s) source=$source hash=${rawKey.take(8)}")
+            return
+        }
+
+        val contentKey = RawContentFingerprint.of(source, dataType, raw)
+        if (contentKey != null &&
+            !markSeen(seenContent, contentKey, now, CONTENT_DEDUP_WINDOW_MS)
+        ) {
+            log(
+                "forward skipped (content dup ${CONTENT_DEDUP_WINDOW_MS / 1000}s) " +
+                    "source=$source hash=${contentKey.take(8)}",
+            )
             return
         }
 
@@ -97,7 +114,8 @@ internal object CaptureForwarder {
                 log("forward relay queued source=$source captureId=$captureId")
             } else if (context == null) {
                 log("forward failed source=$source: no app context and relay down")
-                seen.remove(dedupKey)
+                seenRaw.remove(rawKey)
+                contentKey?.let { seenContent.remove(it) }
             }
         }
     }
@@ -198,15 +216,20 @@ internal object CaptureForwarder {
         return json.toString()
     }
 
-    /** MD5(rawJson) + 窗口去重；在调用线程做，保证 DB 插入回调不会被拖慢。 */
-    private fun markSeen(key: String, now: Long): Boolean {
+    /** 在调用线程做，保证 DB 插入回调不会被拖慢。 */
+    private fun markSeen(
+        seen: ConcurrentHashMap<String, Long>,
+        key: String,
+        now: Long,
+        windowMs: Long,
+    ): Boolean {
         synchronized(seen) {
             if (seen.size > MAX_SEEN) {
-                val cutoff = now - DEDUP_WINDOW_MS
+                val cutoff = now - maxOf(windowMs, DEDUP_WINDOW_MS)
                 seen.entries.removeAll { it.value < cutoff }
             }
             val previous = seen.put(key, now)
-            return previous == null || now - previous > DEDUP_WINDOW_MS
+            return previous == null || now - previous > windowMs
         }
     }
 

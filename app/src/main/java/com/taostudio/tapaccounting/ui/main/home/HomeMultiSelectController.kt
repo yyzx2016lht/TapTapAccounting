@@ -85,12 +85,13 @@ internal class HomeMultiSelectController(
 
             val recyclerView = getRecyclerView()
             val deletedIds = billsToDelete.map { it.id }
-            BillRowAnimator.collapseThen(BillRowAnimator.findRows(recyclerView, deletedIds)) {
+            BillRowAnimator.deleteThen(recyclerView, deletedIds) {
                 val db = AppDatabase.getDatabase(fragment.requireContext())
                 fragment.lifecycleScope.launch(Dispatchers.IO) {
                     val rows = BillDeleteUndo.delete(db, billsToDelete) ?: return@launch
                     withContext(Dispatchers.Main) {
-                        getHomeAdapter().clearSelection()
+                        // 不退出多选，只清空勾选，方便连续处理多批（与「不计入统计」一致）。
+                        getHomeAdapter().deselectAll()
                         onDataChanged()
                         BillUndoController.showNow(
                             fragment.requireActivity().findViewById(android.R.id.content),

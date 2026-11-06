@@ -1289,12 +1289,13 @@ class BillSearchActivity : AppCompatActivity() {
             val billsToDelete = adapter.getSelectedBills()
             if (billsToDelete.isEmpty()) return@setOnClickListener
             val targetIds = billsToDelete.map { it.id }
-            BillRowAnimator.collapseThen(BillRowAnimator.findRows(rvResults, targetIds)) {
+            BillRowAnimator.deleteThen(rvResults, targetIds) {
                 lifecycleScope.launch {
                     val rows = BillDeleteUndo.delete(db, billsToDelete) ?: return@launch
                     val deletedIds = billsToDelete.map { it.id }.toSet()
                     allBills = allBills.filterNot { it.id in deletedIds }
-                    adapter.clearSelection()
+                    // 不退出多选，只清空勾选，方便连续删多批。
+                    adapter.deselectAll()
                     applyFilter(currentKeyword.trim())
                     BillUndoController.showNow(
                         findViewById(android.R.id.content),

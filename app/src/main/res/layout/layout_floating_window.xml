@@ -19,7 +19,107 @@
         android:paddingTop="14dp"
         android:paddingBottom="16dp">
 
+        <LinearLayout
+            android:id="@+id/layout_capture_context"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="6dp"
+            android:orientation="vertical"
+            android:visibility="gone">
+
+            <LinearLayout
+                android:id="@+id/layout_capture_context_bar"
+                android:layout_width="match_parent"
+                android:layout_height="40dp"
+                android:background="@drawable/bg_capture_context_bar"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingStart="11dp"
+                android:paddingEnd="4dp">
+
+                <View
+                    android:id="@+id/view_capture_source_dot"
+                    android:layout_width="8dp"
+                    android:layout_height="8dp"
+                    android:background="@drawable/bg_capture_source_dot" />
+
+                <TextView
+                    android:id="@+id/tv_capture_count"
+                    android:layout_width="wrap_content"
+                    android:layout_height="match_parent"
+                    android:layout_marginStart="4dp"
+                    android:background="?android:attr/selectableItemBackgroundBorderless"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:gravity="center_vertical"
+                    android:paddingHorizontal="6dp"
+                    android:text="待记 0 笔"
+                    android:textColor="@color/text_primary"
+                    android:textSize="12sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/tv_capture_summary"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="2dp"
+                    android:layout_weight="1"
+                    android:ellipsize="end"
+                    android:maxLines="1"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="12sp" />
+
+                <LinearLayout
+                    android:id="@+id/layout_capture_mode_switch"
+                    android:layout_width="wrap_content"
+                    android:layout_height="28dp"
+                    android:layout_marginStart="6dp"
+                    android:background="@drawable/bg_capture_mode_track"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:padding="2dp">
+
+                    <TextView
+                        android:id="@+id/btn_capture_mode_pending"
+                        android:layout_width="wrap_content"
+                        android:layout_height="match_parent"
+                        android:background="@drawable/bg_capture_mode_segment"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:gravity="center"
+                        android:minWidth="44dp"
+                        android:paddingHorizontal="10dp"
+                        android:text="待记"
+                        android:textColor="@color/brand_primary"
+                        android:textSize="11sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/btn_capture_mode_new"
+                        android:layout_width="wrap_content"
+                        android:layout_height="match_parent"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:gravity="center"
+                        android:minWidth="44dp"
+                        android:paddingHorizontal="10dp"
+                        android:text="新账"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="11sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/layout_capture_panel"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:visibility="gone" />
+        </LinearLayout>
+
         <RelativeLayout
+            android:id="@+id/layout_amount_row"
             android:layout_width="match_parent"
             android:layout_height="wrap_content">
 
@@ -232,6 +332,21 @@
                 android:textColor="#333333" />
 
             <TextView
+                android:id="@+id/tv_category_source_badge"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="6dp"
+                android:background="@drawable/shape_tag_bg"
+                android:paddingStart="8dp"
+                android:paddingTop="3dp"
+                android:paddingEnd="8dp"
+                android:paddingBottom="3dp"
+                android:textColor="@color/brand_primary"
+                android:textSize="11sp"
+                android:textStyle="bold"
+                android:visibility="gone" />
+
+            <TextView
                 android:id="@+id/tv_refund_toggle"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
@@ -368,6 +483,49 @@
                 android:textColor="#333333" />
         </LinearLayout>
 
+        <LinearLayout
+            android:id="@+id/layout_split_toggle_row"
+            android:layout_width="match_parent"
+            android:layout_height="36dp"
+            android:layout_marginTop="6dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:visibility="gone">
+
+            <androidx.appcompat.widget.SwitchCompat
+                android:id="@+id/switch_split_bill"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="拆分记账"
+                android:textColor="#334155"
+                android:textSize="13sp" />
+
+            <TextView
+                android:id="@+id/tv_split_hint"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:layout_weight="1"
+                android:text="按备注拆为多条明细"
+                android:textColor="#94A3B8"
+                android:textSize="11.5sp" />
+
+            <TextView
+                android:id="@+id/btn_split_preview"
+                android:layout_width="wrap_content"
+                android:layout_height="28dp"
+                android:background="@drawable/shape_tag_bg"
+                android:clickable="true"
+                android:focusable="true"
+                android:gravity="center"
+                android:paddingHorizontal="10dp"
+                android:text="拆单预览"
+                android:textColor="@color/brand_primary"
+                android:textSize="12sp"
+                android:textStyle="bold"
+                android:visibility="gone" />
+        </LinearLayout>
+
         <EditText
             android:id="@+id/et_remark"
             android:layout_width="match_parent"
@@ -492,11 +650,26 @@
             android:textSize="@dimen/text_size_13"
             android:visibility="gone" />
 
+        <TextView
+            android:id="@+id/tv_save_disabled_hint"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:background="?android:attr/selectableItemBackground"
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="center"
+            android:paddingVertical="4dp"
+            android:text="@string/pending_save_hint_need_category_or_remark"
+            android:textColor="@color/brand_primary"
+            android:textSize="12sp"
+            android:visibility="gone" />
+
         <LinearLayout
             android:id="@+id/layout_form_actions"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="14dp"
+            android:layout_marginTop="10dp"
             android:orientation="horizontal">
 
             <com.google.android.material.button.MaterialButton
@@ -517,6 +690,38 @@
                 android:layout_marginStart="8dp"
                 android:layout_weight="1.5"
                 android:text="@string/save_and_record"
+                android:textColor="#FFFFFF"
+                android:textStyle="bold"
+                app:backgroundTint="@color/brand_primary"
+                app:cornerRadius="14dp" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/layout_ai_confirm_bar"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:orientation="horizontal"
+            android:visibility="gone">
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_ai_change_category"
+                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                android:layout_width="0dp"
+                android:layout_height="46dp"
+                android:layout_weight="1"
+                android:text="@string/btn_change_category"
+                android:textColor="@color/brand_primary"
+                app:cornerRadius="14dp"
+                app:strokeColor="@color/brand_primary" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_ai_confirm_save"
+                android:layout_width="0dp"
+                android:layout_height="46dp"
+                android:layout_marginStart="8dp"
+                android:layout_weight="1.5"
+                android:text="@string/btn_confirm_record"
                 android:textColor="#FFFFFF"
                 android:textStyle="bold"
                 app:backgroundTint="@color/brand_primary"

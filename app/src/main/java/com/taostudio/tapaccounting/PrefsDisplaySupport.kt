@@ -21,6 +21,7 @@ object PrefsDisplaySupport {
     private const val KEY_BILL_SHOW_FULL_CATEGORY = "bill_show_full_category_v1"
     private const val KEY_BILL_REMARK_PRIORITY = "bill_remark_priority_v1"
     private const val KEY_INDEPENDENT_DETAIL = "independent_detail_enabled_v1"
+    private const val KEY_BILL_CATEGORY_SOURCE = "bill_category_source_visible_v1"
     private const val KEY_INSIGHT_CARDS_ENABLED = "insight_cards_enabled"
     private const val KEY_IMPORT_ONBOARDING_SEEN = "import_onboarding_seen_v1"
     private const val KEY_IMPORT_REVIEW_COMPLETED = "import_review_completed_v1"
@@ -142,6 +143,12 @@ object PrefsDisplaySupport {
         prefs(ctx).getBoolean(KEY_INDEPENDENT_DETAIL, false)
     fun setIndependentDetailEnabled(ctx: Context, enabled: Boolean) =
         prefs(ctx).edit().putBoolean(KEY_INDEPENDENT_DETAIL, enabled).apply()
+
+    /** 账单详情里是否显示“AI 建议 / 规则命中 / 用户自选”来源标签，默认显示。 */
+    fun isBillCategorySourceVisible(ctx: Context): Boolean =
+        prefs(ctx).getBoolean(KEY_BILL_CATEGORY_SOURCE, true)
+    fun setBillCategorySourceVisible(ctx: Context, visible: Boolean) =
+        prefs(ctx).edit().putBoolean(KEY_BILL_CATEGORY_SOURCE, visible).apply()
 
     fun isInsightCardsEnabled(ctx: Context): Boolean =
         prefs(ctx).getBoolean(KEY_INSIGHT_CARDS_ENABLED, true)

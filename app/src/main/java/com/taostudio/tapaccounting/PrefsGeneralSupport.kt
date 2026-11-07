@@ -56,6 +56,8 @@ object PrefsGeneralSupport {
     private const val KEY_RECURRING_DETECT_AMOUNT_TOLERANCE = "recurring_detect_amount_tolerance_v1"
     private const val KEY_RECURRING_AUTO_DETECT_GUIDE_SEEN = "recurring_auto_detect_guide_seen_v1"
     private const val KEY_MULTI_SELECT_MORE_TIP_COUNT = "multi_select_more_tip_count_v1"
+    private const val KEY_AI_PANEL_BUBBLE_SIDE = "ai_panel_bubble_side_v1"
+    private const val KEY_AI_PANEL_BUBBLE_Y = "ai_panel_bubble_y_v1"
 
     private fun prefs(ctx: Context) = ctx.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
@@ -464,6 +466,18 @@ object PrefsGeneralSupport {
         prefs(ctx).getBoolean(KEY_AGGRESSIVE_KEEP_ALIVE, false)
     fun setAggressiveKeepAliveEnabled(ctx: Context, enabled: Boolean) =
         prefs(ctx).edit().putBoolean(KEY_AGGRESSIVE_KEEP_ALIVE, enabled).apply()
+
+    // --- AI 面板常驻小圆位置 ---
+    fun getAiPanelBubbleSide(ctx: Context): Int =
+        prefs(ctx).getInt(KEY_AI_PANEL_BUBBLE_SIDE, Prefs.AI_BUBBLE_SIDE_RIGHT)
+    fun setAiPanelBubbleSide(ctx: Context, side: Int) =
+        prefs(ctx).edit().putInt(KEY_AI_PANEL_BUBBLE_SIDE, side).apply()
+
+    /** 小圆顶部 y（px）；-1 表示还没拖过，由 UI 取屏幕中部默认值。 */
+    fun getAiPanelBubbleY(ctx: Context): Int =
+        prefs(ctx).getInt(KEY_AI_PANEL_BUBBLE_Y, -1)
+    fun setAiPanelBubbleY(ctx: Context, y: Int) =
+        prefs(ctx).edit().putInt(KEY_AI_PANEL_BUBBLE_Y, y).apply()
 
     // --- Backup initialization ---
     fun isBackupInitialized(ctx: Context): Boolean =

@@ -6,9 +6,11 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
+import com.taostudio.tapaccounting.data.local.dao.AccountingRuleDao
 import com.taostudio.tapaccounting.data.local.dao.AiRuleDao
 import com.taostudio.tapaccounting.data.local.dao.AssetDao
 import com.taostudio.tapaccounting.data.local.dao.BillDao
+import com.taostudio.tapaccounting.data.local.dao.BillRuleProvenanceDao
 import com.taostudio.tapaccounting.data.local.dao.BookDao
 import com.taostudio.tapaccounting.data.local.dao.BookScopeDao
 import com.taostudio.tapaccounting.data.local.dao.BudgetDao
@@ -24,9 +26,21 @@ import com.taostudio.tapaccounting.data.local.dao.SyncOperationDao
 import com.taostudio.tapaccounting.data.local.dao.SyncQueueDao
 import com.taostudio.tapaccounting.data.local.dao.SyncStateDao
 import com.taostudio.tapaccounting.data.local.dao.SyncedRemoteFileDao
+import com.taostudio.tapaccounting.capture.data.AssetMappingDao
+import com.taostudio.tapaccounting.capture.data.CaptureEventDao
+import com.taostudio.tapaccounting.capture.data.CategoryRuleDao
+import com.taostudio.tapaccounting.capture.data.PaymentCaptureDao
+import com.taostudio.tapaccounting.capture.data.RuleLearningTaskDao
+import com.taostudio.tapaccounting.capture.data.AssetMappingRule
+import com.taostudio.tapaccounting.capture.data.CaptureEvent
+import com.taostudio.tapaccounting.capture.data.CategoryRule
+import com.taostudio.tapaccounting.capture.data.PaymentCapture
+import com.taostudio.tapaccounting.capture.data.RuleLearningTask
+import com.taostudio.tapaccounting.data.local.entity.AccountingRule
 import com.taostudio.tapaccounting.data.local.entity.AiRule
 import com.taostudio.tapaccounting.data.local.entity.Asset
 import com.taostudio.tapaccounting.data.local.entity.Bill
+import com.taostudio.tapaccounting.data.local.entity.BillRuleProvenance
 import com.taostudio.tapaccounting.data.local.entity.Book
 import com.taostudio.tapaccounting.data.local.entity.Budget
 import com.taostudio.tapaccounting.data.local.entity.Category
@@ -44,7 +58,7 @@ import com.taostudio.tapaccounting.data.local.entity.SyncedRemoteFile
 import com.taostudio.tapaccounting.logic.InvestmentInterestService
 
 /** 与 backupIfDowngrade 第三个参数保持同步。 */
-private const val DB_VERSION = 40
+private const val DB_VERSION = 44
 
 /**
  * Room 主库。改 schema 前请先读本节，避免误用破坏性迁移或漏改版本号。
@@ -76,10 +90,16 @@ private const val DB_VERSION = 40
         Budget::class, RecurringPattern::class, Book::class,
         SharedLedger::class, SharedMember::class, SyncOperation::class,
         SyncQueue::class, SyncState::class, SyncedRemoteFile::class,
-        ExternalImport::class
+        ExternalImport::class,
+        // P1：待记收件箱迁入主库。5 张表暂未接入 .bak 备份/恢复，P4 再补
+        // BackupRepository.getFullData/restoreFullData；它们不影响账单/资产/预算的既有备份。
+        PaymentCapture::class, CaptureEvent::class, AssetMappingRule::class,
+        CategoryRule::class, RuleLearningTask::class,
+        // v43：待记与 AI 记账规则合并表及账单来源记录表
+        AccountingRule::class, BillRuleProvenance::class
     ],
     version = DB_VERSION,
-    exportSchema = false
+    exportSchema = true
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun billDao(): BillDao
@@ -100,6 +120,13 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun syncQueueDao(): SyncQueueDao
     abstract fun syncStateDao(): SyncStateDao
     abstract fun syncedRemoteFileDao(): SyncedRemoteFileDao
+    abstract fun paymentCaptureDao(): PaymentCaptureDao
+    abstract fun captureEventDao(): CaptureEventDao
+    abstract fun assetMappingDao(): AssetMappingDao
+    abstract fun categoryRuleDao(): CategoryRuleDao
+    abstract fun ruleLearningTaskDao(): RuleLearningTaskDao
+    abstract fun accountingRuleDao(): AccountingRuleDao
+    abstract fun billRuleProvenanceDao(): BillRuleProvenanceDao
 
     companion object {
         /** 对外暴露的数据库版本号（与 [DB_VERSION] 相同）。 */
@@ -759,6 +786,48 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * v41：拆分入账的支付组 id。
+         *
+         * 老回执保持 NULL；新拆单回执记录同一组 N 条账单的 paymentGroupId。
+         */
+        val MIGRATION_40_41 = object : Migration(40, 41) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL(
+                    "ALTER TABLE external_imports ADD COLUMN paymentGroupId TEXT"
+                )
+            }
+        }
+
+        /**
+         * v42：把支付捕获插件的 5 张待记表并入主库。
+         *
+         * SQL 与 Room Entity 生成的 schema 完全一致；由 [CAPTURE_MIGRATION_41_42_SQL] 统一维护，
+         * `CaptureSchemaMigrationTest` 会拿导出的 42.json 做逐列/逐索引校验。
+         */
+        val MIGRATION_41_42 = object : Migration(41, 42) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                CAPTURE_MIGRATION_41_42_SQL.forEach(database::execSQL)
+            }
+        }
+
+        /**
+         * v43：待记与 AI 记账规则合并为 accounting_rules，新增 bill_rule_provenance，
+         * payment_captures 新增 categoryRuleId。
+         */
+        val MIGRATION_42_43 = object : Migration(42, 43) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                CAPTURE_MIGRATION_42_43_SQL.forEach(database::execSQL)
+            }
+        }
+
+        /** v44：待记卡片展示命中规则名。 */
+        val MIGRATION_43_44 = object : Migration(43, 44) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                CAPTURE_MIGRATION_43_44_SQL.forEach(database::execSQL)
+            }
+        }
+
         fun getDatabase(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 val appCtx = context.applicationContext
@@ -809,7 +878,11 @@ abstract class AppDatabase : RoomDatabase() {
                         MIGRATION_36_37,
                         MIGRATION_37_38,
                         MIGRATION_38_39,
-                        MIGRATION_39_40
+                        MIGRATION_39_40,
+                        MIGRATION_40_41,
+                        MIGRATION_41_42,
+                        MIGRATION_42_43,
+                        MIGRATION_43_44
                     )
                     // 仅处理降级：清库并按当前代码 schema 重建。升级缺迁移时仍应抛异常，不要改成 fallbackToDestructiveMigration()。
                     .fallbackToDestructiveMigrationOnDowngrade()

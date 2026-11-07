@@ -122,6 +122,13 @@ internal class HomeRefreshController(
                     billsInvalidationDebounceJob = fragment.viewLifecycleOwner.lifecycleScope.launch(Dispatchers.Main) {
                         delay(260)
                         if (!fragment.isAdded) return@launch
+                        // Room Flow 刚刚已经推过一次（删除/编辑账单时几乎总会这样）：
+                        // 再强制重载只会让列表重建两次，看起来就是「删完闪一下 / 刷新一下」。
+                        val age = homeViewModel.billEmissionAgeMs()
+                        if (age < 700L) {
+                            Log.d("HomePerf", "skip fallback reload: bills flow emitted ${age}ms ago")
+                            return@launch
+                        }
                         homeViewModel.forceReload(
                             bookName = getSelectedBookName(),
                             year = getSelectedYear(),

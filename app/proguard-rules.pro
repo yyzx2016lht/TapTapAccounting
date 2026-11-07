@@ -28,6 +28,13 @@
     native <methods>;
 }
 
+# QuickJS（待记规则引擎）：JNI 侧按原始类名/方法名回调，release 不能混淆。
+-keep class com.shiqi.quickjs.** { *; }
+-keepnames class com.shiqi.quickjs.**
+-keepclassmembers class com.shiqi.quickjs.** {
+    native <methods>;
+}
+
 # Backup/restore uses Gson + TypeToken to deserialize persisted JSON into
 # Room entity models. Release builds enable R8, so keep the generic metadata
 # that reflection-based parsers rely on to make debug/release behavior match.

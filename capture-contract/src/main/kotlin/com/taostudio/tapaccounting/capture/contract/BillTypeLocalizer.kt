@@ -14,9 +14,13 @@ package com.taostudio.tapaccounting.capture.contract
  *    Expend/Transfer -> null（与出账方向矛盾，不猜）。
  * 3. Transfer -> 转账（2/0）；即使规则名含“转账/收款”也不再改判
  *    （例如“支付宝转账收款到余额宝”是账户间调拨）。
- * 4. Expend + 规则名含“收款/收入/收益/打款” -> 收入（1/0），见下面的“群收款”例外。
- * 5. Expend -> 支出（0/0）；Income -> 收入（1/0）。
- * 6. 其他/空类型 -> null。
+ * 4. 规则名含“提现” -> 转账（2/0），即使 AA 规则输出 Expend/Income。
+ *    AutoAccounting 的“微信支付提现”规则把“零钱提现发起”硬编码成 Expend，
+ *    但提现是 微信零钱 -> 银行卡 的账户间调拨，不是支出；上游规则包不能改（会被覆盖），
+ *    所以在本地归一化。规则名含“手续费”的除外（提现手续费是真实支出）。
+ * 5. Expend + 规则名含“收款/收入/收益/打款” -> 收入（1/0），见下面的“群收款”例外。
+ * 6. Expend -> 支出（0/0）；Income -> 收入（1/0）。
+ * 7. 其他/空类型 -> null。
  *
  * 已知例外：AutoAccounting 的“微信群收款”规则只在“你支付了……”时命中并输出
  * Expend；规则名虽然含“收款”，本质是出账，不能按收入关键词改判。
@@ -29,7 +33,11 @@ object BillTypeLocalizer {
 
     private val REPAYMENT_KEYWORDS = listOf("还款")
     private val REFUND_KEYWORDS = listOf("退款")
+    private val WITHDRAWAL_KEYWORDS = listOf("提现")
     private val INCOME_KEYWORDS = listOf("收款", "收入", "收益", "打款")
+
+    /** 提现手续费是真实支出，不能因为规则的“提现”二字改成转账。 */
+    private val WITHDRAWAL_EXCEPTIONS = listOf("手续费")
 
     /** “群收款”是出账，不能因为含“收款”就改判收入。 */
     private val EXPEND_KEYWORD_EXCEPTIONS = listOf("群收款")
@@ -44,12 +52,15 @@ object BillTypeLocalizer {
         val name = ruleName.orEmpty().trim()
         val isRepayment = name.containsAny(REPAYMENT_KEYWORDS)
         val isRefund = name.containsAny(REFUND_KEYWORDS)
+        val isWithdrawal = name.containsAny(WITHDRAWAL_KEYWORDS) &&
+            !name.containsAny(WITHDRAWAL_EXCEPTIONS)
         val isIncomeHint = name.containsAny(INCOME_KEYWORDS)
 
         return when (type) {
             AUTO_TYPE_EXPEND -> when {
                 isRepayment -> repayment()
                 isRefund -> null
+                isWithdrawal -> transfer()
                 isIncomeHint && !name.containsAny(EXPEND_KEYWORD_EXCEPTIONS) -> income()
                 else -> expense()
             }
@@ -62,6 +73,8 @@ object BillTypeLocalizer {
 
             AUTO_TYPE_INCOME -> when {
                 isRefund -> refund()
+                // 提现到账同样是账户间调拨（如“零钱提现到账”被某些规则输出成 Income）。
+                isWithdrawal -> transfer()
                 // 组合 B：Income + 还款 也按普通收入（1/0），不再返回 null。
                 else -> income()
             }

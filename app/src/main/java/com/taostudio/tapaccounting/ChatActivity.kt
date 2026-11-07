@@ -65,8 +65,10 @@ import org.json.JSONArray
 import org.json.JSONObject
 import com.taostudio.tapaccounting.data.local.AppDatabase
 import com.taostudio.tapaccounting.data.local.entity.Bill
+import com.taostudio.tapaccounting.logic.RuleCorrectionCoordinator
 import com.taostudio.tapaccounting.ui.common.StatusBarStyle
 import com.taostudio.tapaccounting.data.local.entity.ChatMessage
+import com.taostudio.tapaccounting.data.local.entity.AccountingRule
 import com.taostudio.tapaccounting.data.local.entity.AiRule
 import com.taostudio.tapaccounting.data.repository.CategoryRepository
 import com.google.android.material.snackbar.Snackbar
@@ -75,7 +77,6 @@ import com.taostudio.tapaccounting.ui.main.home.CalendarActivity
 import com.taostudio.tapaccounting.logic.BillMutationService
 import com.taostudio.tapaccounting.logic.CurrencyManager
 import com.taostudio.tapaccounting.logic.RuleDialogHelper
-import com.taostudio.tapaccounting.logic.RuleLearnPromptHelper
 import com.taostudio.tapaccounting.ui.dialog.OverlayDialogs
 import java.io.File
 import java.io.FileOutputStream
@@ -302,7 +303,7 @@ class ChatActivity : AppCompatActivity() {
     }
     private val searchResultAdapter by lazy {
         DrawerSearchResultAdapter(
-            onClick = { msg ->
+            onClick = { msg: ChatMessage ->
                 messagePipeline.cancelCurrentRequest(showInterruptedMessage = false)
                 pendingScrollToMessageId = msg.id
                 currentBookName = msg.bookName.ifBlank { currentBookName }
@@ -1814,22 +1815,15 @@ class ChatActivity : AppCompatActivity() {
         originalBill: Bill,
         updatedBill: Bill
     ) {
-        if (originalBill.categoryName == updatedBill.categoryName) return
-        val referenceText = updatedBill.remark.ifBlank { originalBill.remark }.trim()
-        if (referenceText.isBlank()) return
-
-        RuleLearnPromptHelper.show(
+        // 分类或备注变化都走统一修正协调器；没有 provenance 时仍可按备注新建规则。
+        RuleCorrectionCoordinator.onUserEditedBill(
             ctx = this,
-            model = RuleLearnPromptHelper.PromptModel(
-                referenceText = referenceText,
-                beforeType = originalBill.type,
-                afterType = updatedBill.type,
-                beforeCategory = originalBill.categoryName,
-                afterCategory = updatedBill.categoryName
-            ),
-            isOverlay = false,
-            onContinue = { openChatRuleEditor(referenceText, updatedBill) },
-            onDismiss = {}
+            billId = updatedBill.id,
+            oldCategory = originalBill.categoryName,
+            newCategory = updatedBill.categoryName,
+            oldRemark = originalBill.remark,
+            newRemark = updatedBill.remark,
+            onFinished = {},
         )
     }
 
@@ -1859,14 +1853,12 @@ class ChatActivity : AppCompatActivity() {
 
     private suspend fun saveRuleWithKeywordConflictPrompt(newRule: AiRule): RuleSaveOutcome =
         withContext(Dispatchers.IO) {
-            val dao = db.aiRuleDao()
+            val dao = db.accountingRuleDao()
             val keyword = newRule.keyword.trim()
-            val currentEditId = newRule.id.takeIf { it > 0 }
-            val conflicts = dao.getRulesByKeyword(keyword)
-                .filter { existing -> currentEditId == null || existing.id != currentEditId }
+            val conflicts = dao.findAllByKeyword(keyword)
 
             if (conflicts.isEmpty()) {
-                dao.insertRule(newRule.copy(keyword = keyword))
+                upsertUserAccountingRule(newRule)
                 return@withContext RuleSaveOutcome.SAVED
             }
 
@@ -1878,13 +1870,50 @@ class ChatActivity : AppCompatActivity() {
             }
 
             val target = conflicts.first()
-            dao.insertRule(newRule.copy(id = target.id, keyword = keyword))
-            currentEditId?.takeIf { it != target.id }?.let { dao.deleteRuleById(it) }
+            upsertUserAccountingRule(newRule, preferredId = target.id)
             conflicts.drop(1).forEach { duplicate ->
-                if (duplicate.id != target.id) dao.deleteRuleById(duplicate.id)
+                if (duplicate.id != target.id) dao.deleteById(duplicate.id)
             }
             RuleSaveOutcome.OVERWRITTEN
         }
+
+    /** 记账习惯规则统一写入 accounting_rules；旧 ai_rule 只读兼容，不再双写。 */
+    private suspend fun upsertUserAccountingRule(newRule: AiRule, preferredId: Long? = null) {
+        val dao = db.accountingRuleDao()
+        val keyword = newRule.keyword.trim()
+        val now = System.currentTimeMillis()
+        val existing = preferredId
+            ?.let { id -> dao.findAllByKeyword(keyword).firstOrNull { it.id == id } }
+            ?: dao.findAllByKeyword(keyword).firstOrNull()
+        val accRule = if (existing != null) {
+            existing.copy(
+                keyword = keyword,
+                targetCategory = newRule.targetCategory,
+                targetType = newRule.targetType ?: existing.targetType,
+                targetAccount1 = newRule.targetAccount1 ?: existing.targetAccount1,
+                targetAccount2 = newRule.targetAccount2 ?: existing.targetAccount2,
+                source = AccountingRule.Source.USER,
+                enabled = newRule.isEnabled,
+                updatedAt = now
+            )
+        } else {
+            AccountingRule(
+                id = 0L,
+                keyword = keyword,
+                matchField = AccountingRule.MatchField.REMARK,
+                matchMode = AccountingRule.MatchMode.ALL_TOKENS,
+                targetCategory = newRule.targetCategory,
+                targetType = newRule.targetType,
+                targetAccount1 = newRule.targetAccount1,
+                targetAccount2 = newRule.targetAccount2,
+                source = AccountingRule.Source.USER,
+                enabled = newRule.isEnabled,
+                createdAt = now,
+                updatedAt = now
+            )
+        }
+        dao.upsert(accRule)
+    }
 
     private suspend fun promptKeywordOverwrite(
         keyword: String,

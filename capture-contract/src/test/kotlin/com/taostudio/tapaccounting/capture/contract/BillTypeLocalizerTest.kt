@@ -71,6 +71,11 @@ class BillTypeLocalizerTest {
                 LocalBillType.TYPE_TRANSFER,
             ),
             Case("提现是账户间调拨", "Transfer", "微信支付提现", LocalBillType.TYPE_TRANSFER),
+            // 真实规则包里 rule_253“微信支付提现”（零钱提现发起）输出的是 Expend，
+            // rule_261“微信支付零钱提现到账”输出 Transfer；两者都应记成转账。
+            Case("提现发起被 AA 输出成支出时仍按转账", "Expend", "微信支付提现", LocalBillType.TYPE_TRANSFER),
+            Case("提现到账被 AA 输出成收入时仍按转账", "Income", "微信支付零钱提现到账", LocalBillType.TYPE_TRANSFER),
+            Case("提现手续费是真实支出", "Expend", "微信支付提现手续费", LocalBillType.TYPE_EXPENSE),
             Case("空白规则名的转账仍按转账", "Transfer", "   ", LocalBillType.TYPE_TRANSFER),
 
             // ---- 收入 / 退款 ----

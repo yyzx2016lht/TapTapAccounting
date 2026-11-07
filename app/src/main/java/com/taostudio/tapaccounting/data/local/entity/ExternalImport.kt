@@ -20,5 +20,7 @@ data class ExternalImport(
     @PrimaryKey val captureId: String,
     val billId: Long,
     val requestId: String? = null,
+    /** 拆分入账时 N 条账单共用的支付组；普通单笔回执为 null。 */
+    val paymentGroupId: String? = null,
     val createdAt: Long
 )

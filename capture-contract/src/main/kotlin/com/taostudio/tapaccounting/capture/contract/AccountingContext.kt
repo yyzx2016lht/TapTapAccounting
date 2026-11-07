@@ -8,6 +8,7 @@ package com.taostudio.tapaccounting.capture.contract
 data class AccountingContext(
     val contractVersion: Int = CaptureContract.VERSION,
     val defaultBookName: String? = null,
+    val currentBookName: String? = null,
     val assetFeatureEnabled: Boolean = true,
     val books: List<BookInfo> = emptyList(),
     val assets: List<AssetInfo> = emptyList(),

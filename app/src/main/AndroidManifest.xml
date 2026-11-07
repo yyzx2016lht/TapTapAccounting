@@ -44,6 +44,8 @@
     <permission
         android:name="com.taostudio.tapaccounting.permission.CAPTURE_BRIDGE"
         android:protectionLevel="signature" />
+    <!-- 主应用自己也要持有该权限，才能反向调用插件的迁移 Provider。 -->
+    <uses-permission android:name="com.taostudio.tapaccounting.permission.CAPTURE_BRIDGE" />
 
     <!-- Android 11+ 包可见性：显式声明插件包名与 Provider，便于广播/Provider 互调。 -->
     <queries>
@@ -197,7 +199,7 @@
 
     <activity android:name=".ui.main.assets.AssetDetailActivity" android:label="资产详情" />
     <activity android:name=".ui.main.assets.AssetStatsActivity" android:label="资产统计" />
-    <activity android:name=".AiRuleManageActivity" android:label="AI规则管理" />
+    <activity android:name=".AiRuleManageActivity" android:label="记账习惯规则" />
     <activity android:name=".AiFeatureSettingsActivity" android:label="@string/title_ai_features" />
     <activity android:name=".AiConfigActivity" android:label="@string/title_ai_config" />
     <activity android:name=".ui.import.ImportOnboardingActivity" android:label="@string/import_onboarding_title" />
@@ -235,7 +237,26 @@
             android:theme="@android:style/Theme.Translucent.NoTitleBar"
             android:taskAffinity=""
             android:excludeFromRecents="true"
-            android:exported="false" />
+            android:exported="true" />
+        <activity
+            android:name=".CaptureImageAccountingActivity"
+            android:label="待记图片记账"
+            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:theme="@style/Theme.TapAccounting.Transparent" />
+
+        <!-- P2：主应用待记收件箱 / 规则 / 数据规则 / 设置 / 历史。 -->
+        <activity
+            android:name=".capture.ui.PendingListActivity"
+            android:exported="false"
+            android:label="待记收件箱"
+            android:theme="@style/CaptureTheme" />
+        <activity
+            android:name=".capture.ui.CaptureHistoryActivity"
+            android:exported="false"
+            android:label="捕获历史"
+            android:theme="@style/CaptureTheme" />
         <!-- 桌面小组件：四种固定样式共享同一套渲染逻辑，见 com.taostudio.tapaccounting.widget 包 -->
         <receiver
             android:name=".widget.CompactExpenseWidgetProvider"
@@ -322,6 +343,44 @@
             android:grantUriPermissions="false"
             android:permission="com.taostudio.tapaccounting.permission.CAPTURE_BRIDGE"
             tools:ignore="ExportedContentProvider" />
+
+        <!--
+          P1：hook / relay -> 主应用的待记入口。
+          - Receiver 走显式广播，可用 FLAG_INCLUDE_STOPPED_PACKAGES 拉起被停掉的主应用；
+          - Provider 给 relay 用 ContentResolver.call() 兜底；
+          - 两者都用 BuildConfig.CAPTURE_INGEST_TOKEN 校验，不启动任何 Activity。
+        -->
+        <receiver
+            android:name=".capture.ingest.CaptureIngestReceiver"
+            android:exported="true"
+            tools:ignore="ExportedReceiver">
+            <intent-filter>
+                <action android:name="com.taostudio.tapaccounting.action.CAPTURE_INGEST" />
+            </intent-filter>
+        </receiver>
+
+        <provider
+            android:name=".capture.ingest.CaptureIngestProvider"
+            android:authorities="com.taostudio.tapaccounting.ingest"
+            android:enabled="true"
+            android:exported="true"
+            android:grantUriPermissions="false"
+            tools:ignore="ExportedContentProvider" />
+
+        <!-- 插件前台时主动回拉规则包/旧 capture.db；ColorOS 会拦截后台启动插件 Provider。 -->
+        <receiver
+            android:name=".capture.rule.CaptureSyncReceiver"
+            android:exported="true"
+            tools:ignore="ExportedReceiver">
+            <intent-filter>
+                <action android:name="com.taostudio.tapaccounting.action.CAPTURE_PULL_RULES" />
+                <action android:name="com.taostudio.tapaccounting.action.CAPTURE_PULL_LEGACY" />
+            </intent-filter>
+        </receiver>
+
+        <receiver
+            android:name=".capture.notify.NotificationActionReceiver"
+            android:exported="false" />
 
     </application>
 

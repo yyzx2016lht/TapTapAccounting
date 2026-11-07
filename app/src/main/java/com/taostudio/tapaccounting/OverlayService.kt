@@ -25,6 +25,7 @@ class OverlayService : Service() {
         const val ACTION_HIDE_OVERLAY = "com.taostudio.tapaccounting.HIDE_OVERLAY"
         const val ACTION_SHOW_AI_INPUT = "com.taostudio.tapaccounting.SHOW_AI_INPUT"
         const val ACTION_SCREEN_CAPTURE = "com.taostudio.tapaccounting.SCREEN_CAPTURE"
+        const val ACTION_SHOW_CAPTURE_BUBBLE = "com.taostudio.tapaccounting.SHOW_CAPTURE_BUBBLE"
         const val ACTION_START_FLIP = "ACTION_START_FLIP"
         const val ACTION_STOP_FLIP = "ACTION_STOP_FLIP"
         const val ACTION_START_DOUBLE_TAP = "ACTION_START_DOUBLE_TAP"
@@ -406,7 +407,10 @@ class OverlayService : Service() {
 
             keepAliveManager.reconcileDetectorState("service-create")
             keepAliveManager.syncWatchdogState()
-            Logger.i(this, "OverlayService", "Service onCreate completed.")
+            com.taostudio.tapaccounting.capture.notify.CaptureBubbleManager.onDismissed = {
+            if (!isDestroying) stopSelfIfIdle("capture-bubble-dismissed")
+        }
+        Logger.i(this, "OverlayService", "Service onCreate completed.")
         } catch (e: Exception) {
             Logger.e(this, "OverlayService", "🚨 Fatal Error in onCreate: ${e.message}")
         }
@@ -471,19 +475,51 @@ class OverlayService : Service() {
                 }
             }
             ACTION_SHOW_OVERLAY -> {
+                // 敲击记账页面打开时胶囊先隐藏，页面关掉再恢复；60 秒照常计时。
+                com.taostudio.tapaccounting.capture.notify.CaptureBubbleManager
+                    .suspendPeekForOverlay(this)
                 val prefill = intent?.getStringExtra(EXTRA_PREFILL)?.let { raw ->
                     runCatching { JSONObject(raw) }.getOrNull()
                 }
-                overlayManager.showOverlay(
+                val shown = overlayManager.showOverlay(
                     prefill = prefill,
                     captureId = intent?.getStringExtra(EXTRA_CAPTURE_ID)?.trim()?.takeIf { it.isNotEmpty() },
                     requestId = intent?.getStringExtra(EXTRA_REQUEST_ID)?.trim()?.takeIf { it.isNotEmpty() }
                 )
+                if (!shown) {
+                    com.taostudio.tapaccounting.capture.notify.CaptureBubbleManager
+                        .resumePeekAfterOverlay(this)
+                }
             }
             ACTION_SHOW_AI_INPUT -> overlayManager.showAiInputPanel()
             ACTION_SCREEN_CAPTURE -> overlayManager.startScreenCaptureFromTap()
+            ACTION_SHOW_CAPTURE_BUBBLE -> {
+                promoteToForeground(currentNotificationText())
+                val captureId = intent?.getStringExtra(EXTRA_CAPTURE_ID)?.trim().orEmpty()
+                if (captureId.isNotEmpty()) {
+                    CoroutineScope(Dispatchers.IO).launch {
+                        val repo = com.taostudio.tapaccounting.capture.data.CaptureRepository(
+                            com.taostudio.tapaccounting.data.local.AppDatabase
+                                .getDatabase(this@OverlayService).paymentCaptureDao()
+                        )
+                        val capture = repo.findById(captureId)
+                        val pendingCount = repo.countPending()
+                        if (capture != null) {
+                            com.taostudio.tapaccounting.capture.notify.CaptureBubbleManager
+                                .showBubble(this@OverlayService, capture, pendingCount.coerceAtLeast(1))
+                            Handler(Looper.getMainLooper()).postDelayed({
+                                if (!com.taostudio.tapaccounting.capture.notify.CaptureBubbleManager.isShowing()) {
+                                    stopSelfIfIdle("capture-bubble-timeout")
+                                }
+                            }, 6_000L)
+                        }
+                    }
+                }
+            }
             ACTION_HIDE_OVERLAY -> {
                 overlayManager.removeOverlay(isSaved = false)
+                // F08: 隐藏悬浮层时 AI 面板和小圆一起关掉
+                overlayManager.closeAiPanel()
                 stopSelfIfIdle("overlay-hidden")
             }
             // 开机/看门狗重拉路径（BootReceiver 或直接 startService）
@@ -495,7 +531,8 @@ class OverlayService : Service() {
             ACTION_HIDE_OVERLAY,
             ACTION_SHOW_OVERLAY,
             ACTION_SHOW_AI_INPUT,
-            ACTION_SCREEN_CAPTURE -> Unit
+            ACTION_SCREEN_CAPTURE,
+            ACTION_SHOW_CAPTURE_BUBBLE -> Unit
             ACTION_RESTART_DOUBLE_TAP -> {
                 if (!isDoubleTapEnabled) keepAliveManager.reconcileDetectorState("onStartCommand-$action")
             }
@@ -513,6 +550,8 @@ class OverlayService : Service() {
         stopTapDetection()
         overlayManager.removeOverlay(isSaved = false)
         overlayManager.destroy()
+        com.taostudio.tapaccounting.capture.notify.CaptureBubbleManager.onDismissed = null
+        com.taostudio.tapaccounting.capture.notify.CaptureBubbleManager.dismissImmediate(this)
         isServiceRunning = false
         super.onDestroy()
     }
@@ -877,7 +916,11 @@ class OverlayService : Service() {
     }
 
     private fun stopSelfIfIdle(reason: String) {
-        if (isFlipEnabled || isDoubleTapEnabled || overlayManager.isShowing()) return
+        // F08: pin 后的小圆/面板也算活跃，不能把承载它的服务停掉
+        if (isFlipEnabled || isDoubleTapEnabled || overlayManager.isShowing() ||
+            overlayManager.isPinnedPanelActive() ||
+            com.taostudio.tapaccounting.capture.notify.CaptureBubbleManager.isShowing()
+        ) return
         Logger.i(this, "OverlayService", "Service idle ($reason), stopping")
         cancelRestart()
         try {

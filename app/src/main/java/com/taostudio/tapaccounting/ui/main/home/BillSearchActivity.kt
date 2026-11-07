@@ -1289,21 +1289,25 @@ class BillSearchActivity : AppCompatActivity() {
             val billsToDelete = adapter.getSelectedBills()
             if (billsToDelete.isEmpty()) return@setOnClickListener
             val targetIds = billsToDelete.map { it.id }
-            BillRowAnimator.collapseThen(BillRowAnimator.findRows(rvResults, targetIds)) {
+            BillRowAnimator.deleteThen(rvResults, targetIds) {
                 lifecycleScope.launch {
                     val rows = BillDeleteUndo.delete(db, billsToDelete) ?: return@launch
                     val deletedIds = billsToDelete.map { it.id }.toSet()
                     allBills = allBills.filterNot { it.id in deletedIds }
+                    // 删除完成：退出多选（底栏滑出），撤销条等底栏走完再出来。
                     adapter.clearSelection()
                     applyFilter(currentKeyword.trim())
-                    BillUndoController.showNow(
-                        findViewById(android.R.id.content),
-                        getString(R.string.deleted_bills_fmt, billsToDelete.size),
-                        rows
-                    ) {
-                        loadAllBills()
-                        BillRowAnimator.expandAfterRefresh(rvResults, rows.map { it.originalBillId })
-                    }
+                    BillUndoController.showAfterSelectionExit(
+                        anchor = findViewById(android.R.id.content),
+                        message = getString(R.string.deleted_bills_fmt, billsToDelete.size),
+                        rows = rows,
+                        onRestored = {
+                            BillRowAnimator.restoreThen(
+                                rvResults,
+                                rows.map { it.originalBillId }
+                            ) { loadAllBills() }
+                        }
+                    )
                 }
             }
         }

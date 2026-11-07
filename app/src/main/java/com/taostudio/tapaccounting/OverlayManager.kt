@@ -72,6 +72,9 @@ class OverlayManager(private val ctx: Context) {
     private var windowManager: WindowManager? = null
     private var overlayView: View? = null
     private var overlayParams: WindowManager.LayoutParams? = null
+    /** 系统选图期间把悬浮窗藏起来并放掉触摸，避免盖住选择器。 */
+    private var overlayHiddenForPicker = false
+    private var overlayFlagsBeforePicker = 0
     private var isRemovingOverlay = false
     private var overlayShownAtUptimeMs = 0L
     private var currentAnimator: Animator? = null
@@ -101,13 +104,54 @@ class OverlayManager(private val ctx: Context) {
 
     private val aiAssistant = AiAssistant(ctx)
     private var formController: AccountingFormController? = null
+
+    /** AI 面板展开时被临时隐藏的普通表单；面板收起/关闭后恢复，避免面板被压在后面。 */
+    private var overlayHiddenForAiPanel = false
+
+    init {
+        // F08: 从「小圆 → 展开」时先让普通表单避让，恢复可见后小圆/面板才看得见
+        aiAssistant.onPanelExpanding = {
+            val view = overlayView
+            if (view != null && !isRemovingOverlay && view.visibility == View.VISIBLE) {
+                view.visibility = View.INVISIBLE
+                overlayHiddenForAiPanel = true
+            }
+        }
+        aiAssistant.onPanelCollapsed = { closeOverlayForm ->
+            if (overlayHiddenForAiPanel) {
+                // 表单只是被展开的面板临时挡住，收小圆后原样放回
+                overlayView?.visibility = View.VISIBLE
+                overlayHiddenForAiPanel = false
+            } else if (closeOverlayForm && overlayView != null) {
+                // 用户主动 pin/点外面/返回：普通表单一起收起
+                removeOverlay(isSaved = false)
+            }
+        }
+        aiAssistant.onPanelClosed = {
+            if (overlayHiddenForAiPanel) {
+                overlayView?.visibility = View.VISIBLE
+                overlayHiddenForAiPanel = false
+            }
+        }
+    }
     private var pendingCaptureController: com.taostudio.tapaccounting.capturebridge.OverlayPendingCaptureController? = null
     private var voiceHandler: VoiceInputHandler? = null
     /** 支付捕获插件“自己记”的幂等键；普通敲击记账为 null。 */
     private var pendingCaptureId: String? = null
     private var pendingRequestId: String? = null
 
+    /** 待记模式下点截图：复用截屏管线，但结果走待记的识图拆单。 */
+    private var screenCaptureForPendingSplit = false
+
     fun isShowing(): Boolean = overlayView != null
+
+    /** F08: AI 面板处于 pin/小圆状态时，服务不能按 idle 退出。 */
+    fun isPinnedPanelActive(): Boolean = aiAssistant.isPinnedPanelActive()
+
+    /** F08: 彻底关闭 AI 面板并移除小圆。 */
+    fun closeAiPanel() {
+        aiAssistant.closePanel()
+    }
 
     fun handleExternalAiResult(result: JSONObject, showSaveOnly: Boolean = false) {
         handleAiResult(result)
@@ -263,6 +307,7 @@ class OverlayManager(private val ctx: Context) {
             return false
         }
         overlayView = LayoutInflater.from(themeContext).inflate(R.layout.layout_floating_window, null)
+        overlayHiddenForPicker = false
         overlayView?.background = android.graphics.drawable.GradientDrawable().apply {
             setColor(android.graphics.Color.WHITE)
             cornerRadius = ctx.resources.displayMetrics.density * 16
@@ -365,9 +410,11 @@ class OverlayManager(private val ctx: Context) {
             ctx = ctx,
             rootFloatingView = view,
             formController = formController!!,
-            onCloseOverlay = { isSaved -> removeOverlay(isSaved) }
+            onCloseOverlay = { isSaved -> removeOverlay(isSaved) },
+            onPickerWindowVisibility = { hidden -> setOverlayHiddenForPicker(hidden) }
         ).also {
-            it.loadIfNeeded(hasExplicitPrefill = prefill != null || !captureId.isNullOrBlank())
+            val isSplit = prefill?.optBoolean("splitRequested", false) ?: false
+            it.loadIfNeeded(hasExplicitPrefill = prefill != null || !captureId.isNullOrBlank(), splitRequested = isSplit)
         }
 
         voiceHandler = VoiceInputHandler(
@@ -391,31 +438,33 @@ class OverlayManager(private val ctx: Context) {
             btn.animate().scaleX(0.72f).scaleY(0.72f).setDuration(90L).withEndAction {
                 btn.animate().scaleX(1f).scaleY(1f).setDuration(140L).start()
             }.start()
-            startScreenCaptureRecognition(btn)
+            if (pendingCaptureController?.isPendingMode() == true) {
+                screenCaptureForPendingSplit = true
+                startScreenCaptureRecognition(btn)
+            } else {
+                startScreenCaptureRecognition(btn)
+            }
         }
 
         if (Prefs.isShowAiImage(ctx)) {
             btnAiImage?.visibility = View.VISIBLE
             btnAiImage?.setOnClickListener {
-                overlayView?.visibility = View.INVISIBLE
-                ImagePickerActivity.onImagesPicked = { uris ->
-                    ImagePickerActivity.onImagesPicked = null
-                    ImagePickerActivity.onPickCancelled = null
-                    overlayView?.visibility = View.VISIBLE
-                    Logger.d(ctx, "StreamPreview", "onImagesPicked: count=${uris.size}")
-                    aiAssistant.analyzeImages(uris, handleAiResult)
+                val pending = pendingCaptureController
+                if (pending?.isPendingMode() == true) {
+                    pending.startImageSplitFromPicker()
+                    return@setOnClickListener
                 }
-                ImagePickerActivity.onPickCancelled = {
-                    ImagePickerActivity.onImagesPicked = null
-                    ImagePickerActivity.onPickCancelled = null
-                    overlayView?.visibility = View.VISIBLE
-                }
-                val intent = android.content.Intent(ctx, ImagePickerActivity::class.java).apply {
-                    addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK or
-                        android.content.Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS or
-                        android.content.Intent.FLAG_ACTIVITY_NO_ANIMATION)
-                }
-                ctx.startActivity(intent)
+                setOverlayHiddenForPicker(true)
+                ImagePickerActivity.launch(
+                    context = ctx,
+                    maxItems = 5,
+                    onPicked = { uris ->
+                        setOverlayHiddenForPicker(false)
+                        Logger.d(ctx, "StreamPreview", "onImagesPicked: count=${uris.size}")
+                        aiAssistant.analyzeImages(uris, handleAiResult)
+                    },
+                    onCancelled = { setOverlayHiddenForPicker(false) },
+                )
             }
         } else {
             btnAiImage?.visibility = View.GONE
@@ -702,6 +751,13 @@ class OverlayManager(private val ctx: Context) {
 
     /** 截屏成功 → toast → 扫光反馈 → 识别；未进入记账则删临时截屏。 */
     private fun beginScreenCaptureAccounting(uri: android.net.Uri) {
+        if (screenCaptureForPendingSplit) {
+            screenCaptureForPendingSplit = false
+            pendingScreenCaptureFile = screenCaptureFileFromUri(uri)
+            finishScreenCaptureFlow(restoreOverlay = true)
+            pendingCaptureController?.splitCurrentItemWithImage(uri)
+            return
+        }
         pendingScreenCaptureFile = screenCaptureFileFromUri(uri)
         Utils.toast(ctx, ctx.getString(R.string.toast_screenshot_success))
         playCaptureDoneHint {
@@ -834,6 +890,7 @@ class OverlayManager(private val ctx: Context) {
     }
 
     private fun handleScreenCaptureError(message: String) {
+        screenCaptureForPendingSplit = false
         Logger.d(ctx, "OverlayManager", "Screen capture recognition error callback: $message")
         hideScreenCaptureLoadingOverlay()
         setOverlayVisible(true)
@@ -843,6 +900,7 @@ class OverlayManager(private val ctx: Context) {
     }
 
     private fun handleScreenCaptureCancelled() {
+        screenCaptureForPendingSplit = false
         Logger.d(ctx, "OverlayManager", "Screen capture recognition cancelled")
         hideScreenCaptureLoadingOverlay()
         setOverlayVisible(true)
@@ -1219,7 +1277,30 @@ class OverlayManager(private val ctx: Context) {
         aiAssistant.shutdown()
     }
 
+    /**
+     * 系统选图期间隐藏记账悬浮窗：visibility 让选择器透出来，
+     * FLAG_NOT_TOUCHABLE 保证选择器上那一片区域还能点。
+     */
+    fun setOverlayHiddenForPicker(hidden: Boolean) {
+        if (overlayHiddenForPicker == hidden) return
+        val view = overlayView ?: return
+        val params = overlayParams ?: return
+        overlayHiddenForPicker = hidden
+        if (hidden) {
+            overlayFlagsBeforePicker = params.flags
+            params.flags = params.flags or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+            view.visibility = View.INVISIBLE
+        } else {
+            params.flags = overlayFlagsBeforePicker
+            view.visibility = View.VISIBLE
+        }
+        runCatching { windowManager?.updateViewLayout(view, params) }
+    }
+
     fun removeOverlay(isSaved: Boolean = true) {
+        // 表单即将移除，不能再被 AI 面板恢复可见
+        overlayHiddenForAiPanel = false
+        overlayHiddenForPicker = false
         // 表单已关闭：本次“自己记”的幂等键随之失效，下一条不能复用。
         pendingCaptureId = null
         pendingRequestId = null
@@ -1232,10 +1313,19 @@ class OverlayManager(private val ctx: Context) {
         voiceHandler?.release()
         voiceHandler = null
 
-        if (overlayView == null || isRemovingOverlay) {
+        if (overlayView == null) {
             formController?.destroy()
             formController = null
             overlayParams = null
+            // 没有可见的悬浮窗可收，直接恢复被敲击页面隐藏的待记胶囊。
+            com.taostudio.tapaccounting.capture.notify.CaptureBubbleManager
+                .resumePeekAfterOverlay(ctx)
+            return
+        }
+        if (isRemovingOverlay) {
+            // 已经在退场动画里，交给那一次 onAnimationEnd 恢复胶囊。
+            formController?.destroy()
+            formController = null
             return
         }
 
@@ -1321,12 +1411,13 @@ class OverlayManager(private val ctx: Context) {
                 pendingBills.clear()
                 Utils.toast(ctx, ctx.getString(R.string.toast_multi_bill_recognition_canceled))
             }
-            return
-        }
-        if (pendingBills.isNotEmpty()) {
+        } else if (pendingBills.isNotEmpty()) {
             android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
                 processNextPendingBill()
             }, 350)
         }
+        // 敲击页面已退场：如果待记胶囊还在 60 秒窗口内，恢复显示。
+        com.taostudio.tapaccounting.capture.notify.CaptureBubbleManager
+            .resumePeekAfterOverlay(ctx)
     }
 }

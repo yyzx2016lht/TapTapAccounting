@@ -3,11 +3,15 @@ package com.taostudio.tapaccounting
 import android.content.Context
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import com.google.gson.Gson
 import com.taostudio.tapaccounting.data.local.AppDatabase
 import com.taostudio.tapaccounting.data.local.entity.Asset
-import com.taostudio.tapaccounting.data.local.entity.AiRule as DbAiRule
+import com.taostudio.tapaccounting.data.local.entity.AccountingRule
 import com.taostudio.tapaccounting.data.local.entity.Bill
+import com.taostudio.tapaccounting.data.local.entity.Category
+import com.taostudio.tapaccounting.logic.SplitAmounts
+import com.taostudio.tapaccounting.logic.SplitPreviewException
 import com.google.gson.JsonObject
 import android.util.Base64
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
@@ -41,6 +45,7 @@ object AIService {
     private const val ACCOUNTING_ASSISTANT_LOG_TAG = "AccountingAssistant"
     private const val GENERAL_CHAT_LOG_TAG = "GeneralChat"
     private const val SIMPLE_CHAT_LOG_TAG = "SimpleChat"
+    private const val CATEGORY_CLASSIFY_LOG_TAG = "CategoryClassify"
     private const val AI_IO_LOG_TAG = "AI_IO"
     private const val AI_CACHE_LOG_TAG = "AICache"
 
@@ -59,6 +64,14 @@ object AIService {
     private const val SPEECH_CONNECT_TIMEOUT_SECONDS = 60L
     private const val SPEECH_READ_TIMEOUT_SECONDS = 180L
     private const val SPEECH_WRITE_TIMEOUT_SECONDS = 180L
+    /** 轻量归类只等一小会儿；超时就按“判断不了”处理，绝不拖住待记提交。 */
+    private const val CATEGORY_CLASSIFY_TIMEOUT_MS = 15_000L
+    private const val CATEGORY_CLASSIFY_BATCH_TIMEOUT_MS = 25_000L
+    /** 文字拆分只做一次轻量解析；超时由调用方提示改备注或重试。 */
+    private const val SPLIT_PREVIEW_TIMEOUT_MS = 20_000L
+    private const val IMAGE_SPLIT_PREVIEW_TIMEOUT_MS = 35_000L
+    /** 规则关键词只是后台副作用，超时就留给插件下次启动补跑。 */
+    private const val RULE_KEYWORD_TIMEOUT_MS = 10_000L
     private const val DEFAULT_CUSTOM_REPLY_STYLE_GUIDE =
         "回复风格：按用户自定义要求回复。"
     private fun enableThinkingForAccounting(ctx: Context): Boolean = Prefs.isAiThinkingMultiBillEnabled(ctx)
@@ -963,6 +976,708 @@ object AIService {
         }
     }
 
+    /**
+     * 轻量智能归类：只把“分类候选 + 用户备注”发给 AI，返回一个本地分类。
+     *
+     * 不传金额、时间、资产、商户；不调用整笔记账的 [analyzeAccounting]。
+     * 备注为空、AI 未配置、超时、解析失败或返回值不在候选内，一律返回 null。
+     */
+    suspend fun classifyCategory(
+        ctx: Context,
+        note: String,
+        billType: Int,
+        categories: List<Category>
+    ): Category? {
+        val cleanNote = note.trim()
+        if (cleanNote.isEmpty()) return null
+        if (billType != Bill.TYPE_EXPENSE && billType != Bill.TYPE_INCOME) return null
+        val candidates = categories.filter { it.type == billType }
+        if (candidates.isEmpty()) return null
+
+        val apiKey = Prefs.getAiKey(ctx)
+        if (apiKey.isBlank()) return null
+        val model = AiModelSlots.resolveTextModel(ctx)
+        if (model.isBlank()) return null
+
+        val userPrompt = buildCategoryClassifyUserPrompt(cleanNote, candidates, categories)
+        val content = try {
+            withTimeoutOrNull(CATEGORY_CLASSIFY_TIMEOUT_MS) {
+                val requestJson = buildTextChatRequest(
+                    model = model,
+                    temperature = 0.1,
+                    systemPrompt = AIPrompts.CATEGORY_CLASSIFY_PROMPT_DEFAULT,
+                    userText = userPrompt,
+                    jsonObjectResponse = true,
+                    enableThinking = false
+                )
+                val response = getApi(ctx).chatRaw(
+                    "Bearer $apiKey",
+                    adaptChatRequestForProvider(Prefs.getAiProvider(ctx), requestJson)
+                )
+                response.choices.firstOrNull()?.message?.content?.trim().orEmpty()
+            }
+        } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+            Logger.dPriv(
+                ctx,
+                "AIService",
+                "classifyCategory failed: errType=${e.javaClass.simpleName}",
+                "Category classify failure detail=${detailedHttpError(e)}"
+            )
+            return null
+        }
+        if (content == null) {
+            Logger.d(ctx, CATEGORY_CLASSIFY_LOG_TAG, "classifyCategory timeout after ${CATEGORY_CLASSIFY_TIMEOUT_MS}ms")
+            return null
+        }
+
+        val jsonText = extractFirstJsonObjectText(cleanJsonString(content))
+        val rawCategory = runCatching {
+            jsonText?.let { JSONObject(it).optNullableString("category") }
+        }.getOrNull()
+            ?: content.trim().takeIf { it.isNotEmpty() && it.length <= 40 && !it.contains('\n') }
+        val resolved = rawCategory?.let { resolveClassifiedCategory(it, categories, billType) }
+        Logger.d(
+            ctx,
+            CATEGORY_CLASSIFY_LOG_TAG,
+            "classifyCategory: candidates=${candidates.size}, result=${resolved?.name ?: "none"}"
+        )
+        return resolved
+    }
+
+    /**
+     * 批量轻量归类：同一种账单类型（支出/收入）只发一次请求。
+     * 模型按序号返回结果，每条单独校验；某条缺失/非法只影响该条。
+     */
+    suspend fun classifyCategories(
+        ctx: Context,
+        notes: List<String>,
+        billType: Int,
+        categories: List<Category>
+    ): List<Category?> {
+        val cleanNotes = notes.map { it.trim() }
+        if (cleanNotes.isEmpty()) return emptyList()
+        if (cleanNotes.size == 1) {
+            return listOf(classifyCategory(ctx, cleanNotes[0], billType, categories))
+        }
+        if (billType != Bill.TYPE_EXPENSE && billType != Bill.TYPE_INCOME) {
+            return List(cleanNotes.size) { null }
+        }
+        val candidates = categories.filter { it.type == billType }
+        if (candidates.isEmpty()) return List(cleanNotes.size) { null }
+
+        val apiKey = Prefs.getAiKey(ctx)
+        if (apiKey.isBlank()) return List(cleanNotes.size) { null }
+        val model = AiModelSlots.resolveTextModel(ctx)
+        if (model.isBlank()) return List(cleanNotes.size) { null }
+
+        val userPrompt = buildCategoryClassifyBatchUserPrompt(cleanNotes, candidates, categories)
+        val content = try {
+            withTimeoutOrNull(CATEGORY_CLASSIFY_BATCH_TIMEOUT_MS) {
+                val requestJson = buildTextChatRequest(
+                    model = model,
+                    temperature = 0.1,
+                    systemPrompt = AIPrompts.CATEGORY_CLASSIFY_BATCH_PROMPT_DEFAULT,
+                    userText = userPrompt,
+                    jsonObjectResponse = true,
+                    enableThinking = false
+                )
+                val response = getApi(ctx).chatRaw(
+                    "Bearer $apiKey",
+                    adaptChatRequestForProvider(Prefs.getAiProvider(ctx), requestJson)
+                )
+                response.choices.firstOrNull()?.message?.content?.trim().orEmpty()
+            }
+        } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+            Logger.dPriv(
+                ctx,
+                "AIService",
+                "classifyCategories failed: errType=${e.javaClass.simpleName}",
+                "Category classify batch failure detail=${detailedHttpError(e)}"
+            )
+            return List(cleanNotes.size) { null }
+        }
+
+        val result = MutableList<Category?>(cleanNotes.size) { null }
+        if (content == null) {
+            Logger.d(ctx, CATEGORY_CLASSIFY_LOG_TAG, "classifyCategories timeout after ${CATEGORY_CLASSIFY_BATCH_TIMEOUT_MS}ms")
+            return result
+        }
+
+        val jsonText = extractFirstJsonObjectText(cleanJsonString(content))
+        val root = runCatching { jsonText?.let { JSONObject(it) } }.getOrNull()
+        val arr = root?.optJSONArray("results") ?: return result
+        for (i in 0 until arr.length()) {
+            val obj = arr.optJSONObject(i) ?: continue
+            val index = obj.optInt("index", i + 1) - 1
+            if (index !in result.indices) continue
+            val raw = obj.optNullableString("category") ?: continue
+            result[index] = resolveClassifiedCategory(raw, categories, billType)
+        }
+        Logger.d(
+            ctx,
+            CATEGORY_CLASSIFY_LOG_TAG,
+            "classifyCategories: notes=${cleanNotes.size}, resolved=${result.count { it != null }}"
+        )
+        return result
+    }
+
+    /**
+     * 文字拆分记账：只把备注拆成条目 + 金额，不决定是否需要拆分。
+     *
+     * 金额单位固定为分；AI 没写金额的条目返回 null，由上层用付款差额推算。
+     * 解析失败会抛出带明确错误码的 [SplitPreviewException]。
+     */
+    suspend fun splitNoteItems(
+        ctx: Context,
+        note: String,
+        totalCents: Long,
+        billType: Int,
+    ): List<SplitAmounts.RawItem> {
+        val cleanNote = note.trim()
+        if (cleanNote.isEmpty()) {
+            throw SplitPreviewException("split_empty", "备注为空，请先写「苹果30 雪梨40」")
+        }
+        if (billType != Bill.TYPE_EXPENSE && billType != Bill.TYPE_INCOME) {
+            throw SplitPreviewException("split_unsupported_type", "转账/还款/退款不支持文字拆分")
+        }
+        if (totalCents <= 0L) {
+            throw SplitPreviewException("invalid_total", "付款金额无效，无法拆分")
+        }
+
+        val apiKey = Prefs.getAiKey(ctx)
+        if (apiKey.isBlank()) {
+            throw SplitPreviewException("ai_not_configured", "请先在敲敲记账中配置 AI API Key")
+        }
+        val model = AiModelSlots.resolveTextModel(ctx)
+        if (model.isBlank()) {
+            throw SplitPreviewException("ai_not_configured", "请先在敲敲记账中配置文本模型")
+        }
+
+        val typeLabel = if (billType == Bill.TYPE_EXPENSE) "支出" else "收入"
+        val userPrompt = buildString {
+            append("用户备注：")
+                .append(cleanNote.replace('\n', ' ').replace('\r', ' '))
+                .append('\n')
+            append("付款总额（分）：").append(totalCents).append('\n')
+            append("账单类型：").append(typeLabel)
+        }
+
+        val content = try {
+            withTimeoutOrNull(SPLIT_PREVIEW_TIMEOUT_MS) {
+                val requestJson = buildTextChatRequest(
+                    model = model,
+                    temperature = 0.1,
+                    systemPrompt = AIPrompts.SPLIT_BILL_PROMPT_DEFAULT,
+                    userText = userPrompt,
+                    jsonObjectResponse = true,
+                    enableThinking = false,
+                )
+                val response = getApi(ctx).chatRaw(
+                    "Bearer $apiKey",
+                    adaptChatRequestForProvider(Prefs.getAiProvider(ctx), requestJson),
+                )
+                response.choices.firstOrNull()?.message?.content?.trim().orEmpty()
+            }
+        } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+            Logger.dPriv(
+                ctx,
+                "AIService",
+                "splitNoteItems failed: errType=${e.javaClass.simpleName}",
+                "Split preview failure detail=${detailedHttpError(e)}",
+            )
+            throw SplitPreviewException("split_ai_failed", "AI 拆分失败，请检查 AI 设置或改备注")
+        }
+        if (content == null) {
+            Logger.d(ctx, CATEGORY_CLASSIFY_LOG_TAG, "splitNoteItems timeout after ${SPLIT_PREVIEW_TIMEOUT_MS}ms")
+            throw SplitPreviewException("ai_timeout", "AI 拆分超时，请重试或改备注")
+        }
+        if (content.isBlank()) {
+            throw SplitPreviewException("split_ai_failed", "AI 没有返回拆分结果，请改备注")
+        }
+
+        val jsonText = extractFirstJsonObjectText(cleanJsonString(content))
+        val root = runCatching { jsonText?.let { JSONObject(it) } }.getOrNull()
+            ?: throw SplitPreviewException("split_ai_failed", "AI 返回的不是有效 JSON，请改备注")
+        val arr = root.optJSONArray("items")
+            ?: throw SplitPreviewException("split_ai_failed", "AI 没有返回条目列表，请改备注")
+
+        val items = buildList {
+            for (i in 0 until arr.length()) {
+                val obj = arr.optJSONObject(i) ?: continue
+                val name = obj.optString("name", "").trim()
+                if (name.isEmpty()) continue
+                add(
+                    SplitAmounts.RawItem(
+                        name = name,
+                        amountCents = obj.optAmountCents("amountCents"),
+                    )
+                )
+            }
+        }
+        if (items.isEmpty()) {
+            throw SplitPreviewException(
+                "split_empty",
+                "没从备注里拆出条目，请把备注写成「苹果30 雪梨40」",
+            )
+        }
+        Logger.d(
+            ctx,
+            CATEGORY_CLASSIFY_LOG_TAG,
+            "splitNoteItems: items=${items.size}, withAmount=${items.count { it.amountCents != null }}",
+        )
+        return SplitAmounts.normalizeYuanAmounts(totalCents, items)
+    }
+
+    data class ImageSplitRawItem(
+        val name: String,
+        val amountCents: Long? = null,
+        val category: String? = null,
+    )
+
+    /**
+     * 图片拆单：多模态 AI 提取小票/订单中的商品名、折后实付净额与分类。
+     *
+     * 提示词参照主 App 识图逻辑（小票商品提取、同名合并、实付净额），但只做条目拆分与分类，
+     * 资产/时间/账本/币种等字段沿用 capture 上下文。
+     */
+    suspend fun splitImageItems(
+        ctx: Context,
+        imageBase64: String,
+        mimeType: String = "image/jpeg",
+        totalCents: Long,
+        billType: Int,
+        categories: List<Category>,
+    ): List<ImageSplitRawItem> = splitImageItemsInternal(
+        ctx = ctx,
+        images = listOf(imageBase64 to mimeType),
+        totalCents = totalCents,
+        billType = billType,
+        categories = categories,
+    )
+
+    /** 多张图片当作同一笔订单的凭证一起识别（多页小票/多张截图）。 */
+    suspend fun splitImageItemsMulti(
+        ctx: Context,
+        images: List<Pair<String, String>>,
+        totalCents: Long,
+        billType: Int,
+        categories: List<Category>,
+    ): List<ImageSplitRawItem> = splitImageItemsInternal(
+        ctx = ctx,
+        images = images,
+        totalCents = totalCents,
+        billType = billType,
+        categories = categories,
+    )
+
+    private suspend fun splitImageItemsInternal(
+        ctx: Context,
+        images: List<Pair<String, String>>,
+        totalCents: Long,
+        billType: Int,
+        categories: List<Category>,
+    ): List<ImageSplitRawItem> {
+        if (images.isEmpty() || images.any { it.first.isBlank() }) {
+            throw SplitPreviewException("split_empty", "图片数据为空")
+        }
+        if (billType != Bill.TYPE_EXPENSE && billType != Bill.TYPE_INCOME) {
+            throw SplitPreviewException("split_unsupported_type", "转账/还款/退款不支持图片拆分")
+        }
+        if (totalCents <= 0L) {
+            throw SplitPreviewException("invalid_total", "付款金额无效，无法拆分")
+        }
+
+        val apiKey = Prefs.getAiKey(ctx)
+        if (apiKey.isBlank()) {
+            throw SplitPreviewException("ai_not_configured", "请先在敲敲记账中配置 AI API Key")
+        }
+        val model = AiModelSlots.resolveVisionModel(ctx).ifBlank { AiModelSlots.resolveTextModel(ctx) }
+        if (model.isBlank()) {
+            throw SplitPreviewException("ai_not_configured", "请先在敲敲记账中配置视觉模型")
+        }
+
+        val candidates = categories.filter { it.type == billType }
+        val typeLabel = if (billType == Bill.TYPE_EXPENSE) "支出" else "收入"
+        val userPrompt = buildString {
+            append("付款总额（分）：").append(totalCents).append('\n')
+            append("账单类型：").append(typeLabel).append('\n')
+            if (images.size > 1) {
+                append("共 ").append(images.size).append(" 张图片，可能是同一笔订单的多页/多张凭证：\n")
+                append("请合并所有图片中的商品明细，并去掉重复条目，不要重复计算同一行。\n")
+            }
+            append("【分类候选】\n")
+            append(candidates.joinToString("\n") { it.name })
+        }
+
+        val dataUrls = images.map { (base64, mime) ->
+            "data:$mime;base64,$base64"
+        }
+        val requestJson = if (dataUrls.size == 1) {
+            buildVisionChatRequest(
+                model = model,
+                temperature = 0.1,
+                systemPrompt = AIPrompts.IMAGE_SPLIT_PROMPT_DEFAULT,
+                dataUrl = dataUrls.first(),
+                userText = userPrompt,
+                jsonObjectResponse = true,
+                enableThinking = enableThinkingForVision(ctx),
+            )
+        } else {
+            buildMultiImageVisionChatRequest(
+                model = model,
+                temperature = 0.1,
+                systemPrompt = AIPrompts.IMAGE_SPLIT_PROMPT_DEFAULT,
+                dataUrls = dataUrls,
+                userText = userPrompt,
+                jsonObjectResponse = true,
+                enableThinking = enableThinkingForVision(ctx),
+            )
+        }
+
+        val content = try {
+            withTimeoutOrNull(IMAGE_SPLIT_PREVIEW_TIMEOUT_MS) {
+                val streamed = requestChatContentStreamedWithReasoning(
+                    ctx = ctx,
+                    apiKey = apiKey,
+                    requestJson = requestJson,
+                    logReasoning = enableThinkingForVision(ctx),
+                    reasoningLogTag = RECEIPT_VISION_LOG_TAG,
+                )
+                if (!streamed.completed && streamed.content.isBlank()) {
+                    throw streamed.parseError ?: streamed.transportError
+                        ?: IllegalStateException("图片识别流式回复未完整结束")
+                }
+                streamed.content.trim()
+            }
+        } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+            Logger.dPriv(
+                ctx,
+                "AIService",
+                "splitImageItems failed: errType=${e.javaClass.simpleName}",
+                "Split image failure detail=${detailedHttpError(e)}",
+            )
+            throw SplitPreviewException("split_ai_failed", "AI 识图拆分失败，请检查 AI 设置或改用清晰图片")
+        }
+
+        if (content == null) {
+            Logger.d(ctx, CATEGORY_CLASSIFY_LOG_TAG, "splitImageItems timeout after ${IMAGE_SPLIT_PREVIEW_TIMEOUT_MS}ms")
+            throw SplitPreviewException("ai_timeout", "AI 识图拆分超时，请重试或换一张清晰图片")
+        }
+        if (content.isBlank()) {
+            throw SplitPreviewException("split_ai_failed", "AI 没有返回拆分结果，请重试")
+        }
+
+        val jsonText = extractFirstJsonObjectText(cleanJsonString(content))
+        val root = runCatching { jsonText?.let { JSONObject(it) } }.getOrNull()
+            ?: throw SplitPreviewException("split_ai_failed", "AI 返回的不是有效 JSON，请重试")
+        val arr = root.optJSONArray("items")
+            ?: throw SplitPreviewException("split_ai_failed", "AI 没有返回条目列表，请重试")
+
+        val rawItems = buildList {
+            for (i in 0 until arr.length()) {
+                val obj = arr.optJSONObject(i) ?: continue
+                val name = obj.optString("name", "").trim()
+                if (name.isEmpty()) continue
+                val cat = obj.optString("category", "").trim().takeIf { it.isNotEmpty() }
+                add(
+                    ImageSplitRawItem(
+                        name = name,
+                        amountCents = obj.optAmountCents("amountCents"),
+                        category = cat,
+                    )
+                )
+            }
+        }
+        if (rawItems.isEmpty()) {
+            throw SplitPreviewException("split_empty", "未能从图片识别出有效消费条目，请确认图片是否包含商品明细")
+        }
+
+        val normalizedAmounts = SplitAmounts.normalizeYuanAmounts(
+            totalCents,
+            rawItems.map { SplitAmounts.RawItem(it.name, it.amountCents) },
+        )
+        return rawItems.mapIndexed { index, item ->
+            item.copy(amountCents = normalizedAmounts.getOrNull(index)?.amountCents ?: item.amountCents)
+        }
+    }
+
+    private fun JSONObject.optAmountCents(key: String): Long? {
+        if (!has(key) || isNull(key)) return null
+        return when (val value = opt(key)) {
+            is Number -> value.toLong()
+            is String -> value.trim().toDoubleOrNull()?.let { Math.round(it) }
+            else -> null
+        }
+    }
+
+    data class RuleKeywordInput(val note: String, val categoryName: String, val billType: Int)
+
+    /**
+     * AI 规则学习：批量从备注 + 已确认分类中提取可复用的备注关键词。
+     *
+     * 与输入 items 等长，无法提取或不符合规则返回空串。
+     * 本地短词直接出，长词合并为一次批量 AI 调用。
+     */
+    suspend fun suggestRuleKeywords(
+        ctx: Context,
+        items: List<RuleKeywordInput>,
+    ): List<String> {
+        if (items.isEmpty()) return emptyList()
+
+        // 预分配结果
+        val results = MutableList(items.size) { "" }
+        val pendingAiIndices = mutableListOf<Int>()
+        val pendingAiItems = mutableListOf<RuleKeywordInput>()
+
+        items.forEachIndexed { index, item ->
+            val cleanNote = item.note.trim()
+            val cleanCategory = item.categoryName.trim()
+            if (cleanNote.isEmpty() || cleanCategory.isEmpty()) return@forEachIndexed
+            if (item.billType != Bill.TYPE_EXPENSE && item.billType != Bill.TYPE_INCOME) return@forEachIndexed
+
+            val leafCategory = cleanCategory.split(Regex("""\s*(?:-|/|>|›|→)\s*"""))
+                .lastOrNull { it.isNotBlank() }
+                ?.trim()
+                .orEmpty()
+            if (leafCategory == "其他" || leafCategory == "差额调整") return@forEachIndexed
+
+            val direct = RuleKeywordPolicy.directKeywordFromNote(cleanNote)
+            if (direct != null && !direct.equals(leafCategory, ignoreCase = true)) {
+                results[index] = direct
+            } else if (direct == null) {
+                pendingAiIndices.add(index)
+                pendingAiItems.add(item)
+            }
+        }
+
+        if (pendingAiItems.isEmpty()) {
+            return results
+        }
+
+        val apiKey = Prefs.getAiKey(ctx)
+        val model = AiModelSlots.resolveTextModel(ctx)
+        if (apiKey.isBlank() || model.isBlank()) {
+            return results
+        }
+
+        val itemsArray = JSONArray()
+        pendingAiItems.forEachIndexed { i, input ->
+            itemsArray.put(
+                JSONObject().apply {
+                    put("index", i)
+                    put("note", input.note.trim().replace('\n', ' ').replace('\r', ' '))
+                    put("category", input.categoryName.trim())
+                    put("billType", if (input.billType == Bill.TYPE_EXPENSE) "支出" else "收入")
+                }
+            )
+        }
+
+        val userPrompt = itemsArray.toString()
+        val content = try {
+            withTimeoutOrNull(RULE_KEYWORD_TIMEOUT_MS) {
+                val requestJson = buildTextChatRequest(
+                    model = model,
+                    temperature = 0.1,
+                    systemPrompt = AIPrompts.BATCH_RULE_KEYWORD_PROMPT_DEFAULT,
+                    userText = userPrompt,
+                    jsonObjectResponse = true,
+                    enableThinking = false
+                )
+                val response = getApi(ctx).chatRaw(
+                    "Bearer $apiKey",
+                    adaptChatRequestForProvider(Prefs.getAiProvider(ctx), requestJson)
+                )
+                response.choices.firstOrNull()?.message?.content?.trim().orEmpty()
+            }
+        } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+            Logger.dPriv(
+                ctx,
+                "AIService",
+                "suggestRuleKeywords failed: errType=${e.javaClass.simpleName}",
+                "Batch rule keywords failure detail=${detailedHttpError(e)}"
+            )
+            null
+        }
+
+        if (!content.isNullOrBlank()) {
+            val jsonText = extractFirstJsonObjectText(cleanJsonString(content))
+            runCatching {
+                if (jsonText != null) {
+                    val root = JSONObject(jsonText)
+                    val resArr = root.optJSONArray("results")
+                    if (resArr != null) {
+                        for (i in 0 until resArr.length()) {
+                            val obj = resArr.optJSONObject(i) ?: continue
+                            val subIdx = obj.optInt("index", -1)
+                            val rawKw = obj.optNullableString("keyword")
+                            if (subIdx in pendingAiIndices.indices) {
+                                val origIdx = pendingAiIndices[subIdx]
+                                val item = items[origIdx]
+                                val leaf = item.categoryName.trim().split(Regex("""\s*(?:-|/|>|›|→)\s*"""))
+                                    .lastOrNull { it.isNotBlank() }?.trim().orEmpty()
+                                val kw = RuleKeywordPolicy.sanitize(rawKw)
+                                if (kw.isNotEmpty() && !kw.equals(leaf, ignoreCase = true)) {
+                                    results[origIdx] = kw
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        return results
+    }
+
+    /**
+     * AI 规则学习：从备注 + 已确认分类中提取一个 1-8 字的可复用备注关键词。
+     *
+     * 只返回关键词；空备注、空分类、非收支、AI 未配置、超时或泛词一律返回空串。
+     * 备注本身就是短关键词（如“苹果”）时不发请求，直接返回，保证入账后的 toast 及时出现。
+     */
+    suspend fun suggestRuleKeyword(
+        ctx: Context,
+        note: String,
+        categoryName: String,
+        billType: Int,
+    ): String {
+        val cleanNote = note.trim()
+        val cleanCategory = categoryName.trim()
+        if (cleanNote.isEmpty() || cleanCategory.isEmpty()) return ""
+        if (billType != Bill.TYPE_EXPENSE && billType != Bill.TYPE_INCOME) return ""
+        val leafCategory = cleanCategory.split(Regex("""\s*(?:-|/|>|›|→)\s*"""))
+            .lastOrNull { it.isNotBlank() }
+            ?.trim()
+            .orEmpty()
+        if (leafCategory == "其他" || leafCategory == "差额调整") return ""
+
+        RuleKeywordPolicy.directKeywordFromNote(cleanNote)?.let { direct ->
+            if (!direct.equals(leafCategory, ignoreCase = true)) {
+                return direct
+            }
+        }
+
+        val batchResult = suggestRuleKeywords(
+            ctx = ctx,
+            items = listOf(RuleKeywordInput(cleanNote, cleanCategory, billType))
+        )
+        val keyword = batchResult.firstOrNull().orEmpty()
+        Logger.d(
+            ctx,
+            "AIService",
+            "suggestRuleKeyword: noteLen=${cleanNote.length}, category=$cleanCategory, result=${keyword.ifEmpty { "none" }}"
+        )
+        return keyword
+    }
+
+    /**
+     * AI 生成自动记账规则：基于 Hook 原始事件报文，生成正则规则表单 JSON。
+     */
+    suspend fun generateAutoRule(
+        ctx: Context,
+        app: String,
+        type: String,
+        rawJson: String,
+        userInstruction: String? = null,
+        currentPattern: String? = null,
+    ): JSONObject? {
+        val cleanRaw = rawJson.trim()
+        if (cleanRaw.isEmpty()) return null
+
+        val apiKey = Prefs.getAiKey(ctx)
+        if (apiKey.isBlank()) return null
+        val model = AiModelSlots.resolveTextModel(ctx)
+        if (model.isBlank()) return null
+
+        val userPrompt = buildString {
+            append("应用包名：").append(app).append('\n')
+            append("事件类型：").append(type).append('\n')
+            if (!currentPattern.isNullOrBlank()) {
+                append("当前正在微调的匹配表达式/现有规则：\n").append(currentPattern).append('\n')
+            }
+            if (!userInstruction.isNullOrBlank()) {
+                append("用户对话调整要求（请严格按此要求修改或补充匹配逻辑）：\n").append(userInstruction).append('\n')
+            }
+            append("原始报文 JSON：\n").append(cleanRaw.take(4000))
+        }
+
+        val content = try {
+            withTimeoutOrNull(45_000L) {
+                val requestJson = buildTextChatRequest(
+                    model = model,
+                    temperature = 0.1,
+                    systemPrompt = AIPrompts.AUTOACCOUNTING_RULE_GENERATE_PROMPT,
+                    userText = userPrompt,
+                    jsonObjectResponse = false,
+                    enableThinking = false,
+                )
+                val response = getApi(ctx).chatRaw(
+                    "Bearer $apiKey",
+                    adaptChatRequestForProvider(Prefs.getAiProvider(ctx), requestJson),
+                )
+                response.choices.firstOrNull()?.message?.content?.trim().orEmpty()
+            }
+        } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+            Logger.dPriv(
+                ctx,
+                "AIService",
+                "generateAutoRule failed: errType=${e.javaClass.simpleName}",
+                "Rule generate failure detail=${detailedHttpError(e)}",
+            )
+            return null
+        }
+        if (content.isNullOrBlank()) {
+            Logger.d(ctx, "AIService", "generateAutoRule timeout after 45s")
+            return null
+        }
+
+        val jsonText = extractFirstJsonObjectText(cleanJsonString(content))
+        return runCatching { jsonText?.let { JSONObject(it) } }.getOrNull()
+    }
+
+    private fun buildCategoryClassifyUserPrompt(
+        note: String,
+        candidates: List<Category>,
+        allCategories: List<Category>
+    ): String = buildString {
+        appendCategoryCandidates(candidates, allCategories)
+        append("用户备注：").append(note)
+    }
+
+    private fun buildCategoryClassifyBatchUserPrompt(
+        notes: List<String>,
+        candidates: List<Category>,
+        allCategories: List<Category>
+    ): String = buildString {
+        appendCategoryCandidates(candidates, allCategories)
+        appendLine("用户备注：")
+        notes.forEachIndexed { index, note ->
+            append(index + 1).append(". ")
+                .append(note.replace('\n', ' ').replace('\r', ' '))
+                .append('\n')
+        }
+    }
+
+    private fun StringBuilder.appendCategoryCandidates(
+        candidates: List<Category>,
+        allCategories: List<Category>
+    ) {
+        val byId = allCategories.associateBy { it.id }
+        appendLine("分类候选：")
+        candidates.forEach { category ->
+            val parent = category.parentId?.let { byId[it] }
+            append("- ")
+            if (parent != null) append(parent.name).append(" - ")
+            appendLine(category.name)
+        }
+    }
+
     suspend fun simpleChat(ctx: Context, prompt: String): String {
         val apiKey = Prefs.getAiKey(ctx)
         val model = AiModelSlots.resolveTextModel(ctx)
@@ -1483,8 +2198,7 @@ object AIService {
         )
         if (!Prefs.isLocalRuleOverrideEnabled(ctx)) return
 
-        val promptRules = loadActivePromptRules(ctx)
-        applyLocalRuleOverrideOnResult(root, referenceText.trim(), promptRules)
+        applyLocalRuleOverrideOnResult(ctx, root, referenceText.trim())
         normalizeAccountingResult(
             root = root,
             expenseCats = promptContext.expenseCats,
@@ -1502,34 +2216,29 @@ object AIService {
      * 直接在已解析的 JSONObject 上原地修改，保证规则的 type / category_name /
      * asset_name / to_asset_name 不会再被后续步骤覆盖。
      */
-    private fun applyLocalRuleOverrideOnResult(root: JSONObject, userInput: String, allRules: List<com.taostudio.tapaccounting.data.local.entity.AiRule>) {
-        if (allRules.isEmpty()) return
-
-        fun applyRulesToBill(bill: JSONObject) {
-            // 优先取 remarks 作为该条账单的语义文本
+    private suspend fun applyLocalRuleOverrideOnResult(ctx: Context, root: JSONObject, userInput: String) {
+        suspend fun applyRulesToBill(bill: JSONObject) {
             val remarks = bill.optString("remarks", "").trim()
                 .ifEmpty { bill.optString("remark", "").trim() }
-            val categoryName = bill.optString("category_name", "")
+            val ruleMatch = com.taostudio.tapaccounting.capture.rules.AccountingRuleEngine.matchAiBill(ctx, userInput, remarks) ?: return
 
-            // 多账单场景下：仅用 remarks+categoryName 匹配，避免 A 账单规则命中 B/C。
-            // 单账单或 AI 未返回 remarks 时才兜底 userInput。
-            val matchText = if (remarks.isNotBlank()) "$remarks $categoryName" else userInput
-
-            allRules.filter { rule ->
-                rule.keyword.split("\\s+".toRegex()).filter { it.isNotEmpty() }
-                    .all { matchText.contains(it, ignoreCase = true) }
-            }.forEach { rule ->
-                rule.targetType?.takeIf { it in 0..3 }?.let { t ->
-                    bill.put("type", if (t == 3) 2 else t)
-                    if (t == 3) {
-                        bill.put("subType", 1)
-                        bill.put("category_name", "还款")
-                    }
+            ruleMatch.targetType?.takeIf { it in 0..3 }?.let { t ->
+                bill.put("type", if (t == 3) 2 else t)
+                if (t == 3) {
+                    bill.put("subType", 1)
+                    bill.put("category_name", "还款")
                 }
-                if (!rule.targetCategory.isNullOrEmpty()) bill.put("category_name", rule.targetCategory)
-                if (!rule.targetAccount1.isNullOrEmpty()) bill.put("asset_name", rule.targetAccount1)
-                if (!rule.targetAccount2.isNullOrEmpty()) bill.put("to_asset_name", rule.targetAccount2)
             }
+            if (!ruleMatch.categoryName.isNullOrEmpty()) {
+                bill.put("category_name", ruleMatch.categoryName)
+            }
+            if (!ruleMatch.targetAccount1.isNullOrEmpty()) {
+                bill.put("asset_name", ruleMatch.targetAccount1)
+            }
+            if (!ruleMatch.targetAccount2.isNullOrEmpty()) {
+                bill.put("to_asset_name", ruleMatch.targetAccount2)
+            }
+            bill.put("rule_id", ruleMatch.ruleId)
         }
 
         try {
@@ -1590,15 +2299,12 @@ object AIService {
         return expenseSignals.count { normalized.contains(it) } >= 2 && incomeSignals.none { normalized.contains(it) }
     }
 
-    private suspend fun loadActivePromptRules(ctx: Context): List<DbAiRule> = withContext(Dispatchers.IO) {
-        AppDatabase.getDatabase(ctx).aiRuleDao().getEnabledRulesList()
+    private suspend fun loadActivePromptRules(ctx: Context): List<AccountingRule> = withContext(Dispatchers.IO) {
+        AppDatabase.getDatabase(ctx).accountingRuleDao().listEnabledForAiAccounting()
     }
 
-    private fun findMatchedPromptRules(text: String, allRules: List<DbAiRule>): List<DbAiRule> =
-        allRules.filter { rule ->
-            rule.isEnabled && rule.keyword.split("\\s+".toRegex()).filter { it.isNotEmpty() }
-                .all { text.contains(it, ignoreCase = true) }
-        }
+    private fun findMatchedPromptRules(text: String, allRules: List<AccountingRule>): List<AccountingRule> =
+        com.taostudio.tapaccounting.capture.rules.AccountingRuleEngine.matchPromptRules(allRules, text)
 
     data class StreamResult(
         val content: String,

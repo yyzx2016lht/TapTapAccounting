@@ -1,9 +1,13 @@
 package com.taostudio.tapaccounting.logic
 
 import android.content.Context
+import android.graphics.Color
+import android.util.TypedValue
+import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
 import android.widget.AdapterView
+import android.widget.LinearLayout
 import android.widget.ArrayAdapter
 import android.widget.Spinner
 import android.widget.Switch
@@ -20,6 +24,7 @@ import com.taostudio.tapaccounting.AIService
 import com.taostudio.tapaccounting.Prefs
 import com.taostudio.tapaccounting.R
 import com.taostudio.tapaccounting.data.local.AppDatabase
+import com.taostudio.tapaccounting.data.local.entity.AccountingRule
 import com.taostudio.tapaccounting.data.local.entity.AiRule
 import com.taostudio.tapaccounting.ui.dialog.OverlayDialogs
 
@@ -51,6 +56,7 @@ object RuleDialogHelper {
         ctx: Context,
         rule: AiRule?,
         referenceText: String?,
+        defaultKeyword: String? = null,
         defaultType: Int? = null,
         defaultCat: String? = null,
         defaultAcc1: String? = null,
@@ -95,13 +101,26 @@ object RuleDialogHelper {
             Toast.makeText(ctx, ctx.getString(R.string.extracting_rules), Toast.LENGTH_SHORT).show()
             CoroutineScope(Dispatchers.IO).launch {
                 val remark = referenceText ?: ""
-                val prompt = DEFAULT_RULE_PROMPT
-                    .replace("{{REMARK}}", remark)
-                    .replace("{{CATEGORY}}", tvCategory.text.toString())
+                val currentCategory = tvCategory.text.toString().takeIf { it != ctx.getString(R.string.tap_select_category) }.orEmpty()
+                val currentType = spType.selectedItemPosition
                 try {
-                    val result = AIService.simpleChat(ctx, prompt)
+                    val keywords = AIService.suggestRuleKeywords(
+                        ctx = ctx,
+                        items = listOf(
+                            AIService.RuleKeywordInput(
+                                note = remark,
+                                categoryName = currentCategory,
+                                billType = currentType
+                            )
+                        )
+                    )
+                    val result = keywords.firstOrNull()?.trim().orEmpty()
                     withContext(Dispatchers.Main) {
-                        etKeyword.setText(result.trim())
+                        if (result.isNotEmpty()) {
+                            etKeyword.setText(result)
+                        } else {
+                            Toast.makeText(ctx, ctx.getString(R.string.extract_failed), Toast.LENGTH_SHORT).show()
+                        }
                     }
                 } catch (e: Exception) {
                     withContext(Dispatchers.Main) {
@@ -170,6 +189,8 @@ object RuleDialogHelper {
         switchEnabled.isChecked = rule?.isEnabled ?: true
         if (rule != null) {
             etKeyword.setText(rule.keyword)
+        } else if (!defaultKeyword.isNullOrBlank()) {
+            etKeyword.setText(defaultKeyword)
         }
 
         view.findViewById<TextView>(R.id.tv_dialog_title).text = if (rule == null) ctx.getString(R.string.add_rule_title) else ctx.getString(R.string.edit_rule_title)
@@ -255,6 +276,238 @@ object RuleDialogHelper {
                 dialog = dialog,
                 ctx = ctx,
                 widthRatio = 0.92f,
+                cancelOnTouchOutside = true,
+                useSolidPanelBackground = true
+            )
+        }
+    }
+
+    /**
+     * 以 AccountingRule 统一契约展示规则详情与调整弹窗。
+     */
+    fun showRuleDialog(
+        ctx: Context,
+        rule: AccountingRule?,
+        referenceText: String?,
+        defaultKeyword: String? = null,
+        defaultType: Int? = null,
+        defaultCat: String? = null,
+        defaultAcc1: String? = null,
+        defaultAcc2: String? = null,
+        isOverlay: Boolean = false,
+        categoryOnlyLearnMode: Boolean = false,
+        onSave: (AccountingRule) -> Unit,
+        onDelete: ((AccountingRule) -> Unit)? = null,
+        onCancel: (() -> Unit)? = null
+    ) {
+        val aiRule = rule?.let {
+            AiRule(
+                id = it.id.toInt(),
+                keyword = it.keyword,
+                targetType = it.targetType,
+                targetCategory = it.targetCategory,
+                targetAccount1 = it.targetAccount1,
+                targetAccount2 = it.targetAccount2,
+                isEnabled = it.enabled
+            )
+        }
+        showDialog(
+            ctx = ctx,
+            rule = aiRule,
+            referenceText = referenceText,
+            defaultKeyword = defaultKeyword ?: rule?.keyword,
+            defaultType = defaultType ?: rule?.targetType,
+            defaultCat = defaultCat ?: rule?.targetCategory,
+            defaultAcc1 = defaultAcc1 ?: rule?.targetAccount1,
+            defaultAcc2 = defaultAcc2 ?: rule?.targetAccount2,
+            isOverlay = isOverlay,
+            categoryOnlyLearnMode = categoryOnlyLearnMode,
+            onSave = { savedAiRule ->
+                val now = System.currentTimeMillis()
+                val updatedRule = (rule ?: AccountingRule(
+                    id = 0L,
+                    keyword = savedAiRule.keyword,
+                    targetCategory = savedAiRule.targetCategory,
+                    targetType = savedAiRule.targetType,
+                    targetAccount1 = savedAiRule.targetAccount1,
+                    targetAccount2 = savedAiRule.targetAccount2,
+                    enabled = savedAiRule.isEnabled,
+                    source = AccountingRule.Source.USER,
+                    createdAt = now,
+                    updatedAt = now
+                )).copy(
+                    keyword = savedAiRule.keyword,
+                    targetCategory = savedAiRule.targetCategory,
+                    targetType = savedAiRule.targetType,
+                    targetAccount1 = savedAiRule.targetAccount1,
+                    targetAccount2 = savedAiRule.targetAccount2,
+                    enabled = savedAiRule.isEnabled,
+                    updatedAt = now
+                )
+                onSave(updatedRule)
+            },
+            onDelete = if (onDelete != null && rule != null) {
+                { onDelete(rule) }
+            } else null,
+            onCancel = onCancel
+        )
+    }
+
+    /**
+     * 规则修正操作单：更新/记住、删除旧规则、只改这次、撤销这次自动分类。
+     */
+    fun showCorrectionActionSheet(
+        ctx: Context,
+        message: String,
+        hasExistingRule: Boolean,
+        isOverlay: Boolean = false,
+        onUpdate: () -> Unit,
+        onDeleteRule: () -> Unit,
+        onOnlyThisTime: () -> Unit,
+        onUndo: () -> Unit,
+        onCancel: () -> Unit = {},
+    ) {
+        val items = buildList {
+            add(if (hasExistingRule) "更新规则" else "记住这次")
+            if (hasExistingRule) add("删除旧规则")
+            add("只改这次")
+            add("撤销这次自动分类")
+        }
+        val themeCtx = ContextThemeWrapper(ctx, R.style.Theme_TapAccounting)
+        val density = themeCtx.resources.displayMetrics.density
+        fun dp(value: Int): Int = (value * density + 0.5f).toInt()
+        val selectable = TypedValue().also {
+            themeCtx.theme.resolveAttribute(android.R.attr.selectableItemBackground, it, true)
+        }.resourceId
+
+        val container = LinearLayout(themeCtx).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(20), dp(16), dp(20), dp(8))
+        }
+        container.addView(TextView(themeCtx).apply {
+            text = "处理这笔分类"
+            textSize = 17f
+            setTypeface(typeface, android.graphics.Typeface.BOLD)
+            setTextColor(Color.parseColor("#24344A"))
+        })
+        container.addView(TextView(themeCtx).apply {
+            text = message
+            textSize = 13f
+            setTextColor(Color.parseColor("#6B7684"))
+            setLineSpacing(0f, 1.25f)
+            setPadding(0, dp(8), 0, dp(10))
+        })
+
+        lateinit var dialog: AlertDialog
+        items.forEach { label ->
+            container.addView(TextView(themeCtx).apply {
+                text = label
+                textSize = 15f
+                gravity = Gravity.CENTER_VERTICAL
+                setTextColor(
+                    if (label == "删除旧规则" || label == "撤销这次自动分类")
+                        Color.parseColor("#D14343")
+                    else Color.parseColor("#24344A")
+                )
+                setPadding(dp(4), dp(14), dp(4), dp(14))
+                setBackgroundResource(selectable)
+                isClickable = true
+                setOnClickListener {
+                    dialog.dismiss()
+                    when (label) {
+                        "更新规则", "记住这次" -> onUpdate()
+                        "删除旧规则" -> onDeleteRule()
+                        "只改这次" -> onOnlyThisTime()
+                        "撤销这次自动分类" -> onUndo()
+                    }
+                }
+            })
+        }
+        container.addView(TextView(themeCtx).apply {
+            text = "取消"
+            textSize = 14f
+            gravity = Gravity.CENTER
+            setTextColor(Color.parseColor("#8A94A6"))
+            setPadding(dp(4), dp(12), dp(4), dp(12))
+            setBackgroundResource(selectable)
+            isClickable = true
+            setOnClickListener {
+                dialog.dismiss()
+                onCancel()
+            }
+        })
+
+        dialog = AlertDialog.Builder(themeCtx)
+            .setView(container)
+            .setOnCancelListener { onCancel() }
+            .create()
+
+        if (isOverlay) {
+            OverlayDialogs.showOverlayCenterDialog(
+                dialog = dialog,
+                ctx = ctx,
+                widthRatio = 0.88f,
+                cancelOnTouchOutside = true,
+                useSolidPanelBackground = true,
+            )
+        } else {
+            OverlayDialogs.showPageCenterDialog(
+                dialog = dialog,
+                ctx = ctx,
+                widthRatio = 0.88f,
+                cancelOnTouchOutside = true,
+                useSolidPanelBackground = true,
+            )
+        }
+    }
+
+    /**
+     * 规则修正冲突裁决确认弹窗。
+     * 支持一键确定覆盖/新建，亦支持点击调整规则深入定制。
+     */
+    fun showCorrectionConfirmDialog(
+        ctx: Context,
+        message: String,
+        keyword: String,
+        targetCategory: String,
+        existingRule: AccountingRule? = null,
+        isOverlay: Boolean = false,
+        onConfirmSave: () -> Unit,
+        onCustomize: () -> Unit,
+        onCancel: () -> Unit = {}
+    ) {
+        val themeCtx = ContextThemeWrapper(ctx, R.style.Theme_TapAccounting)
+        val dialog = AlertDialog.Builder(themeCtx)
+            .setTitle("分类规则")
+            .setMessage(message)
+            .setPositiveButton("确定") { d, _ ->
+                d.dismiss()
+                onConfirmSave()
+            }
+            .setNeutralButton("调整规则") { d, _ ->
+                d.dismiss()
+                onCustomize()
+            }
+            .setNegativeButton("取消") { d, _ ->
+                d.dismiss()
+                onCancel()
+            }
+            .setOnCancelListener { onCancel() }
+            .create()
+
+        if (isOverlay) {
+            OverlayDialogs.showOverlayCenterDialog(
+                dialog = dialog,
+                ctx = ctx,
+                widthRatio = 0.88f,
+                cancelOnTouchOutside = true,
+                useSolidPanelBackground = true
+            )
+        } else {
+            OverlayDialogs.showPageCenterDialog(
+                dialog = dialog,
+                ctx = ctx,
+                widthRatio = 0.88f,
                 cancelOnTouchOutside = true,
                 useSolidPanelBackground = true
             )

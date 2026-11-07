@@ -28,6 +28,10 @@ object Prefs {
     const val TYPE_EXPENSE = 1
     const val TYPE_INCOME = 2
 
+    /** AI 面板收起后的小圆停靠边。 */
+    const val AI_BUBBLE_SIDE_LEFT = 0
+    const val AI_BUBBLE_SIDE_RIGHT = 1
+
     // --- General settings ---
 
     fun isVibrateFeedbackEnabled(ctx: Context): Boolean = PrefsGeneralSupport.isVibrateFeedbackEnabled(ctx)
@@ -375,6 +379,11 @@ object Prefs {
     fun setIndependentDetailEnabled(ctx: Context, enabled: Boolean) =
         PrefsDisplaySupport.setIndependentDetailEnabled(ctx, enabled)
 
+    fun isBillCategorySourceVisible(ctx: Context): Boolean =
+        PrefsDisplaySupport.isBillCategorySourceVisible(ctx)
+    fun setBillCategorySourceVisible(ctx: Context, visible: Boolean) =
+        PrefsDisplaySupport.setBillCategorySourceVisible(ctx, visible)
+
     fun addOcrDebugRecord(ctx: Context, text: String, source: String = "local_ocr_before_ai") =
         PrefsAiSupport.addOcrDebugRecord(ctx, text, source)
 
@@ -589,6 +598,14 @@ object Prefs {
 
     fun serializeSettingsModules(ctx: Context): Map<String, String> =
         PrefsBackupSupport.serializeSettingsModules(ctx)
+
+    // --- AI 面板常驻小圆 ---
+    fun getAiPanelBubbleSide(ctx: Context): Int = PrefsGeneralSupport.getAiPanelBubbleSide(ctx)
+    fun setAiPanelBubbleSide(ctx: Context, side: Int) =
+        PrefsGeneralSupport.setAiPanelBubbleSide(ctx, side)
+    fun getAiPanelBubbleY(ctx: Context): Int = PrefsGeneralSupport.getAiPanelBubbleY(ctx)
+    fun setAiPanelBubbleY(ctx: Context, y: Int) =
+        PrefsGeneralSupport.setAiPanelBubbleY(ctx, y)
 
     // --- Backup initialization ---
     fun isBackupInitialized(ctx: Context): Boolean =

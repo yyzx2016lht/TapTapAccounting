@@ -1,10 +1,12 @@
 package com.taostudio.tapaccounting
 
 import android.app.Activity
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.widget.Toast
+import com.taostudio.tapaccounting.capture.contract.CaptureContract
 import java.io.File
 
 /**
@@ -19,6 +21,8 @@ class ImagePickerActivity : Activity() {
 
     companion object {
         private const val REQUEST_PICK_IMAGE = 1001
+        const val EXTRA_MAX_ITEMS = "maxItems"
+        private const val DEFAULT_MAX_ITEMS = 5
 
         /** P2-25: 宿主销毁时清空静态回调，避免悬挂 OverlayManager */
         fun clearCallbacks() {
@@ -29,6 +33,32 @@ class ImagePickerActivity : Activity() {
         /** 单图兼容回调 */
         var onImagePicked: ((Uri) -> Unit)? = null
         var onPickCancelled: (() -> Unit)? = null
+
+        /**
+         * 统一入口：浮层（Service）里启动会落到独立任务，取消后回到原来的 App，
+         * 不会把记账主界面顶到前台。Activity 里启动则留在当前任务。
+         */
+        fun launch(
+            context: Context,
+            maxItems: Int = DEFAULT_MAX_ITEMS,
+            onPicked: (List<Uri>) -> Unit,
+            onCancelled: () -> Unit,
+        ) {
+            onImagesPicked = onPicked
+            onImagePicked = null
+            onPickCancelled = onCancelled
+            val intent = Intent(context, ImagePickerActivity::class.java).apply {
+                putExtra(EXTRA_MAX_ITEMS, maxItems.coerceAtLeast(1))
+                var flags = Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS or
+                    Intent.FLAG_ACTIVITY_NO_ANIMATION
+                if (context !is Activity) {
+                    flags = flags or Intent.FLAG_ACTIVITY_NEW_TASK or
+                        Intent.FLAG_ACTIVITY_MULTIPLE_TASK
+                }
+                addFlags(flags)
+            }
+            context.startActivity(intent)
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -38,9 +68,19 @@ class ImagePickerActivity : Activity() {
     }
 
     private fun openImagePicker() {
-        val intent = Intent(Intent.ACTION_PICK, android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI).apply {
-            type = "image/*"
-            putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
+        val maxItems = intent?.getIntExtra(EXTRA_MAX_ITEMS, DEFAULT_MAX_ITEMS)
+            ?.coerceAtLeast(1) ?: DEFAULT_MAX_ITEMS
+        val intent = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            Intent(android.provider.MediaStore.ACTION_PICK_IMAGES).apply {
+                type = "image/*"
+                putExtra(android.provider.MediaStore.EXTRA_PICK_IMAGES_MAX, maxItems)
+            }
+        } else {
+            Intent(Intent.ACTION_GET_CONTENT).apply {
+                type = "image/*"
+                if (maxItems > 1) putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
+                addCategory(Intent.CATEGORY_OPENABLE)
+            }
         }
         startActivityForResult(intent, REQUEST_PICK_IMAGE)
     }
@@ -48,7 +88,8 @@ class ImagePickerActivity : Activity() {
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode == REQUEST_PICK_IMAGE) {
-            Logger.d(this, "StreamPreview", "onActivityResult: resultCode=$resultCode, data=${data != null}, clipData=${data?.clipData?.itemCount}")
+            val isCaptureMode = !intent?.getStringExtra(CaptureContract.EXTRA_CAPTURE_ID).isNullOrBlank()
+            Logger.d(this, "StreamPreview", "onActivityResult: resultCode=$resultCode, data=${data != null}, clipData=${data?.clipData?.itemCount}, isCaptureMode=$isCaptureMode")
             if (resultCode == RESULT_OK && data != null) {
                 val uris = mutableListOf<Uri>()
                 val clipData = data.clipData
@@ -63,14 +104,27 @@ class ImagePickerActivity : Activity() {
                 }
                 Logger.d(this, "StreamPreview", "onActivityResult: uris=${uris.size}, onImagesPicked=${onImagesPicked != null}, onImagePicked=${onImagePicked != null}")
                 if (uris.isEmpty()) {
-                    onPickCancelled?.invoke()
+                    if (isCaptureMode) {
+                        Toast.makeText(this, "未选择图片，待记仍保留", Toast.LENGTH_SHORT).show()
+                    } else {
+                        onPickCancelled?.invoke()
+                    }
                 } else {
-                    val stableUris = uris.mapNotNull { uri ->
-                        runCatching { copyImageToCache(uri) }.getOrNull()
+                    val stableUris = uris.mapIndexedNotNull { index, uri ->
+                        runCatching { copyImageToCache(uri, index) }.getOrNull()
                     }
                     if (stableUris.isEmpty()) {
                         Toast.makeText(this, getString(R.string.image_read_failed), Toast.LENGTH_SHORT).show()
-                        onPickCancelled?.invoke()
+                        if (!isCaptureMode) {
+                            onPickCancelled?.invoke()
+                        }
+                    } else if (isCaptureMode) {
+                        // 待记图片记账：选图完成后交给 capture 专用 Activity，不走 OverlayManager 回调
+                        if (!launchCaptureAccounting(stableUris)) {
+                            Toast.makeText(this, "启动图片记账失败，待记仍保留", Toast.LENGTH_SHORT).show()
+                        }
+                        finish()
+                        return
                     } else {
                         // 优先调多图回调，兼容单图回调
                         val multiCb = onImagesPicked
@@ -82,21 +136,57 @@ class ImagePickerActivity : Activity() {
                     }
                 }
             } else {
-                onPickCancelled?.invoke()
+                if (isCaptureMode) {
+                    Toast.makeText(this, "已取消图片记账，待记仍保留", Toast.LENGTH_SHORT).show()
+                } else {
+                    onPickCancelled?.invoke()
+                }
             }
         }
         finish()
+    }
+
+    /**
+     * 待记图片记账模式：把已复制到缓存的图片 Uri 和 capture 上下文交给
+     * [CaptureImageAccountingActivity]。返回 false 表示不是该模式。
+     */
+    private fun launchCaptureAccounting(uris: List<Uri>): Boolean {
+        val captureId = intent?.getStringExtra(CaptureContract.EXTRA_CAPTURE_ID)
+            ?.trim()
+            ?.takeIf { it.isNotEmpty() }
+            ?: return false
+        val next = Intent(this, CaptureImageAccountingActivity::class.java).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            putStringArrayListExtra(
+                CaptureImageAccountingActivity.EXTRA_IMAGE_URIS,
+                ArrayList(uris.map { it.toString() })
+            )
+            putExtra(CaptureContract.EXTRA_CAPTURE_ID, captureId)
+            intent.getStringExtra(CaptureContract.EXTRA_CAPTURE_PAYLOAD)?.let {
+                putExtra(CaptureContract.EXTRA_CAPTURE_PAYLOAD, it)
+            }
+            intent.getStringExtra(CaptureContract.EXTRA_REQUEST_ID)?.let {
+                putExtra(CaptureContract.EXTRA_REQUEST_ID, it)
+            }
+        }
+        return try {
+            startActivity(next)
+            true
+        } catch (t: Throwable) {
+            Logger.e(this, "StreamPreview", "launchCaptureAccounting failed: ${t.message}")
+            false
+        }
     }
 
     override fun onDestroy() {
         super.onDestroy()
     }
 
-    private fun copyImageToCache(sourceUri: Uri): Uri {
+    private fun copyImageToCache(sourceUri: Uri, index: Int = 0): Uri {
         val input = contentResolver.openInputStream(sourceUri)
             ?: throw IllegalArgumentException("无法打开图片流")
         val imageDir = File(cacheDir, "picked_images").apply { mkdirs() }
-        val outFile = File(imageDir, "receipt_${System.currentTimeMillis()}.jpg")
+        val outFile = File(imageDir, "receipt_${System.currentTimeMillis()}_${index}_${System.nanoTime() % 10000}.jpg")
 
         input.use { ins ->
             outFile.outputStream().use { outs ->

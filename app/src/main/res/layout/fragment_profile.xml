@@ -116,6 +116,60 @@
                 </LinearLayout>
             </androidx.cardview.widget.CardView>
 
+            <androidx.cardview.widget.CardView
+                android:id="@+id/layout_capture_center_entry"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="16dp"
+                android:clickable="true"
+                android:focusable="true"
+                android:visibility="gone"
+                android:foreground="?attr/selectableItemBackground"
+                style="@style/SettingsCard">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingHorizontal="18dp"
+                    android:paddingVertical="14dp">
+
+                    <ImageView
+                        android:layout_width="40dp"
+                        android:layout_height="40dp"
+                        android:background="@drawable/bg_capture_icon_soft"
+                        android:padding="9dp"
+                        android:src="@drawable/ic_capture" />
+
+                    <LinearLayout style="@style/SettingsTextBlock">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="待记收件箱"
+                            android:textColor="@color/settings_item_title"
+                            android:textSize="@dimen/text_size_16"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:id="@+id/tv_capture_center_subtitle"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="4dp"
+                            android:text="支付后自动留痕，有空再补备注/分类"
+                            android:textColor="@color/settings_item_subtitle"
+                            android:textSize="@dimen/text_size_12" />
+                    </LinearLayout>
+
+                    <ImageView
+                        android:layout_width="20dp"
+                        android:layout_height="20dp"
+                        android:src="@drawable/ic_chevron_right"
+                        android:tint="@color/settings_chevron" />
+                </LinearLayout>
+            </androidx.cardview.widget.CardView>
+
             <!-- ══════════════════════════════════
                  悬浮窗权限提醒卡片（动态显示）
                  ══════════════════════════════════ -->

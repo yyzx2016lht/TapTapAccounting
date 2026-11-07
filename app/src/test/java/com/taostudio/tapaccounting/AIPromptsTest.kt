@@ -91,6 +91,10 @@ class AIPromptsTest {
                 prompt.contains("不要合并同名商品")
             )
         }
+        assertFalse(
+            "图片拆单提示词也不能再要求保留同名多行",
+            AIPrompts.IMAGE_SPLIT_PROMPT_DEFAULT.contains("不要合并同名商品")
+        )
 
         val rule = AIPrompts.buildSameItemMergeRule()
         assertTrue(rule.contains("amount = 各行金额之和"))
@@ -119,6 +123,21 @@ class AIPromptsTest {
     fun imagePromptPointsToRemarksContentRule() {
         assertFalse(AIPrompts.IMAGE_ACCOUNTING_PROMPT.contains("精简品名"))
         assertTrue(AIPrompts.IMAGE_ACCOUNTING_PROMPT.contains("备注内容规则"))
+    }
+
+    @Test
+    fun imageSplitPromptFollowsReceiptRulesAndOnlyClassifies() {
+        val prompt = AIPrompts.IMAGE_SPLIT_PROMPT_DEFAULT
+        // 参照主记账 app 核心识图与小票原则
+        assertTrue(prompt.contains("严禁输出总计行"))
+        assertTrue(prompt.contains("同名商品合并"))
+        assertTrue(prompt.contains("实付净额"))
+        assertTrue(prompt.contains("折后实付净额"))
+        assertTrue(prompt.contains("未识别商品"))
+        // 只进行分类即可：不推断资产、时间、还款、账本等
+        assertTrue(prompt.contains("只进行分类即可"))
+        assertTrue(prompt.contains("category"))
+        assertTrue(prompt.contains("不要推断账户、资产、时间、币种、账本或手续费"))
     }
 
     @Test

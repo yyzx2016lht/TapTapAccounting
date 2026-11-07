@@ -8,6 +8,7 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.graphics.Color
+import android.graphics.Rect
 import android.graphics.Typeface
 import android.os.Build
 import android.text.Editable
@@ -29,9 +30,16 @@ import org.json.JSONObject
 import com.taostudio.tapaccounting.*
 import com.taostudio.tapaccounting.AmountFormatHelper
 import com.taostudio.tapaccounting.data.local.AppDatabase
+import com.taostudio.tapaccounting.data.local.entity.AccountingRule
 import com.taostudio.tapaccounting.data.local.entity.Asset
 import com.taostudio.tapaccounting.data.local.entity.AiRule
 import com.taostudio.tapaccounting.data.local.entity.Bill
+import com.taostudio.tapaccounting.data.local.entity.BillRuleProvenance
+import com.taostudio.tapaccounting.logic.RuleCorrectionCoordinator
+import com.taostudio.tapaccounting.capture.bridge.RuleLearningManager
+import com.taostudio.tapaccounting.capture.data.CapturePrefs
+import com.taostudio.tapaccounting.capturebridge.CaptureImportService
+import com.taostudio.tapaccounting.capturebridge.CapturePluginClient
 import com.taostudio.tapaccounting.ui.ExchangeRateActivity
 import com.taostudio.tapaccounting.ui.common.UiMotion.applyFormRowPressFeedback
 import com.taostudio.tapaccounting.ui.dialog.MergePaymentDialog
@@ -65,21 +73,320 @@ class AccountingFormController(
     fun updateCaptureContext(captureId: String?, requestId: String?) {
         this.captureId = captureId
         this.requestId = requestId
+        updateCategoryBadge()
+        updateSaveButtonState()
+    }
+
+    /** 当前表单绑定的待记 id；普通记账/被外部预填覆盖后为 null 或其它值。 */
+    fun currentCaptureId(): String? = captureId
+
+    /** 表单字段快照，用于待记/新账两种模式各自暂存草稿。 */
+    data class DraftSnapshot(
+        val amount: String = "",
+        val typePosition: Int = 0,
+        val accountName: String = "",
+        val toAccountName: String = "",
+        val categoryName: String = "",
+        val categorySource: String? = null,
+        val categoryRuleId: Long? = null,
+        val remark: String = "",
+        val fee: String = "",
+        val time: String = "",
+        val bookName: String = "",
+        val currencyCode: String = "CNY",
+        val isRefundMode: Boolean = false,
+        val refundSourceBill: Bill? = null,
+        val refundSourceLabel: String? = null,
+        val editingBillId: Long? = null,
+        val customTransferRate: Double? = null,
+        val customTargetAmount: Double? = null,
+        val savedTransferRateForEdit: Double? = null,
+        val hasConfirmedExchangeRate: Boolean = false,
+        val customCurrencyRate: Double? = null,
+        val customCurrencyTargetAmount: Double? = null,
+        val hasConfirmedCurrencyRate: Boolean = false,
+    )
+
+    private var onRemarkChanged: ((String) -> Unit)? = null
+    private var suppressRemarkCallback = false
+    private var onCategoryChanged: ((String) -> Unit)? = null
+    private var suppressCategoryCallback = false
+
+    /** 输入法收起（用户点返回/收起键盘）时回调；待记悬浮窗用它触发自动分类。 */
+    var onImeClosed: (() -> Unit)? = null
+
+    /** 备注变化回调；程序化回填（待记预填/草稿恢复）不会触发。 */
+    fun setOnRemarkChangedListener(listener: ((String) -> Unit)?) {
+        onRemarkChanged = listener
+    }
+
+    /** 分类变化回调（用户手动选择时触发；程序化回填不触发）。 */
+    fun setOnCategoryChangedListener(listener: ((String) -> Unit)?) {
+        onCategoryChanged = listener
+    }
+
+    /** 记录当前表单内容。 */
+    fun snapshotDraft(): DraftSnapshot = DraftSnapshot(
+        amount = etMoney.text?.toString().orEmpty(),
+        typePosition = spType.selectedItemPosition.coerceAtLeast(0),
+        accountName = tvAccount.text?.toString().orEmpty(),
+        toAccountName = tvAccount2.text?.toString().orEmpty(),
+        categoryName = sanitizeCategoryNameForSave(tvCategory.text?.toString().orEmpty()),
+        categorySource = currentCategorySource,
+        categoryRuleId = currentCategoryRuleId,
+        remark = etRemark.text?.toString().orEmpty(),
+        fee = etFee.text?.toString().orEmpty(),
+        time = tvTime.text?.toString().orEmpty(),
+        bookName = tvBook.text?.toString().orEmpty(),
+        currencyCode = spCurrency.selectedItem as? String ?: "CNY",
+        isRefundMode = isRefundMode,
+        refundSourceBill = selectedRefundSourceBill,
+        refundSourceLabel = tvRefundSourceBill?.text?.toString(),
+        editingBillId = editingBillId,
+        customTransferRate = customTransferRate,
+        customTargetAmount = customTargetAmount,
+        savedTransferRateForEdit = savedTransferRateForEdit,
+        hasConfirmedExchangeRate = hasConfirmedExchangeRate,
+        customCurrencyRate = customCurrencyRate,
+        customCurrencyTargetAmount = customCurrencyTargetAmount,
+        hasConfirmedCurrencyRate = hasConfirmedCurrencyRate,
+    )
+
+    /** 恢复表单内容；传 null 表示回到普通空白新账。 */
+    fun restoreDraft(snapshot: DraftSnapshot?) {
+        if (snapshot == null) {
+            restoreBlankDraft()
+            return
+        }
+        suppressRemarkCallback = true
+        suppressCategoryCallback = true
+        try {
+            hideAmountKeypad()
+            clearAiSuggestionState()
+            resetTransientRateState()
+            hideAiConfirmBar()
+            editingBillId = snapshot.editingBillId
+            val maxType = ((spType.adapter?.count ?: 1) - 1).coerceAtLeast(0)
+            spType.setSelection(snapshot.typePosition.coerceIn(0, maxType))
+            etMoney.setText(snapshot.amount)
+            tvAccount.text = snapshot.accountName
+            tvAccount2.text = snapshot.toAccountName
+            refreshAccountIconForName(snapshot.accountName)
+            refreshAccount2IconForName(snapshot.toAccountName)
+            applyCategoryName(snapshot.categoryName, snapshot.categorySource, snapshot.categoryRuleId)
+            etRemark.setText(snapshot.remark)
+            etFee.setText(snapshot.fee)
+            tvTime.text = snapshot.time
+            selectedFormBook = BookAccountManager.resolveWritableBook(
+                ctx,
+                snapshot.bookName.ifBlank { BookAccountManager.getDefaultBook(ctx) },
+            )
+            tvBook.text = selectedFormBook
+            setCurrency(snapshot.currencyCode)
+            customTransferRate = snapshot.customTransferRate
+            customTargetAmount = snapshot.customTargetAmount
+            savedTransferRateForEdit = snapshot.savedTransferRateForEdit
+            hasConfirmedExchangeRate = snapshot.hasConfirmedExchangeRate
+            customCurrencyRate = snapshot.customCurrencyRate
+            customCurrencyTargetAmount = snapshot.customCurrencyTargetAmount
+            hasConfirmedCurrencyRate = snapshot.hasConfirmedCurrencyRate
+            if (snapshot.isRefundMode) {
+                enterRefundMode()
+            } else if (isRefundMode) {
+                exitRefundMode()
+            }
+            selectedRefundSourceBill = snapshot.refundSourceBill
+            if (snapshot.refundSourceBill != null) {
+                tvRefundSourceBill?.text =
+                    snapshot.refundSourceLabel ?: ctx.getString(R.string.select_refund_bill)
+                tvRefundSourceBill?.setTextColor(Color.parseColor("#E53935"))
+            } else {
+                tvRefundSourceBill?.text = ctx.getString(R.string.select_refund_bill)
+                tvRefundSourceBill?.setTextColor(Color.parseColor("#888888"))
+            }
+            updateCategoryBadge()
+            updateSaveButtonState()
+        } finally {
+            suppressCategoryCallback = false
+            suppressRemarkCallback = false
+        }
+    }
+
+    private fun restoreBlankDraft() {
+        suppressRemarkCallback = true
+        suppressCategoryCallback = true
+        try {
+            hideAmountKeypad()
+            clearAiSuggestionState()
+            resetTransientRateState()
+            hideAiConfirmBar()
+            if (isRefundMode) exitRefundMode()
+            editingBillId = null
+            selectedFormBook = BookAccountManager.resolveWritableBook(
+                ctx,
+                BookAccountManager.getDefaultBook(ctx),
+            )
+            resetToBlankBill()
+            setCurrency("CNY")
+        } finally {
+            suppressCategoryCallback = false
+            suppressRemarkCallback = false
+        }
+    }
+
+    private fun clearAiSuggestionState() {
+        lastAiSuggestOriginalText = null
+        lastAiSuggestType = null
+        lastAiSuggestCategory = null
+        lastAiSuggestAccount1 = null
+        lastAiSuggestAccount2 = null
+    }
+
+    private fun resetTransientRateState() {
+        customTransferRate = null
+        customTargetAmount = null
+        savedTransferRateForEdit = null
+        hasConfirmedExchangeRate = false
+        hasConfirmedCurrencyRate = false
+        customCurrencyRate = null
+        customCurrencyTargetAmount = null
+        pendingInvestmentSchedule = null
+        hasCheckedInvestmentSchedulePrompt = false
+    }
+
+    /** 当前分类文本；占位文案归一为空串。 */
+    fun currentCategoryName(): String =
+        sanitizeCategoryNameForSave(tvCategory.text?.toString().orEmpty())
+
+    /** 待记规则回填分类（null/空串恢复占位）。 */
+    fun applyCategoryName(
+        categoryName: String?,
+        source: String? = null,
+        ruleId: Long? = null
+    ) {
+        val normalized = categoryName?.trim().orEmpty()
+            .replace("/::/", " - ")
+            .replace(" > ", " - ")
+        if (source != null) {
+            currentCategorySource = source
+            currentCategoryRuleId = ruleId
+        }
+        if (normalized.isBlank()) {
+            tvCategory.text = ctx.getString(R.string.select_category)
+            showDefaultCategoryIcon()
+            currentCategorySource = null
+            currentCategoryRuleId = null
+        } else {
+            tvCategory.text = normalized
+            refreshCategoryIconForSelection(normalized)
+        }
+        updateCategoryBadge()
+        updateSaveButtonState()
+    }
+
+    fun isPendingMode(): Boolean = captureId != null
+
+    fun isSaveBlockedByPendingRule(): Boolean {
+        if (!isPendingMode()) return false
+        val spinnerPos = spType.selectedItemPosition
+        val isRepayment = isAssetFeatureEnabled && spinnerPos == 3
+        val type = if (spinnerPos > 2) 2 else spinnerPos
+        if (isRepayment || (type != 0 && type != 1)) return false
+        val hasCategory = currentCategoryName().isNotBlank()
+        val hasRemark = etRemark.text?.toString()?.trim().orEmpty().isNotBlank()
+        return !hasCategory && !hasRemark
+    }
+
+    fun updateSaveButtonState() {
+        val blocked = isSaveBlockedByPendingRule()
+        if (blocked) {
+            btnSave.alpha = 0.45f
+            tvSaveDisabledHint?.visibility = View.VISIBLE
+        } else {
+            btnSave.alpha = 1.0f
+            tvSaveDisabledHint?.visibility = View.GONE
+        }
+    }
+
+    private fun updateCategoryBadge() {
+        val badge = tvCategorySourceBadge ?: return
+        if (captureId == null || currentCategoryName().isBlank()) {
+            badge.visibility = View.GONE
+            return
+        }
+        when (currentCategorySource) {
+            BillRuleProvenance.Source.AI -> {
+                badge.text = ctx.getString(R.string.category_source_ai)
+                badge.visibility = View.VISIBLE
+            }
+            BillRuleProvenance.Source.RULE -> {
+                badge.text = ctx.getString(R.string.category_source_rule)
+                badge.visibility = View.VISIBLE
+            }
+            BillRuleProvenance.Source.MANUAL -> {
+                badge.text = ctx.getString(R.string.category_source_manual)
+                badge.visibility = View.VISIBLE
+            }
+            else -> {
+                badge.visibility = View.GONE
+            }
+        }
+    }
+
+    fun showCategoryPicker() {
+        if (!isActivityAlive()) return
+        val currentType = if (spType.selectedItemPosition == 1) Prefs.TYPE_INCOME else Prefs.TYPE_EXPENSE
+        // 已入账账单不允许清空分类；待记/新账仍可回待选。
+        val allowClear = editingBillId == null
+        OverlayDialogs.showGridCategoryPicker(
+            ctx = ctx,
+            currentSelectionText = tvCategory.text.toString(),
+            type = currentType,
+            allowClear = allowClear,
+        ) { selectedCategory ->
+            var normalized = if (selectedCategory.isBlank()) "" else selectedCategory.replace(" > ", " - ")
+            if (normalized.isBlank() && editingBillId != null) normalized = "其他"
+            val source = if (normalized.isNotBlank()) BillRuleProvenance.Source.MANUAL else null
+            applyCategoryName(normalized, source, null)
+            if (!suppressCategoryCallback) {
+                onCategoryChanged?.invoke(normalized)
+            }
+        }
+    }
+
+    private fun showAiConfirmBar() {
+        layoutFormActions?.visibility = View.GONE
+        layoutAiConfirmBar?.visibility = View.VISIBLE
+        updateCategoryBadge()
+    }
+
+    private fun hideAiConfirmBar() {
+        layoutAiConfirmBar?.visibility = View.GONE
+        layoutFormActions?.visibility = View.VISIBLE
     }
 
     /** 清空待记预填，恢复为空白记账状态。 */
     fun resetToBlankBill() {
         this.captureId = null
         this.requestId = null
+        this.formExcludeFromStats = false
+        this.currentCategorySource = null
+        this.currentCategoryRuleId = null
+        this.currentRuleKeyword = null
         etMoney.setText("")
         spType.setSelection(0)
         tvAccount.text = ctx.getString(R.string.select_asset_dialog)
         resetAccountIconToEmoji()
         tvCategory.text = ctx.getString(R.string.select_category)
         showDefaultCategoryIcon()
+        hideAiConfirmBar()
+        updateCategoryBadge()
+        suppressRemarkCallback = true
         etRemark.setText("")
+        suppressRemarkCallback = false
         etFee.setText("")
         setupDefaults()
+        updateSaveButtonState()
     }
 
     /** P1-29: 界面销毁时取消协程。 */
@@ -89,6 +396,10 @@ class AccountingFormController(
         scope.cancel()
     }
     private var editingBillId: Long? = null
+    private var formExcludeFromStats: Boolean = false
+    private var currentCategorySource: String? = null
+    private var currentCategoryRuleId: Long? = null
+    private var currentRuleKeyword: String? = null
     private val saveLock = SaveReentryLock()
     private var isSaving: Boolean
         get() = saveLock.isLocked()
@@ -110,12 +421,18 @@ class AccountingFormController(
     private val btnSwapAccounts: View? = rootView.findViewById(R.id.btn_swap_accounts)
     private val layoutCategory: View = rootView.findViewById(R.id.layout_category)
     private val tvCategory: TextView = rootView.findViewById(R.id.tv_category)
+    private val tvCategorySourceBadge: TextView? = rootView.findViewById(R.id.tv_category_source_badge)
     private val ivCategoryIcon: ImageView? = rootView.findViewById(R.id.iv_category_icon)
     private val tvCategoryIconEmoji: TextView? = rootView.findViewById(R.id.tv_category_icon_emoji)
     private val layoutFee: View = rootView.findViewById(R.id.layout_fee)
     private val etFee: EditText = rootView.findViewById(R.id.et_fee)
     private val tvTime: TextView = rootView.findViewById(R.id.tv_time)
     private val etRemark: EditText = rootView.findViewById(R.id.et_remark)
+    private val tvSaveDisabledHint: TextView? = rootView.findViewById(R.id.tv_save_disabled_hint)
+    private val layoutFormActions: LinearLayout? = rootView.findViewById(R.id.layout_form_actions)
+    private val layoutAiConfirmBar: LinearLayout? = rootView.findViewById(R.id.layout_ai_confirm_bar)
+    private val btnAiChangeCategory: Button? = rootView.findViewById(R.id.btn_ai_change_category)
+    private val btnAiConfirmSave: Button? = rootView.findViewById(R.id.btn_ai_confirm_save)
     private val btnSave: Button = rootView.findViewById(R.id.btn_save)
     private val btnCancel: Button = rootView.findViewById(R.id.btn_cancel)
     private val tvTitle: TextView? = rootView.findViewById(R.id.tv_title)
@@ -444,6 +761,8 @@ class AccountingFormController(
         val tvLabel2 = rootView.findViewById<TextView?>(R.id.tv_account_2_label)
         if (!isAssetFeatureEnabled) {
             updateCurrencySpinnerMode(isTransferMode = false)
+            updateCategoryBadge()
+            updateSaveButtonState()
             return
         }
         when (position) {
@@ -477,6 +796,8 @@ class AccountingFormController(
                 updateCurrencySpinnerMode(isTransferMode = false)
             }
         }
+        updateCategoryBadge()
+        updateSaveButtonState()
     }
 
     private fun setupCurrencySpinner() {
@@ -755,16 +1076,7 @@ class AccountingFormController(
                 }
                 R.id.layout_category, R.id.tv_category -> {
                     if (!isActivityAlive()) return@OnClickListener
-                    val currentType = if (spType.selectedItemPosition == 1) Prefs.TYPE_INCOME else Prefs.TYPE_EXPENSE
-                    OverlayDialogs.showGridCategoryPicker(ctx, tvCategory.text.toString(), currentType) {
-                        if (it.isBlank()) {
-                            tvCategory.text = ctx.getString(R.string.select_category)
-                            showDefaultCategoryIcon()
-                        } else {
-                            tvCategory.text = it.replace(" > ", " - ")
-                            refreshCategoryIconForSelection(it)
-                        }
-                    }
+                    showCategoryPicker()
                 }
                 R.id.layout_account_2, R.id.tv_account_2 -> {
                     scope.launch(Dispatchers.IO) {
@@ -888,6 +1200,11 @@ class AccountingFormController(
         }
         btnSave.setOnClickListener { v ->
             hideAmountKeypad()
+            if (isSaveBlockedByPendingRule()) {
+                Utils.toast(ctx, ctx.getString(R.string.pending_save_hint_need_category_or_remark))
+                showCategoryPicker()
+                return@setOnClickListener
+            }
             // Press feedback: quick scale-down then restore
             v.animate().cancel()
             v.animate()
@@ -908,6 +1225,7 @@ class AccountingFormController(
         }
         btnCancel.setOnClickListener {
             hideAmountKeypad()
+            hideAiConfirmBar()
             if (isProcessingPendingBillQueue) {
                 if (pendingBills.isNotEmpty()) {
                     Utils.toast(ctx, ctx.getString(R.string.toast_bill_skipped_next))
@@ -932,8 +1250,50 @@ class AccountingFormController(
         }
         // btnVoice 的触摸逻辑由 VoiceInputHandler.setupVoiceButton 接管，此处不设置 OnClickListener
 
+        tvSaveDisabledHint?.setOnClickListener {
+            showCategoryPicker()
+        }
+        btnAiChangeCategory?.setOnClickListener {
+            showCategoryPicker()
+        }
+        btnAiConfirmSave?.setOnClickListener {
+            hideAiConfirmBar()
+            isSaving = true
+            performSaveWithLock()
+        }
+
         // 备注输入框：回车键收起输入法，不换行
         etRemark.dismissKeyboardOnEnter()
+        installImeCloseWatcher()
+        etRemark.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = Unit
+            override fun afterTextChanged(s: Editable?) {
+                hideAiConfirmBar()
+                updateSaveButtonState()
+                if (!suppressRemarkCallback) {
+                    onRemarkChanged?.invoke(s?.toString().orEmpty())
+                }
+            }
+        })
+        updateCategoryBadge()
+        updateSaveButtonState()
+    }
+
+    /** 输入法从可见变为收起时回调一次（用户按返回键/手势收起键盘）。 */
+    private fun installImeCloseWatcher() {
+        var wasVisible = false
+        rootView.viewTreeObserver.addOnGlobalLayoutListener {
+            val rect = Rect()
+            rootView.getWindowVisibleDisplayFrame(rect)
+            val height = rootView.rootView.height
+            val visible = height > 0 &&
+                height - rect.bottom > (120 * ctx.resources.displayMetrics.density).toInt()
+            if (wasVisible && !visible) {
+                onImeClosed?.invoke()
+            }
+            wasVisible = visible
+        }
     }
 
     private fun setupAmountKeypad() {
@@ -988,20 +1348,23 @@ class AccountingFormController(
         isAmountKeypadVisible = true
     }
 
-    private fun hideAmountKeypad() {
+    fun hideAmountKeypad() {
         if (!isAmountKeypadVisible) return
         amountKeypad?.normalize()
         closeAmountKeypad()
     }
 
     fun handleBackPressed(): Boolean {
-        return if (isAmountKeypadVisible) {
+        if (isAmountKeypadVisible) {
             // 返回键只收起键盘；表达式可求值时规整为结果，不提交账单
             hideAmountKeypad()
-            true
-        } else {
-            false
+            return true
         }
+        if (layoutAiConfirmBar?.visibility == View.VISIBLE) {
+            hideAiConfirmBar()
+            return true
+        }
+        return false
     }
 
     private fun closeAmountKeypad() {
@@ -1575,6 +1938,115 @@ class AccountingFormController(
             Utils.toast(ctx, ctx.getString(R.string.toast_no_asset_mode))
             return
         }
+
+        // 待记模式保存校验与分类判定
+        if (captureId != null && !isRepayment && (type == 0 || type == 1)) {
+            val currentCat = currentCategoryName()
+            val currentRemark = etRemark.text?.toString()?.trim().orEmpty()
+
+            if (currentCat.isBlank() && currentRemark.isBlank()) {
+                Utils.toast(ctx, ctx.getString(R.string.pending_save_hint_need_category_or_remark))
+                showCategoryPicker()
+                return
+            }
+
+            // Priority 1: User explicitly selected category
+            if (currentCat.isNotBlank() && currentCategorySource == BillRuleProvenance.Source.MANUAL) {
+                isSaving = true
+                performSaveWithLock()
+                return
+            }
+
+            // If category is already present (e.g. from existing rule or confirmation)
+            if (currentCat.isNotBlank()) {
+                if (currentCategorySource == null) {
+                    currentCategorySource = BillRuleProvenance.Source.MANUAL
+                }
+                isSaving = true
+                performSaveWithLock()
+                return
+            }
+
+            // No category, but remark is present!
+            val cId = captureId ?: return
+            btnSave.isEnabled = false
+            scope.launch {
+                try {
+                    // Priority 2: Check local rule via AccountingRuleEngine.matchNote
+                    val ruleMatch = withContext(Dispatchers.IO) {
+                        com.taostudio.tapaccounting.capture.rules.AccountingRuleEngine.matchNote(ctx, currentRemark)
+                    }
+                    if (ruleMatch != null) {
+                        applyCategoryName(ruleMatch.categoryName, BillRuleProvenance.Source.RULE, ruleMatch.ruleId)
+                        currentRuleKeyword = ruleMatch.keyword
+                        withContext(Dispatchers.IO) {
+                            CapturePluginClient.updateCaptureDraft(
+                                context = ctx,
+                                captureId = cId,
+                                note = currentRemark,
+                                categoryName = ruleMatch.categoryName,
+                                categorySource = BillRuleProvenance.Source.RULE,
+                            )
+                        }
+                        isSaving = true
+                        performSaveWithLock()
+                        return@launch
+                    }
+
+                    // Priority 3: AI classification
+                    if (Prefs.getAiKey(ctx).isBlank()) {
+                        Utils.toast(ctx, ctx.getString(R.string.toast_ai_no_key))
+                        showCategoryPicker()
+                        return@launch
+                    }
+
+                    btnSave.text = ctx.getString(R.string.toast_ai_classifying)
+                    val aiCategory = try {
+                        withContext(Dispatchers.IO) {
+                            CaptureImportService.classifySingleNote(ctx, cId, currentRemark, type)
+                        }
+                    } catch (e: Exception) {
+                        null
+                    }
+
+                    if (!isActivityAlive() || captureId != cId) return@launch
+                    val latestRemark = etRemark.text?.toString()?.trim().orEmpty()
+                    if (latestRemark != currentRemark) return@launch
+                    if (currentCategoryName().isNotBlank()) return@launch
+
+                    if (aiCategory.isNullOrBlank()) {
+                        Utils.toast(ctx, ctx.getString(R.string.toast_ai_classify_failed))
+                        showCategoryPicker()
+                        return@launch
+                    }
+
+                    // AI succeeded
+                    applyCategoryName(aiCategory, BillRuleProvenance.Source.AI)
+                    withContext(Dispatchers.IO) {
+                        CapturePluginClient.updateCaptureDraft(
+                            context = ctx,
+                            captureId = cId,
+                            note = currentRemark,
+                            categoryName = aiCategory,
+                            categorySource = BillRuleProvenance.Source.AI,
+                        )
+                    }
+
+                    val aiMode = CapturePrefs.getAiCategoryMode(ctx)
+                    if (aiMode == CapturePrefs.AI_CATEGORY_CONFIRM) {
+                        showAiConfirmBar()
+                    } else {
+                        isSaving = true
+                        performSaveWithLock()
+                    }
+                } finally {
+                    btnSave.isEnabled = true
+                    btnSave.text = ctx.getString(R.string.save_and_record)
+                }
+            }
+            return
+        }
+
         // P0-5：所有入口（含汇率确认旁路）共用同一把锁，禁止双击/动画重入双写
         isSaving = true
         performSaveWithLock()
@@ -1878,7 +2350,7 @@ class AccountingFormController(
                 exchangeRate = finalRate,
                 fee = feeVal,
                 bookName = writableBook,
-                excludeFromStats = oldBill?.excludeFromStats ?: false,
+                excludeFromStats = oldBill?.excludeFromStats ?: formExcludeFromStats,
                 paymentGroupId = pendingQueuePaymentGroupId?.takeIf {
                     isProcessingPendingBillQueue && cbQueuePaymentGroup?.isChecked == true &&
                         (type == Bill.TYPE_EXPENSE || type == Bill.TYPE_INCOME) && subType == Bill.SUBTYPE_NORMAL
@@ -1931,6 +2403,7 @@ class AccountingFormController(
             }
 
             val scheduleForInvestment = pendingInvestmentSchedule
+            val pendingCaptureId = captureId
             if (!didReplaceExisting) {
                 if (latestRefundSource != null) {
                     try {
@@ -1971,13 +2444,50 @@ class AccountingFormController(
                         )
                     }
                 }
+                // 退款/投资转账等分支不经过带 captureId 的入账：补一条回执，
+                // 否则这笔待记会一直停在收件箱里（悬浮窗细改保存后最明显）。
+                if (pendingCaptureId != null) {
+                    if (db.externalImportDao().getByCaptureId(pendingCaptureId) == null) {
+                        BillMutationService.recordCaptureImport(
+                            db = db,
+                            captureId = pendingCaptureId,
+                            billId = rBill.id,
+                            requestId = requestId
+                        )
+                    }
+                }
+                // 所有新账单/编辑账单都记录分类来源；手动新账默认“用户自选”。
+                if (rBill.id > 0L && rBill.type in 0..1 && rBill.categoryName.isNotBlank()) {
+                    val existingProv = runCatching {
+                        db.billRuleProvenanceDao().getByBillId(rBill.id)
+                    }.getOrNull()
+                    val provSource = currentCategorySource
+                        ?: existingProv?.source
+                        ?: BillRuleProvenance.Source.MANUAL
+                    try {
+                        db.billRuleProvenanceDao().upsert(
+                            BillRuleProvenance(
+                                billId = rBill.id,
+                                captureId = pendingCaptureId ?: existingProv?.captureId,
+                                source = provSource,
+                                ruleId = currentCategoryRuleId ?: existingProv?.ruleId,
+                                keyword = currentRuleKeyword ?: existingProv?.keyword,
+                            )
+                        )
+                    } catch (_: Exception) {}
+                }
                 // 本次捕获已消费：表单可能继续留着记下一笔，不能复用同一个 captureId。
                 captureId = null
                 requestId = null
             }
 
             withContext(Dispatchers.Main) {
-                Utils.toast(ctx, ctx.getString(R.string.toast_accounting_success))
+                val saveToastMsg = if (pendingCaptureId != null && finalCategory.isNotBlank()) {
+                    "已记入 $finalCategory"
+                } else {
+                    ctx.getString(R.string.toast_accounting_success)
+                }
+                Utils.toast(ctx, saveToastMsg)
                 if (Prefs.isSaveVibrateEnabled(ctx)) {
                     Utils.vibrate(ctx, 50)
                 }
@@ -2030,6 +2540,7 @@ class AccountingFormController(
                         val acc1ToSuggest = if (changedType != null) (changedAcc1 ?: accountName1) else null
 
                         val suggestion = RuleCreateSuggestion(
+                            billId = rBill.id,
                             originalText = originalText,
                             beforeType = lastAiSuggestType,
                             beforeCategory = lastAiSuggestCategory?.takeIf { it.isNotBlank() },
@@ -2043,6 +2554,30 @@ class AccountingFormController(
                     }
                 }
                 lastAiSuggestOriginalText = null
+
+                // 账单编辑态：分类或备注变更都走统一修正入口
+                if (didReplaceExisting && oldBill != null &&
+                    (oldBill.categoryName != rBill.categoryName || oldBill.remark != rBill.remark)
+                ) {
+                    RuleCorrectionCoordinator.onUserEditedBill(
+                        ctx = ctx,
+                        billId = oldBill.id,
+                        oldCategory = oldBill.categoryName,
+                        newCategory = rBill.categoryName,
+                        oldRemark = oldBill.remark,
+                        newRemark = rBill.remark,
+                        onFinished = {
+                            if (pendingBills.isNotEmpty()) {
+                                processNextPendingBill()
+                            } else {
+                                onCloseRequest(true)
+                            }
+                        }
+                    )
+                    return@withContext
+                }
+
+                maybeAskLearnRule(finalCategory, type, rBill.remark, pendingCaptureId)
 
                 if (pendingBills.isNotEmpty()) {
                     processNextPendingBill()
@@ -2175,6 +2710,7 @@ class AccountingFormController(
     private var hasFinishedSaveFlow = false
 
     private data class RuleCreateSuggestion(
+        val billId: Long,
         val originalText: String,
         val beforeType: Int?,
         val beforeCategory: String?,
@@ -2186,33 +2722,20 @@ class AccountingFormController(
 
     private fun handleRulePromptAfterBookkeeping(suggestion: RuleCreateSuggestion) {
         val safeContext = ctx
-        val isOverlayContext = safeContext !is Activity
         if (safeContext is Activity && safeContext.isFinishing) {
             finishSaveFlow()
             return
         }
 
-        RuleLearnPromptHelper.show(
+        // 主记账 AI 纠错也走统一修正协调器；没有 provenance 时会按备注创建新规则。
+        RuleCorrectionCoordinator.onUserCorrectCategory(
             ctx = safeContext,
-            model = RuleLearnPromptHelper.PromptModel(
-                referenceText = suggestion.originalText,
-                beforeType = suggestion.beforeType,
-                afterType = suggestion.finalType,
-                beforeCategory = suggestion.beforeCategory,
-                afterCategory = suggestion.finalCategory
-            ),
-            isOverlay = isOverlayContext,
-            onContinue = {
-                showCreateRuleDialog(
-                    suggestion.originalText,
-                    suggestion.finalType,
-                    suggestion.finalCategory,
-                    suggestion.finalAcc1,
-                    suggestion.finalAcc2,
-                    finishOnDone = true
-                )
-            },
-            onDismiss = { finishSaveFlow() }
+            billId = suggestion.billId,
+            oldCategory = suggestion.beforeCategory,
+            newCategory = suggestion.finalCategory,
+            note = suggestion.originalText,
+            merchant = null,
+            onFinished = { finishSaveFlow() }
         )
     }
 
@@ -2268,11 +2791,12 @@ class AccountingFormController(
 
     private suspend fun saveRuleWithDedupDecision(newRule: AiRule): RuleSaveResult {
         val db = AppDatabase.getDatabase(ctx)
-        val dao = db.aiRuleDao()
-        val existingRules = dao.getRulesByKeyword(newRule.keyword.trim())
+        val dao = db.accountingRuleDao()
+        val keyword = newRule.keyword.trim()
+        val existingRules = dao.findAllByKeyword(keyword)
 
         if (existingRules.isEmpty()) {
-            dao.insertRule(newRule)
+            upsertUserAccountingRule(db, newRule, existingId = null)
             return RuleSaveResult.SAVED
         }
 
@@ -2281,7 +2805,7 @@ class AccountingFormController(
             normalizeRuleCategory(it.targetCategory) == normalizedNewCategory
         }
         if (sameCategoryRule != null) {
-            dao.insertRule(newRule.copy(id = sameCategoryRule.id))
+            upsertUserAccountingRule(db, newRule, existingId = sameCategoryRule.id)
             return RuleSaveResult.SAVED
         }
 
@@ -2295,17 +2819,48 @@ class AccountingFormController(
 
         return when (chosen) {
             RuleConflictDecision.OVERWRITE -> {
-                val target = existingRules.firstOrNull()
-                if (target != null) {
-                    dao.insertRule(newRule.copy(id = target.id))
-                } else {
-                    dao.insertRule(newRule)
-                }
+                upsertUserAccountingRule(db, newRule, existingId = existingRules.firstOrNull()?.id)
                 RuleSaveResult.SAVED
             }
             RuleConflictDecision.CANCEL_RECORD,
             RuleConflictDecision.DISMISS -> RuleSaveResult.SKIPPED
         }
+    }
+
+    /** 记账习惯规则统一写入 accounting_rules；旧 ai_rule 只读兼容，不再双写。 */
+    private suspend fun upsertUserAccountingRule(db: AppDatabase, newRule: AiRule, existingId: Long?) {
+        val dao = db.accountingRuleDao()
+        val keyword = newRule.keyword.trim()
+        val now = System.currentTimeMillis()
+        val existing = existingId?.let { id -> dao.findAllByKeyword(keyword).firstOrNull { it.id == id } }
+        val rule = if (existing != null) {
+            existing.copy(
+                keyword = keyword,
+                targetCategory = newRule.targetCategory,
+                targetType = newRule.targetType ?: existing.targetType,
+                targetAccount1 = newRule.targetAccount1 ?: existing.targetAccount1,
+                targetAccount2 = newRule.targetAccount2 ?: existing.targetAccount2,
+                source = AccountingRule.Source.USER,
+                enabled = newRule.isEnabled,
+                updatedAt = now
+            )
+        } else {
+            AccountingRule(
+                id = 0L,
+                keyword = keyword,
+                matchField = AccountingRule.MatchField.REMARK,
+                matchMode = AccountingRule.MatchMode.ALL_TOKENS,
+                targetCategory = newRule.targetCategory,
+                targetType = newRule.targetType,
+                targetAccount1 = newRule.targetAccount1,
+                targetAccount2 = newRule.targetAccount2,
+                source = AccountingRule.Source.USER,
+                enabled = newRule.isEnabled,
+                createdAt = now,
+                updatedAt = now
+            )
+        }
+        dao.upsert(rule)
     }
 
     private enum class RuleConflictDecision { OVERWRITE, CANCEL_RECORD, DISMISS }
@@ -2360,6 +2915,30 @@ class AccountingFormController(
             ?.replace(">", "-")
             ?.trim()
             .orEmpty()
+    }
+
+    /**
+     * ASK 模式：保存成功后问一次是否把这条备注→分类记成规则。
+     * 不阻塞关窗；用户点“记住”才写 accounting_rules。
+     */
+    private fun maybeAskLearnRule(
+        category: String,
+        type: Int,
+        note: String,
+        captureId: String?,
+    ) {
+        if (captureId == null) return
+        if (CapturePrefs.getRuleLearnMode(ctx) != CapturePrefs.RULE_LEARN_ASK) return
+        if (type != 0 && type != 1) return
+        val cleanNote = note.trim()
+        val cleanCategory = category.trim()
+        if (cleanNote.isEmpty() || cleanCategory.isEmpty()) return
+        val leaf = cleanCategory.substringAfterLast(" - ").substringAfterLast(" > ").trim()
+        if (leaf == "其他" || leaf == "差额调整") return
+
+        val entry = RuleLearningManager.RuleLearnEntry(cleanNote, cleanCategory, type)
+        // 与列表/批量/气泡/拆分共用同一套 ASK 提示。
+        RuleAskCoordinator.showIfNeeded(ctx, listOf(entry))
     }
 
     private fun finishSaveFlow() {
@@ -2469,6 +3048,11 @@ class AccountingFormController(
         }
 
         val isFromAi = json.has("original_text_from_user")
+        if (json.has("exclude_from_stats")) {
+            formExcludeFromStats = json.optBoolean("exclude_from_stats", false)
+        } else if (json.has("excludeFromStats")) {
+            formExcludeFromStats = json.optBoolean("excludeFromStats", false)
+        }
         if (isFromAi) {
             lastAiSuggestType = json.optInt("type", -1).takeIf { it != -1 }
             lastAiSuggestCategory = json.optString("category_name", json.optString("category", ""))
@@ -2633,7 +3217,23 @@ class AccountingFormController(
         }
         tvCategory.text = categoryText
         refreshCategoryIconForSelection(categoryText)
+        if (json.has("category_source")) {
+            currentCategorySource = json.optString("category_source").takeIf { it.isNotBlank() }
+        } else if (rawCategory.isNotBlank()) {
+            currentCategorySource = BillRuleProvenance.Source.MANUAL
+        } else {
+            currentCategorySource = null
+        }
+        if (json.has("category_rule_id")) {
+            currentCategoryRuleId = json.optLong("category_rule_id").takeIf { it > 0 }
+        } else {
+            currentCategoryRuleId = null
+        }
+        updateCategoryBadge()
+        updateSaveButtonState()
+        suppressRemarkCallback = true
         etRemark.setText(json.optString("remarks", json.optString("remark", "")))
+        suppressRemarkCallback = false
         if (json.has("fee")) {
             val fee = json.optDouble("fee", 0.0).coerceAtLeast(0.0)
             etFee.setText(if (fee > 0.0) fee.toString() else "")

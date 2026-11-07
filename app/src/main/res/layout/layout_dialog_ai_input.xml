@@ -12,6 +12,18 @@
         android:layout_height="wrap_content"
         android:orientation="vertical">
 
+        <FrameLayout
+            android:id="@+id/ai_panel_grabber"
+            android:layout_width="match_parent"
+            android:layout_height="20dp">
+
+            <View
+                android:layout_width="32dp"
+                android:layout_height="4dp"
+                android:layout_gravity="center"
+                android:background="#D7DEE8" />
+        </FrameLayout>
+
         <RelativeLayout
             android:layout_width="match_parent"
             android:layout_height="52dp"
@@ -39,6 +51,19 @@
                     android:textSize="15sp"
                     android:textStyle="bold" />
             </LinearLayout>
+
+            <ImageView
+                android:id="@+id/btn_pin"
+                android:layout_width="30dp"
+                android:layout_height="30dp"
+                android:layout_centerVertical="true"
+                android:layout_marginEnd="2dp"
+                android:layout_toStartOf="@id/btn_close"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/ai_panel_collapse"
+                android:padding="7dp"
+                android:src="@drawable/ic_ai_minimize"
+                app:tint="#98A5B6" />
 
             <ImageView
                 android:id="@+id/btn_close"

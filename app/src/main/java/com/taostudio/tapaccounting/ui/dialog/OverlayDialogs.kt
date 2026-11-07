@@ -356,12 +356,18 @@ object OverlayDialogs {
         currentSelectionText: String,
         type: Int,
         allowClear: Boolean = true,
+        title: String? = null,
+        onCancel: (() -> Unit)? = null,
         onConfirm: (String) -> Unit
     ) {
         val themeContext = ContextThemeWrapper(ctx, R.style.Theme_TapAccounting)
         val view = LayoutInflater.from(themeContext).inflate(R.layout.dialog_category_picker, null)
+        if (!title.isNullOrBlank()) {
+            view.findViewById<TextView>(R.id.dialog_title)?.text = title
+        }
 
         val dialog = AlertDialog.Builder(themeContext).setView(view).create()
+        dialog.setOnCancelListener { onCancel?.invoke() }
         val container = view.findViewById<LinearLayout>(R.id.container_categories)
         val scrollCategories = view.findViewById<ScrollView>(R.id.scroll_categories)
         val rvSortCategories = view.findViewById<RecyclerView>(R.id.rv_sort_categories)
@@ -461,9 +467,14 @@ object OverlayDialogs {
             }
         }
 
-        // 异步从数据库加载分类，然后渲染
+        // 异步从数据库加载分类，然后渲染（「其他」置于最后）
         CoroutineScope(Dispatchers.Main).launch {
-            val categories = withContext(Dispatchers.IO) { categoryRepository.getCategoryTree(dbType) }
+            val rawCategories = withContext(Dispatchers.IO) { categoryRepository.getCategoryTree(dbType) }
+            val categories = rawCategories.map { node ->
+                node.copy(
+                    subs = node.subs.sortedWith(compareBy { if (it.name.trim() == "其他") 1 else 0 }).toMutableList()
+                ).apply { id = node.id }
+            }.sortedWith(compareBy { if (it.name.trim() == "其他") 1 else 0 })
             render(categories)
             applyBottomPickerEnterAnimation(dialog, view, scrollCategories)
             showStyledDialog(
@@ -1115,10 +1126,17 @@ object OverlayDialogs {
         )
     }
 
-    fun showBookPickerDialog(ctx: Context, books: List<String>, currentBook: String, onConfirm: (String) -> Unit) {
+    fun showBookPickerDialog(
+        ctx: Context,
+        books: List<String>,
+        currentBook: String,
+        onCancel: (() -> Unit)? = null,
+        onConfirm: (String) -> Unit
+    ) {
         val themeContext = ContextThemeWrapper(ctx, R.style.Theme_TapAccounting)
         val view = LayoutInflater.from(themeContext).inflate(R.layout.dialog_book_picker, null)
         val dialog = AlertDialog.Builder(themeContext).setView(view).create()
+        dialog.setOnCancelListener { onCancel?.invoke() }
         val rv = view.findViewById<RecyclerView>(R.id.rv_books)
         val sourceBooks = books
             .map { BookAccountManager.normalizeBookName(it) }
@@ -1420,6 +1438,7 @@ object OverlayDialogs {
         title: String,
         assetFilter: ((com.taostudio.tapaccounting.data.local.entity.Asset) -> Boolean)? = null,
         allowClear: Boolean = true,
+        onCancel: (() -> Unit)? = null,
         onConfirm: (String) -> Unit
     ) {
         val themeContext = ContextThemeWrapper(ctx, R.style.Theme_TapAccounting)
@@ -1427,6 +1446,7 @@ object OverlayDialogs {
         view.findViewById<TextView>(R.id.tv_asset_picker_title).text = title
         view.findViewById<Button>(R.id.btn_confirm_asset)?.visibility = View.GONE
         val dialog = AlertDialog.Builder(themeContext).setView(view).create()
+        dialog.setOnCancelListener { onCancel?.invoke() }
         val rv = view.findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.rv_assets)
         var currentSelection = currentSelectionText
         var archivedExpanded = false

@@ -3,6 +3,7 @@ package com.taostudio.tapaccounting.data.backup
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import com.taostudio.tapaccounting.data.local.entity.*
+import com.taostudio.tapaccounting.data.repository.BackupRepository
 
 object DataExportManager {
     private val gson = Gson()
@@ -85,6 +86,9 @@ object DataExportManager {
 
     fun deserializeAiRules(json: String): List<AiRule> =
         gson.fromJson(json, object : TypeToken<List<AiRule>>() {}.type) ?: emptyList()
+
+    fun deserializeRules(json: String): List<AccountingRule> =
+        BackupRepository.convertRulesToAccountingRules(json)
 
     fun deserializeChatMessages(json: String): List<ChatMessage> =
         gson.fromJson(json, object : TypeToken<List<ChatMessage>>() {}.type) ?: emptyList()

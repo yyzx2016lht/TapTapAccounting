@@ -51,6 +51,21 @@
         <item name="android:backgroundDimEnabled">false</item>
     </style>
 
+    <!-- 待记 UI 是纯平台 Activity（不继承 AppCompat），统一给系统控件一套强调色，
+         否则 Switch / CheckBox / AlertDialog 会回到平台默认蓝。 -->
+    <style name="CaptureTheme" parent="@android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:colorPrimary">@color/brand_primary</item>
+        <item name="android:colorPrimaryDark">@color/brand_primary_dark</item>
+        <item name="android:colorAccent">@color/brand_primary</item>
+        <item name="android:colorControlActivated">@color/brand_primary</item>
+        <item name="android:colorControlHighlight">@color/brand_primary_soft</item>
+        <item name="android:windowBackground">@color/page_background</item>
+        <item name="android:statusBarColor">@android:color/white</item>
+        <item name="android:navigationBarColor">@color/page_background</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightNavigationBar">true</item>
+    </style>
+
     <style name="Theme.TapAccounting.AppCompatNoActionBar" parent="Theme.AppCompat.Light.NoActionBar">
         <item name="fontFamily">sans-serif</item>
         <item name="android:fontFamily">sans-serif</item>

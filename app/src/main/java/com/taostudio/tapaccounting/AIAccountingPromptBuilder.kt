@@ -3,7 +3,7 @@ package com.taostudio.tapaccounting
 import android.content.Context
 import com.google.gson.Gson
 import com.taostudio.tapaccounting.data.local.entity.Asset
-import com.taostudio.tapaccounting.data.local.entity.AiRule as DbAiRule
+import com.taostudio.tapaccounting.data.local.entity.AccountingRule
 
 internal fun buildAccountingSystemPrompt(
     ctx: Context,
@@ -78,7 +78,7 @@ private fun accountingBasePrompt(assetFeatureEnabled: Boolean): String =
     }
 
 internal fun buildPromptCorrectionBlock(
-    matchedRules: List<DbAiRule>,
+    matchedRules: List<AccountingRule>,
     includeCategory: Boolean = true,
     includeAccount: Boolean = true
 ): String {
@@ -174,7 +174,7 @@ internal fun buildPromptBookOptions(books: List<String>): List<PromptBookOption>
 internal fun buildAccountingUserPrompt(
     userInput: String,
     promptContext: AIAccountingPromptContext,
-    matchedPromptRules: List<DbAiRule>,
+    matchedPromptRules: List<AccountingRule>,
     assetFeatureEnabled: Boolean,
     isFromChat: Boolean = false,
     aiName: String = ""
@@ -210,7 +210,7 @@ internal fun buildAccountingUserPrompt(
 internal fun buildScreenAccountingUserText(
     promptContext: AIAccountingPromptContext,
     taskInstruction: String,
-    matchedPromptRules: List<DbAiRule> = emptyList()
+    matchedPromptRules: List<AccountingRule> = emptyList()
 ): String = buildString {
     // 数据上下文注入到 user message 开头
     append(buildDataBlock(promptContext))

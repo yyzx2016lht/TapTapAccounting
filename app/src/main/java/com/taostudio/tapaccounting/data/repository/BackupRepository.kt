@@ -15,6 +15,7 @@ import com.taostudio.tapaccounting.data.backup.sanitizeBillForRestore
 import com.taostudio.tapaccounting.data.backup.sanitizeBudgetForRestore
 import com.taostudio.tapaccounting.data.backup.validateSharedReconnect
 import com.taostudio.tapaccounting.data.local.AppDatabase
+import com.taostudio.tapaccounting.data.local.entity.AccountingRule
 import com.taostudio.tapaccounting.data.local.entity.AiRule
 import com.taostudio.tapaccounting.data.local.entity.Asset
 import com.taostudio.tapaccounting.data.local.entity.Bill
@@ -118,6 +119,138 @@ class BackupRepository(private val db: AppDatabase) {
 
         /** Path separator used by archives written before [CategoryNameNormalizer] unified on " - ". */
         private const val LEGACY_CHILD_SEPARATOR = ">"
+
+        /**
+         * 将恢复数据（可能为 AccountingRule 列表、旧版 AiRule 列表、JSON 字符串或 Map 列表）
+         * 统一转换为 [AccountingRule] 列表。
+         * 旧版格式默认填充：source = USER, matchField = REMARK, matchMode = ALL_TOKENS。
+         */
+        fun convertRulesToAccountingRules(rawRules: Any?): List<AccountingRule> {
+            if (rawRules == null) return emptyList()
+            if (rawRules is String) {
+                if (rawRules.isBlank()) return emptyList()
+                return try {
+                    val array = JSONArray(rawRules)
+                    buildList {
+                        for (i in 0 until array.length()) {
+                            val obj = array.optJSONObject(i) ?: continue
+                            add(parseJsonToAccountingRule(obj))
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.w("BackupRepo", "Failed to parse rules json", e)
+                    emptyList()
+                }
+            }
+            if (rawRules is JSONArray) {
+                return buildList {
+                    for (i in 0 until rawRules.length()) {
+                        val obj = rawRules.optJSONObject(i) ?: continue
+                        add(parseJsonToAccountingRule(obj))
+                    }
+                }
+            }
+            if (rawRules is List<*>) {
+                return rawRules.mapNotNull { item ->
+                    when (item) {
+                        is AccountingRule -> item
+                        is AiRule -> convertAiRuleToAccountingRule(item)
+                        is JSONObject -> parseJsonToAccountingRule(item)
+                        is Map<*, *> -> parseMapToAccountingRule(item)
+                        is String -> {
+                            try {
+                                parseJsonToAccountingRule(JSONObject(item))
+                            } catch (_: Exception) {
+                                null
+                            }
+                        }
+                        else -> null
+                    }
+                }
+            }
+            return emptyList()
+        }
+
+        private fun convertAiRuleToAccountingRule(aiRule: AiRule): AccountingRule {
+            return AccountingRule(
+                id = 0L,
+                keyword = aiRule.keyword,
+                isRegex = false,
+                matchField = AccountingRule.MatchField.REMARK,
+                matchMode = AccountingRule.MatchMode.ALL_TOKENS,
+                targetType = aiRule.targetType,
+                targetCategory = aiRule.targetCategory,
+                targetBook = null,
+                targetAccount1 = aiRule.targetAccount1,
+                targetAccount2 = aiRule.targetAccount2,
+                sort = 0,
+                enabled = aiRule.isEnabled,
+                source = AccountingRule.Source.USER,
+                learnedAt = null,
+                createdAt = System.currentTimeMillis(),
+                updatedAt = System.currentTimeMillis()
+            )
+        }
+
+        private fun parseJsonToAccountingRule(obj: JSONObject): AccountingRule {
+            val hasMatchField = obj.has("matchField") || obj.has("matchMode") || obj.has("source")
+            val keyword = obj.optString("keyword", "")
+            val targetType = if (obj.has("targetType") && !obj.isNull("targetType")) obj.getInt("targetType") else null
+            val targetCategory = if (obj.has("targetCategory") && !obj.isNull("targetCategory")) obj.getString("targetCategory") else null
+            val targetAccount1 = if (obj.has("targetAccount1") && !obj.isNull("targetAccount1")) obj.getString("targetAccount1") else null
+            val targetAccount2 = if (obj.has("targetAccount2") && !obj.isNull("targetAccount2")) obj.getString("targetAccount2") else null
+
+            return if (hasMatchField) {
+                val targetBook = if (obj.has("targetBook") && !obj.isNull("targetBook")) obj.getString("targetBook") else null
+                val enabled = if (obj.has("enabled")) obj.optBoolean("enabled", true) else obj.optBoolean("isEnabled", true)
+                AccountingRule(
+                    id = 0L,
+                    keyword = keyword,
+                    isRegex = obj.optBoolean("isRegex", false),
+                    matchField = obj.optString("matchField", AccountingRule.MatchField.REMARK),
+                    matchMode = obj.optString("matchMode", AccountingRule.MatchMode.SUBSTRING),
+                    targetType = targetType,
+                    targetCategory = targetCategory,
+                    targetBook = targetBook,
+                    targetAccount1 = targetAccount1,
+                    targetAccount2 = targetAccount2,
+                    sort = obj.optInt("sort", 0),
+                    enabled = enabled,
+                    source = obj.optString("source", AccountingRule.Source.USER),
+                    learnedAt = if (obj.has("learnedAt") && !obj.isNull("learnedAt")) obj.getLong("learnedAt") else null,
+                    createdAt = obj.optLong("createdAt", System.currentTimeMillis()),
+                    updatedAt = obj.optLong("updatedAt", System.currentTimeMillis())
+                )
+            } else {
+                val enabled = if (obj.has("isEnabled")) obj.optBoolean("isEnabled", true) else obj.optBoolean("enabled", true)
+                AccountingRule(
+                    id = 0L,
+                    keyword = keyword,
+                    isRegex = false,
+                    matchField = AccountingRule.MatchField.REMARK,
+                    matchMode = AccountingRule.MatchMode.ALL_TOKENS,
+                    targetType = targetType,
+                    targetCategory = targetCategory,
+                    targetBook = null,
+                    targetAccount1 = targetAccount1,
+                    targetAccount2 = targetAccount2,
+                    sort = 0,
+                    enabled = enabled,
+                    source = AccountingRule.Source.USER,
+                    learnedAt = null,
+                    createdAt = System.currentTimeMillis(),
+                    updatedAt = System.currentTimeMillis()
+                )
+            }
+        }
+
+        private fun parseMapToAccountingRule(map: Map<*, *>): AccountingRule {
+            val json = JSONObject()
+            map.forEach { (k, v) ->
+                if (k != null) json.put(k.toString(), v)
+            }
+            return parseJsonToAccountingRule(json)
+        }
     }
 
 
@@ -137,7 +270,7 @@ class BackupRepository(private val db: AppDatabase) {
                 "deleted_bills" to db.deletedBillDao().getAllDeletedBills(),
                 "investment_lots" to db.investmentLotDao().getAllLots(),
                 "categories" to db.categoryDao().getAllCategoriesList(),
-                "rules" to db.aiRuleDao().getAllRulesList(),
+                "rules" to db.accountingRuleDao().listAll(),
                 "chat_messages" to db.chatMessageDao().getAll(),
                 "budgets" to db.budgetDao().getAll(),
                 "recurring_patterns" to db.recurringPatternDao().getAll(),
@@ -156,7 +289,7 @@ class BackupRepository(private val db: AppDatabase) {
         deletedBills: List<DeletedBill>?,
         investmentLots: List<InvestmentLot>?,
         categories: List<Category>?,
-        rules: List<AiRule>?,
+        rules: Any? = null,
         chatMessages: List<ChatMessage>?,
         budgets: List<Budget>?,
         recurringPatterns: List<RecurringPattern>?,
@@ -276,8 +409,24 @@ class BackupRepository(private val db: AppDatabase) {
             if (categories != null && bills == null) relinkBillsWithoutCategory()
 
             if (rules != null) {
-                db.aiRuleDao().deleteAll()
-                rules.forEach { db.aiRuleDao().insertRule(it.copy(id = 0)) }
+                val incomingRules = convertRulesToAccountingRules(rules)
+                val existingRules = db.accountingRuleDao().listAll().toMutableList()
+                incomingRules.forEach { incoming ->
+                    val existingIndex = existingRules.indexOfFirst {
+                        it.keyword == incoming.keyword &&
+                            it.matchField == incoming.matchField &&
+                            it.targetCategory == incoming.targetCategory
+                    }
+                    if (existingIndex >= 0) {
+                        val existing = existingRules[existingIndex]
+                        val updated = incoming.copy(id = existing.id, updatedAt = System.currentTimeMillis())
+                        db.accountingRuleDao().upsert(updated)
+                        existingRules[existingIndex] = updated
+                    } else {
+                        val newId = db.accountingRuleDao().upsert(incoming.copy(id = 0L, updatedAt = System.currentTimeMillis()))
+                        existingRules.add(incoming.copy(id = newId))
+                    }
+                }
             }
 
             if (chatMessages != null) {
@@ -329,7 +478,7 @@ class BackupRepository(private val db: AppDatabase) {
         deletedBills: List<DeletedBill>? = null,
         investmentLots: List<InvestmentLot>?,
         categories: List<Category>?,
-        rules: List<AiRule>?,
+        rules: Any? = null,
         chatMessages: List<ChatMessage>?,
         budgets: List<Budget>?,
         recurringPatterns: List<RecurringPattern>?,
@@ -534,19 +683,17 @@ class BackupRepository(private val db: AppDatabase) {
 
             // ── 规则：追加 ──
             if (rules != null) {
-                // P2-20: 合并恢复按「关键词 + 目标映射」去重（AiRule 无 name/content 字段）
-                val existingRules = db.aiRuleDao().getAllRulesList().toMutableList()
-                rules.forEach {
-                    val isDup = existingRules.any { e ->
-                        e.keyword == it.keyword &&
-                            e.targetType == it.targetType &&
-                            e.targetCategory == it.targetCategory &&
-                            e.targetAccount1 == it.targetAccount1 &&
-                            e.targetAccount2 == it.targetAccount2
+                val incomingRules = convertRulesToAccountingRules(rules)
+                val existingRules = db.accountingRuleDao().listAll().toMutableList()
+                incomingRules.forEach { incoming ->
+                    val isDup = existingRules.any {
+                        it.keyword == incoming.keyword &&
+                            it.matchField == incoming.matchField &&
+                            it.targetCategory == incoming.targetCategory
                     }
                     if (!isDup) {
-                        db.aiRuleDao().insertRule(it.copy(id = 0))
-                        existingRules += it
+                        val newId = db.accountingRuleDao().upsert(incoming.copy(id = 0L, updatedAt = System.currentTimeMillis()))
+                        existingRules.add(incoming.copy(id = newId))
                         insertedRules++
                     }
                 }

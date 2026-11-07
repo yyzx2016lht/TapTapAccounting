@@ -1,6 +1,23 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!--
+      插件页统一主题：把 Switch / CheckBox / AlertDialog 等系统控件的强调色
+      从平台默认色收敛到 CaptureUi 的靛蓝，避免和手写卡片两套观感。
+    -->
+    <style name="CaptureTheme" parent="@android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:colorPrimary">@color/capture_brand</item>
+        <item name="android:colorPrimaryDark">@color/capture_brand_dark</item>
+        <item name="android:colorAccent">@color/capture_brand</item>
+        <item name="android:colorControlActivated">@color/capture_brand</item>
+        <item name="android:colorControlHighlight">@color/capture_ripple</item>
+        <item name="android:windowBackground">@color/capture_page_bg</item>
+        <item name="android:statusBarColor">@android:color/white</item>
+        <item name="android:navigationBarColor">@color/capture_page_bg</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightNavigationBar">true</item>
+    </style>
+
+    <!--
       等价于 AutoAccounting 的 TransparentActivityTheme：
       1x1 透明无动画悬浮窗口，供 com.android.phone (UID 1001) 在后台瞬间唤醒被 ColorOS Hans 冻结的插件进程。
     -->

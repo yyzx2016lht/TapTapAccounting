@@ -563,6 +563,28 @@
                     <View style="@style/AiDivider" />
 
                     <LinearLayout
+                        android:id="@+id/layout_category_source"
+                        style="@style/AiRow">
+
+                        <LinearLayout style="@style/AiRowText">
+
+                            <TextView
+                                style="@style/AiRowTitle"
+                                android:text="@string/ai_page_category_source_title" />
+
+                            <TextView
+                                style="@style/AiRowDesc"
+                                android:text="@string/ai_page_category_source_desc" />
+                        </LinearLayout>
+
+                        <com.google.android.material.switchmaterial.SwitchMaterial
+                            android:id="@+id/switch_bill_category_source"
+                            style="@style/AiSwitch" />
+                    </LinearLayout>
+
+                    <View style="@style/AiDivider" />
+
+                    <LinearLayout
                         android:id="@+id/btn_manage_ai_rules"
                         style="@style/AiRow">
 

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 与 CaptureUi 的设计令牌保持一致；Theme 需要 XML 色值才能接管 Switch / CheckBox / Dialog。 -->
+    <color name="capture_brand">#5C6BC0</color>
+    <color name="capture_brand_dark">#3F51B5</color>
+    <color name="capture_brand_soft">#EDEFFA</color>
+    <color name="capture_brand_border">#C5CAE9</color>
+    <color name="capture_page_bg">#F5F7FA</color>
+    <color name="capture_ripple">#1A5C6BC0</color>
+</resources>

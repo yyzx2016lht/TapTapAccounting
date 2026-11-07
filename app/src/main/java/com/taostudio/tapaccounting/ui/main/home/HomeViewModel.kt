@@ -65,6 +65,9 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     private var fetchJob: Job? = null
     private var requestGeneration: Long = 0L
+    /** 最近一次账单表 Flow 推送的时间；用来跳过「Flow 已经推过」之后的重复兜底重载。 */
+    @Volatile
+    private var lastBillEmissionAtMs: Long = 0L
     private val db by lazy { AppDatabase.getDatabase(application) }
 
     /** Fragment 重建后调用，同步 UI 设置到 ViewModel（如需要则重新触发加载）。
@@ -120,6 +123,15 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         _uiState.value = _uiState.value.copy(isLoading = true)
         startFlow()
     }
+
+    /**
+     * 最近一次账单表 Flow 推送距今多久（毫秒）。
+     * 删除/编辑账单本身就会触发 Flow 重推，UI 不需要再来一次强制重载；
+     * 兜底刷新据此判断「这次改动是不是已经被 Flow 覆盖了」。
+     */
+    fun billEmissionAgeMs(): Long =
+        if (lastBillEmissionAtMs == 0L) Long.MAX_VALUE
+        else System.currentTimeMillis() - lastBillEmissionAtMs
 
     /** 强制按传入参数刷新（用于下拉刷新/快速切页，避免使用旧快照） */
     fun forceReload(
@@ -246,6 +258,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                     return@collectLatest
                 }
                 val t1 = now()
+                lastBillEmissionAtMs = System.currentTimeMillis()
                 Log.d(TAG, "DB emission received: ${allTransactions.size} bills  [+${t1 - t0}ms since startFlow]")
                 val isChartHiddenNow = Prefs.isShowHomeTrendCard(getApplication<Application>()).not()
 

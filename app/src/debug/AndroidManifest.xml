@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!--
+      仅 debug 构建暴露的 adb 调试入口：规则包重载/导入、提示模式、状态查询、模拟支付。
+      release 不合并这个 receiver，避免把调试入口带到正式包。
+    -->
+    <application>
+        <receiver
+            android:name=".capture.debug.CaptureDebugReceiver"
+            android:exported="true"
+            tools:ignore="ExportedReceiver">
+            <intent-filter>
+                <action android:name="com.taostudio.tapaccounting.action.CAPTURE_SET_PROMPT_MODE" />
+                <action android:name="com.taostudio.tapaccounting.action.CAPTURE_RELOAD_RULES" />
+                <action android:name="com.taostudio.tapaccounting.action.CAPTURE_IMPORT_RULES" />
+                <action android:name="com.taostudio.tapaccounting.action.CAPTURE_IMPORT_LEGACY" />
+                <action android:name="com.taostudio.tapaccounting.action.CAPTURE_PING" />
+                <action android:name="com.taostudio.tapaccounting.action.CAPTURE_SIMULATE" />
+            </intent-filter>
+        </receiver>
+    </application>
+</manifest>

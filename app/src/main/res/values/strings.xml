@@ -873,6 +873,8 @@
 
     <!-- AI 助手 -->
     <string name="ai_assistant_title">智能记账助手</string>
+    <string name="ai_panel_collapse">收起为悬浮小圆</string>
+    <string name="ai_panel_bubble_desc">打开智能记账助手</string>
     <string name="smart_recognition">智能识别</string>
     <string name="visual_retry_hint">失败时用视觉模型重试</string>
     <string name="expand_all">展开全部</string>
@@ -880,6 +882,7 @@
     <!-- 多条账单识别完成后的入账方式 -->
     <string name="record_all_at_once">一键全部入账</string>
     <string name="record_one_by_one">逐条确认入账</string>
+    <string name="confirm_and_merge">确认入账并合并</string>
     <!-- 一键全部入账后询问是否并成一笔扣款 -->
     <string name="merge_payment_count">共 %1$d 笔</string>
     <string name="merge_payment_message">这些账单看起来来自同一次付款。合并后它们各自仍是独立账单、分类统计不变，只是在资产详情里折叠成一行显示合计，方便和银行流水对账。</string>
@@ -1819,6 +1822,8 @@
     <string name="ai_page_insight_desc">在首页和统计页展示本月消费洞察</string>
     <string name="ai_page_rules_title">本地规则优先</string>
     <string name="ai_page_rules_desc">用你设置的关键词规则修正 AI 识别的分类</string>
+    <string name="ai_page_category_source_title">显示账单分类来源</string>
+    <string name="ai_page_category_source_desc">在账单详情里显示「AI 建议 / 规则命中 / 用户自选」标签</string>
     <string name="ai_page_rules_manage_title">管理规则</string>
     <string name="ai_page_rules_manage_desc">设置关键词与分类的对应关系</string>
     <string name="ai_tile_screen_need_permission">需先开启无障碍服务或 Shizuku 授权</string>
@@ -2507,4 +2512,15 @@
     <string name="rule_learn_update_existing">已存在同关键词规则，是否更新？</string>
     <string name="rule_learn_success">规则已保存</string>
     <string name="rule_learn_updated">规则已更新</string>
+
+    <!-- 待记保存与 AI 模式 (T03) -->
+    <string name="pending_save_hint_need_category_or_remark">写个备注，或选个分类</string>
+    <string name="btn_confirm_record">确认入账</string>
+    <string name="btn_change_category">改分类</string>
+    <string name="category_source_manual">手动</string>
+    <string name="category_source_rule">规则</string>
+    <string name="category_source_ai">AI 建议</string>
+    <string name="toast_ai_classifying">AI 智能归类中…</string>
+    <string name="toast_ai_classify_failed">AI 归类失败，请手动选择分类</string>
+    <string name="toast_ai_no_key">未配置 AI API Key，请手动选择分类</string>
 </resources>

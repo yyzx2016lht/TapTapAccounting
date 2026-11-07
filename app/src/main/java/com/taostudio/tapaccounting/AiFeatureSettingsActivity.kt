@@ -84,6 +84,14 @@ class AiFeatureSettingsActivity : AppCompatActivity() {
             }
         }
 
+        // 账单分类来源标签
+        findViewById<CompoundButton>(R.id.switch_bill_category_source)?.apply {
+            isChecked = Prefs.isBillCategorySourceVisible(this@AiFeatureSettingsActivity)
+            setOnCheckedChangeListener { _, isChecked ->
+                Prefs.setBillCategorySourceVisible(this@AiFeatureSettingsActivity, isChecked)
+            }
+        }
+
         // 消费洞察开关
         findViewById<CompoundButton>(R.id.switch_insight_cards)?.apply {
             isChecked = Prefs.isInsightCardsEnabled(this@AiFeatureSettingsActivity)

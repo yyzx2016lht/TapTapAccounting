@@ -15,11 +15,9 @@ import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.RecyclerView
 import com.taostudio.tapaccounting.ui.common.BillRowAnimator
-import com.taostudio.tapaccounting.ui.common.BillUndoController
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import com.taostudio.tapaccounting.R
 import com.taostudio.tapaccounting.data.local.AppDatabase
 import com.taostudio.tapaccounting.data.local.entity.Bill
 import com.taostudio.tapaccounting.logic.BillDeleteUndo
@@ -88,22 +86,12 @@ internal class HomeMultiSelectController(
             BillRowAnimator.deleteThen(recyclerView, deletedIds) {
                 val db = AppDatabase.getDatabase(fragment.requireContext())
                 fragment.lifecycleScope.launch(Dispatchers.IO) {
-                    val rows = BillDeleteUndo.delete(db, billsToDelete) ?: return@launch
+                    BillDeleteUndo.delete(db, billsToDelete) ?: return@launch
                     withContext(Dispatchers.Main) {
-                        // 删除完成：退出多选（底栏滑出），撤销条等底栏走完再出来，避免两个底部控件叠在一起。
+                        // 删除是终止性操作：直接退出多选，回到普通列表。
+                        // 不弹底部撤销条；需要恢复时去「我的 → 回收站」。
                         getHomeAdapter().clearSelection()
                         onDataChanged()
-                        BillUndoController.showAfterSelectionExit(
-                            anchor = fragment.requireActivity().findViewById(android.R.id.content),
-                            message = fragment.getString(R.string.deleted_bills_fmt, billsToDelete.size),
-                            rows = rows,
-                            onRestored = {
-                                BillRowAnimator.restoreThen(
-                                    recyclerView,
-                                    rows.map { it.originalBillId }
-                                ) { onDataChanged() }
-                            }
-                        )
                     }
                 }
             }

@@ -1176,9 +1176,7 @@ class OverlayPendingCaptureController(
 
                 val billsArray = JSONArray()
                 categorized.forEach { item ->
-                    val finalRemark = item.note?.takeIf { it.isNotBlank() }
-                        ?: item.merchant?.takeIf { it.isNotBlank() }
-                        ?: ""
+                    val finalRemark = item.note?.takeIf { it.isNotBlank() } ?: ""
                     billsArray.put(
                         JSONObject().apply {
                             put("captureId", item.id)

@@ -1052,7 +1052,7 @@ object CaptureBubbleManager {
             item.toAssetName?.let { put("to_asset_name", it) }
             item.categoryName?.let { put("category_name", it) }
             put("time", timeFormat.format(Date(item.paidAt)))
-            put("remarks", item.note?.takeIf { it.isNotBlank() } ?: item.merchant.orEmpty())
+            put("remarks", item.note?.takeIf { it.isNotBlank() } ?: "")
             item.bookName?.let { put("book_name", it) }
             put("exclude_from_stats", item.excludeFromStats)
         }
@@ -1238,6 +1238,7 @@ object CaptureBubbleManager {
             else -> "#3B82F6"
         }
         val pill = LinearLayout(app).apply {
+            tag = "peek_pill"
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             setPadding(dp(12), 0, dp(14), 0)
@@ -1480,13 +1481,30 @@ object CaptureBubbleManager {
         val root = peekHintView ?: return
         val bar = root.findViewWithTag<View>("peek_hint_bar") ?: return
         val text = root.findViewWithTag<TextView>("peek_hint_text") ?: return
+        val density = app.resources.displayMetrics.density
+        bar.background = GradientDrawable().apply {
+            setColor(Color.parseColor(if (hot) "#E6EF4444" else "#99FFFFFF"))
+            cornerRadius = (3 * density + 0.5f).toInt().toFloat()
+        }
+        text.setTextColor(Color.parseColor(if (hot) "#FF7A7A" else "#CCFFFFFF"))
         bar.animate()
             .scaleX(if (hot) 1.25f else 1f)
             .scaleY(if (hot) 1.8f else 1f)
-            .alpha(if (hot) 1f else 0.75f)
             .setDuration(120L)
             .start()
         text.animate().alpha(if (hot) 1f else 0.7f).setDuration(120L).start()
+        // 胶囊边框同步变红，明确“松手就删”。
+        val pill = peekView?.findViewWithTag<View>("peek_pill")
+        if (pill != null) {
+            pill.background = GradientDrawable().apply {
+                setColor(Color.parseColor("#E60F172A"))
+                cornerRadius = (18 * density + 0.5f).toInt().toFloat()
+                setStroke(
+                    (1 * density + 0.5f).toInt(),
+                    Color.parseColor(if (hot) "#EF4444" else "#38FFFFFF"),
+                )
+            }
+        }
     }
 
     private fun hideDropHint(app: Context) {

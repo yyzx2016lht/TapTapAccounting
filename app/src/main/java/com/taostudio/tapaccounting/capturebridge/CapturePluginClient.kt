@@ -199,9 +199,7 @@ object CapturePluginClient {
             item.categorySource?.let { put("category_source", it) }
             item.categoryRuleId?.let { put("category_rule_id", it) }
             put("time", timeFmt.format(Date(item.paidAt)))
-            val remark = item.note?.takeIf { it.isNotBlank() }
-                ?: item.merchant?.takeIf { it.isNotBlank() }
-                ?: ""
+            val remark = item.note?.takeIf { it.isNotBlank() } ?: ""
             put("remarks", remark)
             item.bookName?.let { put("book_name", it) }
         }

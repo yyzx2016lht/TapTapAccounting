@@ -498,8 +498,8 @@ object CaptureBubbleManager {
             }
             when (state) {
                 BubbleState.SUMMARY -> {
-                    // 不自动收起：用户点右上角「⌄」或点窗口外才缩成小圈。
-                    cancelAutoDismiss()
+                    // 2 秒无操作自动缩成胶囊；用户也可以手动下滑或点窗口外提前收。
+                    scheduleAutoPeek(app, 2_000L)
                 }
 
                 BubbleState.INPUT -> {

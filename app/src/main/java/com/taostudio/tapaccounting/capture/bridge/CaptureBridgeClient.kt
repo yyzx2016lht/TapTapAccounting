@@ -480,7 +480,22 @@ class CaptureBridgeClient(context: Context) {
         totalCents: Long,
         billType: Int,
         imageUri: Uri,
+    ): SplitPreviewResult =
+        previewImageSplitMulti(captureId, totalCents, billType, listOf(imageUri))
+
+    suspend fun previewImageSplitMulti(
+        captureId: String,
+        totalCents: Long,
+        billType: Int,
+        imageUris: List<Uri>,
     ): SplitPreviewResult = withContext(Dispatchers.IO) {
+        if (imageUris.isEmpty()) {
+            return@withContext SplitPreviewResult(
+                ok = false,
+                error = "missing_image",
+                message = "请选择图片后再拆分",
+            )
+        }
         if (totalCents <= 0L) {
             return@withContext SplitPreviewResult(
                 ok = false,
@@ -496,13 +511,24 @@ class CaptureBridgeClient(context: Context) {
             )
         }
 
-        val tempFile = try {
-            File.createTempFile("cap_split_", ".tmp", appContext.cacheDir).apply {
-                appContext.contentResolver.openInputStream(imageUri)?.use { input ->
-                    outputStream().use { output -> input.copyTo(output) }
+        val tempFiles = mutableListOf<File>()
+        val pfds = mutableListOf<ParcelFileDescriptor>()
+        val mime: String
+        try {
+            imageUris.forEach { uri ->
+                val tempFile = File.createTempFile("cap_split_", ".tmp", appContext.cacheDir)
+                tempFiles.add(tempFile)
+                appContext.contentResolver.openInputStream(uri)?.use { input ->
+                    tempFile.outputStream().use { output -> input.copyTo(output) }
                 } ?: error("无法读取所选图片")
+                pfds.add(
+                    ParcelFileDescriptor.open(tempFile, ParcelFileDescriptor.MODE_READ_ONLY)
+                )
             }
+            mime = appContext.contentResolver.getType(imageUris.first()) ?: "image/jpeg"
         } catch (t: Throwable) {
+            pfds.forEach { runCatching { it.close() } }
+            tempFiles.forEach { it.delete() }
             return@withContext SplitPreviewResult(
                 ok = false,
                 error = "image_read_failed",
@@ -510,18 +536,6 @@ class CaptureBridgeClient(context: Context) {
             )
         }
 
-        val pfd = try {
-            ParcelFileDescriptor.open(tempFile, ParcelFileDescriptor.MODE_READ_ONLY)
-        } catch (t: Throwable) {
-            tempFile.delete()
-            return@withContext SplitPreviewResult(
-                ok = false,
-                error = "image_read_failed",
-                message = "打开图片描述符失败：${t.message}",
-            )
-        }
-
-        val mime = appContext.contentResolver.getType(imageUri) ?: "image/jpeg"
         val payload = JSONObject()
             .put("captureId", captureId)
             .put("totalCents", totalCents)
@@ -530,7 +544,11 @@ class CaptureBridgeClient(context: Context) {
         val extras = Bundle().apply {
             putString(CaptureContract.EXTRA_SPLIT_PAYLOAD, payload.toString())
             putString(CaptureContract.EXTRA_IMAGE_MIME, mime)
-            putParcelable(CaptureContract.EXTRA_IMAGE_PFD, pfd)
+            if (pfds.size == 1) {
+                putParcelable(CaptureContract.EXTRA_IMAGE_PFD, pfds.first())
+            } else {
+                putParcelableArrayList(CaptureContract.EXTRA_IMAGE_PFDS, ArrayList(pfds))
+            }
         }
 
         val res = try {
@@ -541,8 +559,8 @@ class CaptureBridgeClient(context: Context) {
             Log.w(TAG, "previewImageSplit failed", t)
             null
         } finally {
-            runCatching { pfd.close() }
-            tempFile.delete()
+            pfds.forEach { runCatching { it.close() } }
+            tempFiles.forEach { it.delete() }
         } ?: return@withContext SplitPreviewResult(
             ok = false,
             error = "bridge_unavailable",

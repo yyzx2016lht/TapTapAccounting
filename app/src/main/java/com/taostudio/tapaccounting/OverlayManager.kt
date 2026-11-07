@@ -72,6 +72,9 @@ class OverlayManager(private val ctx: Context) {
     private var windowManager: WindowManager? = null
     private var overlayView: View? = null
     private var overlayParams: WindowManager.LayoutParams? = null
+    /** 系统选图期间把悬浮窗藏起来并放掉触摸，避免盖住选择器。 */
+    private var overlayHiddenForPicker = false
+    private var overlayFlagsBeforePicker = 0
     private var isRemovingOverlay = false
     private var overlayShownAtUptimeMs = 0L
     private var currentAnimator: Animator? = null
@@ -304,6 +307,7 @@ class OverlayManager(private val ctx: Context) {
             return false
         }
         overlayView = LayoutInflater.from(themeContext).inflate(R.layout.layout_floating_window, null)
+        overlayHiddenForPicker = false
         overlayView?.background = android.graphics.drawable.GradientDrawable().apply {
             setColor(android.graphics.Color.WHITE)
             cornerRadius = ctx.resources.displayMetrics.density * 16
@@ -406,7 +410,8 @@ class OverlayManager(private val ctx: Context) {
             ctx = ctx,
             rootFloatingView = view,
             formController = formController!!,
-            onCloseOverlay = { isSaved -> removeOverlay(isSaved) }
+            onCloseOverlay = { isSaved -> removeOverlay(isSaved) },
+            onPickerWindowVisibility = { hidden -> setOverlayHiddenForPicker(hidden) }
         ).also {
             val isSplit = prefill?.optBoolean("splitRequested", false) ?: false
             it.loadIfNeeded(hasExplicitPrefill = prefill != null || !captureId.isNullOrBlank(), splitRequested = isSplit)
@@ -449,25 +454,17 @@ class OverlayManager(private val ctx: Context) {
                     pending.startImageSplitFromPicker()
                     return@setOnClickListener
                 }
-                overlayView?.visibility = View.INVISIBLE
-                ImagePickerActivity.onImagesPicked = { uris ->
-                    ImagePickerActivity.onImagesPicked = null
-                    ImagePickerActivity.onPickCancelled = null
-                    overlayView?.visibility = View.VISIBLE
-                    Logger.d(ctx, "StreamPreview", "onImagesPicked: count=${uris.size}")
-                    aiAssistant.analyzeImages(uris, handleAiResult)
-                }
-                ImagePickerActivity.onPickCancelled = {
-                    ImagePickerActivity.onImagesPicked = null
-                    ImagePickerActivity.onPickCancelled = null
-                    overlayView?.visibility = View.VISIBLE
-                }
-                val intent = android.content.Intent(ctx, ImagePickerActivity::class.java).apply {
-                    addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK or
-                        android.content.Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS or
-                        android.content.Intent.FLAG_ACTIVITY_NO_ANIMATION)
-                }
-                ctx.startActivity(intent)
+                setOverlayHiddenForPicker(true)
+                ImagePickerActivity.launch(
+                    context = ctx,
+                    maxItems = 5,
+                    onPicked = { uris ->
+                        setOverlayHiddenForPicker(false)
+                        Logger.d(ctx, "StreamPreview", "onImagesPicked: count=${uris.size}")
+                        aiAssistant.analyzeImages(uris, handleAiResult)
+                    },
+                    onCancelled = { setOverlayHiddenForPicker(false) },
+                )
             }
         } else {
             btnAiImage?.visibility = View.GONE
@@ -1280,9 +1277,30 @@ class OverlayManager(private val ctx: Context) {
         aiAssistant.shutdown()
     }
 
+    /**
+     * 系统选图期间隐藏记账悬浮窗：visibility 让选择器透出来，
+     * FLAG_NOT_TOUCHABLE 保证选择器上那一片区域还能点。
+     */
+    fun setOverlayHiddenForPicker(hidden: Boolean) {
+        if (overlayHiddenForPicker == hidden) return
+        val view = overlayView ?: return
+        val params = overlayParams ?: return
+        overlayHiddenForPicker = hidden
+        if (hidden) {
+            overlayFlagsBeforePicker = params.flags
+            params.flags = params.flags or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+            view.visibility = View.INVISIBLE
+        } else {
+            params.flags = overlayFlagsBeforePicker
+            view.visibility = View.VISIBLE
+        }
+        runCatching { windowManager?.updateViewLayout(view, params) }
+    }
+
     fun removeOverlay(isSaved: Boolean = true) {
         // 表单即将移除，不能再被 AI 面板恢复可见
         overlayHiddenForAiPanel = false
+        overlayHiddenForPicker = false
         // 表单已关闭：本次“自己记”的幂等键随之失效，下一条不能复用。
         pendingCaptureId = null
         pendingRequestId = null
@@ -1295,10 +1313,19 @@ class OverlayManager(private val ctx: Context) {
         voiceHandler?.release()
         voiceHandler = null
 
-        if (overlayView == null || isRemovingOverlay) {
+        if (overlayView == null) {
             formController?.destroy()
             formController = null
             overlayParams = null
+            // 没有可见的悬浮窗可收，直接恢复被敲击页面隐藏的待记胶囊。
+            com.taostudio.tapaccounting.capture.notify.CaptureBubbleManager
+                .resumePeekAfterOverlay(ctx)
+            return
+        }
+        if (isRemovingOverlay) {
+            // 已经在退场动画里，交给那一次 onAnimationEnd 恢复胶囊。
+            formController?.destroy()
+            formController = null
             return
         }
 
@@ -1384,12 +1411,13 @@ class OverlayManager(private val ctx: Context) {
                 pendingBills.clear()
                 Utils.toast(ctx, ctx.getString(R.string.toast_multi_bill_recognition_canceled))
             }
-            return
-        }
-        if (pendingBills.isNotEmpty()) {
+        } else if (pendingBills.isNotEmpty()) {
             android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
                 processNextPendingBill()
             }, 350)
         }
+        // 敲击页面已退场：如果待记胶囊还在 60 秒窗口内，恢复显示。
+        com.taostudio.tapaccounting.capture.notify.CaptureBubbleManager
+            .resumePeekAfterOverlay(ctx)
     }
 }

@@ -25,6 +25,7 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
+import com.taostudio.tapaccounting.ImagePickerActivity
 import com.taostudio.tapaccounting.capture.CaptureApp
 import com.taostudio.tapaccounting.capture.CaptureInboxEvents
 import com.taostudio.tapaccounting.capture.bridge.CaptureBridgeClient
@@ -2327,19 +2328,20 @@ class PendingListActivity : Activity() {
             splitWorkArea.visibility = View.VISIBLE
 
             skipNextResumeLoad = true
-            CaptureImagePickerActivity.pickImage(
+            ImagePickerActivity.launch(
                 context = this@PendingListActivity,
-                onPicked = { uri ->
+                maxItems = 5,
+                onPicked = { uris ->
                     scope.launch {
                         btnImageSplit.isEnabled = false
                         btnImageSplit.text = "⏳ 识图中…"
                         splitSummaryText.text = "AI 正在识别小票并拆分条目，请稍候…"
                         try {
-                            val preview = bridge.previewImageSplit(
+                            val preview = bridge.previewImageSplitMulti(
                                 captureId = item.id,
                                 totalCents = amountCents,
                                 billType = billType,
-                                imageUri = uri,
+                                imageUris = uris,
                             )
                             if (preview.ok) {
                                 splitSubItems.clear()

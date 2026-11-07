@@ -546,8 +546,15 @@ internal object CaptureImportService {
         pfd: ParcelFileDescriptor?,
         mime: String,
         payload: JSONObject,
+    ): JSONObject = previewImageSplit(ctx, listOfNotNull(pfd), mime, payload)
+
+    suspend fun previewImageSplit(
+        ctx: Context,
+        pfds: List<ParcelFileDescriptor>,
+        mime: String,
+        payload: JSONObject,
     ): JSONObject {
-        if (pfd == null) {
+        if (pfds.isEmpty()) {
             return errorJson("missing_image", "缺少图片数据，请重新选择图片")
         }
         val totalCents = payload.optLong("totalCents", -1L)
@@ -562,32 +569,35 @@ internal object CaptureImportService {
         val db = AppDatabase.getDatabase(ctx)
         val allCategories = db.categoryDao().getAllCategoriesList()
 
-        val tempFile = File.createTempFile("split_img_pfd_", ".tmp", ctx.cacheDir)
-        val imageBase64: String
-        val actualMime: String
+        val images = mutableListOf<Pair<String, String>>()
         try {
-            FileInputStream(pfd.fileDescriptor).use { input ->
-                tempFile.outputStream().use { output -> input.copyTo(output) }
+            pfds.forEach { pfd ->
+                val tempFile = File.createTempFile("split_img_pfd_", ".tmp", ctx.cacheDir)
+                try {
+                    FileInputStream(pfd.fileDescriptor).use { input ->
+                        tempFile.outputStream().use { output -> input.copyTo(output) }
+                    }
+                    val compressed = AiImageCompressor.compressInPlace(tempFile)
+                    val bytes = tempFile.readBytes()
+                    if (bytes.isEmpty()) {
+                        return errorJson("image_read_failed", "图片读取失败，请重新选择")
+                    }
+                    val actualMime = if (compressed) AiImageCompressor.JPEG_MIME else mime
+                    images.add(Base64.encodeToString(bytes, Base64.NO_WRAP) to actualMime)
+                } finally {
+                    tempFile.delete()
+                }
             }
-            val compressed = AiImageCompressor.compressInPlace(tempFile)
-            val bytes = tempFile.readBytes()
-            if (bytes.isEmpty()) {
-                return errorJson("image_read_failed", "图片读取失败，请重新选择")
-            }
-            imageBase64 = Base64.encodeToString(bytes, Base64.NO_WRAP)
-            actualMime = if (compressed) AiImageCompressor.JPEG_MIME else mime
         } catch (t: Throwable) {
             return errorJson("image_read_failed", "图片读取处理异常：${t.message}")
         } finally {
-            tempFile.delete()
-            runCatching { pfd.close() }
+            pfds.forEach { runCatching { it.close() } }
         }
 
         val rawItems = try {
-            AIService.splitImageItems(
+            AIService.splitImageItemsMulti(
                 ctx = ctx,
-                imageBase64 = imageBase64,
-                mimeType = actualMime,
+                images = images,
                 totalCents = totalCents,
                 billType = billType,
                 categories = allCategories,

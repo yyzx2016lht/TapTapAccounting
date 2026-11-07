@@ -27,6 +27,7 @@ import android.widget.ScrollView
 import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.view.ContextThemeWrapper
+import com.taostudio.tapaccounting.ImagePickerActivity
 import com.taostudio.tapaccounting.Prefs
 import com.taostudio.tapaccounting.R
 import com.taostudio.tapaccounting.Utils
@@ -35,7 +36,6 @@ import com.taostudio.tapaccounting.capture.bridge.RuleLearningManager
 import com.taostudio.tapaccounting.capture.contract.CaptureSource
 import com.taostudio.tapaccounting.capture.contract.ImportItemStatus
 import com.taostudio.tapaccounting.capture.contract.LocalBillType
-import com.taostudio.tapaccounting.capture.ui.CaptureImagePickerActivity
 import com.taostudio.tapaccounting.logic.AccountingFormController
 import com.taostudio.tapaccounting.ui.dialog.OverlayDialogs
 import kotlinx.coroutines.CoroutineScope
@@ -63,6 +63,7 @@ class OverlayPendingCaptureController(
     private val rootFloatingView: View,
     private val formController: AccountingFormController,
     private val onCloseOverlay: (isSaved: Boolean) -> Unit,
+    private val onPickerWindowVisibility: (hidden: Boolean) -> Unit = {},
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val density = ctx.resources.displayMetrics.density
@@ -1627,16 +1628,29 @@ class OverlayPendingCaptureController(
     fun startImageSplitFromPicker() {
         if (mode != FormMode.PENDING || isBusy) return
         if (switchSplitBill?.isChecked != true) switchSplitBill?.isChecked = true
-        CaptureImagePickerActivity.pickImage(
+        onPickerWindowVisibility(true)
+        ImagePickerActivity.launch(
             context = ctx,
-            onPicked = { uri -> splitCurrentItemWithImage(uri) },
-            onCancelled = { Utils.toast(ctx, "已取消选图，待记仍保留") },
+            maxItems = 5,
+            onPicked = { uris ->
+                onPickerWindowVisibility(false)
+                splitCurrentItemWithImages(uris)
+            },
+            onCancelled = {
+                onPickerWindowVisibility(false)
+                Utils.toast(ctx, "已取消选图，待记仍保留")
+            },
         )
     }
 
     /** 截图/选图统一入口：按图片识别明细，再走现有拆单确认面板。 */
     fun splitCurrentItemWithImage(uri: Uri) {
+        splitCurrentItemWithImages(listOf(uri))
+    }
+
+    fun splitCurrentItemWithImages(uris: List<Uri>) {
         if (mode != FormMode.PENDING || isBusy) return
+        if (uris.isEmpty()) return
         val item = currentItem() ?: return
         val amountStr = etAmount?.text?.toString()?.trim().orEmpty()
         val money = amountStr.toDoubleOrNull() ?: (item.amountCents / 100.0)
@@ -1659,11 +1673,11 @@ class OverlayPendingCaptureController(
         scope.launch {
             try {
                 val preview = withContext(Dispatchers.IO) {
-                    CaptureBridgeClient(ctx).previewImageSplit(
+                    CaptureBridgeClient(ctx).previewImageSplitMulti(
                         captureId = item.id,
                         totalCents = totalCents,
                         billType = billType,
-                        imageUri = uri,
+                        imageUris = uris,
                     )
                 }
                 if (!preview.ok) {

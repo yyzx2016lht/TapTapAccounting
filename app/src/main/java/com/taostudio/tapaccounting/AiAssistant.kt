@@ -1,6 +1,9 @@
 package com.taostudio.tapaccounting
 
 import android.app.Activity
+import android.animation.Animator
+import android.animation.AnimatorListenerAdapter
+import android.animation.ValueAnimator
 import android.content.Context
 import android.content.Intent
 import android.graphics.Color
@@ -15,10 +18,14 @@ import android.view.Gravity
 import android.view.HapticFeedbackConstants
 import android.view.LayoutInflater
 import android.view.MotionEvent
+import android.view.VelocityTracker
 import android.view.View
 import android.view.ViewConfiguration
+import android.view.Window
 import android.view.WindowManager
 import android.view.WindowManager.BadTokenException
+import android.view.animation.AccelerateInterpolator
+import android.view.animation.DecelerateInterpolator
 import android.view.inputmethod.InputMethodManager
 import android.widget.EditText
 import android.widget.TextView
@@ -101,6 +108,9 @@ class AiAssistant(private val ctx: Context) {
     private var bubbleTouchStartY = 0
     private var bubbleTouchDownAtMs = 0L
     private var bubbleTouchMoved = false
+    private var bubbleDropShown = false
+    private var bubbleDropArmed = false
+    private var bubbleVelocity: android.view.VelocityTracker? = null
 
     // 外部可注入语音按钮绑定逻辑
     var voiceInputBtnSetup: ((View) -> Unit)? = null
@@ -123,9 +133,11 @@ class AiAssistant(private val ctx: Context) {
         /** 图片记账顶层字段：画面本身是否为「一次消费的凭证」（一张小票/一个支付成功页/一个订单详情）。 */
         const val KEY_SINGLE_PAYMENT = "single_payment"
 
-        /** F08: 收起后常驻小圆的边长（dp）。 */
-        private const val MINI_BUBBLE_SIZE_DP = 54
-        /** 没保存过位置时小圆距离屏幕顶部的比例。 */
+        /** F08: 收起后常驻胶囊的尺寸（dp），和待记胶囊保持一致。 */
+        private const val MINI_BUBBLE_W_DP = 104
+        private const val MINI_BUBBLE_H_DP = 50
+        private const val MINI_BUBBLE_EDGE_MARGIN_DP = 6
+        /** 没保存过位置时胶囊距离屏幕顶部的比例。 */
         private const val MINI_BUBBLE_DEFAULT_Y_RATIO = 0.42f
         private const val MINI_BUBBLE_ANIM_MS = 140L
 
@@ -936,24 +948,38 @@ class AiAssistant(private val ctx: Context) {
     private var dismissZoneView: View? = null
     private var isBubbleInDismissZone: Boolean = false
 
+    private fun dropTargetCenterY(): Float =
+        ctx.resources.displayMetrics.heightPixels - dp(84).toFloat()
+
+    private fun insideDropTarget(
+        params: WindowManager.LayoutParams,
+        halfW: Int,
+        halfH: Int,
+    ): Boolean {
+        val cx = params.x + params.width / 2f
+        val cy = params.y + params.height / 2f
+        return Math.abs(cx - ctx.resources.displayMetrics.widthPixels / 2f) <= halfW &&
+            Math.abs(cy - dropTargetCenterY()) <= halfH
+    }
+
     private fun ensureDismissZone(wm: WindowManager) {
         if (dismissZoneView != null) return
         val zone = TextView(ContextThemeWrapper(ctx.applicationContext, R.style.Theme_TapAccounting)).apply {
             text = "✕ 拖到此处关闭"
-            setTextColor(Color.WHITE)
-            textSize = 13f
+            textSize = 12.5f
             gravity = Gravity.CENTER
-            val bg = android.graphics.drawable.GradientDrawable().apply {
-                setColor(Color.parseColor("#E6EF4444"))
-                cornerRadius = dp(24).toFloat()
+            setTypeface(typeface, android.graphics.Typeface.BOLD)
+            setTextColor(Color.parseColor("#E2E8F0"))
+            background = android.graphics.drawable.GradientDrawable().apply {
+                setColor(Color.parseColor("#D90F172A"))
+                cornerRadius = dp(20).toFloat()
+                setStroke(dp(1), Color.parseColor("#52FFFFFF"))
             }
-            background = bg
-            setPadding(dp(20), dp(10), dp(20), dp(10))
             elevation = dp(8).toFloat()
         }
         val params = WindowManager.LayoutParams().apply {
-            width = WindowManager.LayoutParams.WRAP_CONTENT
-            height = WindowManager.LayoutParams.WRAP_CONTENT
+            width = dp(156)
+            height = dp(40)
             type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
             } else {
@@ -961,22 +987,45 @@ class AiAssistant(private val ctx: Context) {
                 WindowManager.LayoutParams.TYPE_PHONE
             }
             flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
                 WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
             format = PixelFormat.TRANSLUCENT
             gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
-            y = dp(40)
+            y = dp(64)
             windowAnimations = 0
         }
         runCatching {
+            zone.alpha = 0f
             wm.addView(zone, params)
+            zone.animate().alpha(1f).setDuration(150L).start()
             dismissZoneView = zone
         }
+    }
+
+    private fun setDismissZoneHot(hot: Boolean) {
+        val zone = dismissZoneView as? TextView ?: return
+        zone.text = if (hot) "松手关闭" else "✕ 拖到此处关闭"
+        zone.setTextColor(Color.parseColor(if (hot) "#FFFFFF" else "#E2E8F0"))
+        zone.background = android.graphics.drawable.GradientDrawable().apply {
+            setColor(Color.parseColor(if (hot) "#F2EF4444" else "#D90F172A"))
+            cornerRadius = dp(20).toFloat()
+            setStroke(
+                dp(1),
+                Color.parseColor(if (hot) "#FFC9C9" else "#52FFFFFF"),
+            )
+        }
+        zone.animate()
+            .scaleX(if (hot) 1.06f else 1f)
+            .scaleY(if (hot) 1.06f else 1f)
+            .setDuration(120L)
+            .start()
     }
 
     private fun removeDismissZone(wm: WindowManager) {
         val zone = dismissZoneView ?: return
         dismissZoneView = null
         isBubbleInDismissZone = false
+        zone.animate().cancel()
         runCatching { wm.removeView(zone) }
     }
 
@@ -984,14 +1033,14 @@ class AiAssistant(private val ctx: Context) {
         if (miniBubble != null) return true
         if (!canUseFloatingBubble()) return false
         val wm = ctx.applicationContext.getSystemService(Context.WINDOW_SERVICE) as? WindowManager ?: return false
-        val size = dp(MINI_BUBBLE_SIZE_DP)
-        val bubble = LayoutInflater.from(ContextThemeWrapper(ctx.applicationContext, R.style.Theme_TapAccounting))
-            .inflate(R.layout.layout_ai_mini_bubble, null)
-        miniBubbleBadge = bubble.findViewById(R.id.view_ai_mini_bubble_badge)
+        // 和待记胶囊同一套外观：深色药丸 + 左侧圆点 + 文案。
+        val width = dp(MINI_BUBBLE_W_DP)
+        val height = dp(MINI_BUBBLE_H_DP)
+        val bubble = buildMiniBubble()
 
         val params = WindowManager.LayoutParams().apply {
-            width = size
-            height = size
+            this.width = width
+            this.height = height
             type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
             } else {
@@ -1003,8 +1052,8 @@ class AiAssistant(private val ctx: Context) {
             format = PixelFormat.TRANSLUCENT
             // 固定 LEFT：x 就是屏幕左边缘像素值，避免 RTL 下 START 解析到右边
             gravity = Gravity.TOP or Gravity.LEFT
-            x = initialBubbleX(size)
-            y = initialBubbleY(size)
+            x = initialBubbleX(width)
+            y = initialBubbleY(height)
             windowAnimations = 0
         }
         bubble.setOnTouchListener { _, event -> handleBubbleTouch(bubble, params, wm, event) }
@@ -1018,8 +1067,8 @@ class AiAssistant(private val ctx: Context) {
         miniBubble = bubble
         miniBubbleWindowManager = wm
         bubble.alpha = 0f
-        bubble.scaleX = 0.82f
-        bubble.scaleY = 0.82f
+        bubble.scaleX = 0.86f
+        bubble.scaleY = 0.86f
         bubble.animate()
             .alpha(1f)
             .scaleX(1f)
@@ -1027,6 +1076,63 @@ class AiAssistant(private val ctx: Context) {
             .setDuration(MINI_BUBBLE_ANIM_MS)
             .start()
         return true
+    }
+
+    private fun buildMiniBubble(): View {
+        val appCtx = ctx.applicationContext
+        val bubble = android.widget.FrameLayout(appCtx).apply {
+            setPadding(dp(5), dp(5), dp(5), dp(5))
+            contentDescription = "AI 记账，点按展开，向下拖动可关闭"
+        }
+        val pill = android.widget.LinearLayout(appCtx).apply {
+            orientation = android.widget.LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(12), 0, dp(12), 0)
+            background = android.graphics.drawable.GradientDrawable().apply {
+                setColor(Color.parseColor("#E60F172A"))
+                cornerRadius = dp(18).toFloat()
+                setStroke(dp(1), Color.parseColor("#38FFFFFF"))
+            }
+            elevation = dp(8).toFloat()
+        }
+        val dot = View(appCtx).apply {
+            background = android.graphics.drawable.GradientDrawable().apply {
+                shape = android.graphics.drawable.GradientDrawable.OVAL
+                setColor(Color.parseColor("#7B61FF"))
+            }
+        }
+        pill.addView(dot, android.widget.LinearLayout.LayoutParams(dp(8), dp(8)).apply {
+            marginEnd = dp(8)
+        })
+        val label = TextView(appCtx).apply {
+            text = "AI 记账"
+            textSize = 12f
+            setTypeface(typeface, android.graphics.Typeface.BOLD)
+            setTextColor(Color.WHITE)
+            isSingleLine = true
+        }
+        pill.addView(label)
+        val badge = View(appCtx).apply {
+            background = android.graphics.drawable.GradientDrawable().apply {
+                shape = android.graphics.drawable.GradientDrawable.OVAL
+                setColor(Color.parseColor("#34D399"))
+                setStroke(dp(1), Color.parseColor("#0F172A"))
+            }
+            visibility = View.GONE
+        }
+        pill.addView(badge, android.widget.LinearLayout.LayoutParams(dp(8), dp(8)).apply {
+            marginStart = dp(6)
+        })
+        miniBubbleBadge = badge
+        bubble.addView(
+            pill,
+            android.widget.FrameLayout.LayoutParams(
+                android.view.ViewGroup.LayoutParams.WRAP_CONTENT,
+                dp(36),
+                Gravity.CENTER,
+            ),
+        )
+        return bubble
     }
 
     private fun removeMiniBubble() {
@@ -1048,13 +1154,14 @@ class AiAssistant(private val ctx: Context) {
         miniBubbleBadge?.visibility = View.VISIBLE
     }
 
-    private fun initialBubbleX(size: Int): Int {
-        val right = (ctx.resources.displayMetrics.widthPixels - size).coerceAtLeast(0)
-        return if (Prefs.getAiPanelBubbleSide(ctx) == Prefs.AI_BUBBLE_SIDE_LEFT) 0 else right
+    private fun initialBubbleX(width: Int): Int {
+        val margin = dp(MINI_BUBBLE_EDGE_MARGIN_DP)
+        val right = (ctx.resources.displayMetrics.widthPixels - width - margin).coerceAtLeast(margin)
+        return if (Prefs.getAiPanelBubbleSide(ctx) == Prefs.AI_BUBBLE_SIDE_LEFT) margin else right
     }
 
-    private fun initialBubbleY(size: Int): Int {
-        val maxY = maxBubbleY(size)
+    private fun initialBubbleY(height: Int): Int {
+        val maxY = maxBubbleY(height)
         val saved = Prefs.getAiPanelBubbleY(ctx)
         if (saved in 0..maxY) return saved
         return (ctx.resources.displayMetrics.heightPixels * MINI_BUBBLE_DEFAULT_Y_RATIO)
@@ -1082,65 +1189,124 @@ class AiAssistant(private val ctx: Context) {
                 bubbleTouchStartY = params.y
                 bubbleTouchDownAtMs = SystemClock.uptimeMillis()
                 bubbleTouchMoved = false
+                bubbleDropShown = false
+                bubbleDropArmed = false
+                bubbleVelocity?.recycle()
+                bubbleVelocity = android.view.VelocityTracker.obtain().also {
+                    it.addMovement(event)
+                }
+                bubble.animate().cancel()
+                bubble.animate().scaleX(0.94f).scaleY(0.94f)
+                    .setDuration(90L).start()
                 return true
             }
 
             MotionEvent.ACTION_MOVE -> {
+                bubbleVelocity?.addMovement(event)
                 val dx = event.rawX - bubbleTouchDownRawX
                 val dy = event.rawY - bubbleTouchDownRawY
                 if (!bubbleTouchMoved) {
                     val slop = ViewConfiguration.get(ctx).scaledTouchSlop
-                    bubbleTouchMoved = kotlin.math.abs(dx) > slop || kotlin.math.abs(dy) > slop
+                    bubbleTouchMoved = Math.hypot(dx.toDouble(), dy.toDouble()) > slop
+                    if (bubbleTouchMoved) {
+                        bubble.animate().cancel()
+                        bubble.performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK)
+                    }
                 }
                 if (bubbleTouchMoved) {
-                    params.x = (bubbleTouchStartX + dx.toInt()).coerceIn(0, maxBubbleX(params.width))
-                    params.y = (bubbleTouchStartY + dy.toInt()).coerceIn(0, maxBubbleY(params.height))
+                    val margin = dp(MINI_BUBBLE_EDGE_MARGIN_DP)
+                    params.x = (bubbleTouchStartX + dx.toInt())
+                        .coerceIn(margin, (maxBubbleX(params.width) - margin).coerceAtLeast(margin))
+                    params.y = (bubbleTouchStartY + dy.toInt())
+                        .coerceIn(dp(24), (maxBubbleY(params.height) - dp(24)).coerceAtLeast(dp(24)))
                     runCatching { wm.updateViewLayout(bubble, params) }
 
-                    ensureDismissZone(wm)
-                    val screenHeight = ctx.resources.displayMetrics.heightPixels
-                    val inZone = event.rawY >= screenHeight * 0.80f
-                    if (inZone != isBubbleInDismissZone) {
-                        isBubbleInDismissZone = inZone
-                        if (inZone) {
-                            bubble.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
-                            dismissZoneView?.apply {
-                                scaleX = 1.15f
-                                scaleY = 1.15f
-                                (this as? TextView)?.text = "✕ 松手即可关闭"
-                            }
-                        } else {
-                            dismissZoneView?.apply {
-                                scaleX = 1.0f
-                                scaleY = 1.0f
-                                (this as? TextView)?.text = "✕ 拖到此处关闭"
-                            }
+                    val near = params.y - bubbleTouchStartY > dp(16) ||
+                        insideDropTarget(params, dp(98) + dp(6), dp(46) + dp(6))
+                    if (near != bubbleDropShown) {
+                        bubbleDropShown = near
+                        if (near) ensureDismissZone(wm) else removeDismissZone(wm)
+                    }
+                    if (!near) {
+                        if (bubbleDropArmed) {
+                            bubbleDropArmed = false
+                            setDismissZoneHot(false)
                         }
+                        bubble.scaleX = 1f
+                        bubble.scaleY = 1f
+                    } else {
+                        val armed = if (bubbleDropArmed) {
+                            insideDropTarget(params, dp(98), dp(46))
+                        } else {
+                            insideDropTarget(params, dp(88), dp(34))
+                        }
+                        if (armed != bubbleDropArmed) {
+                            bubbleDropArmed = armed
+                            setDismissZoneHot(armed)
+                            bubble.performHapticFeedback(
+                                if (armed) HapticFeedbackConstants.LONG_PRESS
+                                else HapticFeedbackConstants.CONTEXT_CLICK,
+                            )
+                        }
+                        bubble.scaleX = if (bubbleDropArmed) 0.84f else 0.94f
+                        bubble.scaleY = bubble.scaleX
                     }
                 }
                 return true
             }
 
             MotionEvent.ACTION_UP -> {
-                val releasedInDismiss = isBubbleInDismissZone
+                val tracker = bubbleVelocity
+                bubbleVelocity = null
+                tracker?.addMovement(event)
+                tracker?.computeCurrentVelocity(1000)
+                val vx = tracker?.xVelocity ?: 0f
+                tracker?.recycle()
+                val releasedArmed = bubbleTouchMoved && bubbleDropShown &&
+                    insideDropTarget(params, dp(98), dp(46))
                 removeDismissZone(wm)
-                if (releasedInDismiss) {
-                    closePanel()
+                bubbleDropShown = false
+                bubbleDropArmed = false
+                if (!bubbleTouchMoved) {
+                    if (SystemClock.uptimeMillis() - bubbleTouchDownAtMs <
+                        ViewConfiguration.getLongPressTimeout()
+                    ) {
+                        // 轻点展开；长按不当作关闭
+                        expandFromBubble()
+                    }
                     return true
                 }
-                if (bubbleTouchMoved) {
-                    snapBubbleToEdge(bubble, params, wm)
-                } else if (SystemClock.uptimeMillis() - bubbleTouchDownAtMs <
-                    ViewConfiguration.getLongPressTimeout()
-                ) {
-                    // 长按不作为关闭入口，只有轻点才展开
-                    expandFromBubble()
+                if (releasedArmed) {
+                    val targetX = ctx.resources.displayMetrics.widthPixels / 2f
+                    val targetY = dropTargetCenterY()
+                    val tx = targetX - (params.x + params.width / 2f)
+                    val ty = targetY - (params.y + params.height / 2f)
+                    bubble.setOnTouchListener { _, _ -> true }
+                    bubble.animate().cancel()
+                    bubble.animate()
+                        .translationX(tx)
+                        .translationY(ty)
+                        .scaleX(0.18f)
+                        .scaleY(0.18f)
+                        .alpha(0f)
+                        .setDuration(170L)
+                        .withEndAction { closePanel() }
+                        .start()
+                } else {
+                    snapBubbleToEdge(bubble, params, wm, vx)
+                    bubble.animate().scaleX(1f).scaleY(1f).alpha(1f)
+                        .setDuration(140L).start()
                 }
                 return true
             }
 
             MotionEvent.ACTION_CANCEL -> {
+                bubbleVelocity?.recycle()
+                bubbleVelocity = null
                 removeDismissZone(wm)
+                bubbleDropShown = false
+                bubbleDropArmed = false
+                bubble.animate().scaleX(1f).scaleY(1f).alpha(1f).start()
                 return true
             }
         }
@@ -1150,19 +1316,130 @@ class AiAssistant(private val ctx: Context) {
     private fun snapBubbleToEdge(
         bubble: View,
         params: WindowManager.LayoutParams,
-        wm: WindowManager
+        wm: WindowManager,
+        velocityX: Float = 0f,
     ) {
         val screenWidth = ctx.resources.displayMetrics.widthPixels
-        val side = if (params.x + params.width / 2 < screenWidth / 2) {
-            Prefs.AI_BUBBLE_SIDE_LEFT
-        } else {
-            Prefs.AI_BUBBLE_SIDE_RIGHT
+        val margin = dp(MINI_BUBBLE_EDGE_MARGIN_DP)
+        val fling = dp(420).toFloat()
+        val side = when {
+            velocityX < -fling -> Prefs.AI_BUBBLE_SIDE_LEFT
+            velocityX > fling -> Prefs.AI_BUBBLE_SIDE_RIGHT
+            params.x + params.width / 2 < screenWidth / 2 -> Prefs.AI_BUBBLE_SIDE_LEFT
+            else -> Prefs.AI_BUBBLE_SIDE_RIGHT
         }
-        params.x = if (side == Prefs.AI_BUBBLE_SIDE_LEFT) 0 else maxBubbleX(params.width)
-        params.y = params.y.coerceIn(0, maxBubbleY(params.height))
+        params.x = if (side == Prefs.AI_BUBBLE_SIDE_LEFT) {
+            margin
+        } else {
+            (screenWidth - params.width - margin).coerceAtLeast(margin)
+        }
+        params.y = params.y.coerceIn(dp(24), (maxBubbleY(params.height) - dp(24)).coerceAtLeast(dp(24)))
         runCatching { wm.updateViewLayout(bubble, params) }
         Prefs.setAiPanelBubbleSide(ctx, side)
         Prefs.setAiPanelBubbleY(ctx, params.y)
+    }
+
+    // ── 面板下滑收起 ────────────────────────────────────────
+
+    private fun installPanelDragGrabber(dialog: AlertDialog, content: View) {
+        val grabber = content.findViewById<View>(R.id.ai_panel_grabber) ?: return
+        if (!canUseFloatingBubble()) {
+            // Activity 内没有悬浮窗权限/走普通对话框时，不提供「收成小圈」手势。
+            grabber.visibility = View.GONE
+            return
+        }
+        val win = dialog.window ?: return
+        var downY = 0f
+        var baseY = 0
+        var armed = false
+        var tracker: VelocityTracker? = null
+        grabber.setOnTouchListener { _, event ->
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    downY = event.rawY
+                    baseY = win.attributes?.y ?: 0
+                    armed = false
+                    tracker?.recycle()
+                    tracker = VelocityTracker.obtain().also { it.addMovement(event) }
+                    true
+                }
+
+                MotionEvent.ACTION_MOVE -> {
+                    tracker?.addMovement(event)
+                    val dy = (event.rawY - downY).coerceAtLeast(0f)
+                    // 过 64dp 后只走 45% 位移，像拉皮筋。
+                    val over = (dy - dp(64)).coerceAtLeast(0f)
+                    val shown = dy - over * 0.55f
+                    moveDialogWindow(win, (baseY - shown.toInt()).coerceAtLeast(0))
+                    content.alpha = (1f - shown / (baseY.coerceAtLeast(dp(140)) * 1.1f))
+                        .coerceIn(0.6f, 1f)
+                    val nextArmed = dy >= dp(56)
+                    if (nextArmed != armed) {
+                        armed = nextArmed
+                        grabber.performHapticFeedback(
+                            if (armed) HapticFeedbackConstants.LONG_PRESS
+                            else HapticFeedbackConstants.CONTEXT_CLICK,
+                        )
+                    }
+                    true
+                }
+
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    val t = tracker
+                    tracker = null
+                    t?.addMovement(event)
+                    t?.computeCurrentVelocity(1000)
+                    val vy = t?.yVelocity ?: 0f
+                    t?.recycle()
+                    val dy = event.rawY - downY
+                    val collapse = event.actionMasked == MotionEvent.ACTION_UP &&
+                        (dy > dp(56) || (vy > dp(1100) && dy > dp(24)))
+                    if (collapse) {
+                        animateDialogCollapse(content, win, baseY)
+                    } else {
+                        animateDialogY(win, baseY)
+                        content.animate().alpha(1f).setDuration(160L).start()
+                    }
+                    true
+                }
+
+                else -> false
+            }
+        }
+    }
+
+    private fun moveDialogWindow(win: Window, y: Int) {
+        val attrs = win.attributes ?: return
+        attrs.y = y
+        runCatching { win.attributes = attrs }
+    }
+
+    private fun animateDialogY(win: Window, targetY: Int) {
+        val start = win.attributes?.y ?: return
+        ValueAnimator.ofInt(start, targetY).apply {
+            duration = 180L
+            interpolator = DecelerateInterpolator()
+            addUpdateListener { moveDialogWindow(win, it.animatedValue as Int) }
+            start()
+        }
+    }
+
+    private fun animateDialogCollapse(content: View, win: Window, restoreY: Int) {
+        val start = win.attributes?.y ?: restoreY
+        val anim = ValueAnimator.ofInt(start, 0)
+        anim.duration = 160L
+        anim.interpolator = AccelerateInterpolator()
+        anim.addUpdateListener { moveDialogWindow(win, it.animatedValue as Int) }
+        anim.addListener(object : AnimatorListenerAdapter() {
+            override fun onAnimationEnd(animation: Animator) {
+                // 先复位窗口和透明度，下次展开还回到原来的位置。
+                moveDialogWindow(win, restoreY)
+                content.alpha = 1f
+                collapseToBubble()
+            }
+        })
+        content.animate().alpha(0.35f).setDuration(160L).start()
+        anim.start()
     }
 
     private fun hideIme(dialog: AlertDialog) {
@@ -1708,6 +1985,8 @@ class AiAssistant(private val ctx: Context) {
         }
         // 点外面：只在这里统一判定，键盘弹出/收起引起的窗口变化不参与
         dialog.window?.decorView?.setOnTouchListener { decor, event -> handleDialogTouch(decor, event) }
+        // 窗口已经 show，grabber 才能拿到有效的 attributes。
+        installPanelDragGrabber(dialog, view)
 
         return dialog to view
     }

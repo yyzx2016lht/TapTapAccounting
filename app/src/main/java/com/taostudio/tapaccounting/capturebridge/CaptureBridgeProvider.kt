@@ -373,11 +373,18 @@ class CaptureBridgeProvider : ContentProvider() {
         } catch (t: Throwable) {
             return errorJson("invalid_split_payload", "拆分 JSON 不合法：${t.message}")
         }
-        val pfd = extras?.getParcelable<ParcelFileDescriptor>(CaptureContract.EXTRA_IMAGE_PFD)
-            ?: return errorJson("missing_image", "缺少图片数据，请重新选择")
+        val pfdList = extras?.getParcelableArrayList<ParcelFileDescriptor>(
+            CaptureContract.EXTRA_IMAGE_PFDS
+        )
+        val singlePfd = extras?.getParcelable<ParcelFileDescriptor>(CaptureContract.EXTRA_IMAGE_PFD)
+        val pfds = pfdList?.takeIf { it.isNotEmpty() } ?: listOfNotNull(singlePfd)
+        if (pfds.isEmpty()) {
+            return errorJson("missing_image", "缺少图片数据，请重新选择")
+        }
         val mime = extras?.getString(CaptureContract.EXTRA_IMAGE_MIME) ?: "image/jpeg"
-        return withTimeoutOrNull(45_000L) {
-            CaptureImportService.previewImageSplit(ctx, pfd, mime, payload)
+        val timeout = if (pfds.size > 1) 90_000L else 45_000L
+        return withTimeoutOrNull(timeout) {
+            CaptureImportService.previewImageSplit(ctx, pfds, mime, payload)
         } ?: errorJson("ai_timeout", "AI 识图拆分超时，请重试或改用清晰图片")
     }
 

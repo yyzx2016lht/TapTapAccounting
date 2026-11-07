@@ -257,10 +257,6 @@
             android:exported="false"
             android:label="捕获历史"
             android:theme="@style/CaptureTheme" />
-        <activity
-            android:name=".capture.ui.CaptureImagePickerActivity"
-            android:exported="false"
-            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
         <!-- 桌面小组件：四种固定样式共享同一套渲染逻辑，见 com.taostudio.tapaccounting.widget 包 -->
         <receiver
             android:name=".widget.CompactExpenseWidgetProvider"

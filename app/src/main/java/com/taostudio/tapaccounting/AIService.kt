@@ -1250,8 +1250,37 @@ object AIService {
         totalCents: Long,
         billType: Int,
         categories: List<Category>,
+    ): List<ImageSplitRawItem> = splitImageItemsInternal(
+        ctx = ctx,
+        images = listOf(imageBase64 to mimeType),
+        totalCents = totalCents,
+        billType = billType,
+        categories = categories,
+    )
+
+    /** 多张图片当作同一笔订单的凭证一起识别（多页小票/多张截图）。 */
+    suspend fun splitImageItemsMulti(
+        ctx: Context,
+        images: List<Pair<String, String>>,
+        totalCents: Long,
+        billType: Int,
+        categories: List<Category>,
+    ): List<ImageSplitRawItem> = splitImageItemsInternal(
+        ctx = ctx,
+        images = images,
+        totalCents = totalCents,
+        billType = billType,
+        categories = categories,
+    )
+
+    private suspend fun splitImageItemsInternal(
+        ctx: Context,
+        images: List<Pair<String, String>>,
+        totalCents: Long,
+        billType: Int,
+        categories: List<Category>,
     ): List<ImageSplitRawItem> {
-        if (imageBase64.isBlank()) {
+        if (images.isEmpty() || images.any { it.first.isBlank() }) {
             throw SplitPreviewException("split_empty", "图片数据为空")
         }
         if (billType != Bill.TYPE_EXPENSE && billType != Bill.TYPE_INCOME) {
@@ -1275,20 +1304,38 @@ object AIService {
         val userPrompt = buildString {
             append("付款总额（分）：").append(totalCents).append('\n')
             append("账单类型：").append(typeLabel).append('\n')
+            if (images.size > 1) {
+                append("共 ").append(images.size).append(" 张图片，可能是同一笔订单的多页/多张凭证：\n")
+                append("请合并所有图片中的商品明细，并去掉重复条目，不要重复计算同一行。\n")
+            }
             append("【分类候选】\n")
             append(candidates.joinToString("\n") { it.name })
         }
 
-        val dataUrl = "data:$mimeType;base64,$imageBase64"
-        val requestJson = buildVisionChatRequest(
-            model = model,
-            temperature = 0.1,
-            systemPrompt = AIPrompts.IMAGE_SPLIT_PROMPT_DEFAULT,
-            dataUrl = dataUrl,
-            userText = userPrompt,
-            jsonObjectResponse = true,
-            enableThinking = enableThinkingForVision(ctx),
-        )
+        val dataUrls = images.map { (base64, mime) ->
+            "data:$mime;base64,$base64"
+        }
+        val requestJson = if (dataUrls.size == 1) {
+            buildVisionChatRequest(
+                model = model,
+                temperature = 0.1,
+                systemPrompt = AIPrompts.IMAGE_SPLIT_PROMPT_DEFAULT,
+                dataUrl = dataUrls.first(),
+                userText = userPrompt,
+                jsonObjectResponse = true,
+                enableThinking = enableThinkingForVision(ctx),
+            )
+        } else {
+            buildMultiImageVisionChatRequest(
+                model = model,
+                temperature = 0.1,
+                systemPrompt = AIPrompts.IMAGE_SPLIT_PROMPT_DEFAULT,
+                dataUrls = dataUrls,
+                userText = userPrompt,
+                jsonObjectResponse = true,
+                enableThinking = enableThinkingForVision(ctx),
+            )
+        }
 
         val content = try {
             withTimeoutOrNull(IMAGE_SPLIT_PREVIEW_TIMEOUT_MS) {

@@ -1,6 +1,7 @@
 package com.taostudio.tapaccounting
 
 import android.app.Activity
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
@@ -20,6 +21,8 @@ class ImagePickerActivity : Activity() {
 
     companion object {
         private const val REQUEST_PICK_IMAGE = 1001
+        const val EXTRA_MAX_ITEMS = "maxItems"
+        private const val DEFAULT_MAX_ITEMS = 5
 
         /** P2-25: 宿主销毁时清空静态回调，避免悬挂 OverlayManager */
         fun clearCallbacks() {
@@ -30,6 +33,32 @@ class ImagePickerActivity : Activity() {
         /** 单图兼容回调 */
         var onImagePicked: ((Uri) -> Unit)? = null
         var onPickCancelled: (() -> Unit)? = null
+
+        /**
+         * 统一入口：浮层（Service）里启动会落到独立任务，取消后回到原来的 App，
+         * 不会把记账主界面顶到前台。Activity 里启动则留在当前任务。
+         */
+        fun launch(
+            context: Context,
+            maxItems: Int = DEFAULT_MAX_ITEMS,
+            onPicked: (List<Uri>) -> Unit,
+            onCancelled: () -> Unit,
+        ) {
+            onImagesPicked = onPicked
+            onImagePicked = null
+            onPickCancelled = onCancelled
+            val intent = Intent(context, ImagePickerActivity::class.java).apply {
+                putExtra(EXTRA_MAX_ITEMS, maxItems.coerceAtLeast(1))
+                var flags = Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS or
+                    Intent.FLAG_ACTIVITY_NO_ANIMATION
+                if (context !is Activity) {
+                    flags = flags or Intent.FLAG_ACTIVITY_NEW_TASK or
+                        Intent.FLAG_ACTIVITY_MULTIPLE_TASK
+                }
+                addFlags(flags)
+            }
+            context.startActivity(intent)
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -39,15 +68,17 @@ class ImagePickerActivity : Activity() {
     }
 
     private fun openImagePicker() {
+        val maxItems = intent?.getIntExtra(EXTRA_MAX_ITEMS, DEFAULT_MAX_ITEMS)
+            ?.coerceAtLeast(1) ?: DEFAULT_MAX_ITEMS
         val intent = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
             Intent(android.provider.MediaStore.ACTION_PICK_IMAGES).apply {
                 type = "image/*"
-                putExtra(android.provider.MediaStore.EXTRA_PICK_IMAGES_MAX, 5)
+                putExtra(android.provider.MediaStore.EXTRA_PICK_IMAGES_MAX, maxItems)
             }
         } else {
             Intent(Intent.ACTION_GET_CONTENT).apply {
                 type = "image/*"
-                putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
+                if (maxItems > 1) putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
                 addCategory(Intent.CATEGORY_OPENABLE)
             }
         }

@@ -143,6 +143,8 @@ object CaptureContract {
     const val EXTRA_CAPTURE_PAYLOAD: String = "capturePayload"
     /** `previewImageSplit` 传递图片的 ParcelFileDescriptor。 */
     const val EXTRA_IMAGE_PFD: String = "imagePfd"
+    /** `previewImageSplit` 多图模式：ArrayList&lt;ParcelFileDescriptor&gt;，优先于单图字段。 */
+    const val EXTRA_IMAGE_PFDS: String = "imagePfds"
     /** `previewImageSplit` 图片的 MIME 类型。 */
     const val EXTRA_IMAGE_MIME: String = "imageMime"
     /** `generateRule` 的请求 JSON：{app, type, rawJson}。 */

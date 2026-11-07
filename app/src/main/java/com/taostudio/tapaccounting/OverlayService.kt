@@ -475,16 +475,21 @@ class OverlayService : Service() {
                 }
             }
             ACTION_SHOW_OVERLAY -> {
-                // 敲击唤出记账悬浮窗时，右侧小圈淡出，避免两个悬浮物并排。
-                com.taostudio.tapaccounting.capture.notify.CaptureBubbleManager.fadePeekOut(this)
+                // 敲击记账页面打开时胶囊先隐藏，页面关掉再恢复；60 秒照常计时。
+                com.taostudio.tapaccounting.capture.notify.CaptureBubbleManager
+                    .suspendPeekForOverlay(this)
                 val prefill = intent?.getStringExtra(EXTRA_PREFILL)?.let { raw ->
                     runCatching { JSONObject(raw) }.getOrNull()
                 }
-                overlayManager.showOverlay(
+                val shown = overlayManager.showOverlay(
                     prefill = prefill,
                     captureId = intent?.getStringExtra(EXTRA_CAPTURE_ID)?.trim()?.takeIf { it.isNotEmpty() },
                     requestId = intent?.getStringExtra(EXTRA_REQUEST_ID)?.trim()?.takeIf { it.isNotEmpty() }
                 )
+                if (!shown) {
+                    com.taostudio.tapaccounting.capture.notify.CaptureBubbleManager
+                        .resumePeekAfterOverlay(this)
+                }
             }
             ACTION_SHOW_AI_INPUT -> overlayManager.showAiInputPanel()
             ACTION_SCREEN_CAPTURE -> overlayManager.startScreenCaptureFromTap()

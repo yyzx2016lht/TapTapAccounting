@@ -1450,12 +1450,21 @@ object CaptureBubbleManager {
             s.state == BubbleState.RESULT
         if (!collapsible || s.busy) return
         if (collapsing) return
-        // 已经过了 60 秒：这一轮不再生成胶囊，卡片回弹即可。
+        // 已经超过 60 秒：没有小圈可回，下拉直接关闭整张卡片。
         if (peekDeadlineAt > 0L && peekRemainingMs() <= 0L) {
-            view.animate().translationY(0f).alpha(1f)
-                .scaleX(1f).scaleY(1f)
-                .setDuration(180L)
-                .setInterpolator(DecelerateInterpolator())
+            view.animate().cancel()
+            view.animate()
+                .translationY(view.translationY + view.height * 0.5f)
+                .alpha(0f)
+                .scaleX(0.96f)
+                .scaleY(0.96f)
+                .setDuration(170L)
+                .setInterpolator(AccelerateInterpolator())
+                .withEndAction {
+                    if (currentView === view) {
+                        dismissImmediate(app, notifyDismissed = true)
+                    }
+                }
                 .start()
             return
         }
